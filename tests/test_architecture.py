@@ -5,14 +5,10 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CORE = ('ip.types', 'ip.geometry', 'ip.actions', 'ip.policy', 'ip.algorithms',
-        'ip.configs.structured', 'ip.configs.original', 'ip.models.denoiser',
-        'ip.models.scene_encoder', 'ip.models.graph_rep', 'ip.models.graph_transformer',
-        'ip.models.backbone', 'ip.models.embeddings')
-FORBIDDEN = ('rlbench', 'pyrep', 'wandb', 'lightning', 'pytorch_lightning', 'argparse',
-             'ip.training', 'ip.evaluation', 'ip.train', 'ip.eval', 'ip.deployment',
-             'ip.prepare_data', 'ip.checkpoints', 'ip.composition', 'ip.models.model',
-             'ip.models.diffusion', 'ip.models.occupancy_net', 'ip.environments')
+CORE = ('icgs.contracts', 'icgs.geometry', 'icgs.algorithms', 'icgs.policies', 'icgs.models', 'icgs.state')
+FORBIDDEN = ('ip', 'instant_policy', 'rlbench', 'pyrep', 'wandb', 'lightning', 'pytorch_lightning', 'argparse',
+             'icgs.training', 'icgs.evaluation', 'icgs.execution', 'icgs.cli',
+             'icgs.artifacts', 'icgs.composition', 'icgs.environments')
 
 
 def matches(module, prefixes):
@@ -63,8 +59,8 @@ def violations(graph, roots, forbidden):
 class ArchitectureTests(unittest.TestCase):
     def test_real_core_dependency_closure(self):
         graph = {}
-        for path in (ROOT / 'ip').rglob('*.py'):
-            parts = list(path.relative_to(ROOT).with_suffix('').parts)
+        for path in (ROOT / 'src/icgs').rglob('*.py'):
+            parts = list(path.relative_to(ROOT/'src').with_suffix('').parts)
             package = parts[-1] == '__init__'
             if package:
                 parts.pop()
@@ -73,20 +69,20 @@ class ArchitectureTests(unittest.TestCase):
         roots = [name for name in graph if matches(name, CORE)]
         self.assertGreater(len(roots), 10, 'missing core modules is not a passing scan')
         self.assertEqual(violations(graph, roots, FORBIDDEN), [], 'ADR 0002: move outer dependencies out of reusable core')
-        pure = [name for name in roots if name not in ('ip.policy',) and not name.startswith('ip.algorithms')]
+        pure = [name for name in roots if name not in ('icgs.policies.instant_policy',) and not name.startswith('icgs.algorithms')]
         self.assertEqual(violations(graph, pure, ('open3d',)), [])
 
     def test_guard_detects_indirect_and_initializer_violations(self):
-        graph = {'ip.core': {'ip.shared.util'}, 'ip.shared.util': set(), 'ip.shared': {'wandb'}}
-        self.assertTrue(violations(graph, ['ip.core'], ('wandb',)))
-        graph['ip.shared'] = set()
-        self.assertEqual(violations(graph, ['ip.core'], ('wandb',)), [])
-        graph['ip.shared.util'] = {'rlbench.tasks'}
-        self.assertTrue(violations(graph, ['ip.core'], ('rlbench',)))
+        graph = {'icgs.core': {'icgs.shared.util'}, 'icgs.shared.util': set(), 'icgs.shared': {'wandb'}}
+        self.assertTrue(violations(graph, ['icgs.core'], ('wandb',)))
+        graph['icgs.shared'] = set()
+        self.assertEqual(violations(graph, ['icgs.core'], ('wandb',)), [])
+        graph['icgs.shared.util'] = {'rlbench.tasks'}
+        self.assertTrue(violations(graph, ['icgs.core'], ('rlbench',)))
 
     def test_relative_and_nested_import_resolution(self):
-        targets = imports('from ..geometry import transform_pcd\ndef f():\n import rlbench.tasks\n', 'ip.models.leaf')
-        self.assertIn('ip.geometry', targets)
+        targets = imports('from ..geometry import transform_pcd\ndef f():\n import rlbench.tasks\n', 'icgs.models.leaf')
+        self.assertIn('icgs.geometry', targets)
         self.assertIn('rlbench.tasks', targets)
 
 

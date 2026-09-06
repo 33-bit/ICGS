@@ -2,6 +2,10 @@
 
 Date: 2026-09-06. Status: accepted by the owner with the modularization plan.
 
+Layout/legacy-import clauses below are superseded by [ADR0004](0004-unified-icgs-v5.md).
+They record the historical decision, not current namespace instructions. Numerical
+and dependency principles remain unless specifically updated by that decision.
+
 ## Context
 
 AGI constructs all components; GraphDiffusion combines algorithm and training;

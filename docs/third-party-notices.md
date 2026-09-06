@@ -1,5 +1,16 @@
 # Third-party notices
 
+## Instant Policy reference distribution
+
+Reference binary was executed externally for research validation, not included in
+the native package. Reference source revision7228173 carries:
+SPDX-License-Identifier: PolyForm-Noncommercial-1.0.0.
+Required Notice: Copyright 2025 Vitalis Vosylius (https://www.robot-learning.uk/instant-policy).
+Terms: https://polyformproject.org/licenses/noncommercial/1.0.0/ .
+Do not interpret the old setup.py placeholder MIT label or the guidance license
+below as relicensing Instant Policy code/assets. No decompilation was performed;
+profile evidence came from public object/config/hooks and measured input/output.
+
 The two adapted generic skills draw on
 [repository-harness](https://github.com/hoangnb24/repository-harness/tree/e765792b635b4d5e3e5fc0578f82f9ca5dea2681)
 onboarding and invariant-encoding guidance. They are locally maintained adaptations,

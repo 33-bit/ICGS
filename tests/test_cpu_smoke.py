@@ -9,13 +9,13 @@ import unittest
 
 
 # Run from any working directory without requiring package installation.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 MISSING = [name for name in ("torch", "numpy") if importlib.util.find_spec(name) is None]
 if not MISSING:
     # Do not swallow errors from packages that are installed but broken.
     import torch
-    from ip.configs.base_config import config
-    from ip.utils.normalizer import Normalizer
+    from icgs.configuration.defaults import instant_policy_original, to_legacy
+    config = to_legacy(instant_policy_original())
+    from icgs.algorithms.diffusion.codec import Normalizer
 
 
 @unittest.skipIf(bool(MISSING), "SKIPPED: missing CPU prerequisites: " + ", ".join(MISSING))

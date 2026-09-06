@@ -10,7 +10,7 @@ class TrainingTests(unittest.TestCase):
         from test_policy import PolicyTests
         helper = PolicyTests()
         helper.setUp()
-        from ip.training import GraphDiffusion
+        from icgs.training.modules.diffusion import GraphDiffusion
         policy = helper.policy()
         model = GraphDiffusion(helper.c, policy=policy)
         self.assertIs(model.model, policy.network)

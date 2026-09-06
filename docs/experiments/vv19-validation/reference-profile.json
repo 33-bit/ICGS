@@ -1,0 +1,614 @@
+{
+  "wrapper_type": "<class 'instant_policy.GraphDiffusion'>",
+  "model_type": "<class 'instant_policy.AGI'>",
+  "config": {
+    "record": false,
+    "save_dir": null,
+    "scene_encoder_path": "./checkpoints/scene_encoder.pt",
+    "pre_trained_encoder": false,
+    "freeze_encoder": true,
+    "save_every": 100000,
+    "compile_models": false,
+    "local_num_freq": 10,
+    "local_nn_dim": 512,
+    "hidden_dim": 1024,
+    "num_demos": 2,
+    "randomise_num_demos": false,
+    "num_demos_test": 2,
+    "traj_horizon": 10,
+    "device": "cuda",
+    "batch_size": 1,
+    "batch_size_val": 1,
+    "num_scenes_nodes": 16,
+    "pre_horizon": 8,
+    "pos_in_nodes": true,
+    "num_layers": 2,
+    "lr": 1e-05,
+    "weight_decay": 0.01,
+    "use_lr_scheduler": false,
+    "num_warmup_steps": 1000,
+    "num_diffusion_iters_train": 100,
+    "num_diffusion_iters_test": 4,
+    "num_iters": 50000000001,
+    "test_every": 50000,
+    "randomize_g_prob": 0.1,
+    "min_actions": [
+      -0.009999999776482582,
+      -0.009999999776482582,
+      -0.009999999776482582,
+      -0.05235987901687622,
+      -0.05235987901687622,
+      -0.05235987901687622
+    ],
+    "max_actions": [
+      0.009999999776482582,
+      0.009999999776482582,
+      0.009999999776482582,
+      0.05235987901687622,
+      0.05235987901687622,
+      0.05235987901687622
+    ]
+  },
+  "model_config": {
+    "record": false,
+    "save_dir": null,
+    "scene_encoder_path": "./checkpoints/scene_encoder.pt",
+    "pre_trained_encoder": false,
+    "freeze_encoder": true,
+    "save_every": 100000,
+    "compile_models": false,
+    "local_num_freq": 10,
+    "local_nn_dim": 512,
+    "hidden_dim": 1024,
+    "num_demos": 2,
+    "randomise_num_demos": false,
+    "num_demos_test": 2,
+    "traj_horizon": 10,
+    "device": "cuda",
+    "batch_size": 1,
+    "batch_size_val": 1,
+    "num_scenes_nodes": 16,
+    "pre_horizon": 8,
+    "pos_in_nodes": true,
+    "num_layers": 2,
+    "lr": 1e-05,
+    "weight_decay": 0.01,
+    "use_lr_scheduler": false,
+    "num_warmup_steps": 1000,
+    "num_diffusion_iters_train": 100,
+    "num_diffusion_iters_test": 4,
+    "num_iters": 50000000001,
+    "test_every": 50000,
+    "randomize_g_prob": 0.1,
+    "min_actions": [
+      -0.009999999776482582,
+      -0.009999999776482582,
+      -0.009999999776482582,
+      -0.05235987901687622,
+      -0.05235987901687622,
+      -0.05235987901687622
+    ],
+    "max_actions": [
+      0.009999999776482582,
+      0.009999999776482582,
+      0.009999999776482582,
+      0.05235987901687622,
+      0.05235987901687622,
+      0.05235987901687622
+    ]
+  },
+  "normalizer": {
+    "pred_horizon": 8,
+    "min_action": [
+      [
+        [
+          -0.009999999776482582,
+          -0.009999999776482582,
+          -0.009999999776482582,
+          -0.05235987901687622,
+          -0.05235987901687622,
+          -0.05235987901687622
+        ],
+        [
+          -0.019999999552965164,
+          -0.019999999552965164,
+          -0.019999999552965164,
+          -0.10471975803375244,
+          -0.10471975803375244,
+          -0.10471975803375244
+        ],
+        [
+          -0.029999999329447746,
+          -0.029999999329447746,
+          -0.029999999329447746,
+          -0.15707963705062866,
+          -0.15707963705062866,
+          -0.15707963705062866
+        ],
+        [
+          -0.03999999910593033,
+          -0.03999999910593033,
+          -0.03999999910593033,
+          -0.20943951606750488,
+          -0.20943951606750488,
+          -0.20943951606750488
+        ],
+        [
+          -0.04999999701976776,
+          -0.04999999701976776,
+          -0.04999999701976776,
+          -0.2617993950843811,
+          -0.2617993950843811,
+          -0.2617993950843811
+        ],
+        [
+          -0.05999999865889549,
+          -0.05999999865889549,
+          -0.05999999865889549,
+          -0.3141592741012573,
+          -0.3141592741012573,
+          -0.3141592741012573
+        ],
+        [
+          -0.07000000029802322,
+          -0.07000000029802322,
+          -0.07000000029802322,
+          -0.36651915311813354,
+          -0.36651915311813354,
+          -0.36651915311813354
+        ],
+        [
+          -0.07999999821186066,
+          -0.07999999821186066,
+          -0.07999999821186066,
+          -0.41887903213500977,
+          -0.41887903213500977,
+          -0.41887903213500977
+        ]
+      ]
+    ],
+    "max_action": [
+      [
+        [
+          0.009999999776482582,
+          0.009999999776482582,
+          0.009999999776482582,
+          0.05235987901687622,
+          0.05235987901687622,
+          0.05235987901687622
+        ],
+        [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.019999999552965164,
+          0.10471975803375244,
+          0.10471975803375244,
+          0.10471975803375244
+        ],
+        [
+          0.029999999329447746,
+          0.029999999329447746,
+          0.029999999329447746,
+          0.15707963705062866,
+          0.15707963705062866,
+          0.15707963705062866
+        ],
+        [
+          0.03999999910593033,
+          0.03999999910593033,
+          0.03999999910593033,
+          0.20943951606750488,
+          0.20943951606750488,
+          0.20943951606750488
+        ],
+        [
+          0.04999999701976776,
+          0.04999999701976776,
+          0.04999999701976776,
+          0.2617993950843811,
+          0.2617993950843811,
+          0.2617993950843811
+        ],
+        [
+          0.05999999865889549,
+          0.05999999865889549,
+          0.05999999865889549,
+          0.3141592741012573,
+          0.3141592741012573,
+          0.3141592741012573
+        ],
+        [
+          0.07000000029802322,
+          0.07000000029802322,
+          0.07000000029802322,
+          0.36651915311813354,
+          0.36651915311813354,
+          0.36651915311813354
+        ],
+        [
+          0.07999999821186066,
+          0.07999999821186066,
+          0.07999999821186066,
+          0.41887903213500977,
+          0.41887903213500977,
+          0.41887903213500977
+        ]
+      ]
+    ],
+    "min_labels": [
+      [
+        [
+          [
+            -0.019999999552965164,
+            -0.019999999552965164,
+            -0.019999999552965164,
+            -0.006282471586018801,
+            -0.006282471586018801,
+            -0.006282471586018801
+          ]
+        ],
+        [
+          [
+            -0.03999999910593033,
+            -0.03999999910593033,
+            -0.03999999910593033,
+            -0.012560569681227207,
+            -0.012560569681227207,
+            -0.012560569681227207
+          ]
+        ],
+        [
+          [
+            -0.05999999865889549,
+            -0.05999999865889549,
+            -0.05999999865889549,
+            -0.018830161541700363,
+            -0.018830161541700363,
+            -0.018830161541700363
+          ]
+        ],
+        [
+          [
+            -0.07999999821186066,
+            -0.07999999821186066,
+            -0.07999999821186066,
+            -0.025086821988224983,
+            -0.025086821988224983,
+            -0.025086821988224983
+          ]
+        ],
+        [
+          [
+            -0.09999999403953552,
+            -0.09999999403953552,
+            -0.09999999403953552,
+            -0.0313262902200222,
+            -0.0313262902200222,
+            -0.0313262902200222
+          ]
+        ],
+        [
+          [
+            -0.11999999731779099,
+            -0.11999999731779099,
+            -0.11999999731779099,
+            -0.037544261664152145,
+            -0.037544261664152145,
+            -0.037544261664152145
+          ]
+        ],
+        [
+          [
+            -0.14000000059604645,
+            -0.14000000059604645,
+            -0.14000000059604645,
+            -0.043736532330513,
+            -0.043736532330513,
+            -0.043736532330513
+          ]
+        ],
+        [
+          [
+            -0.1599999964237213,
+            -0.1599999964237213,
+            -0.1599999964237213,
+            -0.04989878833293915,
+            -0.04989878833293915,
+            -0.04989878833293915
+          ]
+        ]
+      ]
+    ],
+    "max_labels": [
+      [
+        [
+          [
+            0.019999999552965164,
+            0.019999999552965164,
+            0.019999999552965164,
+            0.006282471586018801,
+            0.006282471586018801,
+            0.006282471586018801
+          ]
+        ],
+        [
+          [
+            0.03999999910593033,
+            0.03999999910593033,
+            0.03999999910593033,
+            0.012560569681227207,
+            0.012560569681227207,
+            0.012560569681227207
+          ]
+        ],
+        [
+          [
+            0.05999999865889549,
+            0.05999999865889549,
+            0.05999999865889549,
+            0.018830161541700363,
+            0.018830161541700363,
+            0.018830161541700363
+          ]
+        ],
+        [
+          [
+            0.07999999821186066,
+            0.07999999821186066,
+            0.07999999821186066,
+            0.025086821988224983,
+            0.025086821988224983,
+            0.025086821988224983
+          ]
+        ],
+        [
+          [
+            0.09999999403953552,
+            0.09999999403953552,
+            0.09999999403953552,
+            0.0313262902200222,
+            0.0313262902200222,
+            0.0313262902200222
+          ]
+        ],
+        [
+          [
+            0.11999999731779099,
+            0.11999999731779099,
+            0.11999999731779099,
+            0.037544261664152145,
+            0.037544261664152145,
+            0.037544261664152145
+          ]
+        ],
+        [
+          [
+            0.14000000059604645,
+            0.14000000059604645,
+            0.14000000059604645,
+            0.043736532330513,
+            0.043736532330513,
+            0.043736532330513
+          ]
+        ],
+        [
+          [
+            0.1599999964237213,
+            0.1599999964237213,
+            0.1599999964237213,
+            0.04989878833293915,
+            0.04989878833293915,
+            0.04989878833293915
+          ]
+        ]
+      ]
+    ]
+  },
+  "schedule": {
+    "num_train_timesteps": 100,
+    "beta_start": 0.0001,
+    "beta_end": 0.02,
+    "beta_schedule": "squaredcos_cap_v2",
+    "trained_betas": null,
+    "clip_sample": false,
+    "set_alpha_to_one": true,
+    "steps_offset": 0,
+    "prediction_type": "sample",
+    "thresholding": false,
+    "dynamic_thresholding_ratio": 0.995,
+    "clip_sample_range": 1.0,
+    "sample_max_value": 1.0,
+    "timestep_spacing": "leading",
+    "rescale_betas_zero_snr": false,
+    "_use_default_values": [
+      "trained_betas",
+      "thresholding",
+      "steps_offset",
+      "dynamic_thresholding_ratio",
+      "timestep_spacing",
+      "beta_end",
+      "rescale_betas_zero_snr",
+      "set_alpha_to_one",
+      "clip_sample_range",
+      "beta_start",
+      "sample_max_value"
+    ]
+  },
+  "public_methods": [
+    "CHECKPOINT_HYPER_PARAMS_KEY",
+    "CHECKPOINT_HYPER_PARAMS_NAME",
+    "CHECKPOINT_HYPER_PARAMS_TYPE",
+    "T_destination",
+    "action_encoder",
+    "action_head_grip",
+    "action_head_rot",
+    "action_head_trans",
+    "add_module",
+    "add_noise",
+    "all_gather",
+    "allow_zero_length_dataloader_with_multiple_devices",
+    "apply",
+    "automatic_optimization",
+    "backward",
+    "best_sr",
+    "best_trans_loss",
+    "bfloat16",
+    "buffers",
+    "call_super_init",
+    "children",
+    "clip_gradients",
+    "compile",
+    "cond_encoder",
+    "config",
+    "configure_callbacks",
+    "configure_gradient_clipping",
+    "configure_model",
+    "configure_optimizers",
+    "configure_sharded_model",
+    "cpu",
+    "cuda",
+    "current_epoch",
+    "device",
+    "device_mesh",
+    "double",
+    "dtype",
+    "dump_patches",
+    "eval",
+    "example_input_array",
+    "extra_repr",
+    "fabric",
+    "float",
+    "forward",
+    "freeze",
+    "get_buffer",
+    "get_extra_state",
+    "get_parameter",
+    "get_submodule",
+    "global_rank",
+    "global_step",
+    "graph_rep",
+    "half",
+    "hparams",
+    "hparams_initial",
+    "ipu",
+    "load_from_checkpoint",
+    "load_state_dict",
+    "local_encoder",
+    "local_rank",
+    "log",
+    "log_dict",
+    "logger",
+    "loggers",
+    "loss_f",
+    "lr_scheduler_step",
+    "lr_schedulers",
+    "manual_backward",
+    "model",
+    "modules",
+    "named_buffers",
+    "named_children",
+    "named_modules",
+    "named_parameters",
+    "noise_scheduler",
+    "normalizer",
+    "on_after_backward",
+    "on_after_batch_transfer",
+    "on_before_backward",
+    "on_before_batch_transfer",
+    "on_before_optimizer_step",
+    "on_before_zero_grad",
+    "on_fit_end",
+    "on_fit_start",
+    "on_gpu",
+    "on_load_checkpoint",
+    "on_predict_batch_end",
+    "on_predict_batch_start",
+    "on_predict_end",
+    "on_predict_epoch_end",
+    "on_predict_epoch_start",
+    "on_predict_model_eval",
+    "on_predict_start",
+    "on_save_checkpoint",
+    "on_test_batch_end",
+    "on_test_batch_start",
+    "on_test_end",
+    "on_test_epoch_end",
+    "on_test_epoch_start",
+    "on_test_model_eval",
+    "on_test_model_train",
+    "on_test_start",
+    "on_train_batch_end",
+    "on_train_batch_start",
+    "on_train_end",
+    "on_train_epoch_end",
+    "on_train_epoch_start",
+    "on_train_start",
+    "on_validation_batch_end",
+    "on_validation_batch_start",
+    "on_validation_end",
+    "on_validation_epoch_end",
+    "on_validation_epoch_start",
+    "on_validation_model_eval",
+    "on_validation_model_train",
+    "on_validation_model_zero_grad",
+    "on_validation_start",
+    "optimizer_step",
+    "optimizer_zero_grad",
+    "optimizers",
+    "parameters",
+    "predict_actions",
+    "predict_dataloader",
+    "predict_step",
+    "prepare_data",
+    "prepare_data_per_node",
+    "print",
+    "randomise_num_demos",
+    "record",
+    "register_backward_hook",
+    "register_buffer",
+    "register_forward_hook",
+    "register_forward_pre_hook",
+    "register_full_backward_hook",
+    "register_full_backward_pre_hook",
+    "register_load_state_dict_post_hook",
+    "register_module",
+    "register_parameter",
+    "register_state_dict_pre_hook",
+    "requires_grad_",
+    "save_dir",
+    "save_every",
+    "save_hyperparameters",
+    "scene_encoder",
+    "se3_loss",
+    "set_extra_state",
+    "set_num_demos",
+    "set_num_diffusion_steps",
+    "setup",
+    "share_memory",
+    "state_dict",
+    "strict_loading",
+    "teardown",
+    "test_dataloader",
+    "test_step",
+    "to",
+    "to_empty",
+    "to_onnx",
+    "to_torchscript",
+    "toggle_optimizer",
+    "train",
+    "train_dataloader",
+    "trainer",
+    "training",
+    "training_step",
+    "transfer_batch_to_device",
+    "type",
+    "unfreeze",
+    "untoggle_optimizer",
+    "use_lr_scheduler",
+    "val_dataloader",
+    "val_losses",
+    "validation_step",
+    "xpu",
+    "zero_grad"
+  ]
+}

@@ -12,16 +12,16 @@ from test_policy import LinearSchedule
 
 class LoadingTests(unittest.TestCase):
     def test_direct_encoder_builder_rejects_unknown_selection(self):
-        from ip.composition import build_scene_encoder
-        from ip.configs.structured import SceneConfig
+        from icgs.composition import build_scene_encoder
+        from icgs.configuration.schema import SceneConfig
         with self.assertRaisesRegex(ValueError, 'scene.*unknown'):
             build_scene_encoder(SceneConfig(kind='unknown', pretrained=False))
 
     def test_resolved_demo_override_survives_load_and_observation_prediction(self):
-        from ip.composition import build_policy, load_policy
-        from ip.configs.original import resolved_config
-        from ip.types import Observation
-        from ip.data import preprocessing
+        from icgs.composition import build_policy, load_policy
+        from icgs.configuration.defaults import resolved_config
+        from icgs.contracts.records import Observation
+        from icgs.data.preprocessing import native as preprocessing
         helper = test_composition.CompositionTests(); helper.setUp()
         config = replace(helper.c, diffusion=replace(helper.c.diffusion, scheduler_kind='linear'))
         factories = replace(helper.factories, scheduler={'linear': LinearSchedule})

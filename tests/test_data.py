@@ -49,7 +49,7 @@ class TinyEncoder(nn.Module):
 
 class DataTests(unittest.TestCase):
     def test_save_sample_roundtrips_real_pyg_files_and_schema(self):
-        from ip.data.preprocessing import save_sample
+        from icgs.data.preprocessing.native import save_sample
 
         with tempfile.TemporaryDirectory(prefix="ip-data-test-") as directory:
             save_sample(prepared_sample(), directory, offset=7)
@@ -67,7 +67,7 @@ class DataTests(unittest.TestCase):
         self.assertFalse(hasattr(data, "live_scene_node_embds"))
 
     def test_cached_fields_exist_only_when_encoder_is_supplied(self):
-        from ip.data.preprocessing import save_sample
+        from icgs.data.preprocessing.native import save_sample
 
         data = save_sample(prepared_sample(), scene_encoder=TinyEncoder())
 
@@ -80,7 +80,7 @@ class DataTests(unittest.TestCase):
         self.assertIsNotNone(data.pos_obs)
 
     def test_live_targets_share_anchor_and_pad_with_identity_and_last_grip(self):
-        from ip.data import preprocessing
+        from icgs.data.preprocessing import native as preprocessing
 
         poses = [np.eye(4) for _ in range(3)]
         poses[0] = poses[0].copy()
@@ -106,7 +106,7 @@ class DataTests(unittest.TestCase):
         np.testing.assert_allclose(actual, expected)
 
     def test_subsample_thresholds_state_changes_and_rotation_units(self):
-        from ip.data.preprocessing import subsample_traj
+        from icgs.data.preprocessing.native import subsample_traj
 
         poses = [np.eye(4) for _ in range(3)]
         poses[1] = poses[1].copy()
@@ -121,18 +121,16 @@ class DataTests(unittest.TestCase):
         np.testing.assert_allclose(sampled[1], poses[1])
         np.testing.assert_allclose(sampled[-1], poses[-1])
 
-    def test_legacy_data_imports_reach_same_implementations(self):
-        from ip.data import dataset, preprocessing
-        from ip.utils import data_proc, running_dataset
-
-        self.assertIs(data_proc.save_sample, preprocessing.save_sample)
-        self.assertIs(data_proc.sample_to_live, preprocessing.sample_to_live)
-        self.assertIs(data_proc.downsample_pcd, preprocessing.downsample_pcd)
-        self.assertIs(running_dataset.RunningDataset, dataset.RunningDataset)
+    def test_public_preprocessing_exports_reach_canonical_implementation(self):
+        from icgs.data import preprocessing
+        from icgs.data.preprocessing import native
+        self.assertIs(preprocessing.save_sample,native.save_sample)
+        self.assertIs(preprocessing.sample_to_live,native.sample_to_live)
+        self.assertIs(preprocessing.downsample_pcd,native.downsample_pcd)
 
     def test_running_dataset_retries_and_preserves_original_augmentations(self):
         from torch_geometric.data import Data
-        from ip.data import dataset
+        from icgs.data.datasets import native as dataset
 
         stored = Data(actions=torch.eye(4).repeat(2, 1, 1),
                       actions_grip=torch.ones(2),
@@ -154,7 +152,8 @@ class DataTests(unittest.TestCase):
         quarter_turn = Rot.from_euler("z", 90, degrees=True)
         source = dataset.RunningDataset("unused", 1, rec=True, random_rotation=True)
         with mock.patch.object(dataset.torch, "load", return_value=reconstruction), \
-             mock.patch.object(dataset.Rot, "random", return_value=quarter_turn):
+             mock.patch.object(dataset, "Rot") as rotation:
+            rotation.random.return_value=quarter_turn
             result = source[0]
         torch.testing.assert_close(result.pos, torch.tensor([[0.0, 1.0, 0.0]]),
                                    atol=1e-6, rtol=1e-6)
@@ -164,7 +163,7 @@ class DataTests(unittest.TestCase):
     @unittest.skipUnless(importlib.util.find_spec("open3d"),
                          "SKIPPED: Open3D is not installed")
     def test_open3d_outlier_and_voxel_paths(self):
-        from ip.data.preprocessing import downsample_pcd, remove_statistical_outliers
+        from icgs.data.preprocessing.native import downsample_pcd, remove_statistical_outliers
 
         points = np.vstack([np.zeros((25, 3)), np.array([[100.0, 100.0, 100.0]])])
         filtered, indices = remove_statistical_outliers(points)

@@ -7,8 +7,8 @@ import numpy as np
 
 class GeometryTests(unittest.TestCase):
     def setUp(self):
-        self.assertIsNotNone(importlib.util.find_spec('ip.geometry'), 'Missing isolated geometry')
-        from ip import geometry
+        self.assertIsNotNone(importlib.util.find_spec('icgs.geometry.transforms'), 'Missing isolated geometry')
+        from icgs.geometry import transforms as geometry
         self.g = geometry
 
     def test_pose_and_rigid_point_transform(self):

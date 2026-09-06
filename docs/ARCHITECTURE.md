@@ -1,156 +1,118 @@
-# Current software architecture
+# ICGS unified runtime
 
-Instant Policy is a composition of reusable components inside the existing `ip`
-namespace. The [original baseline](baselines/instant_policy.md) preserves historical
-identity and values; [ADR 0002](decisions/0002-runtime-composition.md) owns dependency
-rules. This is a structural refactor, not a new algorithm.
+ICGS is the method-level project. Its only installed runtime is `src/icgs`.
+Instant Policy is one internal policy and a collection of models/diffusion
+components, not an external backend or a package that owns the method.
 
-## Runtime map and dependencies
+## Dependencies and ownership
 
 ```text
-train.py / eval.py / deployment.py / prepare_data.py
-             ↓
-composition.py + checkpoints.py + training/evaluation orchestration
-             ↓                                  ↓
-policy.py                                  environments/rlbench.py
-             ↓                                  ↓
-models/denoiser + algorithms/diffusion       types Observation/ActionTrajectory
-             ↓
-SceneEncoder + GraphRep + graph stages + action codec
-             ↓
-geometry / positional embeddings / narrow configuration
+CLI → configuration + composition + artifacts
+                      ↓
+training/evaluation → execution → policy + environment adapter
+                                  ↓
+                      state + sampling/proposal algorithms
+                                  ↓
+                  neural encoders/graph/backbone/denoiser
+                                  ↓
+                         contracts + geometry
 ```
 
-| Owner | Responsibility |
+| Directory | Actual responsibility |
 | --- | --- |
-| [configs/structured.py](../ip/configs/structured.py) | Frozen experiment sections and validation |
-| [configs/original.py](../ip/configs/original.py) | instant_policy_original, legacy conversion, entry profiles, versioned resolved metadata |
-| [composition.py](../ip/composition.py) | Explicit factories, component initialization/encoder IO, shared network/policy/training/load construction |
-| [types.py](../ip/types.py) | Observation, ActionTrajectory, PreparedContext, policy/environment protocols |
-| [geometry.py](../ip/geometry.py) | Original NumPy/SciPy pose and torch action/rotation/SVD math |
-| [actions.py](../ip/actions.py) | Normalizer and OriginalActionCodec: normalization, labels, transforms and rigid recovery |
-| [models/scene_encoder.py](../ip/models/scene_encoder.py) | Original two-stage point encoder; injected by composition |
-| [models/embeddings.py](../ip/models/embeddings.py) | Original positional encodings, without Open3D imports |
-| [models/graph_rep.py](../ip/models/graph_rep.py) | Original graph structure, learned embeddings, masks/features; narrow GraphConfig |
-| [models/graph_transformer.py](../ip/models/graph_transformer.py) | Original TransformerConv/MLP blocks |
-| [models/backbone.py](../ip/models/backbone.py) | Original stage factory and stateless three-stage execution |
-| [models/denoiser.py](../ip/models/denoiser.py) | GraphDenoiser: supplied components and original forward computation |
-| [algorithms/diffusion.py](../ip/algorithms/diffusion.py) | OriginalDiffusionObjective, OriginalDiffusionSampler and DDIM factory |
-| [policy.py](../ip/policy.py) | Inference, model-ready batch API, demo preprocessing/cache lifecycle |
-| [data/preprocessing.py](../ip/data/preprocessing.py) | Original waypoint/cloud/target/serialization code; lazy Open3D |
-| [data/dataset.py](../ip/data/dataset.py) | Original indexed loading/retries and augmentation |
-| [training.py](../ip/training.py) | Lightning GraphDiffusion adapter, metrics/optimizer/checkpoint lifecycle, run_training |
-| [evaluation.py](../ip/evaluation.py) | evaluate_policy over public policy/environment protocols |
-| [environments/rlbench.py](../ip/environments/rlbench.py) | Simulator task mapping/setup/demos/observation/action conversion and legacy rollout adapter |
-| [checkpoints.py](../ip/checkpoints.py) | Explicit state translation, mismatch diagnostics and trusted loading |
+| contracts | World-frame Observation, native ActionTrajectory, narrow policy/environment capabilities |
+| state | Owner-bound immutable demo content, mutable context features, scoped RNG restoration |
+| geometry | Existing pose, rotation and point-set transforms, grouped in transforms.py |
+| models/layers | Shared positional encodings |
+| models/encoders | Native IP scene encoder; no speculative v5 encoder |
+| models/graphs | Native topology, learned graph features, masks and session scratch |
+| models/backbones | GraphTransformer and native three-stage processing |
+| models/denoisers | Native graph denoiser with registered parameter names preserved |
+| algorithms/diffusion | Action codec, original schedule/objective/sampler in coherent files |
+| algorithms/planning | Sequential candidate proposer only; no fake search/value/dynamics |
+| policies | InstantPolicy public observation/context → native action inference |
+| execution | Rollout loop and root-relative → absolute command prefix |
+| environments/rlbench | Lazy simulator setup, tasks, observation/action conversion |
+| evaluation | Benchmark entry delegating the shared execution protocol |
+| data | Native PyG preprocessing/datasets; safe versioned inference NPZ |
+| configuration | Frozen schema/defaults, explicit JSON parser, profiles and validation |
+| artifacts | Checkpoint inspection/translation, hash-bound published profile and legacy format repair |
+| training | Lightning module versus runner; retained unsupported occupancy source |
+| cli | infer, train, evaluate, prepare-data and lightweight help |
 
-No reusable core depends on RLBench, WandB, Lightning, argparse, composition or
-training. Core imports numerical libraries; policy preprocessing still needs Open3D
-when actual filtering runs. Pure geometry/model imports do not reach Open3D.
-The AST local-dependency check includes indirect imports and package initializers;
-it does not inspect arbitrary dynamic imports or third-party internals.
+Models never import policy, search, training, environment, CLI or checkpoint IO.
+Search/candidate algorithms use proposer capability, not concrete InstantPolicy.
+Runtime never imports old ip, instant_policy.so, docs, tests or root scripts.
+No sys.path/sys.modules aliases form part of the architecture.
 
-`models/model.py::AGI` is the legacy construction adapter;
-`models/diffusion.py::GraphDiffusion` re-exports the Lightning adapter.
-`utils/` retains legacy exports/diagnostics. New core does not import those adapters.
-`occupancy_net.py` remains a documented stale pretraining path, outside reusable
-core. No world-model/planner/history/language package has been created.
+## Configuration and construction
 
-## Construction and ownership
+Authoritative source defaults live in configuration.schema/defaults. Root JSON
+presets are explicit user inputs, not files implicitly read by an installed wheel.
+Precedence: runtime defaults/entry profile < explicit JSON sections < explicit CLI
+overrides. Relative artifact paths in JSON resolve against that file's directory.
+Unknown fields, component IDs and shape/horizon/type mismatches fail before model IO.
 
-`instant_policy_original()` returns independent frozen sections with immutable
-numeric action-limit tuples. `from_legacy` requires original fields; `to_legacy`
-returns fresh tensors/dictionary. The old `base_config.config` is a compatibility
-export only, not a shared state source for new training/evaluation code.
+Composition builds explicit components from immutable factory maps. Neural
+constructors do not load checkpoints. Caller-supplied factories are supported by
+Python composition; CLI selects only implemented identifiers. No Hydra or discovery.
 
-`ComponentFactories` holds immutable caller-supplied mappings for scene, graph,
-backbone, codec, scheduler, objective and sampler. Original names use explicit
-built-ins; unknown identifiers fail before artifact/model creation. No automatic
-plugin discovery or process-global registration. Components receive only relevant
-sections plus explicit dimensions/device.
+Published profile is separate from historical source defaults. Its packaged profile
+is tied to the actual checkpoint SHA256 and exposed reference configuration.
+It disables auxiliary encoder loading, uses live voxel size .01, and draws sampling
+noise before first scene encoding. See [fidelity decision](decisions/0005-published-profile-fidelity.md).
+All 337 model-owned keys are loaded strictly from 674 reference alias entries;
+equal aliases are explicitly reported, conflicts/shapes/missing keys fail.
 
-`build_network` creates components in original order and preserves registered
-names scene_encoder, graph, local_encoder, cond_encoder, action_encoder and three
-prediction heads. Stage execution does not add a backbone.* state-dict prefix.
-`build_policy` composes the network, codec, schedule, objective and sampler.
-The plain policy facade is not an additional nn.Module parent. A training wrapper
-registers the network under model and retains original aliases for compatibility.
+## Public semantics and state
 
-Graph, schedule and context state belong to one policy instance. Context records
-carry an owner token; cross-policy reuse fails. Context preparation does not eagerly
-encode demos; reset clears embeddings per rollout, preserving the original first-
-prediction cache timing. Sampling clones the model-ready caller batch, but original
-internal mutation/order is retained. Policies are not promised thread-safe for
-concurrent calls. Device is selected at construction; no general post-construction
-policy.to(device) contract exists for unregistered graph/codec tensors.
+Observation contains segmented world XYZ [N,3], T_w_e [4,4], and observed grip0/1.
+Policy prepares local clouds exactly once. ActionTrajectory holds root-relative
+[B,P,4,4] transforms and normalized [B,P,1] grips. Current public observation API
+supports B=1; K candidates are sequential proposals, not batch B.
 
-## Execution flows
+Prepared contexts own immutable numeric demo copies and a content hash. Their
+owner/count/waypoint checks prevent cross-policy or mismatched use. Mutable
+embeddings may be copied for a branch, but graph/scheduler/model are never cloned
+per node. Sessions and global seeded scopes are not concurrent-call safe.
+A frozen record does not imply tensor contents are immutable; demo arrays use
+read-only byte-backed storage, mutable outputs are caller-owned.
 
-Training:
-structured baseline or saved config → entry profile → build_training_module →
-shared build_policy/network → PyG dataset/loaders → Lightning training_step →
-callable objective → original noise/labels/denoiser/L1 → optimizer → validation
-sampler/metrics → legacy-named checkpoints and config.pkl plus resolved metadata.
+Published profile does not persist scene embeddings between calls, matching observed
+reference ordering. Historical source profile preserves its old cache path. Both
+paths are explicit; no arbitrary goal/latent-state support is claimed.
 
-Evaluation:
-read saved resolved_config.json (if present) or trusted config.pkl → eval profile
-(batch1, demos, four sampler steps) → shared build_policy → diagnostic strict state
-load → eval/optional compilation → RLBenchAdapter → evaluate_policy →
-prepare/reset context → policy.predict → anchored trajectory commands → task step →
-original success fraction.
+## Execution and command paths
 
-Deployment:
-same load_policy, explicit legacy deployment profile/non-strict diagnostics →
-prepare_context → predict(Observation, context) → controller-specific execution.
-The shipped file is still an example requiring demos/observations/controller.
+- `icgs infer`: safe NPZ → hash-bound strict published load → prepare context →
+  full native forward/sampler → validated relative/absolute trajectories.
+- `icgs train`: explicit config/data → same component construction → Lightning
+  adapter/objective/optimizer → native checkpoints and resolved metadata.
+- `icgs evaluate`: strict published config/weights → RLBench adapter and common
+  execution loop → original termination/reward success fraction.
+- `icgs prepare-data`: explicit NPZ with D conditioning demos plus a live trajectory
+  → original conversion/schema → PyG files. No invented data collector.
+- Method foundations: `propose_candidates` → K real native trajectories;
+  `absolute_prefix` → common root-anchored targets and known/unknown timing.
 
-Data:
-raw environment demo → generic point-cloud/waypoint processing → existing PyG
-sample schema → save_sample or RunningDataset. RLBench-specific masks/cameras
-remain in the environment adapter, not generic preprocessing. A second environment
-implements the same Observation/ActionTrajectory boundary, not AGI internals.
+The original source formulas, masks, six gripper points, graph stages and sampler
+indexing remain. Recorded/simulator data, broad task success, optimizer-resume and
+whole-object old-pickle compatibility are separate claims.
 
-## Public component contracts
+## Deliberate compatibility changes
 
-- Encoder: (x or None, XYZ[N,3], membership[N]) → features[M,E], positions[M,3],
-  membership[M]. Original graph requires compatible frame/cardinality/features.
-- Graph: constructor(GraphConfig,batch_size,device), initialise_graph/update_graph,
-  graph dictionaries/action node metadata, edge_dim and gripper geometry.
-- Backbone factory: (BackboneConfig,input_channels,edge_dim) → three nn.Modules;
-  each accepts feature/edge-index/edge-attribute dictionaries.
-- Codec: normalization + encode/decode + get_labels + gripper-node positions and
-  rigid recovery. Arbitrary action semantics may require a paired graph/objective.
-- Objective: constructor(DiffusionConfig,codec,schedule), callable(network,data)
-  returns differentiable scalar. Original exposes add_noise for legacy callers.
-- Sampler: constructor(SamplingConfig,DiffusionConfig,codec,schedule);
-  sample(network,data) → ActionTrajectory.
-- Policy: eval, prepare_context(demos,prepared=False), reset_context,
-  predict(Observation,context), predict_batch(PyG data).
-- Environment: launch, collect_demos, reset, observe, encode_action, step, shutdown.
+Old public ip imports/CLI paths are removed by owner authorization. The checkpoint
+was moved to artifacts/checkpoints/vv19 without changing bytes; no user data was
+deleted. setup.py's placeholder metadata was replaced by pyproject.toml.
+Historic documents link to pinned Git source rather than maintaining a second runtime.
 
-Exact tensors, masks, frames and original mathematical quirks remain in
-[policy-data-contract](components/policy-data-contract.md). Original full model,
-published-checkpoint and simulator parity are not certified by synthetic-component
-tests. See [validation](../tests/README.md) and the
-[migration record](plans/completed/modularize-instant-policy.md).
+Unsupported occupancy/pretraining code is preserved under training/stages, fails
+explicitly on construction and is never part of native inference. Missing visualizer/
+incompatible historical encoder calls are not disguised as a working port.
+The old recording-without-WandB and unbounded loader/reset retry behavior is retained;
+run the validated environment and use explicit resource limits.
 
-## Experiments and limits
-
-[Composition examples](components/composition-examples.md) show actual factory/config
-use, second-environment integration and hypothetical outer world-model/planner
-composition. No research method is implemented by those future examples.
-
-Compilation currently targets original scene internals and graph/head modules;
-custom encoders should use compile_models=False unless compatible. Custom factories
-must be supplied again on load; saved IDs are not executable code distribution.
-The original recording-without-WandB bug, dataset/reset retry behavior, mathematical
-quirks and stale occupancy route are not repaired. New Torch weights_only defaults
-can make original dataset loading hang on retried PyG deserialization errors; use
-the declared environment and address that separately.
-
-Host compatibility observation: constructing the original scene encoder on the
-development Python 3.14/PyG 2.5 stack fails in PyG's typing inspector
-(`typing.Union` lacks `_name`). The encoder mathematical implementation is not
-rewritten to bypass this dependency issue. Use the declared Python 3.10 stack for
-original-component validation; available synthetic collaborators do not certify
-that original encoder on this host.
+[Method foundation status](components/v5-foundations.md),
+[semantic contract](components/policy-data-contract.md),
+[usage examples](components/composition-examples.md), and
+[completed acceptance record](plans/completed/icgs-v5-unified.md) provide deeper evidence.

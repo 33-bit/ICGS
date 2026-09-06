@@ -1,105 +1,73 @@
-# Instant Policy
+# ICGS
 
-## Research repository guidance
+Unified research runtime in `src/icgs`. Instant Policy is an internal native
+policy/components baseline; method-level world models, learned evaluators and
+planners remain [designed/deferred](docs/components/v5-foundations.md).
 
-Start with the [documentation map](docs/README.md) for architecture, the original
-baseline, research workflow, and tiered validation. Coding agents start at
-[AGENTS.md](AGENTS.md). These guides do not change the runtime quickstart below.
+Start with [AGENTS](AGENTS.md), the [documentation map](docs/README.md),
+[architecture](docs/ARCHITECTURE.md), and [checkpoint evidence](docs/experiments/vv19-validation/README.md).
 
-The runtime now uses [explicit component composition](docs/components/composition-examples.md).
-Legacy `ip` imports and the commands below remain available. See the
-[baseline reproduction notes](docs/baselines/instant_policy.md#modular-runtime-reproduction-route)
-for compatibility and validation limits; the original training environment is unchanged.
+## Validated inference environment
 
-Code for the paper: "Instant Policy: In-Context Imitation Learning via Graph Diffusion", 
-[Project Webpage](https://www.robot-learning.uk/instant-policy)
+Linux x86_64, Python3.10, NVIDIA CUDA11.8 wheels. These commands match the isolated
+Colab environment used for acceptance; no full Conda export or host Python3.14 is
+assumed compatible.
 
-<p align="center">
-<img src="./media/rollout_roll.gif" alt="drawing" width="700"/>
-</p>
-
-## Setup
-
-**Clone this repo**
-
-```
-git clone https://github.com/vv19/instant_policy.git
-cd instant_policy
+```bash
+uv venv --python 3.10 /content/icgs-check-env
+uv pip install --python /content/icgs-check-env/bin/python -r requirements-inference-cu118.txt
+uv pip install --python /content/icgs-check-env/bin/python --no-deps .
+mkdir -p /content/icgs-artifacts
+/content/icgs-check-env/bin/python -m gdown --no-cookies https://drive.google.com/uc?id=1TM_zU1pVOqPuWZL3E9knNp4w-p7EBwwt -O /content/icgs-artifacts/model.pt
+/content/icgs-check-env/bin/python tests/fixtures/generate_smoke.py --output /content/icgs-evidence/input.npz
+cd /tmp
+/content/icgs-check-env/bin/icgs infer --checkpoint /content/icgs-artifacts/model.pt --input /content/icgs-evidence/input.npz --output /content/icgs-evidence/actions.npz --device cuda --seed 17
 ```
 
-**Create conda environment**
+Run installation commands from the checkout, then the last inference command works
+from any directory. For an existing wheel, install its absolute path instead of dot.
+torch-cluster/scatter/pyg-lib must match torch/CUDA ABI; they are explicitly pinned
+in the requirements file, not silently replaced with Python mocks.
 
-```
-conda env create -f environment.yml
-conda activate ip_env
-pip install pyg-lib -f https://data.pyg.org/whl/torch-2.2.0+cu118.html
-pip install -e .
-```
+The published checkpoint is 471777552 bytes, SHA256
+`119fa871091c7082b98d8a795dd80eca38295c4b7ab454e1f88549194bd4a4a5`.
+Hash identifies downloaded bytes, not an author-issued checksum. Encoder weights
+are included; no config.pkl or scene_encoder.pt download is required for this target.
+Do not commit weights. Local cached artifact is at
+`artifacts/checkpoints/vv19/model.pt`.
 
-Install RLbench by following the instructions in the https://github.com/stepjam/RLBench.
+## Commands
 
-## Quick Start
-
-### Try our pre-trained model for RLBench tasks.
-
-Download pre-trained weights.
-
-```
-cd ip
-./scripts/download_weights.sh
-```
-
-Run inference.
-
-```
-python eval.py \
- --task_name='plate_out' \
- --num_demos=2 \
- --num_rollouts=10
+```bash
+icgs --help
+icgs infer --help
+icgs train --help
+icgs evaluate --help
+icgs prepare-data --help
 ```
 
-Try it out with different tasks, e.g. `open_box` or `toilet_seat_down`! More in `utils/rl_bench_tasks.py`.
+Help does not load models or start environments. Train/evaluate/prepare-data require
+explicit config/data/artifact arguments. See [CLI/config contracts](docs/components/cli-and-data.md).
+No training, full benchmark or physical robot execution is automatic.
 
-## Deploy on Your Robot
+## Cheap validation
 
-Every robot (and its user) uses different controllers and gets observations in different ways. 
-In `deployment.py`, we provide examples of how to use Instant Policy for deployment on any robotic manipulator using parallel-jaw gripper. 
-Plug in your controller, get observations in a form of segmented point clouds, end-effector poses and gripper states, and you are all set! 
-
-## Training and Fine-tuning
-
-To train the graph diffusion model from scratch or fine-tune it using your own data, use `train.py`.
-First, you'll have to convert your data into appropriate format. Example of how to do it can be found in `prepare_data.py`. 
-
-Then to fine-tune your model, run: 
-```
-python train.py \
- --run_name='fine-tunning_ip' \
- --record=1 \
- --use_wandb=1 \
- --fine_tune=1 \
- --data_path_train='PATH/TO/TRAIN/DATA' \
- --data_path_val='PATH/TO/VAL/DATA' \
+```bash
+python3 -B scripts/validate_fast.py
+/content/icgs-check-env/bin/python -B -m unittest discover -s tests -p 'test_*.py'
 ```
 
-For more argument options, use `python train.py --help` and see parameters defined in `configs/base_config.py`. 
+L0 includes canonical src/package/import-boundary checks and negative fixtures.
+Read counts and skips; CPU/test-double proof is not published-checkpoint fidelity.
+Actual C1–C5 acceptance uses real weights and the external vv19 oracle, with logs.
 
-## Notes on Observed Performance
+## Research provenance
 
-To reach the best performance when deploying the current implementation of Instant Policy, there is a number of things to consider:
-
-- Objects of interest should be well segmented.
-- Tasks should follow Markovian assumption (there is no history of observations).
-- Demonstrations should be short and consistent, without a lot of task irrelevant motions.
-- Inference parameters (e.g. number of demonstrations and number of diffusion timesteps) can greatly influence the performance.
-- Compiling the model and using fewer diffusion steps will result in significantly faster inference times.
-
-If the deployed policy doesn't perform well, please feel free to contact me, I'll be happy!
-
-# Citing
-
-If you find our paper interesting or this code useful in your work, please cite our paper:
-
-```
-TBD.
-```
+Native numerical source originated from Instant Policy, “In-Context Imitation
+Learning via Graph Diffusion” (Vosylius and Johns, ICLR2025).
+[Upstream](https://github.com/vv19/instant_policy),
+[project](https://www.robot-learning.uk/instant-policy).
+Historical source identity and target-specific differences are recorded in
+[baseline documentation](docs/baselines/instant_policy.md). Reference distribution
+notices are in [third-party notices](docs/third-party-notices.md).
+No full benchmark success or complete v5 method is claimed.

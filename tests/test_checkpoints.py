@@ -8,19 +8,18 @@ import unittest
 import warnings
 
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 MISSING = [name for name in ("torch",) if importlib.util.find_spec(name) is None]
 if not MISSING:
     import torch
     from torch import nn
 
-    from ip.checkpoints import (
+    from icgs.artifacts.checkpoints import (
         CheckpointCompatibilityError,
         load_checkpoint_state,
         load_state_dict_compatible,
         normalize_state_dict,
     )
-    from ip.utils.repairs import remove_prefix, repair_checkpoint
+    from icgs.artifacts.legacy_formats import remove_prefix, repair_checkpoint
 
 
 class TinyAGI(nn.Module if not MISSING else object):

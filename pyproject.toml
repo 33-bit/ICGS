@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "icgs"
+version = "0.2.0"
+description = "Unified ICGS research components and Instant Policy baseline"
+requires-python = ">=3.10,<3.13"
+dependencies = ["numpy>=1.26,<2", "scipy>=1.14,<1.15", "torch==2.2.0", "torch-geometric==2.5.0", "diffusers==0.31.0", "huggingface-hub==0.26.2", "open3d==0.18.0", "tqdm>=4.66", "regex"]
+
+[project.optional-dependencies]
+training = ["lightning==2.4.0", "pytorch-lightning==2.4.0", "torchmetrics==1.5.2", "wandb==0.18.7"]
+native-extensions = ["torch-cluster==1.6.3", "torch-scatter==2.1.2"]
+
+[project.scripts]
+icgs = "icgs.cli.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["icgs*"]
+
+[tool.setuptools.package-data]
+"icgs.artifacts" = ["profiles/*.json"]

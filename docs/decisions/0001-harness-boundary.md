@@ -10,7 +10,7 @@ agents without becoming a runtime framework or a prerequisite for using artifact
 
 ## Decision
 
-Runtime code under `ip/` and packaging in `setup.py` must not depend on
+Runtime code under `src/icgs/` and packaging in `pyproject.toml` must not depend on
 `AGENTS.md`, `docs/`, `.agents/`, `tests/`, or root harness `scripts/`.
 Deleting those harness surfaces must not break training, inference, evaluation,
 checkpoint loading, data processing or simulator integration. Dependencies may

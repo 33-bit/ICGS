@@ -1,4 +1,4 @@
-# Working in Instant Policy
+# Working in ICGS
 
 Start with [the documentation map](docs/README.md). Before changing runtime code,
 read [architecture](docs/ARCHITECTURE.md), [workflow](docs/WORKFLOW.md), and the
@@ -22,5 +22,10 @@ frame, action, or normalization changes.
   accepted-rule enforcement. Neither authorizes speculative architecture changes.
 
 Inspect Git state before edits. Existing untracked work belongs to the user.
+Canonical runtime is src/icgs; Instant Policy is one internal policy/component
+family. Do not restore ip shims or a wrapped legacy subtree. Read
+[unified architecture decision](docs/decisions/0004-unified-icgs-v5.md).
+Published-checkpoint C1–C5 are mandatory for the current migration; requested
+Colab inference/reference validation is authorized. Never count SKIPPED as PASS.
 Do not launch training, downloads, preprocessing, simulator workloads, or robot
 motion as incidental validation. Advice, audits, and diagnoses remain read-only.

@@ -6,7 +6,8 @@ import unittest
 import numpy as np
 import torch
 
-from ip.types import ActionTrajectory, Observation, PreparedContext
+from icgs.contracts.records import ActionTrajectory, Observation
+from icgs.state.context_cache import PreparedContext
 
 
 class CallablePolicy:
@@ -88,7 +89,7 @@ class FakeEnvironment:
 
 class EvaluationTests(unittest.TestCase):
     def test_success_metric_termination_anchor_and_context_reset(self):
-        from ip.evaluation import evaluate_policy
+        from icgs.execution.rollout import evaluate_policy
 
         policy = CallablePolicy()
         environment = FakeEnvironment([
@@ -112,7 +113,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertEqual([entry[2] for entry in environment.encoded], [0, 1, 0])
 
     def test_step_exception_terminates_unsuccessful_rollout(self):
-        from ip.evaluation import evaluate_policy
+        from icgs.execution.rollout import evaluate_policy
 
         policy = CallablePolicy()
         environment = FakeEnvironment([[RuntimeError("step failed")]])
@@ -125,7 +126,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertTrue(environment.shutdown_called)
 
     def test_execution_and_replanning_horizons_are_independent(self):
-        from ip.evaluation import evaluate_policy
+        from icgs.execution.rollout import evaluate_policy
 
         policy = CallablePolicy(horizon=3)
         environment = FakeEnvironment([[(0.0, False)] * 6])
@@ -139,7 +140,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertIsNot(environment.encoded[0][0], environment.encoded[3][0])
 
     def test_encode_failure_propagates_without_failure_cleanup(self):
-        from ip.evaluation import evaluate_policy
+        from icgs.execution.rollout import evaluate_policy
 
         class EncodeFailure(FakeEnvironment):
             def encode_action(self, observation, trajectory, index):
@@ -151,7 +152,7 @@ class EvaluationTests(unittest.TestCase):
         self.assertFalse(environment.shutdown_called)
 
     def test_rlbench_adapter_converts_public_trajectory_at_boundary(self):
-        from ip.environments.rlbench import RLBenchAdapter
+        from icgs.environments.rlbench.adapter import RLBenchAdapter
 
         adapter = RLBenchAdapter("plate_out")
         anchor = np.eye(4)
@@ -167,21 +168,17 @@ class EvaluationTests(unittest.TestCase):
         np.testing.assert_allclose(command[3:7], [0.0, 0.0, 0.0, 1.0])
         self.assertEqual(command[7], 1.0)
 
-    def test_rlbench_imports_are_lazy_and_legacy_exports_are_identical(self):
-        from ip.environments import rlbench
-        from ip.utils import rl_bench_tasks, rl_bench_utils
+    def test_rlbench_imports_are_lazy_and_task_mapping_is_available(self):
+        from icgs.environments.rlbench import adapter as rlbench
 
         self.assertEqual(len(rlbench.TASK_NAMES), 17)
         self.assertIn("plate_out", rlbench.TASK_NAMES)
-        self.assertIs(rl_bench_tasks.TASK_NAMES, rlbench.TASK_NAMES)
-        self.assertIs(rl_bench_utils.RLBenchAdapter, rlbench.RLBenchAdapter)
-        self.assertIs(rl_bench_utils.get_point_cloud, rlbench.get_point_cloud)
 
     @unittest.skipUnless(importlib.util.find_spec("rlbench"),
                          "SKIPPED: RLBench is not installed")
     def test_rlbench_task_alias_resolves_to_real_task_class(self):
         from rlbench.tasks import TakePlateOffColoredDishRack
-        from ip.environments.rlbench import TASK_NAMES
+        from icgs.environments.rlbench.adapter import TASK_NAMES
 
         self.assertIs(TASK_NAMES["plate_out"], TakePlateOffColoredDishRack)
 

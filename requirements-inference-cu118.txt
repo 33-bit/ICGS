@@ -1,0 +1,19 @@
+# Validated Linux x86_64 / CPython3.10 / NVIDIA CUDA11.8 wheel stack.
+--extra-index-url https://download.pytorch.org/whl/cu118
+--find-links https://data.pyg.org/whl/torch-2.2.0+cu118.html
+torch @ https://download.pytorch.org/whl/cu118/torch-2.2.0%2Bcu118-cp310-cp310-linux_x86_64.whl
+numpy==1.26.4
+scipy==1.14.1
+torch-geometric==2.5.0
+torch-cluster==1.6.3+pt22cu118
+torch-scatter==2.1.2+pt22cu118
+pyg-lib==0.4.0+pt22cu118
+diffusers==0.31.0
+huggingface-hub==0.26.2
+open3d==0.18.0
+lightning==2.4.0
+pytorch-lightning==2.4.0
+torchmetrics==1.5.2
+regex
+gdown
+build

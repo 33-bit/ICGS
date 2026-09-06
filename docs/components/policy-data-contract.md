@@ -7,7 +7,7 @@ must update this current contract and identify its effect on the
 
 ## Raw observations and frames
 
-[Data processing](../../ip/data/preprocessing.py) expects demos with lists
+[Data processing](../../src/icgs/data/preprocessing/native.py) expects demos with lists
 `pcds`, `T_w_es`, `grips`. Each cloud is segmented world-frame XYZ;
 `T_w_e` is a 4×4 end-effector-to-world transform. Gripper inputs are 0 closed /
 1 open. Clouds are transformed by `inverse(T_w_e)` into the corresponding
@@ -67,7 +67,7 @@ Targets beyond the trajectory end are identity transforms and the last gripper
 state; there is no explicit padding mask. A chunk's actions share the observation
 reference pose; do not chain them as incremental transforms.
 
-[Normalizer and action codec](../../ip/actions.py) scale each six-dimensional action bound
+[Normalizer and action codec](../../src/icgs/algorithms/diffusion/codec.py) scale each six-dimensional action bound
 by horizon index 1..P. Translation base bounds are ±0.01; rotation components
 ±π/60. Linear mappings send these bounds to [-1,1]. Labels are not six-dimensional
 pose vectors: translation correction is repeated across gripper nodes; rotation
@@ -81,8 +81,8 @@ translation, rotational displacement and target grip, giving [B,P,6,7].
 GraphDiffusion normalizes the first six label channels and uses L1 loss.
 
 Current implementation owners are GraphDenoiser, OriginalActionCodec and
-OriginalDiffusionObjective; historical AGI/GraphDiffusion imports remain compatible
-entry adapters. Policy returns ActionTrajectory and operates on cloned sampling
+OriginalDiffusionObjective under src/icgs; historical ip imports are intentionally
+removed. Policy returns ActionTrajectory and operates on cloned sampling
 batches, preserving internal numerical operations without mutating caller data.
 
 Predicted gripper states use sign; exactly zero is possible and the rollout's
@@ -136,3 +136,14 @@ uses k in scheduler.step, and gives the first model call num_diffusion_iters_tra
 Its node-displacement/SVD composition and clipping are the observed sampler; do not
 replace this with a generic DDIM description or conventional indexing silently.
 These subtleties are targets for the later characterization/refactoring task.
+
+## Published profile and method boundary
+
+Published vv19 live preprocessing includes voxel size0.01 and initial noise precedes
+scene encoding. The historical source cache path is not equivalent under the same
+seed. Published profile selects those observed behaviors, with strict hash-bound
+embedded encoder weights and no auxiliary checkpoint (ADR0005).
+
+Contexts own read-only byte-backed demo arrays and immutable mappings; mutable
+features are isolated via branch_copy. Candidate K differs from batch B/horizon P;
+prefix targets use one root pose, with unknown timing left explicitly unknown.

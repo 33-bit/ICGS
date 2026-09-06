@@ -1,0 +1,1 @@
+"""ICGS contracts package."""

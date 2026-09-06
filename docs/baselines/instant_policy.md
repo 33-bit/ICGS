@@ -1,4 +1,8 @@
-# Original Instant Policy baseline
+# Instant Policy baseline identities
+
+Current runtime is src/icgs. The historical source identity below is distinct from
+published vv19 checkpoint profile. Old ip paths/commands in historical sections are
+provenance, not current execution instructions. Use the current route at the end.
 
 Identifier: `instant-policy-original-65dc94e`.
 Source: [matdmiller/instant_policy at 65dc94e347df5bca4e390a6f959cd3308f8ae2bc](https://github.com/matdmiller/instant_policy/tree/65dc94e347df5bca4e390a6f959cd3308f8ae2bc).
@@ -15,12 +19,12 @@ frozen documentation; live source may change later through the
 ## Complete source configuration
 
 After modularization, the executable canonical composition is
-`ip.configs.original.instant_policy_original()` with frozen sections;
-`ip.configs.base_config.config` remains a legacy fresh-dictionary export. The table
+`icgs.configuration.defaults.instant_policy_original()` with frozen sections;
+old `ip.configs.base_config.config` imports were removed; explicit `to_legacy` supports native artifact conversion. The table
 below records original values, not new profile defaults. An independent differential
 test compares every field with the hash-verified original configuration.
 
-Owner at baseline: [base_config.py](../../ip/configs/base_config.py).
+Owner at baseline: [base_config.py](../../src/icgs/configuration/defaults.py).
 The dictionary is Python with tensor values, not an executable YAML config.
 
 | Key | Original value |
@@ -160,48 +164,34 @@ runtime changes also produce differences: inspect them against baseline policy,
 do not regenerate the historical inventory to conceal drift. No checksum check
 alone proves runtime behavior or checkpoint compatibility.
 
-## Modular runtime reproduction route
+## Current published-native reproduction
 
-The modularization intentionally changes implementation file bytes. Historical
-checksums stay frozen and now report those migrations; they are not expected to
-all pass on the refactored tree. The named source baseline remains
-instant-policy-original-65dc94e and its canonical composition is
-instant_policy_original. Numerical parity is bounded to the tests described in
-[validation](../../tests/README.md), not a completed paper benchmark reproduction.
+Canonical source default is `icgs.configuration.defaults.instant_policy_original()`.
+Published profile is `icgs.artifacts.published.published_config()`, packaged and
+bound to the verified model hash. It changes only reference-evidenced settings:
+pretrained auxiliary encoder IO off, batch1, steps4, live voxel .01 and sampling
+before scene encoding. See [ADR0005](../decisions/0005-published-profile-fidelity.md).
 
-Setup is unchanged: use the original Linux-oriented environment.yml, matching
-PyG/torch extensions and a separately provisioned RLBench/PyRep/CoppeliaSim stack;
-install ip editable as in README. No dependency upgrades were made.
+The target artifact is downloaded from vv19's official script: file ID
+1TM_zU1pVOqPuWZL3E9knNp4w-p7EBwwt, 471777552 bytes, SHA256
+119fa871091c7082b98d8a795dd80eca38295c4b7ab454e1f88549194bd4a4a5.
+No auxiliary scene_encoder.pt or config.pkl is needed. Native strict loading
+maps all 674 alias entries to all 337 model-owned tensors; no missing/unexpected/
+shape/conflict tolerance or random fill is used.
 
-Dataset preparation still requires real demonstrations in prepare_data.py;
-it is not a complete data-generation recipe. Implementation now lives in
-ip.data.preprocessing and ip.data.dataset with old utils exports retained.
-Use existing PyG data_N.pt files with original schema and trusted provenance.
-Newer PyTorch's weights_only default is not silently patched in RunningDataset:
-it can reject these files and trigger retries; use the declared stack until a
-separate compatibility fix is approved.
+[README setup](../../README.md) provides exact commands. CLI is `icgs infer`
+with absolute checkpoint/input/output paths, installed wheel and no old source
+or reference binary in the import path. [CLI mapping](../components/cli-and-data.md)
+covers train/evaluate/prepare-data. Old namespace compatibility is intentionally
+removed under [ADR0004](../decisions/0004-unified-icgs-v5.md).
 
-From repository root after provisioning/installing, existing CLI paths remain:
+C1–C5 passed on Colab T4/CPython3.10.21/torch2.2.0+cu118/PyG2.5 for the supplied
+two-demo synthetic fixture and seeds17/29/41. This proves scoped native execution/
+fidelity, not task success or paper benchmark reproduction.
+[Actual metrics/logs](../experiments/vv19-validation/README.md) record tolerances,
+artifact/config identity, repeated contexts and installed execution.
 
-```bash
-cd ip
-python train.py --run_name=baseline --record=1 --use_wandb=1 --fine_tune=0 --data_path_train=./data/train --data_path_val=./data/val
-python eval.py --task_name=plate_out --num_demos=2 --num_rollouts=10 --restrict_rot=1 --compile_models=0
-```
-
-These are long-running research commands, NOT validation defaults. Supply actual
-data and explicit compute scope; source max steps remain 50000000001. Fine-tuning
-uses --fine_tune=1 and --model_path/--model_name as before; optimizer-resume
-equivalence is not claimed.
-
-Shared loading is ip.composition.load_policy. Eval preserves strict loading; deploy
-preserves explicit non-strict mode with complete mismatch warnings. Loading prefers
-saved resolved_config.json when present, otherwise trusted config.pkl. Registered
-original leaf/alias names are preserved; explicit compiled/alias translations are
-diagnosed. Actual published checkpoints were unavailable and compatibility remains
-unverified. Generated fixtures do not replace that evidence.
-
-Original encoder loading, evaluation rotation/mask/camera settings, sample order,
-sampler timestep arithmetic and action-frame quirks are retained. See
-[architecture](../ARCHITECTURE.md) and
-[composition examples](../components/composition-examples.md) for current APIs.
+Historical source defaults remain regression-tested, but they are not blindly
+used as an oracle for published preprocessing/RNG behavior. Original old retry,
+training and unsupported occupancy limitations remain documented. No retraining,
+new neural v5 model or planner was implemented to pass these gates.

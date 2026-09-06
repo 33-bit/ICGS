@@ -31,7 +31,7 @@ def legacy_definition(relative, name, namespace, owner=None):
 class DifferentialTests(unittest.TestCase):
     def test_all_canonical_config_values_match_original_source(self):
         import runpy
-        from ip.configs.original import instant_policy_original, to_legacy
+        from icgs.configuration.defaults import instant_policy_original, to_legacy
         # Verify the independent source bytes before executing its torch/NumPy config.
         root = Path(__file__).resolve().parents[1]
         expected_hash = next(line.split()[0] for line in
@@ -50,9 +50,9 @@ class DifferentialTests(unittest.TestCase):
 
     def test_graph_structure_and_seeded_parameters(self):
         from torch_geometric.data import HeteroData
-        from ip.models.embeddings import PositionalEncoder, SinusoidalPosEmb
-        from ip.models.graph_rep import GraphRep
-        from ip.configs.original import instant_policy_original, to_legacy
+        from icgs.models.layers.embeddings import PositionalEncoder, SinusoidalPosEmb
+        from icgs.models.graphs.ip_graph import GraphRep
+        from icgs.configuration.defaults import instant_policy_original, to_legacy
         from dataclasses import replace
         c = instant_policy_original()
         c = replace(c, runtime=replace(c.runtime, batch_size=1, device='cpu'))
@@ -88,8 +88,8 @@ class DifferentialTests(unittest.TestCase):
 
     def test_sampler_matches_original_loop_with_controlled_schedule(self):
         from test_policy import PolicyTests, LinearSchedule
-        from ip.configs.original import to_legacy
-        from ip.geometry import actions_to_transforms, transforms_to_actions, get_rigid_transforms
+        from icgs.configuration.defaults import to_legacy
+        from icgs.geometry.transforms import actions_to_transforms, transforms_to_actions, get_rigid_transforms
         helper = PolicyTests(); helper.setUp(); policy = helper.policy(custom=False)
         old_step = legacy_definition('ip/models/diffusion.py', 'test_step',
                     dict(torch=torch, actions_to_transforms=actions_to_transforms,

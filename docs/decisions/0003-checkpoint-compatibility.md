@@ -2,6 +2,9 @@
 
 Date: 2026-09-06. Status: accepted by the owner with the modularization plan.
 
+Legacy import retention and published non-strict allowance are superseded by
+[ADR0004](0004-unified-icgs-v5.md); current published target is strict-only.
+
 ## Context
 
 Legacy GraphDiffusion registers self.model and aliases to its submodules. Module

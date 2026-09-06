@@ -1,207 +1,110 @@
 # Validation ownership and evidence
 
-This file owns validation tiers, commands and reporting. The repository originally
-had no automated tests. Checks now cover harness integrity, modular composition,
-semantic CPU contracts, checkpoint translation and opt-in model integration,
-not baseline research performance.
+Canonical runtime is src/icgs. L0 must scan that root and reject empty/missing
+source, forbidden dependencies and old ip/binary imports; a moved tree cannot
+produce a false-green check by disappearing from discovery.
 
-## Tiers and selection
+## Tiers and canonical commands
 
-| Level | What to check | Prerequisites / cost | When |
-| --- | --- | --- | --- |
-| L0 static/harness | Syntax, local docs links, syntactic harness boundary, validator positive/negative tests | Python 3.10+ standard library; seconds | Every harness or Python change |
-| L1 CPU smoke | Config construction/copy isolation, action/label normalization and horizon bounds | Importable PyTorch + NumPy; seconds | Config, normalizer or related contract changes |
-| L2 model integration | Actual construction, checkpoint loading, trusted representative fixture, finite/shape-correct inference | Compatible research stack, encoder/policy assets, CUDA where necessary; minutes/resource-dependent | Model, graph, diffusion, checkpoint or data-contract changes |
-| L3 environment integration | Imports, simulator startup, real observation and action conversion, bounded rollout | RLBench/PyRep/CoppeliaSim, rendering and model assets; minutes or longer | Environment/adapter/preprocessing changes affecting observations or commands |
-| L4 research benchmark | Frozen protocol, multi-seed task evaluation, matched baseline/ablation comparison | Full environment, artifacts and explicitly agreed compute budget; expensive | Scientific performance claims |
-
-L0 is not import validation. L1 is not a CPU full-model guarantee. L2–L4 have no
-general automated runner or repository fixture yet: specify the required bounded
-proof in the task/experiment before running. Never run “all tests” as shorthand
-for full training or a benchmark.
-
-## Canonical cheap commands
-
-Run from the repository root (or use absolute script paths):
+| Tier | Purpose | Prerequisites |
+| --- | --- | --- |
+| L0 | Syntax, doc links, src/package boundaries, local dependency closure including initializers, negative fixtures | Python standard library |
+| L1 | Contracts/config/geometry, real PyG synthetic composition, data IO, candidate/context/RNG, evaluator and checkpoint translation | Installed ICGS and actual dependencies |
+| L2 / C1–C5 | Actual published checkpoint, full native encoder/graph/sampling, reference fidelity, installed standalone command | Pinned Linux Python3.10/CUDA11.8 and trusted published artifact |
+| L3 | RLBench integration/task smoke | Separately provisioned simulator |
+| L4 | Research benchmark and matched statistical comparison | Explicit protocol and compute scope |
 
 ```bash
 python3 -B scripts/validate_fast.py
-python3 -B -m unittest discover -s tests -p 'test_*.py' -v
+python3 -B -S scripts/validate_fast.py
+/content/icgs-check-env/bin/python -B -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-The first command runs L0 only (including architecture closure tests) and exits 1 on a check/test failure. It reports
-L1–L4 as NOT RUN. `--root <fixture-root>` inspects an isolated tree but intentionally
-does not run self-tests; it cannot certify that the installed harness is complete.
+The package must be installed; tests no longer inject repository roots into sys.path.
+L0 uses only stdlib. Full L1 uses the validated environment; missing modules are not
+substituted with fake imports. Core fixture tests inject concrete small collaborators
+only at public seams, not to certify missing full-model behavior.
 
-Individual validator tests:
+Unittest zero exit with skipped tests is not a full PASS. Report selected/executed/
+skipped counts. C1–C5 are mandatory for this migration, not optional because a host
+initially lacks dependencies. Opt-in decorators serve cheap routine runs; the
+acceptance job must run actual checkpoint tests and reference comparison.
 
-```bash
-python3 -B -m unittest discover -s tests -p test_harness.py -v
-```
+## Test owners
 
-The legacy test_cpu_smoke.py skips when torch or numpy cannot be found;
-installed-but-broken imports fail. The full CPU suite requires real torch, NumPy,
-SciPy and PyG; use L0 alone on a dependency-free host.
-Unittest may exit zero with skipped tests: read its counts and report those tests
-as SKIPPED, never a CPU validation pass. No fake torch/PyG modules are substituted.
-Python `-B` avoids bytecode files. Tests create/remove only their own temporary
-fixture directories outside the repository.
-
-## Check ownership and exact scope
-
-- [test_harness.py](test_harness.py): exercises the real validator with bad syntax,
-  missing file/heading targets, valid links, reverse dependencies, runtime resource
-  literals, empty trees and CLI failure propagation.
-- [test_cpu_smoke.py](test_cpu_smoke.py): characterizes original config and Normalizer
-  behavior without loading the full policy. Independent numeric bounds supplement
-  round trips, which alone could miss a symmetric normalization bug.
-- [validate_fast.py](../scripts/validate_fast.py): parses repository-owned Python
-  under ip/scripts/tests/docs/.agents plus root Python files. Syntax checking
-  compiles in memory without executing scanned files or writing bytecode. It does
-  not install packages. Its self-tests run bounded Python CLI subprocesses against
-  owned fixtures; no research entry point is launched.
-- The boundary scan covers runtime Python under ip and setup.py, not shell,
-  arbitrary generated code or external libraries. It flags harness-root imports,
-  literal dynamic-import targets and exact harness-shaped string literals. It does
-  not resolve aliases, compute paths, prove transitive third-party isolation, or
-  analyze every filesystem operation. A diagnostic is a reviewable violation
-  candidate; prose literals can require inspection. Rule authority is
-  [ADR 0001](../docs/decisions/0001-harness-boundary.md).
-- Link checking supports simple inline Markdown links/images, reference definitions,
-  ATX headings (including repeated heading suffixes), and HTML src/href. It skips
-  fenced examples and remote URLs. It is not a full CommonMark renderer, does not
-  verify external availability or free-form backtick references, and does not
-  validate arbitrary HTML anchors. Keep maintained links in supported syntax.
-- No model/runtime module imports tests or the validator. Removing harness surfaces
-  must preserve runtime operation; static results are bounded evidence, not a
-  replacement for appropriate integration checks.
-- No optional hook, CI job or external branch-protection requirement was installed.
-  A local PASS does not mean a merge-blocking check exists.
-
-## L2 prerequisites and bounded evidence
-
-Start with the [baseline artifact requirements](../docs/baselines/instant_policy.md).
-Do not deserialize untrusted pickle/checkpoint data. Record torch/PyG/Lightning/
-Diffusers/Open3D versions, device, model and encoder checksums, resolved checkpoint
-config, loading strictness and any overrides.
-
-For an authorized integration task, construct the actual GraphDiffusion with the
-checkpoint config, batch one and no compilation; load the original scene encoder
-and checkpoint in the same way as eval.py. Build or load one trusted PyG fixture
-covering the [semantic contract](../docs/components/policy-data-contract.md).
-Record construction/load exceptions; validate actual action/grip shapes, finite
-values, transform properties and seed-dependent repeatability/tolerances before
-claiming inference passed. The repository does not yet supply that fixture, so
-this is a test design requirement, not a claimed runnable command.
-
-Even version/import checking needs real dependencies. In a provisioned environment,
-`python -B ip/sandbox.py` prints torch/CUDA/PyG/Lightning versions only; it does not
-validate Open3D, Diffusers, checkpoint compatibility or inference.
-
-## L3 controlled simulator operation
-
-Before startup, record exact RLBench/PyRep/CoppeliaSim revisions, rendering
-availability, task/demo counts, model artifacts, time budget and ownership of the
-simulator process. The current environment code retries some failures indefinitely
-and does not guarantee cleanup on exceptions. Use an operator-controlled deadline;
-stop only processes owned by this run. Do not use broad kill/cleanup commands.
-
-After package installation, this import-only probe does not launch a simulator:
-
-```bash
-python -B -c 'import rlbench; import pyrep; from ip.utils.rl_bench_utils import rollout_model; print("PASS: environment imports only")'
-```
-
-Only with the prerequisites and explicit simulator execution approval, an existing
-minimal-rollout command is:
-
-```bash
-cd ip
-python -B eval.py --task_name=plate_out --num_demos=2 --num_rollouts=1 --restrict_rot=1 --compile_models=0
-```
-
-It still collects demonstrations, can hang in retries, and may be costly. One
-rollout is NOT a benchmark or a deterministic simulator smoke. The CLI does not
-expose a seed, headless flag, max-step limit or timeout; do not invent those flags.
-Return to repository root before running root-relative checks.
-
-Robot deployment is never implicit validation: deployment.py contains placeholders
-and no controller safety system. Physical robot actions require a separately
-authorized integration procedure.
-
-## L4 research benchmark
-
-Create a real [research contract](../docs/experiments/TEMPLATE.md). Freeze baseline,
-tasks/variations, demonstrations, seeds, data, checkpoints, rotation restriction,
-execution/prediction horizon, diffusion steps, hardware and metric aggregation.
-The original repository does not provide a complete benchmark matrix or seed CLI.
-Do not claim paper reproduction from the example task list or a single rollout.
-
-## Reporting vocabulary
-
-- PASS: the named check executed and satisfied its assertions.
-- FAIL: the check executed and failed, including an installed dependency that fails
-  to import. Include the diagnostic.
-- SKIPPED: a selected check intentionally could not execute because its prerequisite
-  was unavailable; give the specific dependency/asset/environment reason.
-- NOT RUN: the check was not selected or attempted.
-
-Every handoff includes command, working directory, interpreter/environment, result
-and counts, skip/failure reasons, and remaining risk. A summary cannot upgrade a
-skipped required check to passed. Initial expected red tests and negative fixtures
-are test-development evidence, not unresolved runtime defects.
-
-## Modularization tests and reproducible commands
-
-| Test owner | Evidence |
+| File | Protected behavior |
 | --- | --- |
-| test_architecture.py | Accepted local import closure, direct/indirect violations and package initializers; stdlib L0 |
-| test_config.py | Frozen baseline, independent tensor conversion, profiles, custom selectors, resolved metadata |
-| test_geometry.py / test_cpu_smoke.py | Original pose/SVD/action/normalization CPU behavior |
-| test_composition.py | Real PyG graph/heads forward/backward with injected encoder/stages, graph replacement, legacy graph config, preflight |
-| test_policy.py | Sampler swap, original loop/objective with controlled schedule, context isolation/cache reset, observation and evaluator API |
-| test_data.py | Real PyG serialization/caches and target semantics; Open3D path conditional |
-| test_evaluation.py | Public policy/fake-environment metric/horizon/action contract; RLBench task resolution conditional |
-| test_checkpoints.py | Generated raw/Lightning states, equal/unequal aliases, compiled keys, strictness, shapes, source immutability |
-| test_loading.py | Resolved demo override survives artifact load/context/prediction; standalone encoder selector rejects unknown IDs |
-| test_training.py | Real Lightning wrapper registration; skipped without Lightning |
-| test_differential.py | Opt-in verified original-source method comparison; no duplicate runtime implementation |
-| test_model_integration.py | Explicit opt-in trusted original artifacts and CUDA inference |
+| test_harness.py | Syntax/link/boundary CLI positive/negative fixtures |
+| test_architecture.py | Direct/indirect core dependency direction, package initializers |
+| test_src_package.py | Actual canonical source exists, no old ip runtime imports/tree |
+| test_config.py / test_v5_config.py | Baseline values, frozen config, profiles, unknown IDs/types/paths/horizons |
+| test_geometry.py / test_cpu_smoke.py | Pose/rotation/SVD and normalization |
+| test_composition.py | Encoder/graph/stage replacement and real PyG forward/backward |
+| test_policy.py | Public inference, owned immutable context, branch feature isolation, cache/reset |
+| test_candidates.py | K/B/P provenance and independent root-anchored prefixes |
+| test_inference_contract.py | Safe NPZ and exception-safe Python/NumPy/CPU/CUDA RNG scope |
+| test_data.py | Native PyG serialization/augmentation and actual Open3D filtering when installed |
+| test_evaluation.py | Original metric/cadence/step exception behavior via fake environment, real action conversion |
+| test_checkpoints.py | Generated alias/compiled/shape/missing diagnostics and artifact immutability |
+| test_loading.py | Resolved config survives load→context→prediction |
+| test_training.py | Actual Lightning wrapper alias registration (no training job) |
+| test_cli.py | Installed help outside checkout, rejected published-runtime overrides |
+| test_differential.py | Verified original source methods, not two facades of new implementation |
+| test_model_integration.py | Real strict published native inference, explicitly enabled |
+| regression/published_fidelity.py | Actual external vv19 vs native outputs, repeatability-derived tolerance |
 
-The architecture rule is [ADR0002](../docs/decisions/0002-runtime-composition.md).
-Its local graph includes syntactic imports and parent initializers; it does not
-prove arbitrary dynamic imports or third-party internals. It is run by the canonical
-L0 command; no CI or branch protection was added.
+Tests remain flat for reliable unittest discovery; regression/fixtures are explicit
+standalone scripts, not silently undiscovered unittest suites. L0 counts its selected
+19 tests and negative fixtures; full discovery counts are in acceptance evidence.
 
-With a trusted original-source checkout at the pinned baseline revision:
+## Published integration commands
 
-```bash
-IP_LEGACY_SOURCE_ROOT=/path/to/original-checkout python3 -B -m unittest discover -s tests -p test_differential.py -v
-```
-
-The test checks historical SHA-256 values before executing selected definitions.
-It compares all original config fields, exact graph edges/seeded parameters, and
-denoiser/labels/sampler under controlled components/schedule. This does not exercise
-original PointNet/FPS kernels or DDIM behavior on CUDA. The refactor's before-image
-can be used locally; it is not a permanent required runtime/harness resource.
-
-Only after trusting/provisioning checkpoint assets and the original stack:
+After setup in [README](../README.md), with trusted assets:
 
 ```bash
-IP_RUN_MODEL_TESTS=1 IP_CHECKPOINT_DIR=/absolute/trusted/checkpoints python3 -B -m unittest discover -s tests -p test_model_integration.py -v
+ICGS_RUN_PUBLISHED=1 ICGS_CHECKPOINT=/content/icgs-artifacts/model.pt ICGS_FIXTURE=/content/icgs-evidence/input.npz /content/icgs-check-env/bin/python -B -m unittest discover -s tests -p test_model_integration.py -v
 ```
 
-Missing prerequisites/assets explicitly skip. Available dependencies that fail
-construction/import/load/assertions fail. The test uses original model composition
-and synthetic clouds, with only an explicit encoder artifact-path override; it does
-not generate a benchmark or download assets. No simulator test launches implicitly.
+Reference comparison uses the exact command in
+[published validation evidence](../docs/experiments/vv19-validation/README.md).
+It runs the original binary in an external reference process/environment, not
+inside native runtime. Normal native installed inference never adds reference to
+PYTHONPATH or imports instant_policy/ip.
 
-On the development host, PyTorch/PyG emit Python-3.14 JIT deprecation warnings;
-these are recorded dependency warnings, not numerical parity proof or test failures.
-The original declared stack is still recommended for research execution.
+Original source differential:
+```bash
+IP_LEGACY_SOURCE_ROOT=/content/source-reference /content/icgs-check-env/bin/python -B -m unittest discover -s tests -p test_differential.py -v
+```
 
-An attempted original-scene construction during selector regression testing failed
-in the host PyG typing inspector (`typing.Union` has no `_name`). This is an observed
-host dependency failure, not a successful original-component check. The selector
-test now rejects unknown IDs before construction; it does not hide or fix that
-separate original-encoder compatibility issue.
+Source hashes are checked before selected original definitions execute. These
+source comparisons do not replace target fidelity; checkpoint/normalization/
+preprocessing settings can differ from the earlier source fork.
+
+## Guarantees and limitations
+
+L0 is syntax/local static analysis, not arbitrary dynamic dependency proof. Markdown
+checking covers simple inline/reference links, ATX headings and HTML src/href,
+not external availability or a full renderer. Learned algorithms/models do not
+depend on harness files. No CI provider, hook or branch protection was added.
+
+Published fixture uses nondegenerate synthetic geometry and two demonstrations
+with nontrivial transforms; it proves execution/fidelity, not task success.
+Full scene/FPS/DDIM runs are real on Colab T4. CUDA/ABI pins matter; no mass dependency
+upgrade or encoder-math workaround is part of setup.
+
+RLBench launches remain explicit and normal-path cleanup preserves original
+semantics; retries may be unbounded. Do not run unknown files through the legacy
+retry loader as a quick smoke test. Train/large preprocessing/benchmark/robot work
+requires separate scope; helper tests never authorize it.
+
+## Reporting
+
+PASS: named check executed and met assertions.
+FAIL: check ran and failed, including installed-but-broken imports.
+SKIPPED: selected check unavailable with explicit prerequisite reason.
+NOT RUN: not selected/attempted.
+
+Always give command, cwd, interpreter/versions, counts, reason and remaining claim
+limits. Preserve failed intermediate evidence and explain the correction. No
+skipped required gate becomes PASS. C1 load metadata, C2 strict load, C3 inference,
+C4 fidelity and C5 independent installed execution are distinct claims.

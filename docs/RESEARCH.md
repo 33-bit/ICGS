@@ -9,9 +9,9 @@ original is a documented limitation, not permission to silently redefine it.
 
 Prefer baseline + controlled configuration/component change + comparable evaluation.
 New code derives from instant_policy_original() with dataclasses.replace on frozen
-sections; record exact overrides and resolved component identities. The legacy
-base_config.config dictionary remains mutable for old imports; deep-copy it before
-legacy experiments. There is no YAML/Hydra framework. Construction-driven component
+sections; record exact overrides and resolved component identities. Historical
+base_config.config imports were removed by the unified namespace migration.
+There is no YAML/Hydra framework. Construction-driven component
 selection and versioned resolved JSON are documented in the
 [composition examples](components/composition-examples.md); arbitrary Python files
 are not automatically discovered or consumed by the CLI.

@@ -1,0 +1,68 @@
+{
+  "status": "PASS",
+  "checkpoint_sha256": "119fa871091c7082b98d8a795dd80eca38295c4b7ab454e1f88549194bd4a4a5",
+  "C1": "PASS",
+  "C2": "PASS",
+  "C3": "PASS",
+  "C4": "PASS",
+  "C5": "PASS",
+  "reference_repeatability": [
+    {
+      "matrix_max": 2.3830216377973557e-7,
+      "matrix_mean": 2.4458074676658725e-8,
+      "translation_max": 2.60770320892334e-8,
+      "rotation_rad_max": 2.401369418899017e-7,
+      "grip_equal": true
+    },
+    {
+      "matrix_max": 2.0848528947681189e-7,
+      "matrix_mean": 2.688977929210523e-8,
+      "translation_max": 4.470348358154297e-8,
+      "rotation_rad_max": 2.4439718983898435e-7,
+      "grip_equal": true
+    },
+    {
+      "matrix_max": 2.7567148208618164e-7,
+      "matrix_mean": 2.791966835502535e-8,
+      "translation_max": 2.2351741790771484e-8,
+      "rotation_rad_max": 3.327833108804715e-7,
+      "grip_equal": true
+    }
+  ],
+  "tolerances": {
+    "matrix": 0.000005513429641723633,
+    "translation": 0.000001,
+    "rotation_rad": 0.00001
+  },
+  "comparisons": [
+    {
+      "seed": 17,
+      "matrix_max": 2.086162567138672e-7,
+      "matrix_mean": 2.5894394184433622e-8,
+      "translation_max": 2.60770320892334e-8,
+      "rotation_rad_max": 2.3259971854597493e-7,
+      "grip_equal": true
+    },
+    {
+      "seed": 29,
+      "matrix_max": 2.0848528947681189e-7,
+      "matrix_mean": 2.894034878409002e-8,
+      "translation_max": 6.705522537231445e-8,
+      "rotation_rad_max": 2.4429967686355393e-7,
+      "grip_equal": true
+    },
+    {
+      "seed": 41,
+      "matrix_max": 2.2351741790771484e-7,
+      "matrix_mean": 2.4276232579723e-8,
+      "translation_max": 5.21540641784668e-8,
+      "rotation_rad_max": 2.657257508532552e-7,
+      "grip_equal": true
+    }
+  ],
+  "candidate_tests": "K=1 parity and K=3 count/index/RNG/prefix PASS",
+  "context": "cold/warm/reset PASS; published profile does not persist scene embeddings",
+  "input": "geometric synthetic two-demo nontrivial-pose fixture; no task success claim",
+  "wheel_sha256": "7509bcdb66f7da26b3a7bfebf414b410d7e3b9a25b6b34d0dca0e8abf3625d49",
+  "fixture_sha256": "75206e40b2475693cdfccaa2e9f6a4b2ae8b54c33917496dc3403e6b9c448d66"
+}

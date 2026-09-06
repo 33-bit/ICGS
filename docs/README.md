@@ -15,6 +15,11 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Boundary decision](decisions/0001-harness-boundary.md) | Runtime independence from repository harness |
 | [Runtime composition decision](decisions/0002-runtime-composition.md) | Accepted core dependency direction and composition/config strategy |
 | [Checkpoint decision](decisions/0003-checkpoint-compatibility.md) | Legacy translation, strictness and diagnostic policy |
+| [Unified ICGS decision](decisions/0004-unified-icgs-v5.md) | Canonical src/icgs namespace and mandatory published gates |
+| [Published fidelity decision](decisions/0005-published-profile-fidelity.md) | Evidence-backed live preprocessing and RNG-order profile |
+| [V5 foundation status](components/v5-foundations.md) | Implemented/designed/deferred method-level ownership |
+| [CLI and data](components/cli-and-data.md) | Explicit config paths, command migration, safe input/output schema |
+| [Published acceptance evidence](experiments/vv19-validation/README.md) | Actual Colab checkpoint/inference/fidelity results |
 | [Decision template](decisions/TEMPLATE.md) | Format for new durable decisions |
 | [Plan template](plans/TEMPLATE.md) | Optional fields for resumable work |
 | [Experiment template](experiments/TEMPLATE.md) | Lightweight research-contract record |

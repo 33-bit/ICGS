@@ -1,125 +1,55 @@
-# Composition and controlled experiments
+# ICGS method-level usage
 
-These examples use current APIs. They require the indicated research libraries and
-trusted encoder/checkpoint assets; none is automatically run by validation.
-
-## Original architecture
+## Published native IP
 
 ```python
-from ip.configs.original import instant_policy_original
-from ip.composition import build_policy, build_training_module
+from icgs.artifacts.published import load_published_policy
+from icgs.data.schemas.inference import load_input
+from icgs.state.randomness import scoped_seed
 
-config = instant_policy_original()
-policy = build_policy(config)  # CUDA + original scene encoder artifact required
-training_module = build_training_module(config)  # independent model; requires Lightning
+policy = load_published_policy("/content/icgs-artifacts/model.pt", device="cuda")
+observation, demos = load_input("/content/icgs-evidence/input.npz")
+with scoped_seed(17, device="cuda"):
+    context = policy.prepare_context(demos)
+    trajectory = policy.predict(observation, context)
 ```
 
-For inference from existing weights, use load_policy rather than treating an
-uninitialized build as pretrained. From the original ip working directory:
+The wheel requires no reference binary, old package, sidecar config/encoder or
+checkout-relative defaults. Only the known hash is accepted by this target loader.
+
+## IP as one method component
 
 ```python
-from ip.composition import load_policy
-policy = load_policy("./checkpoints", mode="eval", num_demos=2)
+from icgs.algorithms.planning.candidates import propose_candidates
+from icgs.execution.commands import absolute_prefix
+
+candidates = propose_candidates(policy, observation, context, count=3, seeds=[17,18,19])
+prefix = absolute_prefix(candidates[0].trajectory, observation.T_w_e, length=3)
 ```
 
-Training/evaluation/deployment share construction. Do not build both examples above
-when only one model is needed. Source defaults and entry profiles differ by design.
+This produces proposals, not a planner score or a search decision. Your method may
+later select/evaluate proposals through its own physical dynamics/task-value models.
+Those components use shared contracts and are not imported by InstantPolicy.
 
-## Replace only the scene encoder
+A second environment implements the narrow observation/demo/action/step contract in
+`icgs.contracts.records.EvaluationEnvironment`; common rollout lives in
+`icgs.execution.rollout.evaluate_policy`. Different metric semantics require a
+named evaluation protocol, not reuse disguised as benchmark equivalence.
 
-Supply your real nn.Module factory with the
-[encoder contract](../ARCHITECTURE.md#public-component-contracts). This example
-assumes make_scene_encoder is an implemented, imported experiment factory; it does
-not invent the encoder architecture.
+World model/planner direction (designed, not implemented):
+history/physical representation → dynamics/evaluator → search → selected absolute
+command prefix. Search depends on proposer/predictor/evaluator capabilities, never
+concrete IP classes. Grounding a new goal into native demo context remains explicit
+future research work, not an assumed latent-goal API.
 
-```python
-from dataclasses import replace
-from ip.composition import ComponentFactories, build_policy
-from ip.configs.original import instant_policy_original
+## Internal component ablations
 
-def build_encoder_experiment(make_scene_encoder):
-    base = instant_policy_original()
-    experiment = replace(base, name="encoder_ablation",
-                         scene=replace(base.scene, kind="experiment_encoder",
-                                       pretrained=False, freeze=False),
-                         runtime=replace(base.runtime, compile_models=False))
-    factories = ComponentFactories(scene={"experiment_encoder": make_scene_encoder})
-    return build_policy(experiment, factories)
-```
+For research that actually changes native components, use
+`icgs.composition.ComponentFactories` and `dataclasses.replace` on
+`icgs.configuration.defaults.instant_policy_original()`. Scene, graph, backbone,
+codec, sampler, objective and scheduler have explicit factories; preserve semantic
+compatibility or declare a matched experiment. This is optional internal capability,
+not the organizing center of the ICGS method.
 
-Only encoder identity/initialization and explicit compilation setting change;
-record them as controls/confounders. Preserve width, node count and frames to keep
-the original graph/backbone/codec/sampler. Recompute cached features. A semantic
-object encoder with incompatible node meaning needs an explicit compatible graph
-composition; shape matching alone is insufficient.
-
-## Add a compatible sampler
-
-The new sampler class must implement constructor(sampling,diffusion,codec,schedule)
-and sample(network,data) returning ActionTrajectory.
-
-```python
-from dataclasses import replace
-from ip.composition import ComponentFactories, build_policy
-from ip.configs.original import instant_policy_original
-
-def build_sampler_experiment(sampler_class):
-    base = instant_policy_original()
-    config = replace(base, name="sampler_ablation",
-                     sampling=replace(base.sampling, kind="experiment_sampler"))
-    return build_policy(config, ComponentFactories(sampler={"experiment_sampler": sampler_class}))
-```
-
-Scheduler identity is selected separately by diffusion.scheduler_kind; objective by
-diffusion.kind. Flow matching generally changes training targets too and is not
-merely a sampler swap. No new sampler is shipped here; tests inject controlled
-collaborators to prove the seam.
-
-## Second environment
-
-Implement EvaluationEnvironment from ip.types using your benchmark's actual API:
-launch, collect_demos returning prepared conditioning dictionaries, reset, observe
-returning Observation, encode_action anchored to the observation, step returning
-(reward,terminate), and shutdown. Then:
-
-```python
-from ip.evaluation import evaluate_policy
-
-def evaluate_second_environment(policy, adapter):
-    return evaluate_policy(policy, adapter, num_demos=2, num_rollouts=1,
-                           max_execution_steps=30, execution_horizon=8,
-                           num_traj_wp=10)
-```
-
-No policy internals or RLBench classes belong in this adapter. If the benchmark's
-metric/termination protocol differs, provide its own evaluator rather than claiming
-the RLBench success fraction applies universally. collect_demos is prepared=True:
-it must supply local clouds/grips/world demo poses with the documented waypoint count.
-
-## World model or planner later
-
-Conceptual composition only; not implemented interfaces:
-
-```text
-outer agent owns history/representation
-  → world model and value estimates
-  → planner chooses a grounded low-level goal/context
-  → existing InstantPolicy.predict(observation, context)
-  → environment executes decoded trajectory
-```
-
-A world model never needs to be imported by the current policy. MCTS/MCGS/CEM own
-their search state, rollout/value contracts and goal grounding outside it. How a
-planner's goal becomes demonstrations/context is future research work, not an
-already supported latent-goal API. Action-representation changes similarly require
-a compatible codec and often graph/denoiser/objective; environment code can remain
-unchanged only if the decoded physical action contract remains the same.
-
-## Experiment recording and loading
-
-Use the [research contract](../experiments/TEMPLATE.md). Frozen config sections and
-dataclasses.replace isolate overrides. resolved_config(config) returns versioned
-JSON-safe metadata; training writes resolved_config.json and legacy config.pkl.
-On load, read_experiment_config prefers resolved JSON; restore any custom factories
-explicitly. Unknown IDs, fields or schema versions fail instead of choosing defaults.
-The config metadata is not a plugin installer or a metric database.
+Runtime JSON metadata records identities, not executable custom factory code.
+Custom factories must be supplied by the experiment's Python composition.

@@ -143,11 +143,11 @@ occupancy_net contain training infrastructure.
 - RLBench owns mask>60, camera set, arm-path monkeypatch, start joints, restricted
   rotation range and terminate/reward success semantics; none is generic policy math.
 
-Sources: [AGI](../../../ip/models/model.py),
-[GraphDiffusion](../../../ip/models/diffusion.py),
-[GraphRep](../../../ip/models/graph_rep.py),
-[preprocessing](../../../ip/utils/data_proc.py),
-[rollout](../../../ip/utils/rl_bench_utils.py).
+Sources: [AGI](https://github.com/33-bit/ICGS/blob/32e177f92b2c5611d30a62b4c9de65e1ba04f965/ip/models/model.py),
+[GraphDiffusion](https://github.com/33-bit/ICGS/blob/32e177f92b2c5611d30a62b4c9de65e1ba04f965/ip/models/diffusion.py),
+[GraphRep](https://github.com/33-bit/ICGS/blob/32e177f92b2c5611d30a62b4c9de65e1ba04f965/ip/models/graph_rep.py),
+[preprocessing](https://github.com/33-bit/ICGS/blob/32e177f92b2c5611d30a62b4c9de65e1ba04f965/ip/utils/data_proc.py),
+[rollout](https://github.com/33-bit/ICGS/blob/32e177f92b2c5611d30a62b4c9de65e1ba04f965/ip/utils/rl_bench_utils.py).
 
 ## 3. Existing execution flows
 

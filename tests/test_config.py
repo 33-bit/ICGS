@@ -5,12 +5,13 @@ import unittest
 
 class ConfigTests(unittest.TestCase):
     def setUp(self):
-        self.assertIsNotNone(importlib.util.find_spec('ip.configs.original'), 'Missing structured baseline')
-        from ip.configs.original import instant_policy_original, from_legacy, to_legacy, profile
+        self.assertIsNotNone(importlib.util.find_spec('icgs.configuration.defaults'), 'Missing structured baseline')
+        from icgs.configuration.defaults import instant_policy_original, from_legacy, to_legacy, profile
         self.original, self.from_legacy, self.to_legacy, self.profile = instant_policy_original, from_legacy, to_legacy, profile
 
     def test_baseline_roundtrip_and_fresh_tensor_limits(self):
-        from ip.configs.base_config import config
+        from icgs.configuration.defaults import instant_policy_original, to_legacy
+        config = to_legacy(instant_policy_original())
         import torch
         resolved = self.from_legacy(config)
         result = self.to_legacy(resolved)
@@ -35,7 +36,8 @@ class ConfigTests(unittest.TestCase):
         self.assertEqual(original.graph.num_demos, 2)
 
     def test_legacy_missing_unknown_and_inconsistent_config_fail(self):
-        from ip.configs.base_config import config
+        from icgs.configuration.defaults import instant_policy_original, to_legacy
+        config = to_legacy(instant_policy_original())
         with self.assertRaisesRegex(ValueError, 'missing'):
             self.from_legacy({})
         with self.assertRaisesRegex(ValueError, 'unknown'):
@@ -46,7 +48,7 @@ class ConfigTests(unittest.TestCase):
 
     def test_resolved_json_preserves_component_identity(self):
         import json
-        from ip.configs.original import resolved_config, from_resolved
+        from icgs.configuration.defaults import resolved_config, from_resolved
         c = dataclasses.replace(self.original(), scene=dataclasses.replace(self.original().scene, kind='experiment'))
         restored = from_resolved(json.loads(json.dumps(resolved_config(c))))
         self.assertEqual(restored, c)

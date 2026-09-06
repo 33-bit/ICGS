@@ -1,0 +1,1 @@
+"""ICGS configuration package."""

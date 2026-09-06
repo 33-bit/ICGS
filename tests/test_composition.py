@@ -23,15 +23,16 @@ class TinyStage(torch.nn.Module):
 
 class CompositionTests(unittest.TestCase):
     def setUp(self):
-        self.assertIsNotNone(importlib.util.find_spec('ip.composition'), 'Missing composition layer')
-        from ip.configs.original import instant_policy_original
-        from ip.composition import ComponentFactories, build_network
+        self.assertIsNotNone(importlib.util.find_spec('icgs.composition'), 'Missing composition layer')
+        from icgs.configuration.defaults import instant_policy_original
+        from icgs.composition import ComponentFactories, build_network
         self.build = build_network
         c = instant_policy_original()
         self.c = replace(c, scene=replace(c.scene, kind='tiny', embd_dim=128, pretrained=False),
                          graph=replace(c.graph, num_demos=1, traj_horizon=2, num_scene_nodes=2, embd_dim=128, pred_horizon=2),
                          backbone=replace(c.backbone, kind='tiny', hidden_dim=128),
-                         action=replace(c.action, pred_horizon=2), runtime=replace(c.runtime, device='cpu', batch_size=1))
+                         action=replace(c.action, pred_horizon=2), runtime=replace(c.runtime, device='cpu', batch_size=1),
+                         evaluation=replace(c.evaluation,execution_horizon=2))
         self.factories = ComponentFactories(scene={'tiny': lambda cfg: TinyScene(cfg)},
                                           backbone={'tiny': lambda cfg, inputs, edges: (TinyStage(), TinyStage(), TinyStage())})
 
@@ -69,7 +70,7 @@ class CompositionTests(unittest.TestCase):
             self.build(replace(self.c, scene=replace(self.c.scene, kind='unknown')), self.factories)
 
     def test_unknown_codec_or_sampler_is_resolved_before_artifact_io(self):
-        from ip.composition import build_policy
+        from icgs.composition import build_policy
         c = replace(self.c, scene=replace(self.c.scene, pretrained=True, checkpoint='/absent/encoder.pt'))
         with self.assertRaisesRegex(ValueError, 'codec.*unknown'):
             self.build(replace(c, action=replace(c.action, kind='unknown')), self.factories)
@@ -77,15 +78,15 @@ class CompositionTests(unittest.TestCase):
             build_policy(replace(c, sampling=replace(c.sampling, kind='unknown')), self.factories)
 
     def test_legacy_graph_constructor_still_accepts_original_dictionary(self):
-        from ip.configs.original import to_legacy
-        from ip.models.graph_rep import GraphRep
+        from icgs.configuration.defaults import to_legacy
+        from icgs.models.graphs.ip_graph import GraphRep
         graph = GraphRep(to_legacy(self.c))
         graph.initialise_graph()
         self.assertEqual(graph.batch_size, 1)
         self.assertEqual(graph.num_scenes_nodes, 2)
 
     def test_graph_builder_replacement_changes_graph_geometry_through_factory(self):
-        from ip.models.graph_rep import GraphRep
+        from icgs.models.graphs.ip_graph import GraphRep
         def half_geometry(cfg, batch_size, device):
             graph = GraphRep(cfg, batch_size, device)
             graph.gripper_node_pos = graph.gripper_node_pos * .5

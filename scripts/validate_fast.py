@@ -11,7 +11,7 @@ from urllib.parse import unquote, urlsplit
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SURFACES = ("ip", "scripts", "tests", "docs", ".agents")
+SURFACES = ("src/icgs", "scripts", "tests", "docs", ".agents")
 HARNESS_NAMES = {"docs", "scripts", "tests", ".agents", "AGENTS.md"}
 AUTHORITY = "docs/decisions/0001-harness-boundary.md"
 
@@ -29,8 +29,8 @@ def files(root, suffix):
 
 def check_syntax(root):
     errors = []
-    if not (root / "ip").is_dir():
-        return ["SYNTAX: missing ip/ runtime tree; select the repository root"]
+    if not (root / "src/icgs").is_dir():
+        return ["SYNTAX: missing src/icgs/ runtime tree; select the repository root"]
     for path in files(root, ".py"):
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
@@ -119,9 +119,9 @@ def harness_literal(value):
 
 def check_boundary(root):
     errors = []
-    if not (root / "ip").is_dir():
-        return ["HARNESS_BOUNDARY: missing ip/ runtime tree; select the repository root"]
-    paths = sorted((root / "ip").rglob("*.py"))
+    if not (root / "src/icgs").is_dir():
+        return ["HARNESS_BOUNDARY: missing src/icgs/ runtime tree; select the repository root"]
+    paths = sorted((root / "src/icgs").rglob("*.py"))
     if (root / "setup.py").is_file():
         paths.append(root / "setup.py")
     for path in paths:
@@ -167,7 +167,7 @@ def main(argv=None):
     if root == ROOT:
         suite = unittest.TestSuite([
             unittest.defaultTestLoader.discover(str(ROOT / "tests"), pattern=pattern)
-            for pattern in ("test_harness.py", "test_architecture.py")
+            for pattern in ("test_harness.py", "test_architecture.py", "test_src_package.py")
         ])
         if not suite.countTestCases():
             print("FAIL: no harness tests discovered")
