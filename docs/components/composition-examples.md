@@ -53,3 +53,11 @@ not the organizing center of the ICGS method.
 
 Runtime JSON metadata records identities, not executable custom factory code.
 Custom factories must be supplied by the experiment's Python composition.
+
+## Target method composition — planned APIs only
+
+The [target signatures](../method/contracts.md#planned-python-interfaces) describe
+future `build_method`, timed execution and predictor/evaluator capabilities.
+They are not runnable imports. Existing examples above remain the supported native
+path. [P00–P13 plans](../plans/active/icgs-method-implementation.md) explain how to
+extend composition without replacing `build_policy` or weakening published loading.

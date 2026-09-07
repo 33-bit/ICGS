@@ -1,0 +1,1473 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\PassOptionsToPackage{dvipsnames,svgnames,x11names}{xcolor}
+%
+\documentclass[
+  10pt,
+]{article}
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+  \setmainfont[]{DejaVu Serif}
+  \setsansfont[]{DejaVu Sans}
+  \setmonofont[]{DejaVu Sans Mono}
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage[a4paper,margin=22mm]{geometry}
+\usepackage{longtable,booktabs,array}
+\usepackage{calc} % for calculating minipage widths
+% Correct order of tables after \paragraph or \subparagraph
+\usepackage{etoolbox}
+\makeatletter
+\patchcmd\longtable{\par}{\if@noskipsec\mbox{}\fi\par}{}{}
+\makeatother
+% Allow footnotes in longtable head/foot
+\IfFileExists{footnotehyper.sty}{\usepackage{footnotehyper}}{\usepackage{footnote}}
+\makesavenoteenv{longtable}
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{5}
+\ifLuaTeX
+\usepackage[bidi=basic]{babel}
+\else
+\usepackage[bidi=default]{babel}
+\fi
+\babelprovide[main,import]{english}
+\ifPDFTeX
+\else
+\babelfont{rm}[]{DejaVu Serif}
+\fi
+% get rid of language-specific shorthands (see #6817):
+\let\LanguageShortHands\languageshorthands
+\def\languageshorthands#1{}
+\usepackage{amsmath,amssymb,bm,booktabs,longtable,array,graphicx,tikz}
+\usetikzlibrary{arrows.meta,positioning,fit}
+\usepackage{fancyhdr,needspace}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small ICGS: Long-Horizon Manipulation}
+\fancyfoot[C]{\thepage}
+\setlength{\headheight}{14pt}
+\setlength{\emergencystretch}{3em}
+\allowdisplaybreaks
+\makeatletter\renewcommand{\l@section}{\@dottedtocline{1}{0em}{2.2em}}\renewcommand{\l@subsection}{\@dottedtocline{2}{1.5em}{3em}}\makeatother
+\newcommand{\sg}{\operatorname{sg}}
+\newcommand{\MLP}{\operatorname{MLP}}
+\newcommand{\LN}{\operatorname{LN}}
+\newcommand{\BCE}{\operatorname{BCE}}
+\newcommand{\CE}{\operatorname{CE}}
+\newcommand{\GRU}{\operatorname{GRU}}
+\newcommand{\clip}{\operatorname{clip}}
+\newcommand{\mean}{\operatorname{mean}}
+\newcommand{\softmax}{\operatorname{softmax}}
+\newcommand{\sigmoid}{\operatorname{sigmoid}}
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\IfFileExists{bookmark.sty}{\usepackage{bookmark}}{\usepackage{hyperref}}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={In-Context Guided Search for Long-Horizon Manipulation},
+  pdfauthor={Research proposal},
+  pdflang={en},
+  colorlinks=true,
+  linkcolor={NavyBlue},
+  filecolor={Maroon},
+  citecolor={Blue},
+  urlcolor={NavyBlue},
+  pdfcreator={LaTeX via pandoc}}
+
+\title{In-Context Guided Search for Long-Horizon Manipulation}
+\usepackage{etoolbox}
+\makeatletter
+\providecommand{\subtitle}[1]{% add subtitle to \maketitle
+  \apptocmd{\@title}{\par {\large #1 \par}}{}{}
+}
+\makeatother
+\subtitle{Evaluating Task Completion from Demonstrations and Planning Across Stages}
+\author{Research proposal}
+\date{September 6, 2026}
+
+\begin{document}
+\maketitle
+
+{
+\hypersetup{linkcolor=}
+\setcounter{tocdepth}{2}
+\tableofcontents
+}
+\newpage
+
+\hypertarget{tuxf3m-tux1eaft}{%
+\section{Summary}\label{tuxf3m-tux1eaft}}
+
+In-context imitation learning allows a robot to perform a new task from a few demonstrations without updating model weights. However, in multi-stage tasks, an action that successfully completes the current skill does not necessarily preserve the ability to complete the remaining task. This proposal introduces \textbf{In-Context Guided Search (ICGS)}: it keeps Instant Policy (IP) as the action-proposal distribution, and combines a history-aware geometric representation, an event memory derived from demonstrations, a physical state-transition model, and an evaluator that predicts task-completion probability under a fixed continuation policy. The evaluator is trained on executed branches that have similar local success but different downstream outcomes; contexts that share the same prefix but differ in later requirements isolate the role of the demonstration in decision making.
+
+ICGS searches over common physical command sequences across predictive hypotheses, computes expected outcomes, and replans after real observations. The experimental design separates three potential sources of improvement: correctly recognizing the current stage, selecting the correct branch using value, and extending lookahead across stages. The data, labels, architecture, losses, and evaluation protocol below form a unified research specification. All numerical settings are \textbf{proposed configurations}, not empirical results or validated optimal settings.
+
+\hypertarget{giux1edbi-thiux1ec7u-vuxe0-cuxe2u-hux1ecfi-nghiuxean-cux1ee9u}{%
+\section{Introduction and Research Questions}\label{giux1edbi-thiux1ec7u-vuxe0-cuxe2u-hux1ecfi-nghiuxean-cux1ee9u}}
+
+\hypertarget{buxe0i-touxe1n-trung-tuxe2m}{%
+\subsection{Central Problem}\label{buxe0i-touxe1n-trung-tuxe2m}}
+
+Consider placing two objects into a drawer and then closing it. Two placements of the first object may both satisfy the condition ``the object is inside the drawer.'' However, one placement may occupy space needed by the second object or obstruct the closing motion. The robot must choose the placement based on what still needs to be done, rather than evaluating only the current placement step.
+
+IP learns an action distribution from demonstrations using graph diffusion. The paper primarily studies relatively short tasks and adopts a Markov assumption; this motivates investigating history and multi-stage decision making {[}1{]}. We focus on the following question:
+
+\begin{quote}
+Given one or two demonstrations of an unseen task, can a robot choose its current action so as to preserve the ability to complete the remaining stages, without using a reward function for the new task and without fine-tuning at test time?
+\end{quote}
+
+Three concepts must be distinguished. \textbf{Execution horizon} is the number of actions that must be executed. \textbf{History dependence} is the amount of past information required to know what has happened. \textbf{Dependency span} is the number of interaction boundaries between the current decision and the consequence that changes task-completion probability. The proposal uses dependency span as the main research axis; the other two axes are treated as control variables.
+
+\hypertarget{giux1ea3-thuyux1ebft-vuxe0-ux111uxf3ng-guxf3p-dux1ef1-kiux1ebfn}{%
+\subsection{Hypotheses and Expected Contributions}\label{giux1ea3-thuyux1ebft-vuxe0-ux111uxf3ng-guxf3p-dux1ef1-kiux1ebfn}}
+
+\textbf{H1: evaluation with respect to the remaining task.} Even when the current stage is known correctly, locally successful branches can still have different probabilities of completing the task. Supervision from physical continuations, combined with the full context, should enable the model to predict these differences on unseen compositions.
+
+\textbf{H2: the distinct effect of lookahead.} With the same action prior, data, and evaluator, prediction across multiple stages should improve success more than root reranking at the same computational budget in settings with sufficiently long dependencies.
+
+\textbf{H3: generalization of the decision criterion.} If the query scene and candidate actions are fixed while the suffix of the demonstration is changed, the selected action should change according to the new requirement; changing the speed or route of a demonstration while preserving the same goal should not destroy task completion.
+
+The expected contributions are: (i) an evaluator that consumes demonstrations and task memory and learns continuation probability rather than temporal order; (ii) contrastive supervision between locally successful branches and between different task suffixes; and (iii) a protocol that separately measures memory, value, and search on unseen tasks. Point encoders, GRUs, Transformers, world-model ensembles, and MCTS all have precedents; combining them alone does not establish novelty.
+
+\hypertarget{cuxf4ng-truxecnh-liuxean-quan}{%
+\section{Related Work}\label{cuxf4ng-truxecnh-liuxean-quan}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Group / work
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Relation to the proposal
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Instant Policy {[}1,2{]} & Source of the demonstration-conditioned action prior. ICGS preserves the checkpoint weights and observation interface while extending decision making outside the policy. \\
+ManiLong-Shot {[}3{]} & One-shot long-horizon manipulation through interaction decomposition and correspondence. It is a direct competitor to stage routing; merely segmenting a demonstration and chaining primitives is not enough to establish a distinction. \\
+Generative Skill Chaining {[}4{]} & Learns and chains skill distributions to satisfy geometric constraints. Downstream compatibility already has precedent; ICGS studies how an evaluation criterion can be inferred from few-shot demonstrations and outcomes of the action prior. \\
+I-TAP {[}5{]} & Offline RL with latent temporal abstraction and MCTS, adapting from history. Its context and learning objective differ from ICGS's successful task demonstrations. \\
+WorldPlanner {[}6{]} & Already combines an action sampler, visual world model, and MCTS/MPC. Comparisons must isolate the benefit of a demonstration-conditioned evaluator and supervision for cross-stage dependencies. \\
+MimicGen {[}7,8{]} & A source of demonstrations and a principle for adapting motion segments in object frames. It may provide executed attempts, but it does not directly provide all continuation labels required by ICGS. \\
+\end{longtable}
+
+The research position lies at the intersection of \textbf{task inference from demonstrations} and \textbf{evaluating choices that change future feasibility}. The proposal does not assume that memory-equipped controllers or skill-chaining methods are weak baselines. They are mandatory controls. The related work here is selected to position the method; it is not a claim of exhaustive coverage of all literature available at the time of writing.
+
+\hypertarget{phuxe1t-biux1ec3u-buxe0i-touxe1n}{%
+\section{Problem Formulation}\label{phuxe1t-biux1ec3u-buxe0i-touxe1n}}
+
+\hypertarget{quan-suxe1t-context-vuxe0-thuxf4ng-tin-ux111ux1b0ux1ee3c-phuxe9p}{%
+\subsection{Observations, Context, and Allowed Information}\label{quan-suxe1t-context-vuxe0-thuxf4ng-tin-ux111ux1b0ux1ee3c-phuxe9p}}
+
+The environment has a hidden state \(s_t\), but the model receives only the observation
+\begin{equation}\label{eq:obs}
+o_t=(P_t^W,T_{E,t}^W,g_t),\qquad
+\mathcal H_t=(o_0,a_0,\ldots,a_{t-1},o_t).
+\end{equation}
+Here, \(P_t^W\) is a point cloud from calibrated depth, \(T_{E,t}^W\in SE(3)\) is the measured end-effector pose, and \(g_t\in\{0,1\}\) is the gripper state under the native IP convention. \(a_t\) contains a target-pose command, gripper command, and a preassigned duration. The commanded target and achieved pose are stored separately.
+
+The context \(C=\{D_n\}_{n=1}^{N_D}\) contains \(N_D\in\{1,2\}\) successful demonstrations from resets independent of the query. Each \(D_n\) contains a sequence \((o_\ell,a_\ell)\) from the same robot embodiment. The full demonstration is visible before the episode; the query history is visible only up to the current time.
+
+Training may use simulator state, object IDs, contacts, success predicates, and task programs to create data and labels. These are not online inputs. Primary evaluation uses the union of \textbf{all declared foreground objects and blockers}, with the same mask available to all methods; the mask does not identify the target. Ground-truth foreground segmentation in simulation is a separate perception assumption and is not equivalent to evaluation from raw pixels. A track using predicted segmentation is reported separately.
+
+The initial scope includes rigid objects, tabletop manipulation, a single robot arm, and a limited set of articulated containers. No claim is made about color discrimination from XYZ-only input, full-arm collision avoidance without joint state, or reliable inference of unobserved physical properties. ``Physical state'' in the model is an estimate from \(\mathcal H_t\), not the true simulator state.
+
+\hypertarget{mux1ee5c-tiuxeau-vuxe0-quy-ux1b0ux1edbc-terminal}{%
+\subsection{Objective and Terminal Convention}\label{mux1ee5c-tiuxeau-vuxe0-quy-ux1b0ux1edbc-terminal}}
+
+Each training task has a success predicate and a set of terminal failures. Success is recorded when all required conditions, including history-dependent ones, are satisfied and remain stable for a confirmation window; the episode then terminates. A temporary placement condition may later become false before the full task succeeds. A failed grasp that still permits recovery is not a terminal failure.
+
+With remaining deadline \(H\), the objective is
+\begin{equation}\label{eq:objective}
+\max_{\pi}\Pr_\pi(\tau_S\leq H,\ \tau_S<\tau_F\mid\mathcal H_t,C),
+\end{equation}
+where \(\tau_S,\tau_F\) are the times of successful and failed termination measured from the present. Timeout yields return 0. No progress reward is added to the probability of success. The success predicate of a test task is used only by the external evaluator for scoring.
+
+Success cannot always be inferred from a demonstration unless the context is sufficiently informative. Two rules that explain all demonstrations equally well may remain indistinguishable. The primary suite therefore contains only contexts with identifiable answers under the benchmark grammar. An ambiguity set is reported separately, rather than arbitrarily scoring every alternative interpretation as a model error.
+
+\hypertarget{thux1eddi-gian-vuxe0-hux1ec7-tux1ecda-ux111ux1ed9}{%
+\subsection{Time and Coordinate Frames}\label{thux1eddi-gian-vuxe0-hux1ec7-tux1ecda-ux111ux1ed9}}
+
+The world model uses a fixed robot base frame \(W\); each demonstration uses its own calibrated base frame. Units are meters and radians, with length scale \(\ell_0=1\,\mathrm m\). The bounding box of each object is not independently normalized, because doing so would remove size and clearance information. Gravity \(d_g^W\) is treated as calibration information.
+
+One model step is a fixed-duration control interval \(\Delta t_0\) with one fixed pose target. The proposed default is \(\Delta t_0=0.1\,\mathrm s\); this is an ICGS control wrapper, \textbf{not a frequency attributed to the original IP}. Native-controller reproduction is reported separately. If the original controller uses pose reaching with variable completion time, the trace is sampled into target-holding intervals; future completion time is not used as an action input.
+
+Let \(T\) be the number of IP targets, \(h\leq T\) the prefix used on a search edge, \(r\leq h\) the number of intervals executed before the next observation, and \(L\) the total number of imagined intervals. The default configuration is \(T=8\) when matching the checkpoint, \(h=r=2\), \(L=32\); additionally \(L\in\{8,16,64\}\) is used for analysis. \(L=32\) is not automatically cross-stage lookahead. Cross-stage coverage must be measured by the actual interaction boundaries crossed.
+
+\hypertarget{method-in-context-guided-search}{%
+\section{Method: In-Context Guided Search}\label{method-in-context-guided-search}}
+
+\hypertarget{kiux1ebfn-truxfac-tux1ed5ng-thux1ec3}{%
+\subsection{Overall Architecture}\label{kiux1ebfn-truxfac-tux1ed5ng-thux1ec3}}
+
+ICGS separates physical representation from task interpretation:
+\begin{equation}\label{eq:factor}
+b_t=E_B(\mathcal H_t),\qquad M_C=E_C(C),\qquad
+q_t=U_C(q_{t-1},b_t,M_C).
+\end{equation}
+Here, \(b_t\) contains scene tokens, pose, and physical memory; \(M_C\) contains event tokens from the demonstrations; and \(q_t\) represents the relation between the query history and the requirements expressed in the demonstrations. The world model \(F_\omega\) receives only \(b_t\) and commands; changing the goal while keeping physics and action fixed must not directly change predicted physics.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[font=\sffamily\small,node distance=9mm and 13mm,box/.style={draw=blue!50!black,rounded corners,fill=blue!4,align=center,text width=41mm,minimum height=12mm},arr/.style={-{Latex[length=2mm]},thick}]
+\node[box] (obs) {Observation + history};
+\node[box,right=of obs] (demo) {Demonstrations};
+\node[box,below=of obs] (phys) {Physical encoder\\$b_t=(X_t,x_t,p_t,m_t)$};
+\node[box,below=of demo] (context) {Event encoder + tracker\\$M_C, q_t$};
+\node[box,below=of phys] (prior) {Frozen IP + router\\candidate commands};
+\node[box,below=of context] (eval) {Continuation evaluator\\$V_H$, terminal events};
+\node[box,below=of prior] (wm) {Physical world model\\predicted cloud + pose};
+\node[box,below=of eval] (search) {Budgeted search\\expected success};
+\node[box,below=of search] (act) {Execute prefix\\new observation};
+\draw[arr] (obs)--(phys); \draw[arr] (demo)--(context);
+\draw[arr] (phys)--(prior); \draw[arr] (phys)--(context); \draw[arr] (context)--(prior);
+\draw[arr] (context)--(eval); \draw[arr] (prior)--(wm);
+\draw[arr] (wm)--(search); \draw[arr] (wm.north east)--(eval.south west); \draw[arr] (eval)--(search);
+\draw[arr] (search)--(act);
+\draw[arr] (wm.west)--++(-9mm,0)|-(phys.west);
+\end{tikzpicture}
+\caption{Observation and imagination flow. During rollout, the predicted cloud is re-encoded, task memory is updated, and IP generates new proposals. After execution, the root is updated using the real observation. The feedback arrow to the encoder occurs only inside imagined branches.}
+\end{figure}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Component
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Input
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Output / size, excluding batch
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Point encoder \(E_P\) & \(P:2048\times3\) & \(x:128\times3\), \(X:128\times256\) \\
+Physical GRU & \(\operatorname{mean}X,p,u_{t-1}\) & \(m:2\times256\) \\
+Physical token set & \(X,p,m\) & \(S:131\times256\) \\
+Demo event encoder & Up to 32 events/demo & \(M_C:L_C\times256\), \(L_C\leq64\) \\
+Task tracker & \(S,M_C,r_{t-1}\) & \(r:256\); alignment and 3 event heads \\
+Dynamics trunk & \(S\) and one action token & \(Y:132\times256\) \\
+Dynamics ensemble & \(Y\) & 3 residual geometry/pose/gripper heads \\
+Patch decoder \(D_P\) & 128 anchors/features & Cloud \(2048\times3\) \\
+Evaluator & \(S,M_C,q,H\) & Continuation value, completion, progress \\
+Event predictor & Pre/post state, action, context & 3 logits: success/failure/continue \\
+\end{longtable}
+
+All dimensions above belong to added modules. The width, graph nodes, and tensor schema inside the IP checkpoint are unchanged. Each subsequent section specifies the corresponding forward pass explicitly.
+
+\hypertarget{cuxe1c-block-mux1ea1ng-duxf9ng-chung}{%
+\subsection{Shared Network Blocks}\label{cuxe1c-block-mux1ea1ng-duxf9ng-chung}}
+
+Every \(\operatorname{MLP}_{a\to b\to c}\) is a biased Linear network with GELU between layers and a linear final layer unless sigmoid/softmax is explicitly specified. Transformers use width 256, 8 heads, head width 32, FFN width 1024, pre-LayerNorm, and dropout 0; LayerNorm uses \(\epsilon=10^{-5}\). Distinct blocks do not share weights unless stated otherwise.
+\begin{equation}\label{eq:attn}
+\begin{aligned}
+A_h(Q,K)&=\operatorname{softmax}\left(\frac{(\operatorname{LN}Q)W_Q^h((\operatorname{LN}K)W_K^h)^\top}{\sqrt{32}}+B_h+\mathcal M\right),\\
+U&=Q+\operatorname{Concat}_h\left(A_h(Q,K)(\operatorname{LN}K)W_V^h\right)W_O,\\
+\operatorname{Block}(Q,K)&=U+\operatorname{MLP}_{256\to1024\to256}(\operatorname{LN}U).
+\end{aligned}
+\end{equation}
+\(\mathcal M\) assigns \(-\infty\) to invalid keys. Padding is never pooled. Geometry attention uses the bias
+\(B_{h,ij}=\operatorname{MLP}_{3\to32\to8}((x_i-x_j)/\ell_0)_h\); other blocks use \(B=0\) together with type/order embeddings. The GRU follows
+\begin{equation}\label{eq:gru}
+\begin{aligned}
+z&=\operatorname{sigmoid}(W_zv+U_zh+b_z),\quad r=\operatorname{sigmoid}(W_rv+U_rh+b_r),\\
+n&=\tanh(W_nv+b_n+r\odot(U_nh+c_n)),\qquad h'=(1-z)\odot n+z\odot h.
+\end{aligned}
+\end{equation}
+
+\hypertarget{biux1ec3u-diux1ec5n-vux1eadt-luxfd-vuxe0-lux1ecbch-sux1eed}{%
+\subsection{Physical Representation and History}\label{biux1ec3u-diux1ec5n-vux1eadt-luxfd-vuxe0-lux1ecbch-sux1eed}}
+
+The cloud is voxel-filtered at 5 mm and then sampled to 2048 points using FPS; if fewer points are available, valid points are repeated while a mask marks duplicated anchors. A fixed declared workspace crop is used for both train and test; the crop is not target-oracle dependent. FPS selects 128 anchors, and each anchor gathers its 32 nearest neighbors in the cloud.
+\begin{equation}\label{eq:encoder}
+\begin{aligned}
+\bar P&=P/\ell_0,\quad\bar x=x/\ell_0,\\
+X_i^0&=\max_{j\in\mathcal N_{32}(i)}\operatorname{MLP}_{6\to64\to128\to256}([\bar P_j-\bar x_i;\bar x_i]),\\
+X&=\operatorname{GeomTransformer}^{(2)}(X^0,\bar x).
+\end{aligned}
+\end{equation}
+The model is permutation-compatible with respect to input points, but it should not be treated as exactly rotation-equivariant. Rotation augmentation around gravity is applied jointly to cloud, pose, and command. The cloud is never rotated independently while the command is left unchanged.
+
+The minimum proprioceptive vector has 13 dimensions:
+\begin{equation}\label{eq:proprio}
+p_t=[t_{E,t}^W/\ell_0;\operatorname{Rot6}(R_{E,t}^W);g_t;d_g^W].
+\end{equation}
+Rot6 concatenates the first two columns of the rotation matrix. Physical memory also receives the previous action:
+\begin{equation}\label{eq:memory}
+\begin{aligned}
+v_t&=\operatorname{MLP}_{277\to256\to256}([\operatorname{mean}_iX_{t,i};p_t;u_{t-1}]),\\
+m_t^1&=\operatorname{GRU}_{256}(v_t,m_{t-1}^1),\quad m_t^2=\operatorname{GRU}_{256}(m_t^1,m_{t-1}^2),\\
+S_t&=[X_t;\operatorname{MLP}_{13\to256\to256}(p_t);m_t^1;m_t^2]+E_{\rm type}.
+\end{aligned}
+\end{equation}
+At reset, \(m^1=m^2=0\) and \(u_{-1}=0\). Between real observations, memory is updated once per interval. Imagined branches copy the memory at the root and update their own copies; predicted memory is never written back into real history.
+
+Scene features retain objects, surfaces, and blockers; the six gripper-conditioned IP tokens are not assumed to be sufficient descriptions of physical state. Velocity and contact are approximately inferred from history. This is a representation of partial observation and is not guaranteed to be a sufficient Markov state.
+
+\hypertarget{muxe3-huxf3a-demonstration-thuxe0nh-event-memory}{%
+\subsection{Encoding Demonstrations into Event Memory}\label{muxe3-huxf3a-demonstration-thuxe0nh-event-memory}}
+
+Each demonstration frame is encoded using the same point encoder:
+\begin{equation}\label{eq:demoframe}
+d_\ell=\operatorname{MLP}_{269\to256\to256}([\operatorname{mean}_iX_{\ell,i};p_\ell]).
+\end{equation}
+Event segmentation uses an observable rule so that test-time inference does not depend on simulator labels. First, every gripper-state change is marked after a 2-frame debounce. Between two such changes, an additional boundary is inserted if cumulative translation from the previous boundary exceeds 0.12 m, cumulative rotation exceeds \(30^\circ\), or 20 intervals have elapsed. The first and last frames are always retained. Segments shorter than 3 intervals are merged into the nearest neighboring segment, except for gripper boundaries. These thresholds are fixed for the primary protocol; sensitivity is measured on validation data.
+
+Each event is a segment \([a_j,b_j]\) between two boundaries. If there are more than 30 interaction events, the two shortest adjacent segments that contain no gripper transition are merged, repeatedly, until 30 remain. If gripper events alone exceed the cap, the sequence is marked as overflow rather than truncating the suffix; the primary length suite uses contexts within the cap, and overflow is treated as a stress test with cap 64. Two start/end landmarks are added, giving a default maximum of 32 tokens per demonstration.
+\begin{equation}\label{eq:eventtoken}
+\begin{aligned}
+e_j&=\operatorname{MLP}_{776\to512\to256}([d_{a_j};d_{b_j};\operatorname{mean}_{a_j:b_j}d;\xi_{a_j,b_j};g_{a_j};g_{b_j}]),\\
+\xi_{a,b}&=\operatorname{Scale}_{\ell_0}\operatorname{Log}((T^W_{E,a})^{-1}T^W_{E,b}),\\
+M_C&=\operatorname{Transformer}^{(2)}(\{e_j+E_{\rm ord}(j,J_n)+E_{\rm landmark}(j)\}).
+\end{aligned}
+\end{equation}
+\(E_{\rm ord}=\operatorname{MLP}_{2\to256\to256}([j/J_n;1/J_n])\); \(\xi\) is a 6-dimensional translation-first twist. Landmarks use \(a=b\), so their motion is zero. Each token stores a pointer to its raw demonstration segment so that the corresponding context can be supplied to IP.
+
+No embedding is used for demonstration identity or demonstration order. Demonstration order is shuffled during training; attention over concatenated tokens does not use a global concatenation index. Landmark/type/order embeddings follow the same convention for every demonstration, preventing the output from privileging the first demonstration. Task programs map observed events to training labels only; segmentation is not assumed to recover a symbolic plan automatically.
+
+\hypertarget{task-memory-vuxe0-routing}{%
+\subsection{Task Memory and Routing}\label{task-memory-vuxe0-routing}}
+
+The task state \(r_t\in\mathbb R^{256}\) is updated from physical features and the full context:
+\begin{equation}\label{eq:taskmemory}
+\begin{aligned}
+z_t^0&=r_{t-1}+W_s\operatorname{mean}S_t,\\
+z_t^{k+1}&=\operatorname{Block}(z_t^k,[S_t;M_C]),\quad k=0,1,\\
+r_t&=\operatorname{GRU}_{256}(z_t^2,r_{t-1}),\\
+\alpha_t&=\operatorname{softmax}\left(\left\{\frac{(W_qr_t)^\top W_kM_j}{\sqrt{256}}\right\}_{j=1}^{L_C},\ w_\varnothing^\top r_t+b_\varnothing\right).
+\end{aligned}
+\end{equation}
+\(\alpha\) includes a null event. The model also predicts three quantities for each event:
+\begin{equation}\label{eq:eventheads}
+[\rho_{t,j},\nu_{t,j},\epsilon_{t,j}]=\operatorname{sigmoid}\bigl(\operatorname{MLP}_{768\to256\to3}([M_j;r_t;M_j\odot r_t])\bigr).
+\end{equation}
+\(\rho\) indicates whether the event has occurred at any time in the past, \(\nu\) whether its postcondition is still true now, and \(\epsilon\) whether the event can begin under its prerequisites. This distinction allows ``the object was placed'' to remain true as a historical fact even if the object has subsequently been displaced. Eligibility is not the same as probability of successful execution and does not remove the planner's need to verify physical feasibility.
+
+We store \(q_t=(r_t,\alpha_t,\rho_t,\nu_t,\epsilon_t)\). Alignment is not forced to be monotonic; recovery may return to an earlier event. Soft targets distribute probability over corresponding events across multiple demonstrations so that alignment to a different but valid demonstration is not penalized.
+
+The router uses weights \(w_j\in\{0,1\}\) for tokens with action windows and excludes landmarks:
+\begin{equation}\label{eq:router}
+\begin{aligned}
+\beta_j&=\frac{w_j(\alpha_j+10^{-6})\epsilon_j}{\sum_k w_k(\alpha_k+10^{-6})\epsilon_k},\\
+\pi_{\rm prior}(A\mid o,q,C)&=\tfrac12\pi_{\rm IP}(A\mid o,C)+\tfrac12\sum_j\beta_j\pi_{\rm IP}(A\mid o,C_j).
+\end{aligned}
+\end{equation}
+If the denominator is below \(10^{-6}\), the full context is used with probability 1. \(C_j\) contains the event plus one neighboring event before/after it in the same demonstration, while retaining both endpoints and all gripper transitions; remaining frames are uniformly sampled to match the exact native context count. If mandatory frames exceed the count, that window is invalid. Full context also follows native preprocessing; the checkpoint never receives 64 new event tokens.
+
+\textbf{The reference controller \(\pi_{\rm ref}\)} is exactly the router above plus frozen IP: it draws one sample from \(\pi_{\rm prior}\), executes \(r=2\) intervals, and then updates the observation. It does not use value to choose a sample and does not depend on the deadline before timeout. If the native API uses a different cadence, the same cadence wrapper is applied to every ICGS baseline. For a held gripper command, a new gripper command is issued only at the next replanning step; a command is not canceled midway through an interval. Native gripper-transition cadence is evaluated as a separate control {[}2{]}.
+
+Because the router changes conditioning, ``IP frozen'' does not mean behavior is identical to native IP. This distinction is retained in every result table.
+
+\hypertarget{giao-diux1ec7n-huxe0nh-ux111ux1ed9ng-vuxe0-tuxe1i-tux1ea1o-quan-suxe1t-cho-ip}{%
+\subsection{Action Interface and Observation Reconstruction for IP}\label{giao-diux1ec7n-huxe0nh-ux111ux1ed9ng-vuxe0-tuxe1i-tux1ea1o-quan-suxe1t-cho-ip}}
+
+The native sampler and native graph construction are preserved. At a real root, IP receives the measured cloud through native preprocessing, not an autoencoded cloud. At an imagined node, the model must provide a concrete cloud and pose. When IP outputs targets relative to the proposal root,
+\begin{equation}\label{eq:actionbridge}
+T^W_{{\rm goal},j}=T^W_{E,{\rm proposal}}A_j^{\rm IP},\qquad j=1,\ldots,T.
+\end{equation}
+Every \(A_j\) is multiplied by the same proposal-root pose; targets are not accumulated as incremental deltas. This is the adapter convention of the proposal; a checkpoint with a different API must first be converted to this convention before being passed to the model.
+
+Every physical hypothesis receives the \textbf{same absolute command}. The relative descriptor for hypothesis \(m\) is
+\begin{equation}\label{eq:actiondesc}
+u_t^{(m)}=
+[\operatorname{Scale}_{\ell_0}\operatorname{Log}((T_{E,t}^{W,(m)})^{-1}T^W_{{\rm goal},t});
+g_t^{\rm cmd};\log(\Delta t_t/\Delta t_0)]\in\mathbb R^8.
+\end{equation}
+Translation in the twist is divided by \(\ell_0\), and rotation is measured in radians. Under the fixed-interval primary protocol, the final dimension is 0. Different pose hypotheses can therefore produce different relative descriptors; applying the same relative delta to every hypothesis would correspond to different physical commands.
+
+The patch decoder uses 16 grid points \(s_r\in[-1,1]^2\) at each anchor:
+\begin{equation}\label{eq:decoder}
+\hat P_{i,r}^W=x_i+
+0.10\,\tanh\bigl(\operatorname{MLP}_{258\to256\to128\to3}([\operatorname{LN}X_i;s_r])\bigr)\ {\rm m}.
+\end{equation}
+Patches from invalid anchors are discarded, and valid output is resampled to the native point count. The decoder is not a renderer with exact visibility. It learns visible foreground surfaces under the declared camera setup; disocclusion is a failure mode that must be measured.
+
+The imagined cloud is transformed to the end-effector frame used by IP {[}2{]}:
+\begin{equation}\label{eq:observationbridge}
+\hat P^E=(\hat T_E^W)^{-1}\hat P^W,\qquad
+\hat o^{\rm IP}=(\hat P^E,\hat T_E^W,\hat g).
+\end{equation}
+The frame transformation is applied exactly once: if native preprocessing accepts a world-frame cloud and performs the conversion internally, the adapter passes the world-frame cloud. Native relative-position edges are not replaced by six latent tokens. Crop, mask, point sampling, scale, and diffusion schedule are kept according to the checkpoint.
+
+Bridge fidelity is measured on real observations by pairing the same diffusion seed and comparing actions from \(o\) with actions from \(D_P(E_P(o))\). In addition to Chamfer distance, translation/rotation discrepancy and local execution success are measured. Good reconstruction alone is not sufficient to guarantee equivalent policy behavior.
+
+\hypertarget{world-model-huxe0nh-ux111ux1ed9ng-cuxf3-ux111iux1ec1u-kiux1ec7n}{%
+\subsection{Action-Conditioned World Model}\label{world-model-huxe0nh-ux111ux1ed9ng-cuxf3-ux111iux1ec1u-kiux1ec7n}}
+
+The dynamics trunk contains 4 Transformer blocks over 132 tokens:
+\begin{equation}\label{eq:wmtrunk}
+Y_t=\operatorname{Transformer}^{(4)}_\omega
+([S_t;\operatorname{MLP}_{8\to256\to256}(u_t)+E_{\rm action}]).
+\end{equation}
+Three heads \(m=1,2,3\) share the trunk and have separate residual MLPs:
+\begin{equation}\label{eq:wmpredict}
+\begin{aligned}
+[\Delta X_i^{(m)};\Delta\bar x_i^{(m)}]
+ &=\operatorname{MLP}^{(m)}_{256\to256\to259}(Y_i),\\
+[\delta\xi^{(m)};\ell_g^{(m)}]
+ &=\operatorname{MLP}^{(m)}_{256\to256\to7}(Y_p),\\
+\widetilde X_i^{(m)}&=X_i+\Delta X_i^{(m)},\qquad
+\widetilde x_i^{(m)}=x_i+\ell_0\Delta\bar x_i^{(m)},\\
+\hat T_{E,t+1}^{W,(m)}
+ &=T_{E,t}^{W,(m)}\operatorname{Exp}(\operatorname{Scale}^{-1}_{\ell_0}\delta\xi^{(m)}),\\
+\hat g_{t+1}^{(m)}&=\mathbf1[\ell_g^{(m)}\geq0].
+\end{aligned}
+\end{equation}
+\(Y_p\) is the proprioception output row. The \(SE(3)\) exponential uses a translation-first twist; commanded pose and achieved pose are not treated as identical. The final layers of the residual geometry/pose heads are initialized near zero, while the gripper head learns logits directly.
+
+Rollout is closed through the decoder and encoder:
+\begin{equation}\label{eq:wmrecursive}
+\begin{aligned}
+\hat P_{t+1}^{(m)}&=D_P(\widetilde X^{(m)},\widetilde x^{(m)}),\\
+(\hat X_{t+1}^{(m)},\hat x_{t+1}^{(m)})&=E_P(\hat P_{t+1}^{(m)}),\\
+\hat p_{t+1}^{(m)}&=p(\hat T_{E,t+1}^{(m)},\hat g_{t+1}^{(m)}),\\
+\hat m_{t+1}^{(m)}&=U_B(\hat X_{t+1}^{(m)},\hat p_{t+1}^{(m)},u_t^{(m)},m_t^{(m)}),\\
+\hat b_{t+1}^{(m)}&=(\hat X_{t+1}^{(m)},\hat x_{t+1}^{(m)},\hat p_{t+1}^{(m)},\hat m_{t+1}^{(m)}),\\
+\hat q_{t+1}^{(m)}&=U_C(\hat q_t^{(m)},\hat b_{t+1}^{(m)},M_C).
+\end{aligned}
+\end{equation}
+\(U_B\) is exactly the pair of GRUs in Eq. \eqref{eq:memory}. \(\hat P\) is cached directly for IP; it is not decoded a second time after re-encoding. FPS/kNN indices and the hard gripper decision carry no gradient; the continuous geometry path may propagate gradients through the frozen encoder/decoder. Measured future memory is never used as input to an imagined step.
+
+A fixed ensemble head \(m\) is used throughout each rollout. The three deterministic heads are bootstrap predictions intended to detect some model error; they are \textbf{not three calibrated posterior samples and do not fully represent aleatoric contact modes}. The primary claim is restricted to rigid/quasi-static tasks and uncertainty diagnostics. If grasp/no-grasp branching is required, joint state-transition modes must be learned; a cloud from a grasp mode must not be mixed with a gripper state from a no-grasp mode. That variant is not a required component of the primary method.
+
+\hypertarget{evaluator-cux1ee7a-phux1ea7n-nhiux1ec7m-vux1ee5-cuxf2n-lux1ea1i}{%
+\subsection{Evaluator for the Remaining Task}\label{evaluator-cux1ee7a-phux1ea7n-nhiux1ec7m-vux1ee5-cuxf2n-lux1ea1i}}
+
+\hypertarget{uxfd-nghux129a-cux1ee7a-ba-ux111ux1ea7u-ra}{%
+\subsubsection{Meaning of the Three Outputs}\label{uxfd-nghux129a-cux1ee7a-ba-ux111ux1ea7u-ra}}
+
+Continuation value is defined for an active state:
+\begin{equation}\label{eq:valuedef}
+V_H^{\pi_{\rm ref}}(b_t,q_t,C)=
+\Pr_{\pi_{\rm ref}}(\tau_S\leq H,\tau_S<\tau_F
+\mid b_t,q_t,C,\text{active at }t).
+\end{equation}
+This is the success probability of \textbf{a particular controller}. A low \(V\) does not prove that the state is infeasible for an expert or another policy. \(V_0=0\) for active states. The reference policy does not receive the deadline, so \(V_{H_1}\leq V_{H_2}\) for \(H_1<H_2\) is a property that should be checked.
+
+\(S(b,q,C)\) predicts whether the entire task is already complete. \(\Phi(b,q,C)\) is an auxiliary progress logit. \(\Phi\) is not added to the return and does not replace \(V\). \(V\) is not forced to be equal across two demonstrations with the same goal: different demonstrations may induce different behavior from \(\pi_{\rm ref}\), and therefore different continuation probabilities.
+
+\hypertarget{cross-attention-theo-yuxeau-cux1ea7u-cuxf2n-lux1ea1i}{%
+\subsubsection{Cross-Attention over Remaining Requirements}\label{cross-attention-theo-yuxeau-cux1ea7u-cuxf2n-lux1ea1i}}
+
+Each event key integrates the four tracker scores:
+\begin{equation}\label{eq:valuekeys}
+K_j^C=M_j+\operatorname{MLP}_{4\to256\to256}([\alpha_j;\rho_j;\nu_j;\epsilon_j]).
+\end{equation}
+\textbf{All} event tokens are retained; events that are ``already done'' are not hard-masked because their postconditions may still need to be preserved. Three learned embeddings initialize the queries:
+\begin{equation}\label{eq:valueforward}
+\begin{aligned}
+Q_V^0&=e_V+W_rr_t+E_H(H),\\
+Q_S^0&=e_S+W_rr_t,\qquad Q_\Phi^0=e_\Phi+W_rr_t,\\
+E_H(H)&=\operatorname{MLP}_{2\to256\to256}([H/H_{\max};\log(1+H)/\log(1+H_{\max})]),\\
+Q_k^{l+1}&=\operatorname{Block}(Q_k^l,[S_t;K^C;r_t]),\quad l=0,1,2,\\
+\ell_k&=\operatorname{MLP}^k_{256\to128\to1}(\operatorname{LN}Q_k^3),\\
+V_H&=\operatorname{sigmoid}(\ell_V),\qquad S=\operatorname{sigmoid}(\ell_S),\qquad\Phi=\ell_\Phi.
+\end{aligned}
+\end{equation}
+The three queries share block weights but are processed independently with no query-to-query attention, so completion does not receive deadline information indirectly from the value query. \(H_{\max}=512\) intervals for primary training; length stress testing up to 1024 uses separate horizon coverage during training and is reported explicitly. \(V_0\) is set to 0 rather than obtained from a sigmoid at \(H=0\).
+
+\hypertarget{first-terminal-event-predictor}{%
+\subsubsection{First-Terminal-Event Predictor}\label{first-terminal-event-predictor}}
+
+To compute the return of an action prefix, a mutually exclusive event is predicted at every interval, \textbf{conditioned on the state before the interval still being active}:
+\begin{equation}\label{eq:hazard}
+\begin{aligned}
+\eta_t&=[\operatorname{mean}S_t;r_t;\operatorname{mean}S_{t+1};r_{t+1};\operatorname{mean}M_C;u_t]\in\mathbb R^{1288},\\
+[p_{S,t},p_{F,t},p_{C,t}]
+&=\operatorname{softmax}(\operatorname{MLP}_{1288\to512\to256\to3}(\eta_t)).
+\end{aligned}
+\end{equation}
+The future quantities here are either the observation after \textbf{one executed transition during training} or the transition model's own prediction during search. This is a transition evaluator, not a future input to the real-time tracker. The output \(p_C\) means the process remains active; success/failure represent only the first terminal event. If success and failure predicates become true simultaneously, failure takes precedence unless absorbing success was already recorded in the previous interval.
+
+\hypertarget{huxe0m-mux1ea5t-muxe1t-vuxe0-luux1ed3ng-gradient}{%
+\subsection{Losses and Gradient Flow}\label{huxe0m-mux1ea5t-muxe1t-vuxe0-luux1ed3ng-gradient}}
+
+\hypertarget{huxecnh-hux1ecdc-vuxe0-dynamics}{%
+\subsubsection{Geometry and Dynamics}\label{huxecnh-hux1ecdc-vuxe0-dynamics}}
+
+Symmetric Chamfer distance is used so that anchor indices are not assumed to correspond across time:
+\begin{equation}\label{eq:cd}
+{\rm CD}(P,\hat P)=\frac1{|P|}\sum_i\min_j\|P_i-\hat P_j\|^2+
+\frac1{|\hat P|}\sum_j\min_i\|\hat P_j-P_i\|^2.
+\end{equation}
+For foreground clouds, an ablation additionally applies moving-point weighting to the target-to-predicted term: weight 5 for points belonging to moving objects and 1 for the remainder, normalized by the total weights. The primary setting uses unweighted CD to minimize dependence on additional training labels.
+
+\begin{equation}\label{eq:physloss}
+\begin{aligned}
+\mathcal L_{\rm phys}^{(m)}
+ &=\frac{{\rm CD}(P^\star,\hat P^{(m)})}{(0.01\,{\rm m})^2}
+ +\frac{\|\hat t^{(m)}-t^\star\|^2}{(0.01\,{\rm m})^2}\\
+ &\quad+\frac{d_R(\hat R^{(m)},R^\star)^2}{(5\pi/180)^2}
+ +\operatorname{BCE}_{\rm logits}(\ell_g^{(m)},g^\star),\\
+d_R(R_1,R_2)
+ &=\arccos\left(\operatorname{clip}_{[-1,1]}\frac{{\rm tr}(R_1^\top R_2)-1}{2}\right).
+\end{aligned}
+\end{equation}
+The numerical rotation loss uses a stable geodesic implementation, avoiding unbounded gradients of arccos at \(\pm1\) by clipping to the interior with margin \(10^{-6}\) during training; the reported metric uses the exact angle and returns zero for identical matrices.
+
+Geometry warm-up uses
+\(\mathcal L_{\rm rec}={\rm CD}(P,D_P(E_P(P)))/(0.01\,{\rm m})^2\).
+Temporal training optimizes
+\begin{equation}\label{eq:wmloss}
+\mathcal L_{\rm WM}=
+\frac{\sum_{i,m}\zeta_{im}\sum_{k=1}^{K_{\rm roll}}\mathcal L_{{\rm phys},i,k}^{(m)}}
+{K_{\rm roll}\sum_{i,m}\zeta_{im}}+
+0.1\mathcal L_{\rm rec},
+\end{equation}
+where \(\zeta_{im}\) is an episode-level bootstrap mask with probability 0.8; each episode is guaranteed to supervise at least one head and each minibatch is guaranteed to contain supervised samples. The reconstruction term updates the encoder/decoder only during warm-up; once they are frozen, the term is omitted from the optimizer. Recursive inputs from step 2 onward use predicted observations; teacher-forcing-only loss is insufficient for training rollout behavior.
+
+\hypertarget{task-representation}{%
+\subsubsection{Task Representation}\label{task-representation}}
+
+Program-derived labels include the alignment distribution \(y^\alpha\), historical occurrence \(y^\rho\), current relation \(y^\nu\), and prerequisite eligibility \(y^\epsilon\):
+\begin{equation}\label{eq:taskloss}
+\mathcal L_{\rm task}=
+\operatorname{CE}_{\rm masked}(\alpha,y^\alpha)+
+\sum_{z\in\{\rho,\nu,\epsilon\}}\operatorname{BCE}_{\rm masked}(z,y^z).
+\end{equation}
+Each term is averaged over valid entries before summation. Events without an identifiable postcondition are masked out of \(\nu\); free-space segments are not assigned arbitrary contact labels. \(\rho\) is a label from the history observed in the data, while \(\nu\) is recomputed from the current state. Null alignment is used when a history segment matches no event. Training includes retries, pauses, and object displacement so that normalized time cannot be used as a shortcut for stage.
+
+\hypertarget{outcome-calibrated-value}{%
+\subsubsection{Outcome-Calibrated Value}\label{outcome-calibrated-value}}
+
+At an active anchor-context-horizon tuple, \(n_i\) independent continuations are run under \(\pi_{\rm ref}\), of which \(k_i\) succeed. The binomial loss is
+\begin{equation}\label{eq:outloss}
+\mathcal L_{\rm out}
+=-\frac{1}{\sum_i n_i}\sum_i
+[k_i\log V_i+(n_i-k_i)\log(1-V_i)].
+\end{equation}
+For numerical stability this is implemented using logits and target \(k_i/n_i\) with weight \(n_i\). \(k_i/n_i\) is not treated as an exact ground-truth probability. Anchors from the same episode/context at different horizons reuse the same first-success times; these are correlated labels and do not increase the number of independent trials.
+
+Completion/event losses and auxiliary progress are
+\begin{equation}\label{eq:evallossbasic}
+\begin{aligned}
+\mathcal L_S&=\operatorname{BCE}_{\rm logits}(\ell_S,y^{\rm complete}),\\
+\mathcal L_E&=\operatorname{CE}(\ell_E,y^{\rm first-event}),\\
+\mathcal L_\Phi&=\operatorname{mean}_{i\prec j}\log(1+\exp(\Phi_i-\Phi_j)).
+\end{aligned}
+\end{equation}
+Pairs \(i\prec j\) are created only within a successful episode when annotations establish that the requirements satisfied at \(i\) are a strict subset of those satisfied at \(j\), with no requirement lost. Pure chronological order is not used across pauses, recoveries, or detours.
+
+\hypertarget{nhuxe1nh-cuxf9ng-local-success-khuxe1c-tux1b0ux1a1ng-lai}{%
+\subsubsection{Branches with the Same Local Success but Different Futures}\label{nhuxe1nh-cuxf9ng-local-success-khuxe1c-tux1b0ux1a1ng-lai}}
+
+For two active successor states \(a,b\), with the same deadline and context, the complete success/failure counts are retained. A preference-label filtering rule uses Beta posteriors with a uniform prior:
+\begin{equation}\label{eq:prefuncertainty}
+v_a\sim{\rm Beta}(k_a+1,n_a-k_a+1),\quad
+v_b\sim{\rm Beta}(k_b+1,n_b-k_b+1),\quad
+p_{ab}=\Pr(v_a>v_b).
+\end{equation}
+\(p_{ab}\) is computed using quadrature or Monte Carlo with a fixed seed. A pair is kept only if \(\max(p_{ab},1-p_{ab})\geq0.9\), with weight \(w_{ab}=2|p_{ab}-0.5|\). This rule assumes independent trials across branches; when common random numbers are used, paired bootstrap replaces the independent formula.
+
+\begin{equation}\label{eq:prefloss}
+\mathcal L_{\rm pair}=
+\frac{\sum_{(a,b)}w_{ab}\operatorname{BCE}_{\rm logits}(\ell_{V,a}-\ell_{V,b},\mathbf1[p_{ab}>0.5])}
+{\sum_{(a,b)}w_{ab}}.
+\end{equation}
+An empty pair set contributes loss 0. This is an auxiliary ordinal loss; the difference in value logits must not be described as the physical probability that one branch is better than the other. The outcome likelihood in Eq. \eqref{eq:outloss} continues to define the semantics of \(V\).
+
+Three non-overlapping sets are created: general branches, recovery branches, and suffix-matched branches. The final set requires all branches to be locally successful, while their ranking changes between two contexts that share a prefix but differ in later requirements. No hard label of the form ``changing context must reverse the ranking'' is imposed unless executed outcomes support it.
+
+\begin{equation}\label{eq:totaleval}
+\mathcal L_{\rm eval}=\mathcal L_{\rm out}+\mathcal L_S+\mathcal L_E
++0.1\mathcal L_\Phi
++0.2(\mathcal L_{\rm branch}+\mathcal L_{\rm recovery}+\mathcal L_{\rm suffix}).
+\end{equation}
+All auxiliary weights are default values to be ablated. Evaluator training does not update the router, IP, physical encoder, or memory used to collect continuations. Event and value heads may additionally use predicted-input examples paired with executed targets in a separate track; those examples must be kept distinct from primary observed-state calibration because a model-generated latent state does not always correspond to a valid physical state.
+
+\hypertarget{budgeted-search-vuxe0-thux1ef1c-thi}{%
+\subsection{Budgeted Search and Execution}\label{budgeted-search-vuxe0-thux1ef1c-thi}}
+
+\hypertarget{node-luxe0-tux1eadp-giux1ea3-thuyux1ebft-khuxf4ng-luxe0-lux1ef1a-chux1ecdn-kux1ebft-quux1ea3-ngux1eabu-nhiuxean}{%
+\subsubsection{A Node Is a Set of Hypotheses, Not a Random-Outcome Choice}\label{node-luxe0-tux1eadp-giux1ea3-thuyux1ebft-khuxf4ng-luxe0-lux1ef1a-chux1ecdn-kux1ebft-quux1ea3-ngux1eabu-nhiuxean}}
+
+A node stores
+\begin{equation}\label{eq:node}
+n=(\tau,U,F,\{w_m,b_m,q_m,m\}_{m=1}^3,\mathcal A_n,N_n).
+\end{equation}
+\(\tau\) is the number of imagined intervals; \(U,F\) are absorbed success/failure mass measured from the root; and \(w_m\) is active mass. Initially \(U=S(b_0,q_0,C)\), \(F=0\), and \(w_m=(1-U)/3\). Online stopping uses the same \(S\) for every added baseline: the method stops when \(S\geq0.95\) for 3 consecutive observation intervals, after which an external evaluator determines whether the stop was successful or false. The threshold is calibrated on validation data and does not read test predicates.
+
+Each candidate is generated from a representative hypothesis, converted to absolute commands, and then evaluated on all three hypotheses. The representative is the medoid under normalized end-effector pose and symmetric cloud CD; ties are broken by head index. The same future action is applied to every hypothesis. The planner is never allowed to select the grasp-success hypothesis and then act as if it knew that outcome had occurred.
+
+After one interval, the event head in Eq. \eqref{eq:hazard} updates the masses:
+\begin{equation}\label{eq:backupmass}
+U'=U+\sum_mw_mp_{S,m},\qquad
+F'=F+\sum_mw_mp_{F,m},\qquad
+w'_m=w_mp_{C,m}.
+\end{equation}
+The invariant is \(U'+F'+\sum_m w'_m=1\). The expected terminal return at a leaf is
+\begin{equation}\label{eq:return}
+G(n)=U+\sum_mw_mV_{H_{\rm root}-\tau}(b_m,q_m,C).
+\end{equation}
+When the deadline is exhausted, \(V_0=0\); when no active mass remains, \(G=U\). The completion head \(S\) is not added again at the leaf. These masses are outputs of a learned approximate transition/evaluation model; correct normalization does not imply that they are calibrated probabilities for the real world.
+
+This search procedure is an \textbf{open-loop belief approximation with replanning}, not a POMDP tree with full observation branching. It does not correctly value information-gathering actions. The hypotheses do not receive real future observations during planning. Physical model error can therefore produce a wrong decision even when backup is internally valid.
+
+\hypertarget{mcts-truxean-sampled-actions}{%
+\subsubsection{MCTS over Sampled Actions}\label{mcts-truxean-sampled-actions}}
+
+Each edge stores an absolute prefix, cached child, visit count \(N_e\), and total return \(W_e\). Progressive widening and UCT are
+\begin{equation}\label{eq:uct}
+\begin{aligned}
+K_{\max}(n)&=\max(1,\lfloor1.5(1+N_n)^{0.5}\rfloor),\\
+Q_e&=W_e/N_e,\qquad
+{\rm UCT}(e)=Q_e+\sqrt{\log(1+N_n)/N_e}.
+\end{aligned}
+\end{equation}
+Unvisited edges are tried first. UCT is not evaluated when \(N_e=0\). \(\pi_{\rm prior}\) supplies samples, so diffusion density estimates are not required for PUCT. Each expansion adds one candidate; duplicate candidates are retained in the audit log, but computation is reused only when commands are exactly identical.
+
+\Needspace{6\baselineskip}
+
+\textbf{Algorithm 1: one planning step.}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Encode the real observation and update both memories once; cache context from the beginning of the episode. Initialize the root and budget timer, counting encoding, proposal generation, rollout, and evaluation.
+\item
+  Start a simulation at the root. If the number of children is below \(K_{\max}\), sample a candidate from \(\pi_{\rm prior}\) at the representative hypothesis and create a new edge; otherwise choose an unvisited edge or the edge with maximum UCT.
+\item
+  For an uncached edge, execute \(h\) recursive model intervals. At each interval, update physical state, task memory, and probability mass. Shorten the prefix at the deadline, upon terminal mass, or at the lookahead cap.
+\item
+  Stop the simulation at a new leaf or depth cap \(L\). Compute \(G\) once. Add \(G\) to \(W_e\) and 1 to \(N_e\) for every edge on the path; increment each node visit exactly once.
+\item
+  Repeat until the time/call budget is exhausted. Choose the root action by visit count, breaking ties using \(Q_e\). If no completed evaluation is available, use one sample from \(\pi_{\rm ref}\).
+\item
+  Execute \(r\) intervals of the selected command. Receive the real observation, update real history, and build a new root. Root-relative \(W_e\) values from the previous tree are not reused.
+\end{enumerate}
+
+Selection, widening, and backup use FP32 or higher precision. Caching a transition does not itself create visits. Approximate MCGS merging is not part of the primary method: small latent distance does not guarantee equal contact state, task history, or remaining deadline.
+
+\hypertarget{reranking-shooting-vuxe0-horizon-cuxf4ng-bux1eb1ng}{%
+\subsubsection{Reranking, Shooting, and Fair Horizons}\label{reranking-shooting-vuxe0-horizon-cuxf4ng-bux1eb1ng}}
+
+Root reranking uses Eq. \eqref{eq:return} after a prefix or full native chunk and then continues with leaf value. Shooting/MPC samples multiple action sequences, resamples IP at each predicted node, and chooses the sequence with highest \(G\). MCTS allocates additional search to high-value prefixes. All three use the same prior, world model, evaluator, and command commitment.
+
+Two comparison protocols are used: \textbf{equal wall time} is primary, while \textbf{equal native policy calls / model transitions} is diagnostic. Budgets of \(\{0.1,0.5,2.0\}\) seconds per decision are used on the same hardware, with identical batching for policy and encoder; call caps \(\{16,64,256\}\) are additionally used to separate implementation latency. Actual throughput must be measured rather than assuming that every budget permits even one native IP call.
+
+Both simulator running time and machine wall time are reported. Paused-simulation results are not called real-time. In the live-clock track, the world continues evolving during search; latency that exceeds the deadline produces a stale action under the same rule for all methods. The primary quasi-static track allows the robot to hold a predetermined safe command, but waiting time still counts toward completion time.
+
+\hypertarget{dux1eef-liux1ec7u-huux1ea5n-luyux1ec7n}{%
+\section{Training Data}\label{dux1eef-liux1ec7u-huux1ea5n-luyux1ec7n}}
+
+\hypertarget{nguyuxean-tux1eafc-vuxe0-simulator-chuxednh}{%
+\subsection{Principles and Primary Simulator}\label{nguyuxean-tux1eafc-vuxe0-simulator-chuxednh}}
+
+\textbf{The selected primary data source is RLBench/PyRep with Panda}, augmented with custom tasks that express cross-stage dependencies. This choice is intended to maintain compatibility with the IP ecosystem; it does not assume snapshot capabilities or throughput comparable to GPU simulators. RLBench provides the environment, observations, and demonstration-generation mechanisms based on waypoints/motion planning {[}9,10{]}. Custom continuation labels must be collected separately by actually executing controllers in the simulator.
+
+The world model is not trained directly on trajectories that only apply geometric transformations or script an object as ``attached'' to the gripper. IP pseudo-demonstrations are intended for learning the action prior and are not required to satisfy dynamic feasibility {[}1{]}. For ICGS, physical labels are valid only after simulator execution or real-robot measurement.
+
+The names \(\mathcal D_{\rm geom}\), \(\mathcal D_{\rm dyn}\), \(\mathcal D_{\rm task}\), and \(\mathcal D_{\rm value}\) denote \textbf{data views} over a provenance-tracked episode repository rather than independent datasets whose counts should be added together. A trajectory may contribute to several views but is counted only once in collection cost.
+
+\hypertarget{nguux1ed3n-cuxf3-thux1ec3-lux1ea5y-vuxe0-ux111iux1ec1u-kiux1ec7n-sux1eed-dux1ee5ng}{%
+\subsection{Available Sources and Conditions for Use}\label{nguux1ed3n-cuxf3-thux1ec3-lux1ea5y-vuxe0-ux111iux1ec1u-kiux1ec7n-sux1eed-dux1ee5ng}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Official source
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Data/capabilities available
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Suitable component
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+What must still be created or verified
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+IP official repository {[}2{]} & Checkpoints, native demo/action format, pseudo-demo generator & Frozen action prior; geometry/context augmentation & Kinematic pseudo-demos do not themselves produce valid dynamics labels. The native checkpoint remains unchanged. \\
+RLBench {[}9,10{]} & Generated robot demos; RGB, depth, masks, proprioception; task success & \(\mathcal D_{\rm geom}\), executed \(\mathcal D_{\rm dyn}\), seed context & Custom dependency tasks; negative attempts; branches; reference continuations; snapshot replay. \\
+MimicGen {[}7,8{]} & Released demonstrations and generation tools in its corresponding ecosystem & Supplementary source of geometry/executed transitions; seed demonstrations & Not an RLBench plug-in. Dynamics use requires either a robosuite/MuJoCo track or re-execution in the primary engine. \\
+ManiSkill {[}11,12{]} & Assets, demonstrations, replay/conversion, simulator physics & Large-scale alternative collection backend & Different action mode, timestep, camera, robot, and contact domain; transitions cannot be mixed unconditionally. \\
+LIBERO {[}13{]} & Task specifications, demos, state-based replay within the benchmark & Transfer track; successful contexts and program labels after conversion & Add depth/camera calibration if files do not contain point clouds; collect failed branches and continuations; explicitly document changes in conditioning. \\
+CALVIN {[}14,15{]} & Play trajectories, robot observations, and long-horizon evaluation & History and geometry pretraining or external diagnostics & A play clip is not automatically a complete task demo; language labels do not replace few-shot context; context and a sensor adapter must be added. \\
+\end{longtable}
+
+The MimicGen release described in robomimic documentation contains more than 48,000 demonstrations across 12 tasks {[}8{]}. This is an optional resource, \textbf{not a default quantity assumed to be loaded into the primary experiment}. The primary method does not require downloading all sources above. Data outside RLBench are used only in an external-data track so that the main results have clear provenance.
+
+When simulator state is available but depth is missing, replay is performed with the exact engine/assets/controller version to re-render RGB-D from fixed cameras. Replay adds observations for the same trajectory and does not create new independent transitions. If calibration is unavailable, a reliable metric point cloud cannot be inferred from RGB alone; such a source is used for an image-only auxiliary track or excluded from geometry training.
+
+\hypertarget{task-grammar-vuxe0-chia-dux1eef-liux1ec7u-trux1b0ux1edbc-khi-sinh}{%
+\subsection{Task Grammar and Pre-Generation Data Splits}\label{task-grammar-vuxe0-chia-dux1eef-liux1ec7u-trux1b0ux1edbc-khi-sinh}}
+
+Each program uses geometric primitives: grasp, lift, transfer, place, open, close, push-blocker, retrieve, and restore. A primitive has object-role arguments, preconditions, completion predicates, and controller parameters. Role labels exist only in the generator/annotation pipeline and are never passed to the online network.
+
+An example program is
+\begin{equation}\label{eq:program}
+{\cal T}:
+{\rm open}(d)\rightarrow{\rm place}(a,d)
+\rightarrow{\rm place}(b,d)\rightarrow{\rm close}(d).
+\end{equation}
+Training variants change object size and position, drawer geometry, target relations, and mandatory order. Task identity is defined by the requirement rather than background color, filename, or source seed. A program with a different suffix counts as a different task even when the first primitive is identical.
+
+\textbf{Default split.} Use 20 training programs, 4 development programs for validation and calibration, and 12 test compositions locked before any test data are collected. Harder length-generalization tasks use a separate split described below. Frame-level random splitting is not used.
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Split axis
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Train / validation
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Test and meaning of the claim
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Configuration & Training programs with separate reset/camera seeds & New resets of known programs; this is only configuration generalization \\
+Composition & 20 train, 4 development compositions & 12 compositions unseen in training; primitives may have been seen \\
+Assets & Split asset families 70/15/15 before augmentation & New mesh families, not merely scaled versions of the same mesh \\
+Source lineage & Seed demonstrations and all descendants remain in the same split & No transformed copy of a test demonstration appears in training \\
+Length & Separate track trained only on programs with 2--3 interaction stages & Test at 4, 6, and 8 stages using previously seen primitives \\
+Dependency mechanism & Known-mechanism primary split & Hold out one family of constraints in a stress track; do not merge this into the composition claim \\
+\end{longtable}
+
+Asset split ratios apply by mesh family/parametric generator, not by individual rendered instance. The same physical anchor used for a context swap remains in its original split. The train--test separation of pretrained IP may not fully control overlap in public assets/tasks; therefore the main claim is generalization to held-out \textbf{custom compositions for the added modules}, accompanied by disclosure of checkpoint pretraining. A strict end-to-end unseen-asset claim is made only for new assets whose provenance can be demonstrated.
+
+In the primary composition split, training programs contain 2--4 stages; this setting is not simultaneously described as strict 2--3-to-8 length extrapolation. The length track is trained separately and restricts the number of stages in seed episodes, branch rollouts, and continuation data.
+
+\hypertarget{cuxe1c-data-views-vuxe0-uxe1nh-xux1ea1-module}{%
+\subsection{Data Views and Module Mapping}\label{cuxe1c-data-views-vuxe0-uxe1nh-xux1ea1-module}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+View
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+What is one sample?
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Target
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+\(\mathcal D_{\rm geom}\) & One observed foreground cloud and valid mask & The same cloud; consistent augmentation \\
+\(\mathcal D_{\rm dyn}\) & Causal history + recorded absolute commands + \(K\) executed next observations & Cloud, achieved pose/gripper at each interval \\
+\(\mathcal D_{\rm task}\) & Independent demonstration context and causal query prefix from the same task & Alignment, occurrence, current relations, eligibility \\
+\(\mathcal D_{\rm terminal}\) & Active transition with context and a state with a completion label & First success/failure/continue; current completion \\
+\(\mathcal D_{\rm value}\) & Active state--context--deadline, policy version, and \(n\) continuations & Success count and first-terminal times \\
+\(\mathcal D_{\rm pair}\) & Two successor states with the same budget; pair/context IDs & Confident ordering from executed outcomes \\
+\(\mathcal D_{\rm calib}\) & Held-out development anchor-context trials, both observed and planner-selected & Counts/outcomes, no training gradients \\
+\(\mathcal D_{\rm audit}\) & Held-out reset + fixed candidates + dense physical evaluation & Model error, true finite-pool ranking, support \\
+\end{longtable}
+
+IP is not trained on these views under the primary protocol. If IP is fine-tuned to improve support, that becomes a different checkpoint variant with its own outcome labels. Search has no separate supervised dataset: it uses the learned models and is evaluated using audit/evaluation episodes.
+
+\hypertarget{thu-successful-contexts-vuxe0-executed-attempts}{%
+\subsection{Collecting Successful Contexts and Executed Attempts}\label{thu-successful-contexts-vuxe0-executed-attempts}}
+
+For each training program, collect 5 seed demonstrations from the native waypoint planner or simulator teleoperation; require at least two distinct valid execution modes when the task permits them. A seed context must show the initial condition, every interaction, and the final requirement. The training model receives at most two seed/derived demonstrations per sample and never receives program text.
+
+Starting from a seed, randomize the scene within the feasible workspace: object translations inside task-defined regions, yaw, size in the range 0.8--1.2 times nominal, and nuisance lighting/camera variation for sensor robustness. Any transformation that changes contact must be re-executed. Object-centric waypoint transformation is used:
+\begin{equation}\label{eq:adaptation}
+T^{W,{\rm new}}_{E,k}
+=T^{W,{\rm new}}_{O}\,(T^{W,{\rm seed}}_{O})^{-1}T^{W,{\rm seed}}_{E,k}.
+\end{equation}
+This is applied to segments associated with the appropriate object \(O\); free-space connectors are produced by a motion planner and then executed by the controller. Contact segments are never connected by teleportation. For RLBench, this is the proposed native generation protocol and is not described as directly running MimicGen.
+
+Each program targets 200 \textbf{successful contexts}, while all unsuccessful attempts with valid observations are also retained. A generation attempt is stopped after 512 intervals in the primary track; only successes are not retained. Report attempts, successes, failure types, and acceptance rate per program. 20 programs \(\times\) 200 successes yields 4,000 successful context episodes, not the total number of attempted episodes.
+
+Dynamics data use an episode-level behavior mixture: 50\% from executed demonstration attempts, 30\% from \(\pi_{\rm ref}\) after it is frozen, and 20\% from bounded perturbation/recovery. Before \(\pi_{\rm ref}\) is available, warm-up uses 70\% demonstration attempts and 30\% perturbed attempts. Episode mixing is tuned only on training data, with final ratios recorded explicitly.
+
+Perturbations include target offsets up to 2 cm or \(10^\circ\), gripper closing one interval early/late, object shifts up to 3 cm after the robot reaches a stationary state, or a new blocker inserted into a free-space path. The simulator executes physics after the intervention; pre/post states and an intervention ID are stored. Frame morphing is never used to fabricate a ``failure'' without dynamics.
+
+\hypertarget{tux1ea1o-nhuxe3n-eventtask-memory}{%
+\subsection{Creating Event/Task-Memory Labels}\label{tux1ea1o-nhuxe3n-eventtask-memory}}
+
+At each query prefix, the program monitor maintains two distinct states: the set of events that have occurred and the predicates that remain true. Object-role binding belongs to generator annotations. For every demonstration event token, identify the primitive with greatest temporal overlap; require at least 50\% overlap of the token interval, otherwise mask the uncertain semantic label.
+
+The alignment target distributes probability uniformly across event tokens corresponding to the primitive currently being executed in all demonstrations. If the query is in a recovery not represented in the demonstrations, the null target is 1. Occurrence indicates that a primitive has completed before or at \(t\); current relation is recomputed from snapshot \(s_t\); eligibility is the conjunction of prerequisites at \(t\), not the result of a future rollout.
+
+For an event token corresponding to free-space motion, only alignment and occurrence are used when mapping is reliable; no artificial object postcondition is assigned. Initial/final landmarks receive valid completion information but are not router action windows. Training samples use a query episode different from every context episode, even when they share seed lineage within the training split.
+
+Additional pauses of 2--10 intervals and retries are created by re-executing the controller rather than modifying normalized timestamps. Task-memory supervision must include cases where \(\rho=1\) but \(\nu=0\) after displacement; otherwise the two heads may learn the same signal.
+
+\hypertarget{branch-bank-vuxe0-nhuxe3n-continuation}{%
+\subsection{Branch Bank and Continuation Labels}\label{branch-bank-vuxe0-nhuxe3n-continuation}}
+
+An \textbf{anchor} is a state in a physically executed episode together with the full causal history, controller state, and deadline. At primary scale, select 2,000 anchor-context records: 40\% immediately before decisions with delayed consequences, 20\% near stage transitions, 20\% after recoverable errors, and 20\% at random positions. An anchor-context record is counted separately for every context \(C\), even when the same physical anchor is reused.
+
+At each anchor, create \(K=8\) candidates from the exact \(\pi_{\rm prior}\) with stored seeds. Each candidate is a common absolute command prefix; training branch prefixes have lengths from \(\{2,8,16\}\), resampling IP across chunks when necessary. Two branches are compared for preference only when they have the same prefix duration and remaining deadline. The collection mixture over prefix lengths is fixed and does not exclude locally failed branches.
+
+\Needspace{6\baselineskip}
+
+\textbf{Algorithm 2: create one branch record.}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Restore the anchor snapshot and replay causal history to obtain \(b_t,q_t\). The snapshot must contain physics, controller, and task-monitor state; model input still uses observation history only.
+\item
+  Sample and execute the candidate prefix in the simulator. Store every observation, command, achieved pose, local completion status, and first-terminal event.
+\item
+  If the prefix has already reached terminal success/failure, assign realized return 1/0; do not continue and do not create an active-state \(V\) label for the terminal successor.
+\item
+  If the successor remains active, restore that same successor state \(n=4\) times, each with independent diffusion and perturbation seeds; run the exact \(\pi_{\rm ref}\) until terminal or deadline.
+\item
+  Store first-success/failure time for every trial. Construct \(k(H)\) for remaining deadlines \(H\in\{32,64,128,256,512\}\) that are applicable; each minibatch samples one horizon/trial group.
+\item
+  Retain locally failed branches, locally successful branches that fail later, and full-task-success branches. Create preference labels only after uncertainty filtering; all-zero groups are not discarded.
+\end{enumerate}
+
+A trial outcome is the outcome of \(\pi_{\rm ref}\) from that state, not the expert. Expert continuations may be collected for diagnostic support/feasibility, but they use a distinct view and head label. Expert outcomes and \(\pi_{\rm ref}\) outcomes are never merged into the same \(k/n\).
+
+\textbf{Snapshot integrity.} A snapshot must include joints/velocities, object and articulation state, gripper state, constraint/attachment state, controller integrators, task history, simulator RNG, and solver state if supported by the API. Before branching, replay the same command prefix twice from the snapshot and measure pose/cloud/outcome discrepancy. If the API cannot fully restore the contact solver, restore using reset plus deterministic action-history replay up to the anchor; if equivalence still fails, mark the pairing as approximate and use repeated-reset estimates. A ``nearly identical state'' must not be recorded as an exact counterfactual.
+
+The proposal does not assume that default RLBench exposes an arbitrary exact snapshot API. Dataset publication must state which fields were actually stored and report measured replay fidelity.
+
+\hypertarget{dux1eef-liux1ec7u-matched-suffix-vuxe0-recovery}{%
+\subsection{Matched-Suffix and Recovery Data}\label{dux1eef-liux1ec7u-matched-suffix-vuxe0-recovery}}
+
+Create pairs \((C^A,C^B)\) with the same local objective but different later requirements. For example, task A may require placing another large object into a drawer, whereas task B may require retrieving the first object through a different access route. The context must visibly express the different suffixes. Query scene, history, and the common candidate pool are kept identical whenever physics permits; \(q_t\) is recomputed for each context.
+
+For the same successor physical state \(s'\), run separate continuations under \(C^A\) and \(C^B\):
+\begin{equation}\label{eq:suffixlabel}
+k_{j,c}=\sum_{\ell=1}^{n}
+\mathbf1[\tau_{S,j,c,\ell}\leq H,\ \tau_{S,j,c,\ell}<\tau_{F,j,c,\ell}],
+\quad c\in\{A,B\}.
+\end{equation}
+Reusing a branch prefix does not permit reuse of its continuation label after the context changes. A pair is marked as a ranking reversal only when posterior evidence supports both directions under Eq. \eqref{eq:prefuncertainty}. A pair without reversal remains valid outcome data; labels are not edited to fit the hypothesis.
+
+Use 30\% of anchor-context records from matched-suffix pairs in the training bank. This is a sampling quota and does not imply that 30\% exhibit confident reversal. Report the number of scene pairs, contexts, locally successful branches, ranking reversals, and unresolved pairs. Avoid shortcuts by independently randomizing target location, object size, grasp convenience, and context route.
+
+The recovery bank stores failure types separately: missed grasp, displacement after placement, premature release, and blocked approach. A case is called recoverable only if at least one executed recovery succeeds within the allowed budget; distance from the demonstration is not used to infer recoverability. Recovery preferences compare state outcomes under the same reference policy and deadline and do not penalize every off-demonstration state.
+
+\hypertarget{calibration-hard-examples-vuxe0-nguxe2n-suxe1ch-dux1eef-liux1ec7u}{%
+\subsection{Calibration, Hard Examples, and Data Budget}\label{calibration-hard-examples-vuxe0-nguxe2n-suxe1ch-dux1eef-liux1ec7u}}
+
+The four development compositions are split by seed lineage into development-selection and calibration groups rather than by frame. The calibration bank contains 250 anchor-context records with \(K=8\) and \(n=16\) to reduce label noise. Validation data select hyperparameters; the calibration group is used only to fit scalar temperatures after model selection. An audit subset contains 100 anchors \(\times\) 8 candidates \(\times\) 32 continuation trials to measure branch ranking and uncertainty; this subset never updates the model.
+
+Planner-selected hard examples are collected \textbf{only on training programs} after an initial model has been trained. Add anchors where predicted return is high but realized outcome is poor, while still keeping 50\% of minibatches from the original bank to avoid forgetting common states. After this additional collection round, the evaluator/model are retrained under the same frozen \(\pi_{\rm ref}\); the reference controller is not silently changed. Dataset growth is recorded for the equal-data baseline.
+
+\begin{longtable}[]{@{}lll@{}}
+\toprule\noalign{}
+Collection item & Pilot & Proposed primary scale \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Training programs & 6 & 20 \\
+Successful contexts/program & 50 & 200 \\
+Training anchor-context records & 200 & 2,000 \\
+Candidates/anchor & 4 & 8 \\
+Continuations/active branch & 2 & 4 \\
+Maximum branch records & 800 & 16,000 \\
+Maximum continuation trials & 1,600 & 64,000 \\
+Calibration bank & Preliminary check only & 250 \(\times\) 8 \(\times\) 16 = 32,000 trials \\
+Dense audit bank & 20 anchors & 100 \(\times\) 8 \(\times\) 32 = 25,600 trials \\
+\end{longtable}
+
+The totals above are upper-bound accounting when every branch remains active. Terminal branches reduce continuation count; the dataset report records actual counts. Overlapping data views are not double-counted as separate transitions.
+
+For \(N_a\) anchor-contexts, \(K\) candidates, average prefix length \(\bar h\), and continuation length \(\bar L_c\),
+\begin{equation}\label{eq:datacost}
+N_{\rm steps}^{\rm branch}
+\approx N_aK(\bar h+n\bar L_c).
+\end{equation}
+For example, \(N_a=2,000,K=8,\bar h=8,n=4,\bar L_c=128\) gives \textbf{8,320,000 intervals}; with \(\bar L_c=512\), it gives \textbf{32,896,000 intervals}. This excludes generation attempts, snapshot replay, calibration, and audit. A raw float32 cloud of size \(2048\times3\) alone consumes 24,576 bytes/interval, so the 8.32-million-interval scenario requires roughly \textbf{204.5 GB} before compression and metadata. These are budget calculations, not measured throughput.
+
+Snapshots are stored at anchors rather than every frame; trajectories store depth or compressed clouds together with calibration for reconstruction. Physics steps/s, rendering cost, reset/replay cost, and acceptance rate must be measured in a pilot before reporting total machine hours. Simulator throughput is not inferred from marketing specifications of another engine.
+
+\hypertarget{schema-tux1ed1i-thiux1ec3u-cux1ee7a-mux1ed9t-bux1ea3n-ghi}{%
+\subsection{Minimum Record Schema}\label{schema-tux1ed1i-thiux1ec3u-cux1ee7a-mux1ed9t-bux1ea3n-ghi}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Group
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Required fields
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Identity/provenance & episode ID, source lineage, program ID, asset-family IDs, split, generator version, engine/asset/controller versions \\
+Observation & timestamp, camera intrinsics/extrinsics, depth/cloud, foreground mask, valid-point mask, measured \(T_E^W,g\) \\
+Action & absolute target \(T_{\rm goal}^W\), commanded gripper, planned interval duration, achieved pose/gripper after the interval \\
+Causal state & history pointer from reset, snapshot/replay specification, physical and task memory hash if cached \\
+Task labels & event-token mapping, occurrence, current predicates, eligibility, masks for uncertain labels \\
+Branch labels & anchor/context IDs, prefix commands, local outcome, first-terminal event/time, remaining budget \\
+Continuation & exact \(\pi_{\rm ref}\) version, independent trial seeds, full outcome trace, \(k(H),n\), censor/timeout reason \\
+Matched data & scene-pair ID, suffix-pair ID, common-candidate ID, perturbation ID, dependency span \\
+Audits & replay discrepancy, rejected-data reason, hard-example source, distinction between real and imagined observations \\
+\end{longtable}
+
+Simulator/task IDs are retained for audit and splitting but are not network features. Training normalization statistics are computed from the training split; test resets, future query frames, oracle stage, and score are never written into model input tensors.
+
+\hypertarget{quy-truxecnh-huux1ea5n-luyux1ec7n-vuxe0-cux1ea5u-huxecnh}{%
+\section{Training Procedure and Configuration}\label{quy-truxecnh-huux1ea5n-luyux1ec7n-vuxe0-cux1ea5u-huxecnh}}
+
+\hypertarget{thux1ee9-tux1ef1-tux1ed1i-ux1b0u-huxf3a}{%
+\subsection{Optimization Order}\label{thux1ee9-tux1ef1-tux1ed1i-ux1b0u-huxf3a}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 6\tabcolsep) * \real{0.2500}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Phase
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Trainable
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Frozen
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Data and purpose
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+A0: geometry & \(E_P,D_P\) & IP & \(\mathcal D_{\rm geom}\), reconstruction \\
+A1: temporal representation & \(E_P,D_P\), physical GRU, pilot dynamics & IP & \(\mathcal D_{\rm dyn}\), one-step and recursive prediction so that memory receives gradient \\
+B: task inference & Demo/event encoder, task GRU/heads & IP, physical encoder, GRU, decoder & \(\mathcal D_{\rm task}\), relation and phase understanding \\
+C: outcome collection & No model updates & Entire \(\pi_{\rm ref}\) and input encoders & Collect branch/continuation bank under the exact target policy \\
+D1: dynamics refinement & Dynamics trunk + 3 heads & IP, encoders, decoder, memories & Executed transitions including policy-selected failures \\
+D2: evaluation & Evaluator attention/heads, event predictor & Entire reference-controller path & Outcome, terminal, and pair losses \\
+E: calibration & Scalar temperatures & All neural weights & Independent development calibration bank \\
+Test & No module & All modules & Inference/search from 1--2 demonstrations \\
+\end{longtable}
+
+Physical memory is not frozen after geometry-only autoencoding: the GRU learns only when temporal loss propagates through it in A1. At the end of B, \textbf{every module that changes \(\pi_{\rm ref}\) is frozen}. If the encoder, router, IP checkpoint, or cadence changes after C, a new reference version must be assigned and the corresponding outcome labels recollected. D1 does not alter the real-observation reference policy because the world model is not part of \(\pi_{\rm ref}\).
+
+\hypertarget{optimizer-sampling-vuxe0-early-stopping}{%
+\subsection{Optimizer, Sampling, and Early Stopping}\label{optimizer-sampling-vuxe0-early-stopping}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Setting
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Default value
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Optimizer & AdamW, learning rate \(10^{-4}\), betas \((0.9,0.999)\), weight decay \(10^{-2}\) \\
+LR schedule & Warm-up for 2,000 updates, cosine decay to \(10^{-5}\) \\
+Gradient clipping & Global norm 1 \\
+A0 & Batch 64 clouds, maximum 50,000 updates \\
+A1 & Batch 8 sequences, 8-interval burn-in + 16 supervised intervals, maximum 100,000 updates \\
+B & Batch 8 context-query sequences, 16 supervised intervals, maximum 100,000 updates \\
+D1 & Batch 8 sequences, bootstrap episode masks, maximum 200,000 updates \\
+D2 & 128 anchor-context-horizon records; 64 terminal transitions; maximum 128 valid preference pairs/update; maximum 100,000 updates \\
+Rollout curriculum & A1: \(K=1,2,4\) over three equal phases; D1: \(K=2,4,8,16\) over four equal phases \\
+Evaluation cadence & Every 5,000 updates; early stop after 5 evaluations without improvement in the primary metric \\
+Precision & FP32 for geometry, rotations, losses, probabilities; mixed-precision attention only after passing numerical audit \\
+Random seeds & 3 independent training seeds; generator/test reset seeds kept separate \\
+\end{longtable}
+
+History burn-in does not mean discarding history before the first 8 intervals. When the encoder is trainable, history is replayed from reset to the start of burn-in using current weights in no-gradient mode; the hidden state is then detached and backpropagation proceeds through the supervised segment. With a frozen encoder, states computed from full causal history may be cached. Task state in phase B follows the same principle; task memory is not reset to zero midway through an episode and then described as a full-history model.
+
+A0 selects checkpoints using reconstruction and native-action fidelity on validation. A1/D1 use normalized multi-step physical error together with a branch-ranking diagnostic that does not use test data; B uses masked task loss and stage-aware execution success; D2 uses validation binomial NLL, breaking ties by branch regret. Metric priority is fixed before training rather than selecting a different best checkpoint for each test task.
+
+Outcome minibatches first sample an anchor-context and then one valid horizon, avoiding oversampling long trajectories. Pair losses use the disjoint pools described above; if insufficient pairs are available, the existing pairs are used with masking rather than lowering the confidence threshold after observing test results. Sample weights used for class-balanced batches must be converted back to the likelihood distribution when computing calibration.
+
+Calibration fits one temperature \(T_V>0\) for value logits, one \(T_S\) for completion, and one \(T_E\) for event logits on the calibration bank by NLL:
+\begin{equation}\label{eq:calibration}
+\widetilde V=\operatorname{sigmoid}(\ell_V/T_V),\quad
+\widetilde S=\operatorname{sigmoid}(\ell_S/T_S),\quad
+\widetilde p_E=\operatorname{softmax}(\ell_E/T_E).
+\end{equation}
+Primary reporting includes results both before and after calibration. Calibration on observed states does not guarantee calibration on imagined states; predictive optimism on imagined states is evaluated separately. Temperatures are never fit using test outcomes.
+
+\hypertarget{thuux1eadt-touxe1n-training-theo-dux1eef-liux1ec7u}{%
+\subsection{Data-Driven Training Algorithms}\label{thuux1eadt-touxe1n-training-theo-dux1eef-liux1ec7u}}
+
+\textbf{Algorithm 3: dynamics.} Sample an executed sequence and its causal history; construct initial memory; preserve recorded absolute commands; unroll Eq. \eqref{eq:wmrecursive}; compute Eq. \eqref{eq:physloss} at every prefix; and update only the modules trainable in the current phase. Teacher targets use stop-gradient. A shared bootstrap trunk is a computational compromise; an ablation with independent trunks measures ensemble correlation.
+
+\textbf{Algorithm 4: evaluator.} Encode the realized anchor and context through the frozen path; sample a horizon; compute \(V,S,\Phi\) and transition logits under the appropriate masks; and optimize Eq. \eqref{eq:totaleval}. Pairs with different contexts must recompute \(q\) from the same query history. Reference value is not forced to be invariant across demonstrations that use different routes. At the end of training, fit temperatures, freeze the model, and only then open the test suite.
+
+\textbf{Equal-data reactive control.} Train a context/history-conditioned action scorer or reactive student using the same executed data and the same outcome labels. A direct action-value baseline encodes \(h\) action descriptors with a width-256 GRU, concatenates the result with the evaluator query, and outputs \(Q_H(b,q,C,A)\); the target is the realized prefix-plus-reference return. This architecture is not a newly fine-tuned frozen IP; it reranks the same candidate bank and tests whether explicit next-state rollout is actually necessary.
+
+\hypertarget{benchmark-vuxe0-thiux1ebft-kux1ebf-thux1ef1c-nghiux1ec7m}{%
+\section{Benchmark and Experimental Design}\label{benchmark-vuxe0-thiux1ebft-kux1ebf-thux1ef1c-nghiux1ec7m}}
+
+\hypertarget{primary-benchmark-phux1ee5-thuux1ed9c-giux1eefa-cuxe1c-giai-ux111oux1ea1n}{%
+\subsection{Primary Benchmark: Cross-Stage Dependencies}\label{primary-benchmark-phux1ee5-thuux1ed9c-giux1eefa-cuxe1c-giai-ux111oux1ea1n}}
+
+We propose a custom suite called \textbf{ICGS-Dependencies}; it is not an existing benchmark available for download. The primary suite contains 12 held-out compositions drawn from the three task families below. Each composition has 100 reset seeds, with the same context panel and reset assignments for every method. Training programs and assets are split in advance according to the data protocol; test compositions are not merely training tasks with new positions.
+
+An \textbf{interaction stage} is counted when the robot completes a relation change with a clear postcondition, such as placing an object inside a container or opening a drawer far enough to provide clearance. Free-space motion intervals between grasp and place do not count as separate stages. The number of event tokens used by the network may exceed the number of semantic stages reported for the benchmark.
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Family
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Local success at the early decision
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Delayed consequence that must be evaluated
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Pack--add--close & Object A is stably released inside the drawer & Object B must still fit and the drawer must remain closable \\
+Grasp--transport--fit & The object is stably grasped and lifted & The grasp orientation/offset must permit passage through the aperture and attainment of the final pose \\
+Park--retrieve--restore & A blocker has been moved away from the immediate access path & The parking pose must not obstruct later retrieval or restoration \\
+\end{longtable}
+
+\textbf{Pack--add--close: four test compositions.} P1: open--place A--place B--close; P2: open--place B--place A--close with different order and object sizes; P3: open--place A--place spacer--place B--close; P4: open--place A--retrieve C--place B--close. Training programs do not contain these exact object-role/order/constraint compositions, although the individual primitives may occur in training.
+
+\textbf{Grasp--transport--fit: four test compositions.} G1: grasp--transport through aperture--place into holder; G2: grasp--rotate in free space--transport through aperture--place; G3: open gate--grasp--transport--place--close gate; G4: grasp--temporary place--regrasp--transport--fit. Regrasp tasks are scored over the full budget; a label such as ``bad initial grasp means unsolvable'' is not used when a valid recovery exists.
+
+\textbf{Park--retrieve--restore: four test compositions.} R1: park blocker--retrieve target--restore blocker; R2: park A--park B--retrieve--restore B--restore A; R3: open drawer--park blocker--retrieve--restore--close; R4: park blocker--retrieve target A--retrieve target B--restore. Parking zone, retrieval side, and order differ from training templates. These 12 names define the skeletons; before the main run, the manifest must additionally fix the object families and parameter ranges described below.
+
+\hypertarget{geometry-predicates-vuxe0-label-chuxednh-xuxe1c}{%
+\subsection{Geometry, Predicates, and Precise Labels}\label{geometry-predicates-vuxe0-label-chuxednh-xuxe1c}}
+
+Tasks use rigid objects with principal diameters/dimensions in the range 4--12 cm, drawer inner dimensions of roughly 18--30 cm by 15--25 cm, and aperture clearance of 5--30 mm over the object cross-section. These ranges are proposed generator parameters; every accepted instance must be verified by at least one successful expert execution. Target position, favorable side, and initial grasp accessibility are balanced so that one task family is not always placed on the same side of the robot.
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Predicate
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Simulation definition for the custom suite
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Stable grasp/lift & Object is lifted at least 3 cm above its initial support surface, and the object-to-gripper transform varies by less than 1 cm and \(10^\circ\) for 5 intervals \\
+Stable placement & Gripper has released, the object has support contact, and linear speed is below 1 cm/s for 5 intervals \\
+Inside container & The entire oriented object bounding volume lies inside the inner container volume with a 2 mm margin \\
+Drawer closed & Prismatic joint is within 5 mm of the closed limit and remains there for 5 intervals; no object interpenetration exceeds tolerance \\
+Fit/final pose & Translation error \(\leq1\) cm, orientation error \(\leq10^\circ\), stable placement, and the task-specific support relation \\
+Restored blocker & Blocker satisfies the demonstrated target relation under the pose tolerance above; the exact source-world pose is not reused if reset changed \\
+Unsafe terminal & Object leaves the workspace, robot/fixture exceeds declared force/penetration limits, or the controller is no longer operational \\
+Full success & All final predicates and mandatory-history predicates hold simultaneously for 5 intervals; the episode terminates \\
+\end{longtable}
+
+These tolerances are used by the external monitor and training labels and are not passed to the test-time network. The proposed defaults for custom simulation are contact force above 40 N for 3 intervals or penetration depth above 2 mm for 3 intervals; allowed grasp/support contacts are excluded from the penetration check when the measured penetration is a quantified solver artifact. Collision validation must verify these thresholds before the final benchmark, and any change requires a new protocol version. A simulator-internal threshold is not interpreted as a real physical force. Near-threshold instances are reported separately and re-evaluated under tolerance sensitivity.
+
+The predicates above define the \textbf{custom suite}. Public benchmarks use their official evaluators rather than replacing them with more favorable predicates. States containing interpenetration caused by solver bugs are not counted as successful episodes; invalid-run reasons are logged and invalid-run rate is reported for every method.
+
+\hypertarget{kiux1ec3m-tra-rux1eb1ng-buxe0i-touxe1n-thux1ef1c-sux1ef1-cux1ea7n-downstream-reasoning}{%
+\subsection{Verifying That the Problem Truly Requires Downstream Reasoning}\label{kiux1ec3m-tra-rux1eb1ng-buxe0i-touxe1n-thux1ef1c-sux1ef1-cux1ea7n-downstream-reasoning}}
+
+At a set of anchors fixed before test evaluation, sample a common pool of \(K=16\) candidates. Execute the candidates and select a diagnostic subset containing at least two locally successful candidates. Run dense \(\pi_{\rm ref}\) continuations to estimate \(p_j\); confirm a consequential choice when the lower/upper uncertainty intervals of at least two branches are separated with an expected gap \(\geq0.2\). This dense set is used for mechanistic analysis and is \textbf{not used to filter difficult episodes out of end-to-end success evaluation}.
+
+For paired-suffix tests, keep scene/history/candidates fixed and change the context. Expert certification verifies that both tasks are solvable. The context change must alter the requirement clearly enough to be visible in demonstrations. If the scene cannot be held exactly fixed, report the actual physical differences rather than calling the pair an exact intervention.
+
+Dependency span \(\delta\) is the number of completed semantic boundaries from the early decision to the first stage at which that decision changes success. Task length \(J\) is measured independently. Construct feasible grid cells \((J,\delta)\) with \(J\in\{4,6,8\}\) and \(\delta\in\{1,2,3\}\); cells without a physically valid construction are marked N/A rather than adding idle frames to artificially increase \(\delta\).
+
+\textbf{Two control sets.} The independent-chain control has the same number of stages, but placements do not share free space, access, or ordering constraints. The memory-control set contains observations that are locally similar while different histories determine the current stage; it is not designed to create delayed-consequence branching. Search gains on memory-control alone do not establish H2.
+
+\hypertarget{public-benchmarks-vuxe0-external-validity}{%
+\subsection{Public Benchmarks and External Validity}\label{public-benchmarks-vuxe0-external-validity}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Benchmark
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Proposed protocol
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+What must not be conflated
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+IP/RLBench {[}1,2,9{]} & Reproduce the setting corresponding to the checkpoint, report task-level success and native cadence; use this to measure regression caused by the wrapper & Do not call every RLBench implementation an exact IP reproduction \\
+RLBench-Oneshot from ManiLong-Shot {[}3{]} & One-shot long-horizon comparison if official code/assets/protocol are available; match demonstration count and sensors & Do not label a self-written heuristic segmentation as ManiLong-Shot \\
+LIBERO {[}13{]} & Separate demonstration-conditioned transfer track using the official task evaluator; 2 demos/task, with no language input to ICGS & Do not directly compare headline language-conditioned scores with demo-conditioned scores as if inputs were identical \\
+CALVIN {[}14,15{]} & External history/sequence diagnostic; provide task demonstrations instead of language in an adapted track & The adapted track is not an official CALVIN language-benchmark result \\
+ManiSkill {[}11,12{]} & Alternative physics backend for scaling and domain-transfer checks & Changing the engine is not zero-cost checkpoint compatibility \\
+\end{longtable}
+
+LIBERO/CALVIN are not required for the core evidence if a validated observation/action adapter is unavailable. At minimum, the primary custom suite and the supported IP/RLBench regression must be complete. Public-dataset train/test lists and source versions are tracked separately to avoid accidentally training the evaluator on test tasks. It is unnecessary to train on every benchmark merely to produce a wider table.
+
+\hypertarget{baseline-ladder}{%
+\subsection{Baseline Ladder}\label{baseline-ladder}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+ID
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Method
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Question isolated
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+B0 & Native IP, native context/cadence & Capability and limitation of the original checkpoint \\
+B1 & IP with full context and the same ICGS cadence/sensors & Gain attributable only to changing the execution wrapper \\
+B2 & Stage-aware IP = \(\pi_{\rm ref}\) & How much do memory/event routing alone solve? \\
+B3 & Equal-data history/context reactive student & Are additional data and amortized reasoning sufficient? \\
+B4 & Direct \(Q_H(b,q,C,A)\) reranker with the same candidates & Is explicit next-state prediction necessary? \\
+B5 & Root reranking using learned WM + \(V\), with \(L=h\) and \(L=T\) & Value and single-chunk lookahead \\
+B6 & Shooting/MPC with the same \(L\) and time budget & Does search allocation outperform sampling sequences? \\
+B7 & Full ICGS-MCTS & Contribution of tree search within the full system \\
+B8 & ManiLong-Shot, if reproduced under the correct protocol & Direct one-shot long-horizon competitor \\
+\end{longtable}
+
+B2--B7 use the same sensors, demonstration panels, physical/task encoders, reference-policy version, and data pool. B3/B4 are retrained on the same additional data, rather than being compared only with a native checkpoint that has never seen failures. Any special input supervision, such as stage labels or oracle masks, is matched or explicitly disclosed. If B8 differs in training corpus or architecture, it is reported as a separate regime rather than called equal-data without justification.
+
+For planners, log sampled-candidate count, unique prefixes, IP forward/denoising calls, model intervals, encoder/decoder calls, and cache hits. Full-chunk reranking at \(T\) is not compared against MCTS at \(4T\) and then attributed entirely to tree topology. Both equal-\(L\) and equal-time comparisons are reported.
+
+\hypertarget{cuxe1c-thuxed-nghiux1ec7m-xuxe1c-nhux1eadn-giux1ea3-thuyux1ebft}{%
+\subsection{Experiments for Testing the Hypotheses}\label{cuxe1c-thuxed-nghiux1ec7m-xuxe1c-nhux1eadn-giux1ea3-thuyux1ebft}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Experiment
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+What is held fixed
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Comparison and decisive outcome
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+E1: regression and stage & Native tasks/easy controls, same resets & B0/B1/B2; local success, phase accuracy, premature advancement \\
+E2: value semantics & Same realized branches, correct/oracle phase diagnostic & Temporal ranking vs outcome-only vs full evaluator; regret, NLL, calibration \\
+E3: suffix dependence & Same anchors/candidates, \(C^A\) vs \(C^B\) & Full vs no/shuffled context vs no-suffix-pair loss; preference-reversal correctness \\
+E4: explicit lookahead & Same prior/evaluator/data, known-stage dependency set & B4/B5/B6/B7 at equal time and equal \(L\); full-task success \\
+E5: dependency span & Fixed task length while changing \(\delta\) where feasible & Success/regret vs \(\delta\); actual imagined boundaries crossed \\
+E6: transfer & Disjoint compositions, assets, strict length track & Generalization by axis, no test-time gradient \\
+E7: model exploitation & Increasing search budget, fixed held-out audit bank & Predicted vs realized return; optimism and regret vs compute \\
+E8: recovery & Matched physical perturbations after the same prefix & Full vs equal-data reactive; unconditional success, recovery latency \\
+E9: deployment latency & Same hardware and controller, paused vs live-clock & p50/p95 latency, stale-command rate, success under wall deadline \\
+\end{longtable}
+
+E2/E3 must be run on \textbf{realized states} so that evaluator correctness is established before attributing failures to the world model. E4 on the primary suite uses the learned tracker; oracle stage is only an additional diagnostic with privileged information.
+
+\hypertarget{ablations-ux1b0u-tiuxean}{%
+\subsection{Priority Ablations}\label{ablations-ux1b0u-tiuxean}}
+
+Ablated methods must be retrained when a module or supervision signal is changed; simply zeroing a feature that the model was never trained without is not considered a fair architecture comparison.
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Group
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Minimum variants
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Target metric
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Physical state & Full; no physical history; pooled geometry; six-IP-token-only diagnostic & Action-conditioned prediction, aliasing, decision regret \\
+Context memory & Events; globally pooled context; no task GRU; monotonic alignment & Stage/retry accuracy, context-swap correctness \\
+Value target & Temporal-only; local-success; outcome-only; outcome + matched-suffix & Full-task regret, NLL, suffix sensitivity \\
+Training signal & Same complete dataset with pair loss disabled; remove matched-suffix data while keeping sample count equal & Separate architecture/supervision effects from data quantity \\
+World model & Persistence; one-step only; recursive training; 1 head; 3 heads & Multi-step error, ranking, optimism \\
+Planning & Rerank/shooting/MCTS; \(L=8,16,32,64\); \(r=1,2,8\) when valid & Success--latency frontier, cross-stage coverage \\
+Interface & Real observed cloud; reconstructed real cloud; predicted cloud & Separate reconstruction drift from dynamics drift \\
+\end{longtable}
+
+An optimistic-max-over-heads variant is used only as a \textbf{misspecification diagnostic}, not as a competing deployable algorithm. If an ensemble disagreement penalty is added, it requires separate validation and its effect must be reported; the primary objective contains no undefined risk-penalty coefficient.
+
+\hypertarget{oracles-vuxe0-phuxe2n-ruxe3-nguyuxean-nhuxe2n-lux1ed7i}{%
+\subsection{Oracles and Failure Attribution}\label{oracles-vuxe0-phuxe2n-ruxe3-nguyuxean-nhuxe2n-lux1ed7i}}
+
+\textbf{Oracle phase:} replace the tracker with the program monitor to measure the ceiling of memory/routing. \textbf{Simulator transitions + learned evaluator:} replace the world model with actual simulator transitions on the same commands to measure the model bottleneck. \textbf{Finite-pool empirical return:} run many continuations for the same root candidates and choose the best candidate in the pool; this bounds the candidate pool/reference continuation, not a globally optimal planner.
+
+There is no automatic ``oracle value'' for an arbitrary predicted cloud because an imagined cloud may correspond to no valid simulator state. Oracle-value comparison is used only when a predicted state can be matched to a physically realized state, or via the simulator-transition diagnostic. No oracle score is constructed by assuming that the latent decoder recovers the entire hidden state.
+
+Candidate support at an anchor is \(\max_j p_j\) over the finite pool; full-task reporting must also include the rate at which the pool contains no locally successful action. Failure is decomposed in the order: perception/interface, stage/task inference, no supported action, dynamics ranking, evaluator ranking, execution deviation, false terminal/timeout. An episode may carry multiple tags; the primary-cause rule must be fixed in advance.
+
+\hypertarget{metrics-vuxe0-thux1ed1ng-kuxea}{%
+\subsection{Metrics and Statistics}\label{metrics-vuxe0-thux1ed1ng-kuxea}}
+
+The primary metric is macro-average full-task success over 12 held-out compositions with 2 demonstrations/context, a fixed 512-interval deadline, and 3 training seeds. This corresponds to 12 \(\times\) 100 \(\times\) 3 = \textbf{3,600 episodes per method}. If all three wall-time budgets are run, this becomes 10,800 episodes per planner, excluding ablations. Native methods without learned extra-module seeds use the same reset/context panels and action-sampling seeds; one number is not artificially replicated as if it came from three independently trained seeds.
+
+The one-demonstration ablation uses 50 matched resets per composition, choosing the demonstration from the same fixed context panel. The length track has a separately declared maximum deadline of 1024 intervals and does not increase the deadline after observing a method fail. Every method in a table cell uses the same execution deadline.
+
+\begin{equation}\label{eq:metrics}
+\begin{aligned}
+{\rm SR}_{\rm macro}
+&=\frac1{|\mathcal T|}\sum_{\tau\in\mathcal T}\frac1{n_\tau}
+\sum_i\mathbf1[\text{full success}_{\tau i}],\\
+{\rm Regret}(s,C)
+&=\max_{a\in\mathcal A}\hat p(s,C,a)-\hat p(s,C,a_{\rm chosen}),\\
+{\rm Brier}
+&=\frac1{N_{\rm trials}}\sum_i\sum_{\ell=1}^{n_i}(V_i-y_{i\ell})^2.
+\end{aligned}
+\end{equation}
+\(\hat p\) in regret is an empirical finite-trial estimate with uncertainty, not a true optimal return. Primary Brier score is computed on individual trial labels rather than only the squared error to a low-sample \(k/n\).
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Group
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Additional metrics
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Task & Unconditional success; downstream success conditional on local success; task time; action intervals; recovery success \\
+Phase & Alignment accuracy, premature advancement, rollback detection, null accuracy \\
+Value & Binomial NLL, trial Brier, calibration curve/ECE with 10 equal-count bins, preference accuracy, branch regret \\
+Physics & CD by horizon, translation/rotation error, gripper accuracy, moving-object error, contact-sensitive outcome accuracy \\
+Search & Unique candidates, coverage, dependency boundaries crossed, success--compute curve, predicted-minus-realized optimism \\
+Runtime & p50/p95 wall latency, timeout/fallback rate, GPU peak memory, IP/model call counts \\
+Reliability & False stop, irreversible failure, collision/invalid-state rate, perception-empty rate \\
+\end{longtable}
+
+Conditional downstream success does not replace unconditional success rate; if a method rarely succeeds at grasping, the conditional metric can be misleading. Calibration on planner-selected states is reported separately from randomly sampled states to expose distribution shift.
+
+Report per-task scores, macro-average, and 95\% confidence intervals using a hierarchical paired bootstrap: resample task compositions and then reset/context IDs within each task; all methods use the same bootstrap indices. Training-seed mean and spread are additionally reported, without treating seeds or frames as falsely independent. Use 10,000 bootstrap resamples; E4 B7--B6 is the primary confirmatory contrast and E3 is the primary mechanistic contrast. If multiple comparisons are tested, apply Holm adjustment within the same family; the best baseline is selected using validation rather than test results.
+
+Twelve compositions support conclusions about this suite, not about all robotic tasks. Effect sizes and confidence intervals are reported even when not statistically significant; the proposal does not assume a target success rate and present it as an achieved result.
+
+\hypertarget{tuxf9y-chux1ecdn-ux111uxe1nh-giuxe1-robot-thux1eadt}{%
+\subsection{Optional Real-Robot Evaluation}\label{tuxf9y-chux1ecdn-ux111uxe1nh-giuxe1-robot-thux1eadt}}
+
+A real-robot extension uses the same three task families, one feasible setup per family, and 30 matched reset configurations, comparing B2/B6/B7 for at least 270 episodes. Demonstration panels are collected separately with 2 demos/task; test trials are not used for calibration. If perception/dynamics must be fine-tuned using robot data, separate training setups are created and the number of transitions is disclosed; this is not called zero-shot sim-to-real.
+
+Sensing uses calibrated RGB-D and robot proprioception, with the same foreground estimator for all methods. Conditions that cannot be reliably observed must be checked by an independent annotator/evaluator rather than by reading nonexistent force sensors. Low-level joint limits and protective controllers are identical across baselines. The real-robot track measures setup/reset variability and wall latency in addition to task success; simulation success does not replace this evidence.
+
+\hypertarget{phuxe2n-tuxedch-kux1ebft-quux1ea3-dux1ef1-kiux1ebfn-vuxe0-giux1edbi-hux1ea1n}{%
+\section{Expected-Result Analysis and Limitations}\label{phuxe2n-tuxedch-kux1ebft-quux1ea3-dux1ef1-kiux1ebfn-vuxe0-giux1edbi-hux1ea1n}}
+
+The proposal would support H1 if an evaluator trained from physical outcomes reduces branch regret relative to temporal/local-success targets on held-out compositions, especially when phase is already correct. H3 requires correct context-dependent changes in decision criterion, together with an equal-data ablation that removes the matched-suffix mechanism. Merely increasing dataset size and observing a better model would not establish this mechanism.
+
+H2 requires explicit lookahead across relevant boundaries and improvement over direct \(Q\), root reranking, and shooting at the same budget. If \(L\) is too short but leaf value still selects good actions, the appropriate conclusion is \textbf{good continuation evaluation}, not successful long-range world-model search. If MCTS does not outperform MPC, that result should be retained rather than treating the algorithm name itself as a confirmed contribution.
+
+Major method risks include: the action prior may not support corrective/preparatory actions; history representation may be insufficient for contact; decoded clouds may shift IP behavior; a weak reference policy may drive most values near zero; planner selection may break calibration; bootstrap heads may be too correlated; and event tokens may fail to preserve enough geometry or suffix requirements. The diagnostics above are designed to connect each risk to a concrete observation.
+
+No-test-time-training is a restriction on weight updates, not a claim that no offline labels or physics experience are needed. One or two new demonstrations identify the task; the world model and evaluator rely on prior training. The system does not infer complete dynamics of a new object from a single successful trajectory.
+
+\hypertarget{ux111ux1eb7c-tux1ea3-tuxe1i-lux1eadp-vuxe0-ux111ux1ed1i-chiux1ebfu}{%
+\section{Reproducibility and Cross-Checking Specification}\label{ux111ux1eb7c-tux1ea3-tuxe1i-lux1eadp-vuxe0-ux111ux1ed1i-chiux1ebfu}}
+
+\hypertarget{nhux1eefng-lux1ef1a-chux1ecdn-cux1ed1-ux111ux1ecbnh-cux1ee7a-primary-method}{%
+\subsection{Fixed Choices of the Primary Method}\label{nhux1eefng-lux1ef1a-chux1ecdn-cux1ed1-ux111ux1ecbnh-cux1ee7a-primary-method}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Item
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Decision
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Modality & XYZ foreground point cloud + measured end-effector pose + binary gripper; causal history \\
+Physics frame & Robot base frame, meters/radians, calibrated gravity \\
+Task input & 1--2 successful demonstrations; no language/program/oracle goal input \\
+Action prior & Native frozen IP; 50/50 mixture of full context and learned event windows \\
+Physical encoder & 2048 points \(\rightarrow\) 128 anchors \(\times\) 256 features; 2 geometry Transformer blocks \\
+Memories & Physical GRU 2\(\times\)256; task GRU 1\(\times\)256 \\
+Dynamics & 4 Transformer blocks; 3 bootstrap heads; decode--reencode every interval \\
+Value semantics & Finite-deadline success under frozen stage-aware \(\pi_{\rm ref}\) \\
+Search semantics & Common absolute commands; root-relative absorbed event masses; no optimistic outcome choice \\
+Primary planner & Progressive-widening MCTS; shooting/rerank/direct-Q are mandatory controls \\
+Train data & Executed attempts, program-labeled contexts, physically executed branches, and reference continuations \\
+Test adaptation & No gradient updates and no cross-test archive updates \\
+Novelty test & Matched local success + suffix supervision + held-out dependencies + equal-data/budget comparisons \\
+\end{longtable}
+
+The specification must be accompanied by a checkpoint/config manifest once experiments exist: native IP commit/checkpoint hash; exact preprocessing/action conversion; simulator and controller versions; camera calibration; asset/source-lineage split; frozen reference-policy hash; dataset manifest; optimizer states/seeds; model-selection rules; and per-episode outcomes/call traces. These fields do not yet have executed results in the proposal and must not be replaced by fabricated hashes or throughput numbers.
+
+\hypertarget{danh-mux1ee5c-program-cho-split-composition}{%
+\subsection{Program Catalog for the Composition Split}\label{danh-mux1ee5c-program-cho-split-composition}}
+
+The catalog below defines task skeletons for the primary generator. Each skeleton has many resets and assets but counts as one program. A/B/C denote object roles used by annotations; the robot sees only the corresponding demonstrations.
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 4\tabcolsep) * \real{0.3333}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+ID
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Training skeleton
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Main constraint variable
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+T01 & Grasp A -- lift A & Grasp position, stable hold \\
+T02 & Grasp A -- place A on pad & Target relation, pad size \\
+T03 & Push blocker -- reach target & Access clearance \\
+T04 & Open drawer -- close drawer & Joint limits and final closure \\
+T05 & Open drawer -- retrieve A & Reachability after opening \\
+T06 & Place A into open drawer -- close & Closing clearance \\
+T07 & Place A -- place B into open tray & Shared free space \\
+T08 & Place B -- place A -- close open drawer & Ordering and packing \\
+T09 & Grasp A -- place A into open holder & Grasp-to-final-pose compatibility \\
+T10 & Push A through aperture -- place A & Aperture geometry, no grasp transfer \\
+T11 & Grasp A -- rotate A -- place A on pad & Orientation requirement \\
+T12 & Open gate -- push A through gate -- close gate & Prerequisite and gate closure \\
+T13 & Park blocker -- retrieve A & Parking and access \\
+T14 & Park blocker -- restore blocker & Temporary relation and restoration \\
+T15 & Park A -- park B -- retrieve C & Two objects share parking space \\
+T16 & Open drawer -- park blocker -- retrieve A & Container access \\
+T17 & Grasp A -- temporary place -- regrasp A & Regrasp and retry history \\
+T18 & Retrieve A -- place A -- retrieve B & Shared retrieval corridor \\
+T19 & Place spacer -- place A -- close open drawer & Spacer-dependent packing constraint \\
+T20 & Park blocker -- retrieve A -- place A on pad & Parking and transport path \\
+\end{longtable}
+
+Development programs are V01: open--place A--close; V02: grasp--rotate--place into holder; V03: park--retrieve--place--restore; V04: open gate--retrieve--close gate. Role assignments, dependency templates, and assets for development remain separate from training. These programs are used for selection/calibration and are not among the 12 test skeletons.
+
+For the strict length track, use only subsets and versions of programs with at most 3 semantic interactions; remove every training continuation that passes through a longer composition. This catalog does not replace the asset manifest: in empirical results, every asset must have a concrete name/version and seed range. Because this proposal has not yet executed an asset collection, it does not claim that a feasibility-validated manifest already exists.
+
+\hypertarget{cuxe1c-bux1ea3ng-vuxe0-huxecnh-sux1ebd-cuxf3-trong-buxe0i-buxe1o-thux1ef1c-nghiux1ec7m}{%
+\subsection{Tables and Figures Planned for the Empirical Paper}\label{cuxe1c-bux1ea3ng-vuxe0-huxecnh-sux1ebd-cuxf3-trong-buxe0i-buxe1o-thux1ef1c-nghiux1ec7m}}
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.5000}}@{}}
+\toprule\noalign{}
+\begin{minipage}[b]{\linewidth}\raggedright
+Research artifact
+\end{minipage} & \begin{minipage}[b]{\linewidth}\raggedright
+Content
+\end{minipage} \\
+\midrule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+Table A & Main task success: B0--B8, per-suite macro score, latency budget, and 95\% CI \\
+Table B & Equal-data ablations of value target, suffix loss, memory, and dynamics \\
+Table C & Data accounting: attempted/successful demos, branch/continuation counts, unique transitions, and overlap \\
+Figure A & Architecture with measured/predicted paths and freeze boundaries \\
+Figure B & Success/regret versus dependency span while holding task length fixed \\
+Figure C & Same-scene context swap: candidates, realized outcomes, and chosen branch \\
+Figure D & Success--compute frontier and predictive optimism as search increases \\
+Figure E & Value calibration on observed, imagined, and planner-selected states \\
+Appendix & Task grammar, predicates, fixed splits, complete network hyperparameters, replay fidelity, failure examples \\
+\end{longtable}
+
+These tables describe the reporting design and do not contain fabricated results. An implementation can cross-check model, data, and experiments against a consistent semantics throughout the proposal.
+
+\hypertarget{tuxe0i-liux1ec7u-tham-khux1ea3o-vuxe0-nguux1ed3n-dux1eef-liux1ec7u}{%
+\section{References and Data Sources}\label{tuxe0i-liux1ec7u-tham-khux1ea3o-vuxe0-nguux1ed3n-dux1eef-liux1ec7u}}
+
+{[}1{]} Vitalis Vosylius and Edward Johns. \textbf{Instant Policy: In-Context Imitation Learning via Graph Diffusion.} ICLR 2025. \href{https://arxiv.org/abs/2411.12633}{Paper}; \href{https://arxiv.org/html/2411.12633v2}{HTML, version 2}.
+
+{[}2{]} Vitalis Vosylius et al. \textbf{Instant Policy: official implementation.} \href{https://github.com/vv19/instant_policy}{Repository and checkpoints}. Native model, inference guidance, and data interface.
+
+{[}3{]} Zixuan Chen, Chongkai Gao, Lin Shao, Jieqi Shi, Jing Huo, and Yang Gao. \textbf{ManiLong-Shot: Interaction-Aware One-Shot Imitation Learning for Long-Horizon Manipulation.} AAAI 2026. \href{https://arxiv.org/abs/2512.16302}{Paper}.
+
+{[}4{]} Utkarsh A. Mishra, Shangjie Xue, Yongxin Chen, and Danfei Xu. \textbf{Generative Skill Chaining: Long-Horizon Skill Planning with Diffusion Models.} CoRL 2023. \href{https://generative-skill-chaining.github.io/}{Project and paper}.
+
+{[}5{]} Baiting Luo, Yunuo Zhang, Nathaniel S. Keplinger, Samir Gupta, Abhishek Dubey, and Ayan Mukhopadhyay. \textbf{In-Context Planning with Latent Temporal Abstractions.} 2026. \href{https://arxiv.org/abs/2602.18694}{Paper}.
+
+{[}6{]} R. Khorrambakht et al. \textbf{WorldPlanner: Monte Carlo Tree Search and MPC with Action-Conditioned Visual World Models.} 2025. \href{https://arxiv.org/abs/2511.03077}{Paper}.
+
+{[}7{]} Ajay Mandlekar et al. \textbf{MimicGen: A Data Generation System for Scalable Robot Learning using Human Demonstrations.} CoRL 2023. \href{https://mimicgen.github.io/}{Project and generation code}.
+
+{[}8{]} robomimic team. \textbf{MimicGen datasets.} \href{https://robomimic.github.io/docs/datasets/mimicgen.html}{Official dataset documentation}; \href{https://huggingface.co/datasets/amandlek/mimicgen_datasets}{released dataset}.
+
+{[}9{]} Stephen James, Zicong Ma, David Rovick Arrojo, and Andrew J. Davison. \textbf{RLBench: The Robot Learning Benchmark \& Learning Environment.} \href{https://arxiv.org/abs/1909.12271}{Paper}.
+
+{[}10{]} RLBench authors. \textbf{RLBench official environment and demonstration generation.} \href{https://github.com/stepjam/RLBench}{Repository}; \href{https://github.com/stepjam/RLBench/blob/master/tutorials/simple_task.md}{task specification tutorial}.
+
+{[}11{]} ManiSkill team. \textbf{ManiSkill3: GPU Parallelized Robotics Simulation and Rendering for Generalizable Embodied AI.} \href{https://arxiv.org/abs/2410.00425}{Paper}; \href{https://www.maniskill.ai/}{project}.
+
+{[}12{]} ManiSkill team. \textbf{Datasets, demonstrations and trajectory replay.} \href{https://maniskill.readthedocs.io/en/latest/user_guide/datasets/index.html}{Official documentation}; \href{https://huggingface.co/datasets/haosulab/ManiSkill}{assets and data}.
+
+{[}13{]} Bo Liu et al. \textbf{LIBERO: Benchmarking Knowledge Transfer for Lifelong Robot Learning.} \href{https://github.com/Lifelong-Robot-Learning/LIBERO}{Official repository, datasets, and benchmark protocol}.
+
+{[}14{]} Oier Mees, Lukas Hermann, Erick Rosete-Beas, and Wolfram Burgard. \textbf{CALVIN: A Benchmark for Language-Conditioned Policy Learning for Long-Horizon Robot Manipulation Tasks.} \href{https://arxiv.org/abs/2112.03227}{Paper}.
+
+{[}15{]} CALVIN authors. \textbf{CALVIN benchmark, dataset and evaluation.} \href{https://github.com/mees/calvin}{Official repository}; \href{https://calvin.cs.uni-freiburg.de/}{project}.
+
+The sources above were checked on September 6, 2026. The architecture, data volumes, and custom experimental protocols in this proposal are proposed ICGS designs; the cited sources are referenced only for the baseline methods, benchmarks, or resources they actually provide.
+
+\end{document}

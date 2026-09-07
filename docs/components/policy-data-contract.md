@@ -147,3 +147,11 @@ embedded encoder weights and no auxiliary checkpoint (ADR0005).
 Contexts own read-only byte-backed demo arrays and immutable mappings; mutable
 features are isolated via branch_copy. Candidate K differs from batch B/horizon P;
 prefix targets use one root pose, with unknown timing left explicitly unknown.
+
+## Separate target ICGS contracts
+
+The [planned method contracts](../method/contracts.md) add timed commands, physical/
+task memory and executed episode records without changing this native contract.
+Proposal T=8 maps to native prediction horizon P, not native demo-waypoint count10.
+Added physical preprocessing is separate; planned neural/action/evaluator examples
+are not installed APIs. See [target decision](../decisions/0006-icgs-target-boundaries.md).

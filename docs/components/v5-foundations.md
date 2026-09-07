@@ -11,10 +11,21 @@ owners, not a vendor/legacy backend.
 | Native K proposals | Implemented | algorithms.planning.candidates; sequential K calls, not search |
 | Absolute command prefix | Implemented | execution.commands; root @ each target, never chained increments |
 | Context/RNG lifecycle | Implemented | state.context_cache and randomness; owned immutable demo content, separate mutable buffers |
-| Physical/task memory contracts | Designed | This document; no unused executable neural stubs |
-| Spatial physical encoder, GRU, task tracker/router | Deferred | Future models.encoders/models.memory plus state owners |
-| World model, continuation/event evaluators | Deferred | Future models.dynamics/models.evaluators; not benchmark evaluation |
-| Shooting/MCTS/MCGS/CEM, planned/stage-aware policies | Deferred | Search uses narrow capabilities; no concrete InstantPolicy import |
+| Method contracts/configuration P00 | Partially reusable / planned | Native contracts/config remain; [target contracts](../method/contracts.md) add physical/task/timed types |
+| Timed execution P01 | Partially reusable / evidence-gated | Absolute targets reusable; fixed-duration controller/mask/live-clock pilot required |
+| Executed episode data/tasks P02 | Planned / evidence-gated | Separate schema, task catalog, asset/monitor feasibility; native PyG unchanged |
+| Physical encoder/decoder bridge P03 | Planned / evidence-gated | New geometry; same-seed reconstructed-cloud/native-action fidelity required |
+| Physical GRU/history P04 | Planned | New causal state, branch isolation and history replay |
+| Event encoder P05 | Planned | Observable segmentation, raw-window references, permutation-compatible tokens |
+| Task tracker/router P06 | Planned / evidence-gated | New inference; native one/two-demo sessions require validation |
+| Physical world model P07 | Planned | Three fixed bootstrap heads, decode–reencode; no task input |
+| Replay/branch/reference data P08 | Planned / evidence-gated | Actual restoration/counterfactual labels, no fabricated snapshots |
+| Continuation/event evaluators P09 | Planned | Value under frozen reference; separate learned stopping |
+| Rerank/shooting/MCTS P10 | Planned | Capability-based common-command search; no concrete IP import |
+| Staged method training P11 | Planned | A0/A1/B/C/D/E; existing native trainer remains separate |
+| Controls/benchmark P12 | Planned / evidence-gated | B0–B7 and custom suite, no measured success claimed |
+| Integrated method P13 | Planned / evidence-gated | Installed execution and six-program pilot before primary scaling |
+| Approximate MCGS/CEM and external/robot tracks | Outside primary / optional | Not silently included in approved core or current runtime |
 
 ## Implemented candidate and command contract
 
@@ -32,7 +43,12 @@ unknown unless actually measured/supplied. Environment.step is not assumed 20Hz.
 Branch copies share immutable demo content but clone mutable cached features;
 they do not clone model, graph or scheduler scratch state. No branch tree exists yet.
 
-## Contracts for later learning/search work
+## Target contracts for later learning/search work
+
+The authoritative [target specification](../method/README.md) and
+[P00–P13 roadmap](../plans/active/icgs-method-implementation.md) now detail these
+boundaries. Status above was checked against source on 2026-09-07; documentation
+adoption itself implements none of the new runtime components.
 
 Physical state b=(X,x,p,m) includes geometry and causal physical history. Demo event
 memory M_C and task memory q are separate; changing a goal context must not silently
@@ -46,9 +62,10 @@ atoms carry weights; search chooses one common absolute action, integrates outco
 counts accumulated success once, and assigns continuation only to active mass.
 
 Prediction chunk T/P, search prefix h, physical lookahead L, execution commitment r
-and remaining deadline H are distinct quantities. Exact cache precedes approximate
-MCGS merging; no graph merging is required now. Snapshot restoration is an optional
-future real capability, never a stub returning success.
+and remaining deadline H are distinct quantities. Exact cache is primary;
+approximate MCGS merging is excluded. Branch collection needs validated snapshot
+or replay capability; arbitrary exact snapshot support is not assumed and must
+never be represented by a stub returning success.
 
 ## Data and training roadmap
 
@@ -57,9 +74,9 @@ version/lineage for geometric pseudo-context, executed transitions, and restored
 anchor branches/reference outcomes. Snapshot IDs, task programs and success/contact
 oracles belong to training/evaluation, not deployed Observation.
 
-Learning order: geometry warm-up; temporal physical-memory warm-up; event/tracker/
-router; freeze reference; collect outcomes; world model and learned evaluators;
-optional frozen-teacher consistency; calibration/test. Models own tensors, losses
+Learning order: geometry warm-up; temporal physical-memory warm-up with pilot
+dynamics; event/tracker/router; freeze reference; collect outcomes; dynamics
+refinement and learned evaluators; calibration/test. Models own tensors, losses
 belong to their algorithm/stage, optimizers/runners to training. Changing reference
 controller after collection changes value targets and requires a new lineage.
 

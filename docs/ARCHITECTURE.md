@@ -116,3 +116,16 @@ run the validated environment and use explicit resource limits.
 [semantic contract](components/policy-data-contract.md),
 [usage examples](components/composition-examples.md), and
 [completed acceptance record](plans/completed/icgs-v5-unified.md) provide deeper evidence.
+
+## Approved target extension — not implemented
+
+The September 2026 [ICGS target](method/README.md) adds a separate physical point
+encoder/decoder and history, demonstration events/task memory/router, physical
+dynamics, continuation/terminal evaluators and budgeted reranking/shooting/MCTS.
+Native IP remains the frozen proposal component. New timed execution, executed
+episode collection and staged learning are planned owners, not current CLI claims.
+
+The [component roadmap](plans/active/icgs-method-implementation.md) records precise
+dependencies and evidence gates. The target's 5 mm physical preprocessing is not
+the published IP 10 mm preprocessing; 0.1 s is a proposed control wrapper, not
+native step timing. No new runtime modules were added by the documentation adoption.
