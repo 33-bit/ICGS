@@ -5,6 +5,8 @@ from __future__ import annotations
 import torch
 from torch import Tensor, nn
 
+from icgs.configuration.method import GeometryConfig, MethodConfig, NeuralConfig
+
 
 def masked_mean(values: Tensor, valid: Tensor, dim: int) -> Tensor:
     """Average only valid entries and reject an empty reduction."""
@@ -35,27 +37,56 @@ def masked_mean(values: Tensor, valid: Tensor, dim: int) -> Tensor:
 class GeometryBlock(nn.Module):
     """Pre-LN self-attention with learned relative geometry bias."""
 
-    def __init__(self, width: int = 256, heads: int = 8, ffn_width: int = 1024):
+    def __init__(
+        self,
+        width: int | None = None,
+        heads: int | None = None,
+        ffn_width: int | None = None,
+        *,
+        method_config: MethodConfig | None = None,
+        geometry_config: GeometryConfig | None = None,
+        neural_config: NeuralConfig | None = None,
+    ):
         super().__init__()
+        if method_config is not None:
+            if not isinstance(method_config, MethodConfig):
+                raise TypeError("method_config must be a MethodConfig or None")
+            if geometry_config is not None or neural_config is not None:
+                raise ValueError("method_config cannot be combined with typed sections")
+            geometry_config = method_config.geometry
+            neural_config = method_config.neural
+        if geometry_config is None or neural_config is None:
+            resolved = MethodConfig()
+            geometry_config = resolved.geometry if geometry_config is None else geometry_config
+            neural_config = resolved.neural if neural_config is None else neural_config
+        if not isinstance(geometry_config, GeometryConfig):
+            raise TypeError("geometry_config must be a GeometryConfig or None")
+        if not isinstance(neural_config, NeuralConfig):
+            raise TypeError("neural_config must be a NeuralConfig or None")
+        width = geometry_config.width if width is None else width
+        heads = neural_config.attention_heads if heads is None else heads
+        ffn_width = neural_config.ffn_width if ffn_width is None else ffn_width
         if width <= 0 or heads <= 0 or width % heads:
             raise ValueError("width must be positive and divisible by heads")
         self.width = width
         self.heads = heads
         self.head_width = width // heads
-        self.norm_attention = nn.LayerNorm(width, eps=1e-5)
+        self.norm_attention = nn.LayerNorm(width, eps=neural_config.layer_norm_eps)
         self.qkv = nn.Linear(width, 3 * width)
         self.output = nn.Linear(width, width)
+        bias_hidden_dim = neural_config.geometry_bias_hidden_dim
         self.geometry_bias = nn.Sequential(
-            nn.Linear(3, 32),
+            nn.Linear(3, bias_hidden_dim),
             nn.GELU(),
-            nn.Linear(32, heads),
+            nn.Linear(bias_hidden_dim, heads),
         )
-        self.norm_feedforward = nn.LayerNorm(width, eps=1e-5)
+        self.norm_feedforward = nn.LayerNorm(width, eps=neural_config.layer_norm_eps)
         self.feedforward = nn.Sequential(
             nn.Linear(width, ffn_width),
             nn.GELU(),
             nn.Linear(ffn_width, width),
         )
+        self.dropout = nn.Dropout(neural_config.dropout)
 
     def forward(self, values: Tensor, coordinates: Tensor, valid: Tensor) -> Tensor:
         if values.ndim != 3 or coordinates.shape != values.shape[:2] + (3,):
@@ -82,11 +113,11 @@ class GeometryBlock(nn.Module):
         scores = scores.masked_fill(~valid[:, None, None, :], torch.finfo(scores.dtype).min)
         attention = torch.softmax(scores, dim=-1)
         attended = torch.matmul(attention, v).transpose(1, 2).reshape_as(values)
-        values = values + self.output(attended)
+        values = values + self.dropout(self.output(attended))
         values = torch.where(row_mask, values, torch.zeros_like(values))
 
         feedforward_input = self.norm_feedforward(values)
-        values = values + self.feedforward(feedforward_input)
+        values = values + self.dropout(self.feedforward(feedforward_input))
         return torch.where(row_mask, values, torch.zeros_like(values))
 
 
