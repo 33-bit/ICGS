@@ -187,8 +187,55 @@ class PhysicalMemoryTests(unittest.TestCase):
                 torch.zeros(1, 2, 256),
             )
 
+    def test_physical_token_projector_is_owned_per_memory_and_trains_from_tokens(self):
+        from icgs.models.memories.physical import PhysicalMemory
+
+        valid = torch.zeros(1, 128, dtype=torch.bool)
+        valid[:, :3] = True
+        state = SimpleNamespace(
+            X=torch.ones(1, 128, 256),
+            valid=valid,
+            p=torch.arange(13, dtype=torch.float32)[None],
+            memory=torch.zeros(1, 2, 256),
+        )
+
+        first = PhysicalMemory()
+        second = PhysicalMemory()
+        tokens, token_valid = first.physical_tokens(state)
+
+        projector_parameters = tuple(first.token_projector.parameters())
+        owned_parameters = tuple(first.parameters())
+        self.assertTrue(projector_parameters)
+        self.assertTrue(
+            all(
+                any(id(parameter) == id(owned) for owned in owned_parameters)
+                for parameter in projector_parameters
+            )
+        )
+        projector_state = first.token_projector.state_dict()
+        model_state = first.state_dict()
+        self.assertTrue(projector_state)
+        self.assertTrue(
+            all(f"token_projector.{name}" in model_state for name in projector_state)
+        )
+        self.assertIsNot(first.token_projector, second.token_projector)
+        self.assertTrue(
+            set(map(id, first.token_projector.parameters())).isdisjoint(
+                map(id, second.token_projector.parameters())
+            )
+        )
+
+        tokens[token_valid].sum().backward()
+        self.assertTrue(
+            all(
+                parameter.grad is not None and parameter.grad.abs().sum().item() > 0
+                for parameter in projector_parameters
+            )
+        )
+        self.assertTrue(bool((tokens[:, 3:128] == 0).all().item()))
+
     def test_physical_tokens_keep_invalid_geometry_masked_and_add_three_valid_rows(self):
-        from icgs.models.memories.physical import physical_tokens
+        from icgs.models.memories.physical import PhysicalMemory
 
         valid = torch.zeros(1, 128, dtype=torch.bool)
         valid[:, :3] = True
@@ -199,7 +246,7 @@ class PhysicalMemoryTests(unittest.TestCase):
             memory=torch.zeros(1, 2, 256),
         )
 
-        tokens, token_valid = physical_tokens(state)
+        tokens, token_valid = PhysicalMemory().physical_tokens(state)
 
         self.assertEqual(tuple(tokens.shape), (1, 131, 256))
         self.assertEqual(tuple(token_valid.shape), (1, 131))

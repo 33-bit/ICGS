@@ -30,9 +30,6 @@ class _PhysicalTokenProjector(nn.Module):
         return self.proprioception(p)
 
 
-_TOKEN_PROJECTOR = _PhysicalTokenProjector()
-
-
 def _as_pose(value: Tensor, name: str) -> Tensor:
     if not torch.is_tensor(value):
         raise TypeError(f"{name} must be a torch.Tensor")
@@ -114,6 +111,7 @@ class PhysicalMemory(nn.Module):
         )
         self.gru1 = nn.GRUCell(256, 256)
         self.gru2 = nn.GRUCell(256, 256)
+        self.token_projector = _PhysicalTokenProjector()
 
     def forward(
         self,
@@ -146,52 +144,50 @@ class PhysicalMemory(nn.Module):
         m2 = self.gru2(m1, memory[:, 1])
         return torch.stack((m1, m2), dim=1)
 
+    def physical_tokens(self, state: object) -> tuple[Tensor, Tensor]:
+        """Build masked geometry, proprioception and memory token rows."""
 
-def physical_tokens(state: object) -> tuple[Tensor, Tensor]:
-    """Build masked geometry, proprioception and memory token rows."""
+        X = getattr(state, "X", None)
+        valid = getattr(state, "valid", getattr(state, "anchor_valid", None))
+        p = getattr(state, "p", None)
+        memory = getattr(state, "memory", None)
+        if not torch.is_tensor(X) or X.ndim != 3 or X.shape[1:] != (128, 256):
+            raise ValueError("state.X must have shape [B,128,256]")
+        if not torch.is_tensor(valid) or valid.shape != X.shape[:2] or valid.dtype != torch.bool:
+            raise ValueError("state.valid must have shape [B,128] and boolean dtype")
+        batch = X.shape[0]
+        if not torch.is_tensor(p) or p.shape != (batch, 13):
+            raise ValueError("state.p must have shape [B,13]")
+        if not torch.is_tensor(memory) or memory.shape != (batch, 2, 256):
+            raise ValueError("state.memory must have shape [B,2,256]")
+        if not all(value.is_floating_point() for value in (X, p, memory)):
+            raise TypeError("state tensors must use floating dtypes")
+        if not (X.device == p.device == memory.device):
+            raise ValueError("state tensors must share a device")
+        if not (X.dtype == p.dtype == memory.dtype):
+            raise ValueError("state tensors must share a dtype")
 
-    X = getattr(state, "X", None)
-    valid = getattr(state, "valid", getattr(state, "anchor_valid", None))
-    p = getattr(state, "p", None)
-    memory = getattr(state, "memory", None)
-    if not torch.is_tensor(X) or X.ndim != 3 or X.shape[1:] != (128, 256):
-        raise ValueError("state.X must have shape [B,128,256]")
-    if not torch.is_tensor(valid) or valid.shape != X.shape[:2] or valid.dtype != torch.bool:
-        raise ValueError("state.valid must have shape [B,128] and boolean dtype")
-    batch = X.shape[0]
-    if not torch.is_tensor(p) or p.shape != (batch, 13):
-        raise ValueError("state.p must have shape [B,13]")
-    if not torch.is_tensor(memory) or memory.shape != (batch, 2, 256):
-        raise ValueError("state.memory must have shape [B,2,256]")
-    if not all(value.is_floating_point() for value in (X, p, memory)):
-        raise TypeError("state tensors must use floating dtypes")
-    if not (X.device == p.device == memory.device):
-        raise ValueError("state tensors must share a device")
-    if not (X.dtype == p.dtype == memory.dtype):
-        raise ValueError("state tensors must share a dtype")
-
-    projector = _TOKEN_PROJECTOR.to(dtype=p.dtype, device=p.device)
-    geometry = torch.where(valid[..., None], X, torch.zeros_like(X))
-    proprioception_row = projector(p).unsqueeze(1)
-    memory_rows = memory
-    rows = torch.cat((geometry, proprioception_row, memory_rows), dim=1)
-    type_ids = torch.cat(
-        (
-            torch.zeros(128, dtype=torch.long, device=p.device),
-            torch.tensor((1, 2, 3), dtype=torch.long, device=p.device),
+        geometry = torch.where(valid[..., None], X, torch.zeros_like(X))
+        proprioception_row = self.token_projector(p).unsqueeze(1)
+        memory_rows = memory
+        rows = torch.cat((geometry, proprioception_row, memory_rows), dim=1)
+        type_ids = torch.cat(
+            (
+                torch.zeros(128, dtype=torch.long, device=p.device),
+                torch.tensor((1, 2, 3), dtype=torch.long, device=p.device),
+            )
         )
-    )
-    embeddings = projector.type_embeddings[type_ids]
-    rows = rows + embeddings[None, :, :]
-    rows = torch.cat(
-        (
-            torch.where(valid[..., None], rows[:, :128], torch.zeros_like(rows[:, :128])),
-            rows[:, 128:],
-        ),
-        dim=1,
-    )
-    token_valid = torch.cat((valid, valid.new_ones((batch, 3))), dim=1)
-    return rows, token_valid
+        embeddings = self.token_projector.type_embeddings[type_ids]
+        rows = rows + embeddings[None, :, :]
+        rows = torch.cat(
+            (
+                torch.where(valid[..., None], rows[:, :128], torch.zeros_like(rows[:, :128])),
+                rows[:, 128:],
+            ),
+            dim=1,
+        )
+        token_valid = torch.cat((valid, valid.new_ones((batch, 3))), dim=1)
+        return rows, token_valid
 
 
-__all__ = ["PhysicalMemory", "action_descriptor", "physical_tokens", "proprioception"]
+__all__ = ["PhysicalMemory", "action_descriptor", "proprioception"]

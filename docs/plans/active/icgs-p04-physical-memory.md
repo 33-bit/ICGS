@@ -47,7 +47,7 @@ Public capability boundary (planned; not currently importable):
 ```python
 physical_update(encoded, observation, previous_descriptor, memory) -> PhysicalState
 PhysicalState.branch_copy() -> PhysicalState
-physical_tokens(state: PhysicalState) -> tuple[Tensor, Tensor]
+PhysicalMemory.physical_tokens(state: PhysicalState) -> tuple[Tensor, Tensor]
 validate_next_boundary(previous: int, current: int) -> None
 ```
 
@@ -111,7 +111,7 @@ while target_w remains identical. Add joint-yaw and invalid pose/gravity/grip te
 
 **Files:** Create physical memory module and state record.
 **Test owner:** `tests/test_physical_memory.py`.
-**Consumes / produces:** Produces `PhysicalMemory.forward(X, valid, p, previous_u, memory)` returning memory; `physical_tokens(state)` returns131 rows and validity.
+**Consumes / produces:** Produces `PhysicalMemory.forward(X, valid, p, previous_u, memory)` returning memory; `PhysicalMemory.physical_tokens(state)` returns 131 rows and validity.
 
 - [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
@@ -210,7 +210,8 @@ phase if an FG fails and request a scoped protocol decision.
 ## Execution evidence
 
 - Documentation drafting: the P04 component modules/tests were implemented in the planned owners after exact source/test-diff review; no native integration was added.
-- Component RED/GREEN commands: source-path diagnostic RED/GREEN evidence is recorded in the controller ledger and implementation report. Final diagnostic GREEN: `env PYTHONPATH=src python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`, 13 selected/13 executed/0 skipped, PASS in Python 3.14.4 with torch 2.11.0. The exact installed-environment command was attempted but remains unavailable because `icgs` is not installed in the host interpreter; it is not counted as PASS.
+- Component RED/GREEN commands: source-path diagnostic RED/GREEN evidence is recorded in the controller ledger and implementation report. Final diagnostic GREEN before the ownership fix was 13 selected/13 executed/0 skipped; the fix-round GREEN is 14 selected/14 executed/0 skipped in Python 3.14.4 with torch 2.11.0. The exact installed-environment command was attempted but remains unavailable because `icgs` is not installed in the host interpreter; it is not counted as PASS.
+- Fix round 1/5: after exact source/test-diff review, the learned token projector is registered inside each `PhysicalMemory`; `physical_tokens` is now the instance method `PhysicalMemory.physical_tokens(state)`, with no global learned module or cache. The ownership RED was feature-specific (`AttributeError` for the absent method); GREEN covered registration in `parameters()`/`state_dict()`, nonzero token gradients, per-instance parameter identity, and zero invalid geometry rows.
 - L1 model assertions: **SKIPPED** for the supported installed environment — no Python >=3.10,<3.13 environment with the pinned ICGS installation is available. The source-path run is diagnostic smoke evidence only, not supported L1 acceptance.
 - L0 PASS: `python3 -B scripts/validate_fast.py`, 19/19 harness self-tests, syntax/links/boundaries pass; L1/L2/L3/L4 not run by this command.
 - L0 PASS: `python3 -B -S scripts/validate_fast.py`, 19/19 harness self-tests, syntax/links/boundaries pass; L1/L2/L3/L4 not run by this command.
