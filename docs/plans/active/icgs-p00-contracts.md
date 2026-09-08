@@ -12,8 +12,9 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — planned runtime NOT IMPLEMENTED**. This document is a category C
-component of the approved docs-only research migration, not permission to execute it.
+Status: **ACTIVE — P00 runtime boundary implemented; downstream target runtime remains planned**.
+This document is a category C component of the approved docs-only research migration;
+the completed P00 surface does not authorize downstream workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
 
@@ -60,7 +61,7 @@ Copy numeric inputs into owned read-only backing; reject bool-as-integer counter
 **Test owner:** `tests/test_method_contracts.py`.
 **Consumes / produces:** Consumes native `Observation`; produces `TimedCommand`, `TimedObservation`, `ExecutedTransition`, `CommandPrefix` and the normative protocol signatures.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -75,10 +76,10 @@ with self.assertRaises(ValueError):
     TimedCommand(np.eye(4), 1, float('nan'))
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 owned = np.array(target_w, dtype=np.float64, copy=True)
@@ -89,10 +90,10 @@ object.__setattr__(self, 'target_w', backing)
 
 Define all planned output records in the shared inventory, using TYPE_CHECKING for state types. Validate terminal probability sums and finite PlanningResult returns; use protocols, not concrete policy imports. Test zero duration, negative boundary, empty prefixes and mutation through caller aliases.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+  evidence. Focused commit: **NOT RUN** per the explicit no-commit instruction.
 
 ### Task 2: Frozen config validates before tensor IO
 
@@ -100,7 +101,7 @@ Define all planned output records in the shared inventory, using TYPE_CHECKING f
 **Test owner:** `tests/test_method_contracts.py`.
 **Consumes / produces:** Produces `MethodConfig.from_dict(payload)` and `MethodConfig.validate()`; consumes immutable native profile ID.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -111,10 +112,10 @@ with self.assertRaisesRegex(ValueError, 'horizon|commit'):
     MethodConfig.from_dict({'planning': {'h': 2, 'r': 8}})
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 allowed = set(field.name for field in dataclasses.fields(section_type))
@@ -127,10 +128,10 @@ if not 1 <= planning.r <= planning.h <= native.pred_horizon:
 
 Implement geometry/event/memory/dynamics/evaluator/planning/control/dataset/training sections explicitly. Enforce width 256, 128 anchors, three fixed heads and trained horizon coverage; keep native P=8 versus demo waypoints10 distinct. Preserve defaults < explicit JSON < explicit CLI, resolve paths relative to JSON and reject executable serialization.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+  evidence. Focused commit: **NOT RUN** per the explicit no-commit instruction.
 
 ### Task 3: Reference and deployment artifact lineage
 
@@ -138,7 +139,7 @@ Implement geometry/event/memory/dynamics/evaluator/planning/control/dataset/trai
 **Test owner:** `tests/test_method_contracts.py`.
 **Consumes / produces:** Produces `reference_fingerprint(payload)` and `validate_method_manifest(manifest, config)`; no load inside neural modules.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -149,10 +150,10 @@ with self.assertRaisesRegex(ValueError, 'reference'):
     reference_fingerprint({'ip_checksum': 'not-a-sha256'})
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 # Select exactly the reference fields specified in contracts.md.
@@ -163,10 +164,10 @@ reference_id = hashlib.sha256(canonical).hexdigest()
 
 Require IP hash/profile, geometry and physical/event/task weights, segmentation/router, preprocessing, calibration/camera/gravity/workspace, cadence/r and RNG IDs. Exclude dynamics, evaluator and learned stopping from the reference hash; record them separately. Test reordering invariance, one-field mutation sensitivity and rejected evaluator/reference mismatch.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_method_contracts.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+  evidence. Focused commit: **NOT RUN** per the explicit no-commit instruction.
 
 ## Acceptance, resource limits and evidence
 
@@ -195,10 +196,35 @@ phase if an FG fails and request a scoped protocol decision.
 
 ## Execution evidence
 
-- Documentation drafting: this plan specifies future work only.
-- Component RED/GREEN commands: **NOT RUN** — runtime/test files are not implemented.
-- L1 model assertions: **NOT RUN** — future installed supported environment required.
-- L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
-- L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
-- Remaining risk: Interfaces and manifests are specified but no runtime validation or artifact availability has been demonstrated.
-
+- Repository state: implementation was run in `/Users/33bit/AI/Research/VLA/ICGS` on
+  `main`; no commit, stage, reset, checkout, or out-of-scope repository edit was
+  made. The only changed repository paths are the three created runtime modules,
+  `tests/test_method_contracts.py`, and this factual evidence/checklist update.
+- Interpreter: `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3`,
+  Python 3.14.4. This is outside the declared supported `>=3.10,<3.13` range and
+  `icgs` is not installed.
+- Audit repair RED evidence: the focused diagnostic command
+  `PYTHONPATH=src python3 -B -m unittest discover -s tests -p
+  'test_method_contracts.py' -v` meaningfully failed for the forbidden concrete
+  records, missing outer loader seam, missing lineage checks, missing config file
+  overlay/IDs, and invalid horizon/type checks before each corresponding fix.
+- Focused diagnostic PASS: the same command from the repository root ran 15
+  selected tests, 15 passed, 0 failures/errors/skips. It covers the contract-only
+  boundary, genuine post-validation loader callback (zero calls on rejected
+  evaluator/reference lineage), component IDs, strict JSON file-relative paths,
+  defaults < JSON < explicit dotted overrides, bool/type rejection, artifact
+  lineage, and sensor/temperature lineage IDs. This is diagnostic execution with
+  `PYTHONPATH=src`, not supported installed L1 acceptance.
+- L0 PASS: `python3 -B scripts/validate_fast.py` from the repository root —
+  Python syntax, local links, static boundary and 19 harness self-tests passed;
+  command also reported higher tiers NOT RUN. L0 PASS: `python3 -B -S
+  scripts/validate_fast.py` from the repository root — same 19/19 harness
+  self-tests passed.
+- Supported installed L1: **NOT RUN** — no supported ICGS environment is
+  available (Python 3.14.4 is outside the supported range and `icgs` is not
+  installed). No local import failure is counted as RED or L1 PASS.
+  L2/C1–C5, L3/L4, model/artifact execution, downloads, preprocessing,
+  simulator workloads, training and robot motion are **NOT RUN**.
+- Remaining risk: supported-environment imports and real tensor/checkpoint
+  compatibility remain unverified; no empirical feasibility or C1–C5 gate is
+  claimed. The active roadmap gates remain unchanged.

@@ -12,8 +12,9 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — planned runtime NOT IMPLEMENTED**. This document is a category C
-component of the approved docs-only research migration, not permission to execute it.
+Status: **ACTIVE — P03 Tasks 1–3 implemented; supported validation and FG gates pending**.
+This document records the bounded runtime component of the approved research migration;
+later state/lineage integration remains owned by P04.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
 
@@ -205,9 +206,58 @@ phase if an FG fails and request a scoped protocol decision.
 
 ## Execution evidence
 
-- Documentation drafting: this plan specifies future work only.
-- Component RED/GREEN commands: **NOT RUN** — runtime/test files are not implemented.
-- L1 model assertions: **NOT RUN** — future installed supported environment required.
-- L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
-- L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
-- Remaining risk: Reconstruction can be geometrically close yet change IP actions; no policy fidelity has been measured.
+- Repository state: correction was performed in the shared checkout
+  `/Users/33bit/AI/Research/VLA/ICGS` on `main`; no worktree, subagent,
+  commit, stage, reset, checkout, download, training, preprocessing job,
+  simulator, or robot action was used. P00 paths remain byte-for-byte
+  unchanged. Correction-round files are the existing P03 runtime modules and
+  `tests/test_physical_geometry.py`; the justified lazy preprocessing
+  initializer remains unchanged.
+- Interpreter/environment: `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3`,
+  Python 3.14.4, repository-root cwd. This is outside the declared supported
+  `>=3.10,<3.13` range and `icgs` is not installed.
+- Correction RED: `PYTHONPATH=src python3 -B -m unittest discover -s tests
+  -p 'test_physical_geometry.py' -v` ran 13 selected tests with 5 existing
+  behaviors passing and 8 expected failures: same-voxel/config-identity
+  subcases, bridge batch/padding behavior, direct decoder empty-input
+  rejection, and non-XYZ input rejection. No production correction was made
+  before this RED run.
+- Prior correction GREEN: the source-path command ran 13 selected/executed
+  tests, 13 passed, 0 failures, 0 errors, 0 skips. It covers same-voxel
+  averaging, fixed 5-mm/2048/128/32/ell0 identity, XYZ/empty-input rejection,
+  direct decoder empty/nonfinite rejection, bridge mask/sentinel/B=1 behavior,
+  finite backward flow through encoder/attention/decoder, and the original
+  P03 geometry/bridge checks. This is diagnostic execution outside the
+  supported installed environment, not a supported L1 acceptance claim.
+- Final bridge correction RED: the same source-path command ran 16 selected
+  tests with 13 existing tests passing and 3 expected failures for scaled/
+  nonorthogonal rotation, malformed homogeneous bottom row, and grip=2.0.
+  No bridge validation correction was made before this RED run.
+- Intermediate GREEN diagnostic: the first guard implementation produced 5
+  errors because `torch.allclose` returned a Python bool and the guard called
+  `.item()`; removing those two calls was the minimal bridge-only correction.
+- Final bridge correction GREEN / focused source-path diagnostic: the command
+  ran 16 selected/executed tests, 16 passed, 0 failures, 0 errors, 0 skips.
+  It preserves the valid bridge case while covering the three new rejection
+  regressions. This remains diagnostic execution outside the supported installed
+  environment, not a supported L1 acceptance claim.
+- L0 PASS: `python3 -B scripts/validate_fast.py` from the repository root —
+  syntax, local links, static harness boundary, and 19/19 harness self-tests
+  passed; L1/L2/L3/L4 were not run by this command.
+- L0 PASS: `python3 -B -S scripts/validate_fast.py` from the repository root —
+  the same 19/19 harness self-tests passed.
+- Supported installed L1 **SKIPPED**: the exact plan command
+  `python3 -B -m unittest discover -s tests -p 'test_physical_geometry.py' -v`
+  was attempted from the repository root after the bridge correction and ran
+  16 selected tests, all 16 ending in `ModuleNotFoundError: No module named 'icgs'`.
+  No supported installed environment is available; this is not PASS.
+- L2/C1–C5, L3/L4, collection, training and benchmark validation: **NOT RUN**
+  by explicit task authorization. Native codec, transforms, graph, sampler,
+  published profile, and native preprocessing behavior were not modified.
+- Remaining risk: P04 still owns PhysicalState/lineage enforcement; no cache
+  lineage field or alternate state schema was added. Supported-environment
+  import/tensor compatibility, checkpoint interaction, paired action drift,
+  local success, and broader feasibility evidence remain unverified. The
+  crop profile is still explicit but optional because no calibrated numeric
+  workspace was supplied; GPU floating-point tie ordering is not claimed
+  bitwise identical.
