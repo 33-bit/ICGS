@@ -33,7 +33,7 @@ REFERENCE_FIELDS = (
     "rng_protocol",
 )
 EXCLUDED_REFERENCE_FIELDS = frozenset(
-    {"dynamics", "evaluator", "stopping", "learned_stopping"}
+    {"dynamics", "evaluator", "stopping", "learned_stopping", "search"}
 )
 _MANIFEST_FIELDS = frozenset(
     {
@@ -46,6 +46,12 @@ _MANIFEST_FIELDS = frozenset(
         "learned_stopping_artifact_id",
     }
 )
+
+_PREPROCESSING_FIELDS = (
+    "voxel_size_m", "num_anchors", "num_points", "neighbors", "ell0_m",
+    "fps_start", "tie_break",
+)
+_RNG_CONFIG_FIELDS = ("generator_seed", "reset_seed", "action_seed")
 
 
 def _json_value(value: Any, name: str) -> None:
@@ -95,11 +101,89 @@ def _validate_cadence(cadence: Any) -> None:
         raise ValueError("reference cadence H is incompatible")
 
 
+def _canonical_reference_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
+    """Normalize only documented reference aliases before fingerprinting.
+
+    ``anchors`` predates the central ``geometry.num_anchors`` spelling.  It is
+    a provenance alias, not an extra tuning knob; conflicting spellings fail
+    rather than producing different identities for the same reference.
+    """
+    canonical = json.loads(json.dumps(payload, sort_keys=True, allow_nan=False))
+
+    def normalize_anchors(value: Any, name: str) -> None:
+        if not isinstance(value, dict) or "anchors" not in value:
+            return
+        anchors = value.pop("anchors")
+        if "num_anchors" in value and value["num_anchors"] != anchors:
+            raise ValueError(f"reference {name} has conflicting anchors aliases")
+        value["num_anchors"] = anchors
+
+    for field in ("geometry", "preprocessing"):
+        normalize_anchors(canonical.get(field), field)
+    physical = canonical.get("physical_weights")
+    if isinstance(physical, dict) and isinstance(physical.get("config"), dict):
+        normalize_anchors(physical["config"].get("geometry"), "physical geometry")
+    return canonical
+
+
+def _require_equal(actual: Any, expected: Any, name: str) -> None:
+    if actual != expected:
+        raise ValueError(f"reference {name}/config mismatch")
+
+
+def _reference_config_projection(config: MethodConfig) -> dict[str, Any]:
+    """Return the resolved fields that define the frozen reference path.
+
+    This deliberately does not use ``MethodConfig.fingerprint()``: that hash
+    includes evaluator, stopping and search settings which ADR0008 excludes
+    from ``pi_ref``.  The selected values cover the P03 physical profile, P04
+    causal-memory inputs, and P01 commitment cadence already consumed at the
+    outer construction boundary.
+    """
+    resolved = config.to_dict()
+    geometry = resolved["geometry"]
+    return {
+        "geometry": geometry,
+        "preprocessing": {name: geometry[name] for name in _PREPROCESSING_FIELDS},
+        "router": resolved["router"],
+        "physical": {
+            "geometry": geometry,
+            "memory": resolved["memory"],
+            "neural": resolved["neural"],
+            "decoder": resolved["decoder"],
+            "numerics": resolved["numerics"],
+            "sensors": resolved["sensors"],
+            "control": {"dt0": resolved["control"]["dt0"]},
+        },
+        "rng": {name: resolved["stages"][name] for name in _RNG_CONFIG_FIELDS},
+    }
+
+
+def _validate_reference_config(payload: Mapping[str, Any], config: MethodConfig) -> None:
+    """Reject manifests whose selected reference inputs differ from config."""
+    expected = _reference_config_projection(config)
+    _require_equal(payload["geometry"], expected["geometry"], "geometry")
+    _require_equal(payload["preprocessing"], expected["preprocessing"], "preprocessing")
+    router = payload["router"]
+    if not isinstance(router, Mapping) or not isinstance(router.get("config"), Mapping):
+        raise ValueError("reference router/config metadata is required")
+    _require_equal(dict(router["config"]), expected["router"], "router")
+    physical = payload["physical_weights"]
+    if not isinstance(physical, Mapping) or not isinstance(physical.get("config"), Mapping):
+        raise ValueError("reference physical/config metadata is required")
+    _require_equal(dict(physical["config"]), expected["physical"], "physical")
+    rng = payload["rng_protocol"]
+    if not isinstance(rng, Mapping) or not isinstance(rng.get("config"), Mapping):
+        raise ValueError("reference rng/config metadata is required")
+    _require_equal(dict(rng["config"]), expected["rng"], "rng")
+
+
 def reference_fingerprint(payload: dict) -> str:
     """Return the canonical SHA-256 identity of the frozen reference path."""
     if not isinstance(payload, Mapping):
         raise ValueError("reference payload must be an object")
     _json_value(payload, "payload")
+    payload = _canonical_reference_payload(payload)
     allowed = set(REFERENCE_FIELDS) | EXCLUDED_REFERENCE_FIELDS
     unknown = set(payload) - allowed
     if unknown:
@@ -162,7 +246,7 @@ def validate_method_manifest(
         raise ValueError("reference artifact_loader must be callable")
 
     method_config = _config(config)
-    payload = manifest["reference_payload"]
+    payload = _canonical_reference_payload(manifest["reference_payload"])
     if payload["native_profile"] != method_config.native_profile:
         raise ValueError("reference native profile/config mismatch")
     cadence = payload["cadence"]
@@ -172,6 +256,7 @@ def validate_method_manifest(
         raise ValueError("reference dt0/config mismatch")
     if "H" in cadence and cadence["H"] != method_config.planning.H:
         raise ValueError("reference horizon/config mismatch")
+    _validate_reference_config(payload, method_config)
     for role, name in (("dynamics", "dynamics_artifact_id"),
                        ("evaluator", "evaluator_artifact_id"),
                        ("learned_stopping", "learned_stopping_artifact_id")):

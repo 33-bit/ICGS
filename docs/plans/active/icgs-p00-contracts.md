@@ -242,3 +242,28 @@ phase if an FG fails and request a scoped protocol decision.
 - Remaining risk: supported-environment imports and real tensor/checkpoint
   compatibility remain unverified; no empirical feasibility or C1–C5 gate is
   claimed. The active roadmap gates remain unchanged.
+- Central-configuration follow-up (2026-09-09): reviewed ADR0009, the parameter
+  inventory and this plan's consumption addendum at central commit
+  `782eb683d85757a8d2450f789024e7c6b8abff41`. Existing P01 timed-execution
+  changes were preserved. A focused RED test demonstrated that the legacy
+  `anchors` spelling changed the reference hash and that a self-consistent
+  manifest could otherwise carry geometry/P03 preprocessing, P04 physical-memory,
+  or P01 cadence values different from the resolved typed config. The artifact
+  seam now canonicalizes the documented alias and compares only the selected
+  frozen-reference projection: geometry/preprocessing, physical geometry/memory/
+  neural/decoder/numerics/sensor declarations, router, cadence and RNG seeds.
+  It intentionally does not use the full config hash; evaluator, learned-stopping
+  and search metadata are accepted but excluded, and stopping-only changes alter
+  `MethodConfig.fingerprint()` while leaving `pi_ref` identity unchanged.
+- Central follow-up L1 PASS: `.venv/bin/python -B -m unittest discover -s tests
+  -p 'test_method_contracts.py' -v` from the repository root, with editable
+  ICGS/Python 3.11.15/Torch 2.2.0/NumPy 1.26.4 — 16 selected, 16 passed, 0
+  failures/errors/skips. This includes supported nondefault P01 `h/r/dt0`
+  manifest propagation and canonical-alias/config-mismatch rejection; it does
+  not claim that physical consumers themselves have been rewired.
+- Central follow-up config validation PASS: `.venv/bin/python -B -m unittest
+  discover -s tests -p 'test_method_config.py' -v` — 24 selected, 24 passed, 0
+  failures/errors/skips. L0 PASS: `python3 -B scripts/validate_fast.py` and
+  `python3 -B -S scripts/validate_fast.py` — 19/19 each. C1–C5, L2/C1–C5,
+  L3/L4, model/tensor/checkpoint execution, downloads, collection, preprocessing,
+  simulator workloads, training and robot motion remain **NOT RUN**.
