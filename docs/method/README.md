@@ -11,6 +11,7 @@ describe what actually runs.
 | Owner | Read for |
 | --- | --- |
 | [Contracts](contracts.md) | Shared types, online information, time/frames, state and interfaces |
+| [Parameters](parameters.md) | Single packaged JSON default source, overrides, units and consumer/shape restrictions |
 | [Neural method](neural.md) | Exact forward passes, dimensions, masks and gradient boundaries |
 | [Data and training](data-training.md) | Dataset lineage, generation, labels, losses and phase order |
 | [Planning and evaluation](planning-evaluation.md) | Search semantics, B0–B7, B3 design, experiments and metrics |
@@ -32,6 +33,10 @@ Requirement labels used throughout:
 - **FG — feasibility gate:** evidence still required before the dependent workload.
 
 The matrices use these labels rather than treating a planned test as current proof.
+Default numbers quoted in these specifications are baseline examples corresponding
+to the [central configuration](parameters.md), not competing editable defaults.
+The uploaded proposal and historical evidence remain immutable; changing an
+experiment setting does not rewrite those records or authorize a workload.
 The original proposal governs scientific intent; explicit AD resolutions govern
 their named ambiguities. IDs cannot relax PR/AD invariants. FG results are recorded
 before dependent jobs are launched. No new runtime implementation is authorized by

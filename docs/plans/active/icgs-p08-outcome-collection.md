@@ -23,6 +23,20 @@ Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
 before runtime execution. Inspect Git state; preserve unrelated work and user assets.
 
+## Configuration consumption addendum — 2026-09-09
+
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
+Consumed sections for this plan: **dataset, collection, losses, sensors, benchmark**.
+
+Use named pilot/primary quotas, prefix/horizon lists and pair confidence/prior/quadrature settings. Require seed/replay/resource metadata before collection. Keep first-terminal/coverage semantics invariant and full config hash separate from frozen reference ID.
+
+Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
+Numeric shapes and test inputs below are baseline examples/compatibility assertions;
+they are not a second editable default source. New tunable implementation constants
+must be replaced by the matching configuration key. Preserve prior progress and
+evidence; this addendum does not certify that the component consumes every new field.
+
 ## Global constraints
 
 - Canonical runtime is `src/icgs`; no `ip` shims or wrapped legacy runtime.
@@ -168,10 +182,12 @@ self.assertEqual(pair_pool(False, True), 'recovery')
 - [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
-p = scipy.integrate.quad(lambda x: scipy.stats.beta.pdf(x, k_a+1, n_a-k_a+1)
-                         * scipy.stats.beta.cdf(x, k_b+1, n_b-k_b+1),
-                         0., 1., epsabs=1e-8, epsrel=1e-8)[0]
-keep, weight = max(p, 1-p) >= .9, 2*abs(p-.5)
+prior_a, prior_b = cfg.losses.pair_beta_prior_alpha, cfg.losses.pair_beta_prior_beta
+p = scipy.integrate.quad(lambda x: scipy.stats.beta.pdf(x, k_a+prior_a, n_a-k_a+prior_b)
+                         * scipy.stats.beta.cdf(x, k_b+prior_a, n_b-k_b+prior_b),
+                         0., 1., epsabs=cfg.losses.pair_quadrature_atol,
+                         epsrel=cfg.losses.pair_quadrature_rtol)[0]
+keep, weight = max(p, 1-p) >= cfg.losses.pair_confidence, 2*abs(p-.5)
 ```
 
 Shared random numbers require paired bootstrap, not independent Beta. Recompute q by full-history replay for each suffix and collect separate continuations; do not force reversal. Pool precedence suffix→recovery→general; empty pools remain valid. Preserve all-zero groups and local failures. Recovery tag requires executed successful recovery, not distance.

@@ -23,6 +23,20 @@ Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
 before runtime execution. Inspect Git state; preserve unrelated work and user assets.
 
+## Configuration consumption addendum — 2026-09-09
+
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
+Consumed sections for this plan: **planning, control, numerics**.
+
+Use config.planning widening/UCT, medoid scales, budget panels and horizons. Use numerics tolerances for mass checks. Derived counts and terminal-mass rules are not independent tuneable settings. Record all effective budgets with the full resolved configuration.
+
+Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
+Numeric shapes and test inputs below are baseline examples/compatibility assertions;
+they are not a second editable default source. New tunable implementation constants
+must be replaced by the matching configuration key. Preserve prior progress and
+evidence; this addendum does not certify that the component consumes every new field.
+
 ## Global constraints
 
 - Canonical runtime is `src/icgs`; no `ip` shims or wrapped legacy runtime.
@@ -115,7 +129,8 @@ with self.assertRaisesRegex(ValueError, 'unvisited'):
 - [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
-limit = max(1, math.floor(1.5*math.sqrt(1+node.visits)))
+limit = max(1, math.floor(cfg.planning.widening_coefficient *
+                          (1+node.visits)**cfg.planning.widening_exponent))
 # Expand one edge if under limit; otherwise unvisited first, then Q+UCT bonus.
 G = leaf_return(leaf.U, leaf.weights, values, H_root-leaf.tau)
 for edge in path:
@@ -201,4 +216,3 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Nonpreemptible IP may exceed small budgets and deeper model rollout may exploit prediction errors.
-

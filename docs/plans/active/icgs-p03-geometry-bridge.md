@@ -24,6 +24,20 @@ Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
 before runtime execution. Inspect Git state; preserve unrelated work and user assets.
 
+## Configuration consumption addendum — 2026-09-09
+
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
+Consumed sections for this plan: **geometry, neural, decoder, sensors, numerics**.
+
+Wire the typed geometry/preprocessing and block/decoder sections when extending existing constructors. Preserve fixed shape locks and original default initialization order; tests must show a supported nondefault scalar reaches its consumer. Existing fixed constructors are not retroactively controlled by merely loading MethodConfig.
+
+Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
+Numeric shapes and test inputs below are baseline examples/compatibility assertions;
+they are not a second editable default source. New tunable implementation constants
+must be replaced by the matching configuration key. Preserve prior progress and
+evidence; this addendum does not certify that the component consumes every new field.
+
 ## Global constraints
 
 - Canonical runtime is `src/icgs`; no `ip` shims or wrapped legacy runtime.

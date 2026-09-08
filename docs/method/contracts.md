@@ -127,14 +127,22 @@ mode, discrepancy measurements and protocol ID.
 
 ## Configuration, artifacts and failures
 
-**ID:** add `MethodConfig` and `build_method` alongside, not in place of,
-`ExperimentConfig`/`build_policy`. A method config contains an explicit immutable
-native profile plus geometry, event, memory, dynamics, evaluator, planning,
-control, dataset and training sections. Persist schema version and component IDs;
+**EI/AD:** `MethodConfig` now loads the added-method defaults from the packaged
+[primary JSON](../../src/icgs/configuration/profiles/icgs_primary.json), not Python
+numeric defaults; native `ExperimentConfig` remains unchanged. `build_method` is
+still a separate integration deliverable. The expanded immutable typed sections
+cover all model/training/collection/search/evaluation parameters; see the
+[key and consumer reference](parameters.md). Preserve existing constructor/JSON
+entry points and old effective defaults/shape locks. Persist schema version and component IDs;
 reject unknown keys/IDs, nonfinite values and incompatible shape/horizon settings
 before loading tensors. No Hydra, plugin discovery, implicit relative root presets
 or executable config serialization. Runtime defaults < explicit JSON < explicit
 CLI overrides remains the precedence; file-relative paths resolve against JSON.
+Only outer composition reads a JSON configuration; neural forward/update loops
+receive explicit sections/arguments. `resolved_config()` returns a complete
+JSON-ready envelope with a full-configuration SHA256 for future run storage;
+this hash is distinct from the reference fingerprint below. New settings are not
+claimed wired into existing physical modules merely because validation accepts them.
 
 **PR/AD:** reference fingerprint includes IP checksum, native profile, geometry and
 physical/task/event weights, routing/segmentation/preprocessing, calibration and

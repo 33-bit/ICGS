@@ -23,6 +23,20 @@ Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
 before runtime execution. Inspect Git state; preserve unrelated work and user assets.
 
+## Configuration consumption addendum — 2026-09-09
+
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
+Consumed sections for this plan: **dynamics, geometry, decoder, neural, losses, numerics**.
+
+Build fixed-compatible dimensions from config and derive concatenated/output sizes. Use dynamics.bootstrap_probability/residual_init_std and losses scales/weights. Do not turn freeze phase or physical/task separation into optional flags.
+
+Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
+Numeric shapes and test inputs below are baseline examples/compatibility assertions;
+they are not a second editable default source. New tunable implementation constants
+must be replaced by the matching configuration key. Preserve prior progress and
+evidence; this addendum does not certify that the component consumes every new field.
+
 ## Global constraints
 
 - Canonical runtime is `src/icgs`; no `ip` shims or wrapped legacy runtime.
@@ -159,7 +173,7 @@ loss_phys = cd / 0.01**2 + translation_mse / 0.01**2
 loss_phys = loss_phys + rotation_angle_squared / (5*math.pi/180)**2 + grip_bce
 loss = (mask[:, :, None]*loss_by_episode_head_step).sum() / (Kroll*mask.sum())
 if encoder_decoder_trainable:
-    loss = loss + 0.1*reconstruction_loss
+    loss = loss + cfg.losses.reconstruction_weight*reconstruction_loss
 ```
 
 Bootstrap episode Bernoulli0.8 with deterministic episode-hash modulo3 forced head if all zero; persist seed. Unroll predicted inputs from step2, keep fixed head, supervise each prefix. Frozen encoder/decoder parameters still allow input gradients; do not wrap continuous path in no_grad. Mask padded points and use stable training rotation clipping1e-6 versus exact reporting angle.

@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "config": {
+    "optimizer": {"learning_rate": 0.00005},
+    "planning": {"h": 2, "r": 1, "L": 16},
+    "training": {"output_dir": "../../runs/icgs-example"}
+  }
+}

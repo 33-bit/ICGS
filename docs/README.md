@@ -19,6 +19,8 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Published fidelity decision](decisions/0005-published-profile-fidelity.md) | Evidence-backed live preprocessing and RNG-order profile |
 | [V5 foundation status](components/v5-foundations.md) | Implemented/designed/deferred method-level ownership |
 | [Target ICGS method](method/README.md) | Approved target, neural/data/search specifications; not implemented status |
+| [ICGS parameters](method/parameters.md) | Central JSON defaults, units, locks, overrides and consumer readiness |
+| [Configuration decision](decisions/0009-central-method-configuration.md) | Packaged defaults and separate resolved/reference identities |
 | [Proposal provenance](proposals/README.md) | Immutable uploaded source, date and SHA256 |
 | [Target requirements](method/requirements.md) | Proposal-to-specification/plan/test traceability |
 | [ICGS implementation roadmap](plans/active/icgs-method-implementation.md) | P00–P13 component plans, dependencies and pilot gates |
