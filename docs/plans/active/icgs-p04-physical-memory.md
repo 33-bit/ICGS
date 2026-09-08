@@ -12,7 +12,7 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — P04 modules/tests implemented; supported validation and integration gates pending**. This document is a category C
+Status: **ACTIVE — P04 modules/tests and scoped central-configuration wiring implemented; supported integration gates pending**. This document is a category C
 component of the approved docs-only research migration; it does not authorize expensive workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
@@ -232,3 +232,42 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: supported-environment L1 compatibility, temporal training usefulness, physical ambiguity sufficiency, native integration, and mandatory C1–C5 remain unverified. No training, downloads, preprocessing jobs, simulator workloads, robot motion, or network work was run.
+
+### Configuration centralization follow-up — 2026-09-09
+
+- Scope was limited to `src/icgs/models/memories/physical.py` and
+  `tests/test_physical_memory.py`; `src/icgs/state/physical.py`, the central
+  schema/profile, P03 shared layers, native IP and other component-owner paths
+  were unchanged. The addendum's typed `geometry`, `memory`, `neural` and
+  `control` sections are resolved once at each public P04 construction/helper
+  boundary and are not read during `forward()` or `physical_tokens()`.
+- TDD RED: `.venv/bin/python -B -m unittest discover -s tests -p
+  'test_physical_memory.py' -v` from
+  `/Users/33bit/AI/Research/VLA/ICGS` after adding the config tests — **17
+  selected, 14 passed, 2 failed, 1 errored**. The feature-specific failures
+  were the missing `config`/section injection seams and constructor support;
+  no unrelated import or environment failure was involved.
+- TDD GREEN: the same command with the amended source — **17 selected, 17
+  executed, 17 PASS, 0 skipped**. Coverage includes default state-dict key/order
+  and values, supported `control.dt0=0.2` planned-duration propagation, typed
+  section injection, rejection of unsupported architecture dimensions, branch
+  isolation, token-projector registration/gradients/per-instance ownership and
+  invalid-geometry masking. `control.dt0` is the sole supported nondefault
+  scalar demonstrated here; the locked geometry scale remains sourced from
+  `geometry.ell0_m`.
+- Relevant central-config regression: `.venv/bin/python -B -m unittest
+  discover -s tests -p 'test_method_config.py' -v` — **24 selected, 24
+  executed, 24 PASS, 0 skipped**.
+- Environment for both test commands: cwd
+  `/Users/33bit/AI/Research/VLA/ICGS`, `.venv/bin/python` Python **3.11.15**,
+  PyTorch **2.2.0**, NumPy **1.26.4**, editable `icgs` import. No host-Python
+  or `PYTHONPATH` diagnostic was counted as supported L1 evidence.
+- L0: `.venv/bin/python -B scripts/validate_fast.py` and
+  `.venv/bin/python -B -S scripts/validate_fast.py` — **PASS** for both;
+  each reported Python syntax, local documentation links, static harness
+  boundary, and **19/19** harness self-tests. Each explicitly reported L1 CPU
+  smoke, L2 model, L3 simulator and L4 benchmark **NOT RUN**.
+- L2/C1–C5, native integration, simulator/robot workloads, collection,
+  preprocessing, downloads and training remain **NOT RUN** and are not claimed
+  by this component-level wiring. Remaining risk is supported integration with
+  future outer composition and the mandatory published checkpoints.

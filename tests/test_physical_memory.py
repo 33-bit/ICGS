@@ -116,6 +116,93 @@ class PhysicalMemoryTests(unittest.TestCase):
         self.assertAlmostEqual(first[0, 7].item(), math.log(2.0), places=6)
         np.testing.assert_allclose(command.target_w, target)
 
+    def test_action_descriptor_uses_typed_control_dt0_and_preserves_default(self):
+        from icgs.configuration.method import MethodConfig
+        from icgs.contracts.method import TimedCommand
+        from icgs.models.memories.physical import action_descriptor
+
+        command = TimedCommand(np.eye(4), 0, 0.1)
+        before = torch.eye(4, dtype=torch.float64)[None]
+
+        default = action_descriptor(before, command)
+        try:
+            configured_default = action_descriptor(before, command, config=MethodConfig())
+        except TypeError as exc:
+            self.fail(f"action_descriptor does not accept typed config injection: {exc}")
+        torch.testing.assert_close(configured_default, default)
+        self.assertAlmostEqual(default[0, 7].item(), 0.0, places=12)
+
+        changed_config = MethodConfig.from_dict({"control": {"dt0": 0.2}})
+        try:
+            changed = action_descriptor(before, command, config=changed_config)
+        except TypeError as exc:
+            self.fail(f"action_descriptor does not accept typed config injection: {exc}")
+        torch.testing.assert_close(changed[:, :7], default[:, :7])
+        self.assertAlmostEqual(changed[0, 7].item(), math.log(0.5), places=12)
+
+    def test_p04_accepts_typed_sections_and_rejects_unlocked_architecture(self):
+        from dataclasses import replace
+
+        from icgs.configuration.method import MethodConfig
+        from icgs.models.memories.physical import PhysicalMemory, proprioception
+
+        config = MethodConfig()
+        pose = torch.eye(4, dtype=torch.float64)[None]
+        gravity = torch.tensor([[0.0, 0.0, -1.0]], dtype=torch.float64)
+        try:
+            configured_p = proprioception(pose, torch.zeros(1, 1, dtype=torch.float64), gravity,
+                                          geometry=config.geometry)
+        except TypeError as exc:
+            self.fail(f"proprioception does not accept typed geometry injection: {exc}")
+        torch.testing.assert_close(
+            configured_p,
+            proprioception(pose, torch.zeros(1, 1, dtype=torch.float64), gravity),
+        )
+
+        try:
+            configured = PhysicalMemory(
+                geometry=config.geometry,
+                memory=config.memory,
+                neural=config.neural,
+                control=config.control,
+            )
+        except TypeError as exc:
+            self.fail(f"PhysicalMemory does not accept typed section injection: {exc}")
+        self.assertEqual(tuple(configured(torch.ones(1, 128, 256),
+                                         torch.ones(1, 128, dtype=torch.bool),
+                                         torch.zeros(1, 13), torch.zeros(1, 8),
+                                         torch.zeros(1, 2, 256)).shape), (1, 2, 256))
+
+        for kwargs in (
+            {"geometry": replace(config.geometry, num_anchors=64)},
+            {"geometry": replace(config.geometry, width=128)},
+            {"memory": replace(config.memory, width=128)},
+            {"memory": replace(config.memory, slots=1)},
+            {"memory": replace(config.memory, descriptor_dim=7)},
+        ):
+            with self.subTest(kwargs=kwargs):
+                try:
+                    PhysicalMemory(**kwargs)
+                except TypeError as exc:
+                    self.fail(f"unsupported section was not validated: {exc}")
+                except ValueError:
+                    pass
+                else:
+                    self.fail("unsupported P04 architectural dimensions were accepted")
+
+    def test_default_config_preserves_physical_memory_parameter_order_and_values(self):
+        from icgs.configuration.method import MethodConfig
+        from icgs.models.memories.physical import PhysicalMemory
+
+        torch.manual_seed(71)
+        baseline = PhysicalMemory()
+        torch.manual_seed(71)
+        configured = PhysicalMemory(config=MethodConfig())
+
+        self.assertEqual(list(configured.state_dict()), list(baseline.state_dict()))
+        for name, expected in baseline.state_dict().items():
+            torch.testing.assert_close(configured.state_dict()[name], expected)
+
     def test_physical_feature_boundaries_reject_invalid_pose_gravity_and_grip(self):
         from icgs.contracts.method import TimedCommand
         from icgs.models.memories.physical import action_descriptor, proprioception
