@@ -1,0 +1,1 @@
+"""Physical memory model components."""
