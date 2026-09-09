@@ -226,9 +226,9 @@ phase if an FG fails and request a scoped protocol decision.
 ## Execution evidence
 
 - Documentation drafting: complete.
-- Component RED/GREEN commands: Task 1 (belief.py) accepted at a430cbf; Task 2 (mcts.py, budget.py seam) implemented at 72ba6e8 (23 passed), accepted only cfe6693 after 3 audit fixes (29 passed in 0.515s); Task 3 (budget.py, rerank.py, shooting.py, mcts.py completed-only wall timing and fallback) completed (39 passed in 0.783s). L0 passed 19/19 on scripts/validate_fast.py (both invocations).
-- L1 search assertions: 39 executed, 39 passed in tests/test_search.py (0.783s) using .venv/bin/python (historical 23-test and 29-test runs preserved).
-- Full regression suite: 333 selected/executed, 324 passed, 9 skipped (4 differential baseline requiring legacy source root, 1 RLBench not installed, 1 CUDA RNG requiring CUDA, 1 opt-in published checkpoint, 2 Lightning not installed), 0 failed in 14.700s.
+- Component RED/GREEN commands: Task 1 (belief.py) accepted at a430cbf; Task 2 (mcts.py, budget.py seam) implemented at 72ba6e8 (23 passed), accepted only cfe6693 after 3 audit fixes (29 passed in 0.515s); Task 3 (budget.py, rerank.py, shooting.py, mcts.py completed-only wall timing and fallback) completed (39 passed in 0.783s); Task 3 Fix Round 1 (BASE b0d7ccb) addressed 6 audit findings: centralized timed_operation in budget.py, synchronize/validate_context capabilities, root/context pre-validation, complete predicted-state validation before caching, nonfinite model error handling, strict MethodConfig/horizon typing, and 6 deterministic cross-planner regressions (46 passed in 1.421s). L0 passed 19/19 on scripts/validate_fast.py (both invocations).
+- L1 search assertions: 46 executed, 46 passed in tests/test_search.py (1.421s) using .venv/bin/python (historical 23-test, 29-test, and 39-test runs preserved).
+- Full regression suite: 333 selected, 324 executed, 9 skipped (4 differential baseline requiring legacy source root, 1 RLBench not installed, 1 CUDA RNG requiring CUDA, 1 opt-in published checkpoint, 2 Lightning not installed), 0 failed in 14.700s (historical provenance at b0d7ccb).
 - L2/C1–C5: **NOT RUN** by this component task — required Feasibility Gate (FG) remains active and FG pilot is **NOT RUN / not accepted**.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Nonpreemptible IP may exceed small budgets and deeper model rollout may exploit prediction errors.

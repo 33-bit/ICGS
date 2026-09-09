@@ -1649,7 +1649,16 @@ class SearchBudgetAndBaselineTests(unittest.TestCase):
             # Verify counter keys match across all 3
             self.assertEqual(
                 set(res.timing_counters.keys()),
-                {"iterations", "native_calls", "model_intervals", "evaluator_calls"},
+                {
+                    "iterations",
+                    "native_calls",
+                    "model_intervals",
+                    "evaluator_calls",
+                    "task_tracker_calls",
+                    "terminal_calls",
+                    "materialization_calls",
+                    "sync_calls",
+                },
                 f"{planner_name} timing_counters keys mismatch",
             )
             for k, v in res.timing_counters.items():
@@ -1660,6 +1669,286 @@ class SearchBudgetAndBaselineTests(unittest.TestCase):
             self.assertGreater(caps.sync_calls, 0, f"{planner_name} must invoke device synchronization")
 
 
+class SearchTask3FixRound1Tests(unittest.TestCase):
+    """Regressions for Task 3 Fix Round 1 audit findings."""
+
+    def setUp(self) -> None:
+        self.cfg = MethodConfig()
+
+    def test_audit_issue_1_late_absorbed_root_for_h_positive_triggers_fallback(self) -> None:
+        """For H > 0, late root eval with stop=1 must not suppress reference fallback."""
+        import icgs.algorithms.planning.mcts as mcts_module
+        import icgs.algorithms.planning.rerank as rerank_module
+        import icgs.algorithms.planning.shooting as shooting_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(wall_budget_s=0.5)
+
+        for planner_name, planner_fn in (
+            ("mcts", mcts_module.plan),
+            ("rerank", rerank_module.plan),
+            ("shooting", shooting_module.plan),
+        ):
+            caps = MockCapabilities(stop_value=1.0)
+            times_copy = [0.0, 0.0, 0.6, 0.6, 0.6, 0.6]
+            res = planner_fn(
+                state,
+                task,
+                context,
+                H=4,
+                budget=budget,
+                capabilities=caps,
+                cfg=self.cfg,
+                clock=lambda: times_copy.pop(0) if times_copy else 0.6,
+            )
+            self.assertFalse(res.completed, f"{planner_name} should not be marked completed")
+            self.assertIsNotNone(res.selected_prefix, f"{planner_name} must materialize fallback prefix")
+            self.assertEqual(len(res.selected_prefix.commands), self.cfg.planning.h)
+            self.assertEqual(res.fallback_reason, "budget_exhausted")
+
+    def test_audit_issue_2_track_task_late_prevents_terminal_start_and_materialization_timing(self) -> None:
+        """Overrunning track_task must prevent predict_terminal from starting."""
+        import icgs.algorithms.planning.mcts as mcts_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+
+        caps = MockCapabilities()
+        budget = PlanningBudget(wall_budget_s=0.5)
+        recorder = TestRecorder()
+
+        current_time = [0.0]
+        def clock():
+            return current_time[0]
+
+        original_track = caps.track_task
+        def track_task_with_delay(prev, st, ev):
+            current_time[0] = 0.6  # Past 0.5 deadline
+            return original_track(prev, st, ev)
+        caps.track_task = track_task_with_delay
+
+        res = mcts_module.plan(
+            state,
+            task,
+            context,
+            H=4,
+            budget=budget,
+            capabilities=caps,
+            cfg=self.cfg,
+            clock=clock,
+            recorder=recorder,
+        )
+        self.assertFalse(res.completed)
+        self.assertEqual(len(caps.predict_terminal_calls), 0, "predict_terminal must not be called after track_task overshoots")
+
+    def test_audit_issue_3_validate_context_called_before_root_eval_and_invalid_state_fields(self) -> None:
+        """Root geometry and context validated before root eval; nonfinite predicted state fields caught."""
+        import icgs.algorithms.planning.mcts as mcts_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        budget = PlanningBudget(wall_budget_s=0.5)
+
+        class ContextValidatingCaps(MockCapabilities):
+            def validate_context(self, ctx):
+                if ctx.get("context_id") != "valid_ctx":
+                    raise ValueError("invalid context provided")
+
+        caps = ContextValidatingCaps()
+        # Even with H=0, invalid context must be rejected!
+        with self.assertRaisesRegex(ValueError, "invalid context"):
+            mcts_module.plan(state, task, {"context_id": "bad_ctx"}, H=0, budget=budget, capabilities=caps, cfg=self.cfg)
+
+    def test_audit_issue_4_rerank_horizon_strict_types_and_budget_audit(self) -> None:
+        """Rerank strictly enforces int type and (h, P) values; planning.start audits resolved config."""
+        import icgs.algorithms.planning.rerank as rerank_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(wall_budget_s=0.5)
+        caps = MockCapabilities()
+        rec = TestRecorder()
+
+        # Non-int (float/bool) rejected
+        with self.assertRaises(TypeError):
+            rerank_module.plan(state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, horizon=3.5)
+
+        # Non-allowed horizon value rejected (neither h=2 nor P=8)
+        with self.assertRaises(ValueError):
+            rerank_module.plan(state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, horizon=5)
+
+        # Audit planning.start has config_sha256 and effective budgets
+        rerank_module.plan(state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, horizon=2, recorder=rec)
+        start_events = [e for e in rec.events if e.get("name") == "planning.start"]
+        self.assertTrue(len(start_events) > 0)
+        fields = start_events[0]["fields"]
+        self.assertEqual(fields["config_sha256"], self.cfg.fingerprint())
+        self.assertIn("wall_budget_s", fields)
+        self.assertIn("clock_track", fields)
+
+    def test_audit_issue_5_leaf_head_equality_vs_late_and_shooting_node_provenance(self) -> None:
+        """Leaf evaluation at deadline equality accepted; leaf evaluation overshooting deadline rejected."""
+        import icgs.algorithms.planning.rerank as rerank_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(wall_budget_s=0.5)
+
+        # Rerank with H=4, h=2 (so rollout reaches leaf with remaining=2 > 0, evaluating heads)
+        # Test A: Leaf head 2 finishes at exact 0.5 -> accepted!
+        caps_a = MockCapabilities()
+        clock_ticks_a = [0.0]
+        eval_count_a = [0]
+        orig_eval_a = caps_a.evaluate_state
+
+        def timed_eval_a(*args: Any, **kwargs: Any) -> Any:
+            eval_count_a[0] += 1
+            if eval_count_a[0] == 1:
+                clock_ticks_a[0] = 0.05
+            elif eval_count_a[0] == 4:
+                clock_ticks_a[0] = 0.5
+            return orig_eval_a(*args, **kwargs)
+
+        caps_a.evaluate_state = timed_eval_a
+        res_a = rerank_module.plan(
+            state,
+            task,
+            context,
+            H=4,
+            budget=budget,
+            capabilities=caps_a,
+            cfg=self.cfg,
+            horizon=2,
+            clock=lambda: clock_ticks_a[0],
+        )
+        self.assertTrue(res_a.completed, "Rollout finishing at exact deadline equality must be completed")
+
+        # Test B: Leaf head 2 finishes at 0.5001 -> overshoots!
+        caps_b = MockCapabilities()
+        clock_ticks_b = [0.0]
+        eval_count_b = [0]
+        orig_eval_b = caps_b.evaluate_state
+
+        def timed_eval_b(*args: Any, **kwargs: Any) -> Any:
+            eval_count_b[0] += 1
+            if eval_count_b[0] == 1:
+                clock_ticks_b[0] = 0.05
+            elif eval_count_b[0] == 4:
+                clock_ticks_b[0] = 0.5001
+            return orig_eval_b(*args, **kwargs)
+
+        caps_b.evaluate_state = timed_eval_b
+        res_b = rerank_module.plan(
+            state,
+            task,
+            context,
+            H=4,
+            budget=budget,
+            capabilities=caps_b,
+            cfg=self.cfg,
+            horizon=2,
+            clock=lambda: clock_ticks_b[0],
+        )
+        self.assertFalse(res_b.completed, "Rollout overshooting deadline must be rejected")
+
+    def test_audit_issue_5_no_late_mcts_backup_and_shooting_node_provenance(self) -> None:
+        """No late MCTS backup if iteration overshoots; shooting passes predicted node pose and breaks ties."""
+        import icgs.algorithms.planning.mcts as mcts_module
+        import icgs.algorithms.planning.shooting as shooting_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(wall_budget_s=0.5)
+
+        # 1. MCTS no late backup
+        caps_mcts = MockCapabilities()
+        clock_ticks_m = [0.0]
+        eval_count_m = [0]
+        orig_eval_m = caps_mcts.evaluate_state
+
+        def timed_eval_m(*args: Any, **kwargs: Any) -> Any:
+            eval_count_m[0] += 1
+            if eval_count_m[0] == 1:
+                clock_ticks_m[0] = 0.05
+            elif eval_count_m[0] == 4:
+                clock_ticks_m[0] = 0.6
+            return orig_eval_m(*args, **kwargs)
+
+        caps_mcts.evaluate_state = timed_eval_m
+        rec_mcts = TestRecorder()
+        res_mcts = mcts_module.plan(
+            state,
+            task,
+            context,
+            H=4,
+            budget=budget,
+            capabilities=caps_mcts,
+            cfg=self.cfg,
+            clock=lambda: clock_ticks_m[0],
+            recorder=rec_mcts,
+        )
+        self.assertFalse(res_mcts.completed)
+        self.assertEqual(res_mcts.timing_counters["iterations"], 0)
+
+        # 2. Shooting passes predicted node pose to sample_prior at intermediate node
+        caps_shoot = MockCapabilities()
+        res_shoot = shooting_module.plan(
+            state,
+            task,
+            context,
+            H=4,
+            budget=PlanningBudget(native_call_cap=2),
+            capabilities=caps_shoot,
+            cfg=self.cfg,
+        )
+        self.assertTrue(res_shoot.completed)
+        self.assertEqual(len(caps_shoot.sample_prior_calls), 2)
+        obs_1 = caps_shoot.sample_prior_calls[1]["obs"]
+        self.assertFalse(np.allclose(obs_1.T_w_e, state.T_w_e[0]))
+
+    def test_audit_issue_6_returned_invalid_state_and_fallback_proposal_root(self) -> None:
+        """Returned invalid state fields trigger NonfiniteModelError; fallback has root pose."""
+        import icgs.algorithms.planning.mcts as mcts_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(wall_budget_s=0.5)
+
+        class NaNStateCaps(MockCapabilities):
+            def predict_step(self, st, cmd, *, head_id):
+                raise ValueError("x must contain only finite values")
+
+        caps = NaNStateCaps()
+        rec = TestRecorder()
+        res = mcts_module.plan(
+            state,
+            task,
+            context,
+            H=4,
+            budget=budget,
+            capabilities=caps,
+            cfg=self.cfg,
+            recorder=rec,
+        )
+        self.assertFalse(res.completed)
+        model_errors = [e for e in rec.events if e.get("name") == "model.error"]
+        self.assertTrue(len(model_errors) > 0)
+        self.assertIsNotNone(res.selected_prefix)
+        self.assertTrue(np.allclose(res.selected_prefix.proposal_root, state.T_w_e[0]))
 
 
 if __name__ == "__main__":

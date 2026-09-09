@@ -23,9 +23,16 @@ from icgs.algorithms.planning.budget import (
     BudgetExhausted,
     NonfiniteModelError,
     PlanningBudget,
+    audit_planning_start,
     eligible_completion,
+    evaluate_root_and_check_h0,
     execute_fallback,
+    score_leaf_rollout,
     synchronize_device,
+    timed_operation,
+    validate_predicted_state,
+    validate_root_and_context,
+    validate_terminal_probabilities,
 )
 from icgs.configuration.method import MethodConfig, PlanningConfig
 from icgs.contracts.method import CommandPrefix, MethodCapabilities, PlanningResult, TimedCommand
@@ -414,13 +421,14 @@ def _step_edge(
     budget: PlanningBudget,
     clock_fn: Callable[[], float],
     start_time: float,
-    model_intervals_tracker: list[int],
+    model_intervals_tracker: list[int] | dict[str, int],
     composite_models: CompositeModelIdentity,
     context_id: str,
     deadline: float | None = None,
     recorder: Any = None,
 ) -> BeliefNode:
     """Step all 3 heads forward across intervals with per-operation budget checks and branch isolation."""
+    timing_counters = model_intervals_tracker
     curr_tau = node.tau
     curr_U = node.U
     curr_F = node.F
@@ -458,57 +466,70 @@ def _step_edge(
             if cached is not None:
                 next_st, next_tk, probs = cached
             else:
-                # Operation-level check and reservation (no start at or beyond deadline)
+                curr_model_count = (
+                    timing_counters["model_intervals"]
+                    if isinstance(timing_counters, dict)
+                    else timing_counters[0]
+                )
                 if (
                     clock_fn() >= effective_deadline
-                    or not budget.check_model_interval(model_intervals_tracker[0])
+                    or not budget.check_model_interval(curr_model_count)
                     or not budget.check_wall_budget(clock_fn() - start_time)
                 ):
                     raise BudgetExhausted("Model interval cap or wall budget reached during edge stepping")
 
-                pred = capabilities.predict_step(h_m.state, cmd, head_id=m)
-                synchronize_device(capabilities)
-                model_intervals_tracker[0] += 1
-                finished_pred = clock_fn()
-                if not eligible_completion(finished_pred, effective_deadline):
-                    if recorder is not None:
-                        recorder.event(
-                            "operation.overshoot",
-                            fields={
-                                "operation": "predict_step",
-                                "head_id": m,
-                                "finished": finished_pred,
-                                "deadline": effective_deadline,
-                                "overshoot": finished_pred - effective_deadline,
-                            },
-                        )
+                counters_dict = timing_counters if isinstance(timing_counters, dict) else None
+                pred, _, eligible_pred = timed_operation(
+                    "predict_step",
+                    lambda: capabilities.predict_step(h_m.state, cmd, head_id=m),
+                    clock_fn=clock_fn,
+                    deadline=effective_deadline,
+                    budget=budget,
+                    capabilities=capabilities,
+                    recorder=recorder,
+                    coverage="inclusive",
+                    timing_counters=counters_dict,
+                    counter_key="model_intervals",
+                )
+                if isinstance(timing_counters, list) and eligible_pred:
+                    timing_counters[0] += 1
+                if not eligible_pred or pred is None:
                     raise BudgetExhausted("Operation overshot deadline during predict_step")
 
                 next_st = pred.next_state
-                if hasattr(next_st, "p") and not np.all(np.isfinite(next_st.p.detach().cpu().numpy())):
-                    raise NonfiniteModelError("Nonfinite state p in predict_step")
+                validate_predicted_state(next_st)
 
-                next_tk = capabilities.track_task(h_m.task, next_st, events)
-                term = capabilities.predict_terminal(h_m.state, h_m.task, next_st, next_tk, events, cmd)
-                synchronize_device(capabilities)
-                finished_term = clock_fn()
-                if not eligible_completion(finished_term, effective_deadline):
-                    if recorder is not None:
-                        recorder.event(
-                            "operation.overshoot",
-                            fields={
-                                "operation": "predict_terminal",
-                                "head_id": m,
-                                "finished": finished_term,
-                                "deadline": effective_deadline,
-                                "overshoot": finished_term - effective_deadline,
-                            },
-                        )
+                next_tk, _, eligible_tk = timed_operation(
+                    "track_task",
+                    lambda: capabilities.track_task(h_m.task, next_st, events),
+                    clock_fn=clock_fn,
+                    deadline=effective_deadline,
+                    budget=budget,
+                    capabilities=capabilities,
+                    recorder=recorder,
+                    coverage="inclusive",
+                    timing_counters=counters_dict,
+                    counter_key="task_tracker_calls",
+                )
+                if not eligible_tk or next_tk is None:
+                    raise BudgetExhausted("Operation overshot deadline during track_task")
+
+                term, _, eligible_term = timed_operation(
+                    "predict_terminal",
+                    lambda: capabilities.predict_terminal(h_m.state, h_m.task, next_st, next_tk, events, cmd),
+                    clock_fn=clock_fn,
+                    deadline=effective_deadline,
+                    budget=budget,
+                    capabilities=capabilities,
+                    recorder=recorder,
+                    coverage="inclusive",
+                    timing_counters=counters_dict,
+                    counter_key="terminal_calls",
+                )
+                if not eligible_term or term is None:
                     raise BudgetExhausted("Operation overshot deadline during predict_terminal")
 
-                probs = np.asarray(term.probabilities if hasattr(term, "probabilities") else term.probs, dtype=np.float64)
-                if not np.all(np.isfinite(probs)):
-                    raise NonfiniteModelError("Nonfinite terminal probabilities in predict_terminal")
+                probs = validate_terminal_probabilities(term)
                 if probs.ndim == 2:
                     probs = probs[0]
                 cache.put(key, (next_st, next_tk, probs), capabilities)
@@ -572,19 +593,42 @@ def plan(
     start_time = clock_fn()
     deadline = start_time + budget.wall_budget_s if budget.wall_budget_s is not None else float("inf")
 
-    rec.event(
-        "planning.start",
-        fields={
-            "boundary": state.boundary,
-            "H": H,
-            "start_time": start_time,
-            "deadline": deadline,
-            "algorithm": "mcts",
-        },
-    )
+    # Strict validation of root geometry and context before any eval
+    rep_obs = validate_root_and_context(state, context, capabilities)
 
-    # Monotonic deadline check: no new operation starts at or beyond deadline
-    if clock_fn() >= deadline:
+    # Provenance audit
+    audit_planning_start(rec, "mcts", cfg, budget)
+
+    timing_counters = {
+        "iterations": 0,
+        "native_calls": 0,
+        "model_intervals": 0,
+        "evaluator_calls": 0,
+        "task_tracker_calls": 0,
+        "terminal_calls": 0,
+        "materialization_calls": 0,
+        "sync_calls": 0,
+    }
+
+    # Evaluate root and handle H=0 / absorbed root
+    h0_res, u_root, should_abort = evaluate_root_and_check_h0(
+        state,
+        task,
+        context,
+        H=H,
+        budget=budget,
+        capabilities=capabilities,
+        cfg=cfg,
+        clock_fn=clock_fn,
+        deadline=deadline,
+        recorder=rec,
+        timing_counters=timing_counters,
+        cache_counters={"lookups": 0, "hits": 0, "misses": 0},
+        audit_ids=(),
+    )
+    if h0_res is not None:
+        return h0_res
+    if should_abort:
         return execute_fallback(
             state,
             task,
@@ -598,110 +642,18 @@ def plan(
             start_time=start_time,
             deadline=deadline,
             earliest_candidate=None,
-            native_calls_count=0,
-            model_intervals_count=0,
-            evaluator_calls_count=0,
-            iteration_count=0,
-            cache_counters={"lookups": 0, "hits": 0, "misses": 0},
-            audit_ids=(),
+            timing_counters=timing_counters,
             recorder=rec,
             fallback_reason="budget_exhausted",
-            observation_fn=_observation_from_state,
         )
 
     # Composite IDs
     composite_models = _extract_model_identities(capabilities)
     context_id = _extract_context_identity(context, capabilities)
-
-    # Initialize root U from evaluator with strict finite [0, 1] validation
     events = getattr(context, "events", context)
-    root_eval = capabilities.evaluate_state(state, task, events, H=H)
-    synchronize_device(capabilities)
-    evaluator_calls_count = 1
-    finished_root = clock_fn()
-    u_root = _validate_scalar_probability(root_eval.calibrated_stop, "Root calibrated_stop")
+
     f_root = 0.0
     w_root = (1.0 - u_root) / 3.0
-
-    # Prompt termination for H=0 or fully absorbed root
-    if H == 0 or u_root >= 1.0:
-        if eligible_completion(finished_root, deadline):
-            return PlanningResult(
-                selected_prefix=None,
-                completed=True,
-                fallback_reason="zero_horizon" if H == 0 else "absorbed_root",
-                expected_return=float(u_root),
-                call_count=0,
-                timing_counters={
-                    "iterations": 0,
-                    "native_calls": 0,
-                    "model_intervals": 0,
-                    "evaluator_calls": evaluator_calls_count,
-                },
-                cache_counters={"lookups": 0, "hits": 0, "misses": 0},
-                audit_ids=(),
-            )
-        else:
-            overshoot = max(0.0, finished_root - deadline)
-            rec.event(
-                "operation.overshoot",
-                fields={
-                    "operation": "root_eval",
-                    "finished": finished_root,
-                    "deadline": deadline,
-                    "overshoot": overshoot,
-                },
-            )
-            return PlanningResult(
-                selected_prefix=None,
-                completed=False,
-                fallback_reason="zero_horizon_timeout" if H == 0 else "absorbed_root_timeout",
-                expected_return=None,
-                call_count=0,
-                timing_counters={
-                    "iterations": 0,
-                    "native_calls": 0,
-                    "model_intervals": 0,
-                    "evaluator_calls": evaluator_calls_count,
-                },
-                cache_counters={"lookups": 0, "hits": 0, "misses": 0},
-                audit_ids=(),
-            )
-
-    if not eligible_completion(finished_root, deadline):
-        overshoot = max(0.0, finished_root - deadline)
-        rec.event(
-            "operation.overshoot",
-            fields={
-                "operation": "root_eval",
-                "finished": finished_root,
-                "deadline": deadline,
-                "overshoot": overshoot,
-            },
-        )
-        return execute_fallback(
-            state,
-            task,
-            context,
-            H=H,
-            budget=budget,
-            capabilities=capabilities,
-            cfg=cfg,
-            seed=seed,
-            clock_fn=clock_fn,
-            start_time=start_time,
-            deadline=deadline,
-            earliest_candidate=None,
-            native_calls_count=0,
-            model_intervals_count=0,
-            evaluator_calls_count=evaluator_calls_count,
-            iteration_count=0,
-            cache_counters={"lookups": 0, "hits": 0, "misses": 0},
-            audit_ids=(),
-            recorder=rec,
-            fallback_reason="budget_exhausted",
-            observation_fn=_observation_from_state,
-        )
 
     root_hypotheses = tuple(
         Hypothesis(
@@ -731,9 +683,6 @@ def plan(
     earliest_candidate: Any | None = None
     next_edge_id = 0
     next_sample_idx = 0
-    native_calls_count = 0
-    model_intervals_tracker = [0]
-    iteration_count = 0
     nonfinite_error = False
 
     while True:
@@ -742,9 +691,9 @@ def plan(
             break
         if not budget.check_wall_budget(clock_fn() - start_time):
             break
-        if not budget.check_native_call(native_calls_count):
+        if not budget.check_native_call(timing_counters["native_calls"]):
             break
-        if not budget.check_model_interval(model_intervals_tracker[0]):
+        if not budget.check_model_interval(timing_counters["model_intervals"]):
             break
 
         # Selection / descent
@@ -762,7 +711,7 @@ def plan(
             limit = widening_limit(curr_node.visits, cfg)
             can_expand = (
                 len(curr_node.candidate_edges) < limit
-                and budget.check_native_call(native_calls_count)
+                and budget.check_native_call(timing_counters["native_calls"])
                 and clock_fn() < deadline
                 and budget.check_wall_budget(clock_fn() - start_time)
             )
@@ -771,30 +720,59 @@ def plan(
                 rep_hyp = curr_node.select_representative()
                 rep_obs = _observation_from_state(rep_hyp.state)
 
-                if clock_fn() >= deadline:
-                    iteration_aborted = True
-                    break
-
                 sample_seed = (seed + next_sample_idx * 10007) & 0x7FFFFFFF
                 try:
-                    candidate = capabilities.sample_prior(rep_obs, rep_hyp.task, context, seed=sample_seed)
+                    candidate, _, eligible_cand = timed_operation(
+                        "sample_prior",
+                        lambda: capabilities.sample_prior(rep_obs, rep_hyp.task, context, seed=sample_seed),
+                        clock_fn=clock_fn,
+                        deadline=deadline,
+                        budget=budget,
+                        capabilities=capabilities,
+                        recorder=rec,
+                        timing_counters=timing_counters,
+                        counter_key="native_calls",
+                    )
                 except NonfiniteModelError as exc:
                     nonfinite_error = True
                     rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
                     iteration_aborted = True
                     break
-                synchronize_device(capabilities)
-                native_calls_count += 1
+
+                if not eligible_cand or candidate is None:
+                    iteration_aborted = True
+                    break
+
                 if earliest_candidate is None:
                     earliest_candidate = candidate
-                finished_sample = clock_fn()
 
-                prefix = capabilities.materialize_prefix(
-                    candidate,
-                    h=step_intervals,
-                    r=min(p_cfg.r, step_intervals),
-                    duration_s=dt0,
-                )
+                try:
+                    prefix, _, eligible_mat = timed_operation(
+                        "materialize_prefix",
+                        lambda: capabilities.materialize_prefix(
+                            candidate,
+                            h=step_intervals,
+                            r=min(p_cfg.r, step_intervals),
+                            duration_s=dt0,
+                        ),
+                        clock_fn=clock_fn,
+                        deadline=deadline,
+                        budget=budget,
+                        capabilities=capabilities,
+                        recorder=rec,
+                        timing_counters=timing_counters,
+                        counter_key="materialization_calls",
+                    )
+                except NonfiniteModelError as exc:
+                    nonfinite_error = True
+                    rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
+                    iteration_aborted = True
+                    break
+
+                if not eligible_mat or prefix is None:
+                    iteration_aborted = True
+                    break
+
                 if len(prefix.commands) != step_intervals:
                     raise ValueError(
                         f"materialize_prefix returned {len(prefix.commands)} commands, expected exactly {step_intervals}"
@@ -824,20 +802,6 @@ def plan(
                 )
                 next_sample_idx += 1
 
-                if not eligible_completion(finished_sample, deadline):
-                    overshoot = max(0.0, finished_sample - deadline)
-                    rec.event(
-                        "operation.overshoot",
-                        fields={
-                            "operation": "sample_prior",
-                            "finished": finished_sample,
-                            "deadline": deadline,
-                            "overshoot": overshoot,
-                        },
-                    )
-                    iteration_aborted = True
-                    break
-
                 # Step edge with operation-level checks
                 try:
                     child_node = _step_edge(
@@ -850,7 +814,7 @@ def plan(
                         budget,
                         clock_fn,
                         start_time,
-                        model_intervals_tracker,
+                        timing_counters,
                         composite_models,
                         context_id,
                         deadline=deadline,
@@ -881,7 +845,6 @@ def plan(
                 break
             else:
                 if not curr_node.candidate_edges:
-                    # Cannot expand and no edges exist; abort iteration
                     iteration_aborted = True
                     break
 
@@ -912,48 +875,19 @@ def plan(
 
         # Leaf evaluation
         rem = leaf.H_root - leaf.tau
-        if rem == 0 or leaf.is_terminal:
-            G = leaf_return(leaf.U, leaf.weights, np.zeros(3, dtype=np.float64), 0)
-        else:
-            if clock_fn() >= deadline or not budget.check_wall_budget(clock_fn() - start_time):
-                break
-            values = np.zeros(3, dtype=np.float64)
-            leaf_eval_failed = False
-            for m in range(3):
-                h_m = leaf.hypotheses[m]
-                if h_m.weight > 0.0:
-                    if clock_fn() >= deadline:
-                        leaf_eval_failed = True
-                        break
-                    try:
-                        eval_res = capabilities.evaluate_state(h_m.state, h_m.task, events, rem)
-                    except NonfiniteModelError as exc:
-                        nonfinite_error = True
-                        rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
-                        leaf_eval_failed = True
-                        break
-                    synchronize_device(capabilities)
-                    evaluator_calls_count += 1
-                    finished_eval = clock_fn()
-                    if not eligible_completion(finished_eval, deadline):
-                        overshoot = max(0.0, finished_eval - deadline)
-                        rec.event(
-                            "operation.overshoot",
-                            fields={
-                                "operation": "evaluate_state",
-                                "head_id": m,
-                                "finished": finished_eval,
-                                "deadline": deadline,
-                                "overshoot": overshoot,
-                            },
-                        )
-                        leaf_eval_failed = True
-                        break
-                    cv = _validate_scalar_probability(eval_res.calibrated_value, "Leaf calibrated_value")
-                    values[m] = cv
-            if leaf_eval_failed:
-                break
-            G = leaf_return(leaf.U, leaf.weights, values, rem)
+        G, eligible_leaf = score_leaf_rollout(
+            leaf,
+            events,
+            remaining_H=rem,
+            clock_fn=clock_fn,
+            deadline=deadline,
+            budget=budget,
+            capabilities=capabilities,
+            recorder=rec,
+            timing_counters=timing_counters,
+        )
+        if not eligible_leaf or G is None:
+            break
 
         finished_iter = clock_fn()
         if not eligible_completion(finished_iter, deadline):
@@ -986,11 +920,11 @@ def plan(
             node.visits += 1
             rec.event("mcts.node_visit", fields={"tau": node.tau, "visits": node.visits})
 
-        iteration_count += 1
+        timing_counters["iterations"] += 1
         rec.event(
             "mcts.iteration",
             fields={
-                "iteration": iteration_count,
+                "iteration": timing_counters["iterations"],
                 "leaf_tau": leaf.tau,
                 "G": G,
                 "path": [e.edge_id for e in path],
@@ -999,7 +933,7 @@ def plan(
 
     # Final root choice: most visits, then greater mean return, then earlier insertion ID
     eligible_edges = [e for e in root_node.candidate_edges if e.visits > 0]
-    if not eligible_edges:
+    if not eligible_edges or nonfinite_error:
         fb_reason = "nonfinite_model_error" if nonfinite_error else "budget_exhausted"
         return execute_fallback(
             state,
@@ -1014,10 +948,7 @@ def plan(
             start_time=start_time,
             deadline=deadline,
             earliest_candidate=earliest_candidate,
-            native_calls_count=native_calls_count,
-            model_intervals_count=model_intervals_tracker[0],
-            evaluator_calls_count=evaluator_calls_count,
-            iteration_count=iteration_count,
+            timing_counters=timing_counters,
             cache_counters=exact_cache.counters(),
             audit_ids=tuple(r.candidate_id for r in audit_records),
             recorder=rec,
@@ -1043,13 +974,8 @@ def plan(
         completed=True,
         fallback_reason=None,
         expected_return=best_edge.q_value,
-        call_count=iteration_count,
-        timing_counters={
-            "iterations": iteration_count,
-            "native_calls": native_calls_count,
-            "model_intervals": model_intervals_tracker[0],
-            "evaluator_calls": evaluator_calls_count,
-        },
+        call_count=timing_counters["iterations"],
+        timing_counters=dict(timing_counters),
         cache_counters=exact_cache.counters(),
         audit_ids=tuple(r.candidate_id for r in audit_records),
     )
