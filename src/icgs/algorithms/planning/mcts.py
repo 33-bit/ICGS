@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import copy
+from dataclasses import dataclass
 import hashlib
-import json
 import math
 from math import isfinite
 import time
-from typing import Any, Mapping, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -19,24 +19,29 @@ from icgs.algorithms.planning.belief import (
     propagate_mass,
     select_representative,
 )
-from icgs.algorithms.planning.budget import PlanningBudget
+from icgs.algorithms.planning.budget import BudgetExhausted, PlanningBudget
 from icgs.configuration.method import MethodConfig, PlanningConfig
 from icgs.contracts.method import CommandPrefix, MethodCapabilities, PlanningResult, TimedCommand
+from icgs.contracts.records import Observation
+from icgs.observability.recorder import NoopRecorder
 from icgs.state.physical import PhysicalState
+
+
+def _resolve_planning_cfg(cfg: MethodConfig | PlanningConfig) -> tuple[PlanningConfig, float]:
+    """Extract PlanningConfig and control dt0 without duck typing."""
+    if isinstance(cfg, MethodConfig):
+        return cfg.planning, float(cfg.control.dt0)
+    if isinstance(cfg, PlanningConfig):
+        return cfg, 0.1
+    raise TypeError(f"cfg must be MethodConfig or PlanningConfig, got {type(cfg)}")
 
 
 def widening_limit(
     visits: int,
-    cfg: MethodConfig | PlanningConfig | None = None,
+    cfg: MethodConfig | PlanningConfig,
 ) -> int:
     """Calculate progressive widening candidate limit for a node."""
-    if cfg is None:
-        cfg = MethodConfig().planning
-    elif isinstance(cfg, MethodConfig):
-        cfg = cfg.planning
-    elif not isinstance(cfg, PlanningConfig):
-        if not (hasattr(cfg, "widening_coefficient") and hasattr(cfg, "widening_exponent")):
-            raise TypeError("cfg must be a MethodConfig or PlanningConfig")
+    p_cfg, _ = _resolve_planning_cfg(cfg)
 
     if isinstance(visits, bool) or not isinstance(visits, (int, np.integer)):
         raise TypeError("visits must be an integer")
@@ -44,8 +49,8 @@ def widening_limit(
         raise ValueError("visits must be nonnegative")
     visits = int(visits)
 
-    coeff = float(cfg.widening_coefficient)
-    exponent = float(cfg.widening_exponent)
+    coeff = float(p_cfg.widening_coefficient)
+    exponent = float(p_cfg.widening_exponent)
     limit = max(1, math.floor(coeff * ((1 + visits) ** exponent)))
     return int(limit)
 
@@ -54,16 +59,10 @@ def uct(
     total_return: float,
     visits: int,
     parent_visits: int,
-    cfg: MethodConfig | PlanningConfig | None = None,
+    cfg: MethodConfig | PlanningConfig,
 ) -> float:
     """Calculate UCT selection value for a visited edge."""
-    if cfg is None:
-        cfg = MethodConfig().planning
-    elif isinstance(cfg, MethodConfig):
-        cfg = cfg.planning
-    elif not isinstance(cfg, PlanningConfig):
-        if not hasattr(cfg, "uct_exploration"):
-            raise TypeError("cfg must be a MethodConfig or PlanningConfig")
+    p_cfg, _ = _resolve_planning_cfg(cfg)
 
     if isinstance(visits, bool) or not isinstance(visits, (int, np.integer)):
         raise TypeError("visits must be an integer")
@@ -85,7 +84,7 @@ def uct(
     if not math.isfinite(total_return):
         raise ValueError("total_return must be finite")
 
-    c = float(cfg.uct_exploration)
+    c = float(p_cfg.uct_exploration)
     return (total_return / visits) + c * math.sqrt(math.log(1 + parent_visits) / visits)
 
 
@@ -126,14 +125,152 @@ class MCTSEdge:
         return self.total_return / self.visits
 
 
+def _physical_state_identity(state: PhysicalState) -> bytes:
+    """Compute complete cryptographic digest covering all owned physical state content."""
+    h = hashlib.sha256()
+    h.update(state.origin.encode("utf-8"))
+    h.update(state.boundary.to_bytes(8, "big", signed=False))
+    h.update(state.encoder_lineage.encode("utf-8"))
+    h.update(state.memory_lineage.encode("utf-8"))
+    h.update(state.X.detach().cpu().contiguous().numpy().tobytes())
+    h.update(state.x.detach().cpu().contiguous().numpy().tobytes())
+    h.update(state.valid.detach().cpu().contiguous().numpy().tobytes())
+    h.update(state.p.detach().cpu().contiguous().numpy().tobytes())
+    h.update(state.memory.detach().cpu().contiguous().numpy().tobytes())
+    h.update(state.T_w_e.detach().cpu().contiguous().numpy().tobytes())
+    h.update(state.grip.detach().cpu().contiguous().numpy().tobytes())
+    if state.cached_world_cloud is not None and state.cached_world_cloud_valid is not None:
+        h.update(b"cloud:")
+        h.update(state.cached_world_cloud.detach().cpu().contiguous().numpy().tobytes())
+        h.update(state.cached_world_cloud_valid.detach().cpu().contiguous().numpy().tobytes())
+    else:
+        h.update(b"no_cloud")
+    return h.digest()
+
+
+@dataclass(frozen=True)
+class CompositeModelIdentity:
+    """Explicit composite IDs for world model, task tracker, and terminal evaluator."""
+
+    world_model_id: str
+    task_tracker_id: str
+    terminal_id: str
+
+    def __post_init__(self) -> None:
+        for name in ("world_model_id", "task_tracker_id", "terminal_id"):
+            val = getattr(self, name)
+            if not isinstance(val, str) or not val.strip():
+                raise ValueError(f"{name} must be a nonempty string")
+
+
+def _extract_model_identities(capabilities: Any) -> CompositeModelIdentity:
+    """Extract explicit composite model identity from capability seam without silent default fallback."""
+    if hasattr(capabilities, "model_identities"):
+        m = capabilities.model_identities
+        if isinstance(m, CompositeModelIdentity):
+            return m
+        if isinstance(m, dict):
+            return CompositeModelIdentity(**m)
+    if hasattr(capabilities, "get_model_identities") and callable(capabilities.get_model_identities):
+        m = capabilities.get_model_identities()
+        if isinstance(m, CompositeModelIdentity):
+            return m
+        if isinstance(m, dict):
+            return CompositeModelIdentity(**m)
+
+    w_id = getattr(capabilities, "world_model_id", getattr(capabilities, "model_id", None))
+    t_id = getattr(capabilities, "task_tracker_id", None)
+    term_id = getattr(capabilities, "terminal_id", None)
+    if w_id is not None and t_id is not None and term_id is not None:
+        return CompositeModelIdentity(world_model_id=str(w_id), task_tracker_id=str(t_id), terminal_id=str(term_id))
+
+    raise ValueError(
+        "capabilities must provide explicit CompositeModelIdentity (world_model_id, task_tracker_id, terminal_id)"
+    )
+
+
+def _extract_context_identity(context: Any, capabilities: Any) -> str:
+    """Extract explicit context identity without lossy fallback to reference_id or id()."""
+    if hasattr(capabilities, "context_identity") and callable(capabilities.context_identity):
+        cid = capabilities.context_identity(context)
+        if isinstance(cid, str) and cid.strip():
+            return cid
+    if hasattr(context, "context_identity"):
+        cid = context.context_identity() if callable(context.context_identity) else context.context_identity
+        if isinstance(cid, str) and cid.strip():
+            return cid
+    if hasattr(context, "identity"):
+        cid = context.identity() if callable(context.identity) else context.identity
+        if isinstance(cid, str) and cid.strip():
+            return cid
+    if hasattr(context, "context_id"):
+        cid = context.context_id
+        if isinstance(cid, str) and cid.strip():
+            return cid
+    if isinstance(context, dict) and "context_id" in context:
+        cid = context["context_id"]
+        if isinstance(cid, str) and cid.strip():
+            return cid
+    if isinstance(context, str) and context.strip():
+        return context
+
+    raise ValueError("context must provide an explicit identity (e.g. context_id or capabilities.context_identity)")
+
+
+def _extract_task_identity(task: Any, capabilities: Any) -> str:
+    """Extract explicit task history identity without lossy repr/str fallback."""
+    if hasattr(capabilities, "task_identity") and callable(capabilities.task_identity):
+        tid = capabilities.task_identity(task)
+        if isinstance(tid, str) and tid.strip():
+            return tid
+    if hasattr(task, "task_identity"):
+        tid = task.task_identity() if callable(task.task_identity) else task.task_identity
+        if isinstance(tid, str) and tid.strip():
+            return tid
+    if hasattr(task, "history_id"):
+        tid = task.history_id
+        if isinstance(tid, str) and tid.strip():
+            return tid
+    if isinstance(task, dict) and "history_id" in task:
+        tid = task["history_id"]
+        if isinstance(tid, str) and tid.strip():
+            return tid
+    if isinstance(task, str) and task.strip():
+        return task
+
+    raise ValueError("task must provide an explicit history identity (e.g. history_id or capabilities.task_identity)")
+
+
+def _branch_copy_task(task: Any, capabilities: Any) -> Any:
+    """Produce an isolated branch copy of task state."""
+    if hasattr(capabilities, "branch_copy_task") and callable(capabilities.branch_copy_task):
+        return capabilities.branch_copy_task(task)
+    if hasattr(task, "branch_copy") and callable(task.branch_copy):
+        return task.branch_copy()
+    if isinstance(task, dict):
+        return copy.deepcopy(task)
+    if hasattr(task, "__dict__"):
+        return copy.deepcopy(task)
+    return task
+
+
+def _canonical_command_bytes(cmd: TimedCommand) -> bytes:
+    """Serialize TimedCommand into canonical byte representation."""
+    pose_bytes = np.asarray(cmd.target_w, dtype=np.float64).tobytes()
+    grip_bytes = int(cmd.grip).to_bytes(1, "big")
+    dur_bytes = float(cmd.duration_s).hex().encode("ascii")
+    return pose_bytes + grip_bytes + dur_bytes
+
+
 @dataclass(frozen=True)
 class CacheKey:
-    """Exact transition cache key with parent state, context, head, model, and time lineage and canonical command bytes."""
+    """Exact transition cache key requiring full state digest, lineage, and canonical command bytes."""
 
-    parent_lineage: tuple[str, str, int, bytes, str]
-    context_id: str
+    parent_state_digest: bytes
+    task_identity: str
+    context_identity: str
     head_id: int
-    model_id: str
+    composite_models: CompositeModelIdentity
     tau: int
     command_bytes: bytes
 
@@ -152,16 +289,20 @@ class ExactCache:
     def root_id(self) -> str:
         return self._root_id
 
-    def get(self, key: CacheKey) -> tuple[PhysicalState, Any, np.ndarray] | None:
+    def get(self, key: CacheKey, capabilities: Any) -> tuple[PhysicalState, Any, np.ndarray] | None:
+        """Lookup cached transition, returning branch-owned copies to avoid aliasing."""
         self.lookups += 1
         if key in self._cache:
             self.hits += 1
-            return self._cache[key]
+            st, tk, probs = self._cache[key]
+            return (st.branch_copy(), _branch_copy_task(tk, capabilities), np.array(probs, copy=True))
         self.misses += 1
         return None
 
     def put(self, key: CacheKey, transition: tuple[PhysicalState, Any, np.ndarray]) -> None:
-        self._cache[key] = transition
+        """Store transition in cache with branch isolation."""
+        st, tk, probs = transition
+        self._cache[key] = (st.branch_copy(), copy.deepcopy(tk) if isinstance(tk, dict) else tk, np.array(probs, copy=True))
 
     def counters(self) -> dict[str, int]:
         return {
@@ -173,44 +314,12 @@ class ExactCache:
 
 @dataclass(frozen=True)
 class CandidateAuditRecord:
-    """Audit log entry for candidate proposal with duplicate detection."""
+    """Audit entry for each sampled candidate proposal."""
 
-    sample_index: int
     candidate_id: str
+    order: int
     is_duplicate: bool
     commands_hash: str
-
-
-def _extract_task_lineage(task: Any) -> str:
-    if task is None:
-        return "none"
-    for attr in ("lineage", "history_id", "task_id"):
-        if hasattr(task, attr):
-            return str(getattr(task, attr))
-    if hasattr(task, "boundary"):
-        return f"task_boundary_{task.boundary}"
-    if isinstance(task, Mapping):
-        try:
-            return json.dumps(task, sort_keys=True)
-        except Exception:
-            pass
-    return str(task)
-
-
-def _extract_context_id(context: Any) -> str:
-    if context is None:
-        return "none"
-    for attr in ("reference_id", "context_id", "source_id"):
-        if hasattr(context, attr):
-            return str(getattr(context, attr))
-    return str(id(context))
-
-
-def _canonical_command_bytes(command: TimedCommand) -> bytes:
-    target_bytes = command.target_w.tobytes()
-    grip_bytes = str(int(command.grip)).encode("ascii")
-    dur_bytes = float(command.duration_s).hex().encode("ascii")
-    return target_bytes + b":" + grip_bytes + b":" + dur_bytes
 
 
 def _step_edge(
@@ -219,20 +328,24 @@ def _step_edge(
     context: Any,
     capabilities: MethodCapabilities,
     cache: ExactCache,
-    cfg: MethodConfig,
+    cfg: MethodConfig | PlanningConfig,
+    budget: PlanningBudget,
+    clock_fn: Callable[[], float],
+    start_time: float,
+    model_intervals_tracker: list[int],
+    composite_models: CompositeModelIdentity,
+    context_id: str,
 ) -> BeliefNode:
-    """Advance all 3 heads through common absolute prefix commands, updating state, task, and hazards each interval."""
-    events = getattr(context, "events", context)
+    """Step all 3 heads forward across intervals with per-operation budget checks and branch isolation."""
     curr_tau = node.tau
     curr_U = node.U
     curr_F = node.F
-    curr_weights = np.array(node.weights, copy=True)
+    curr_weights = list(node.weights)
     curr_hypotheses = list(node.hypotheses)
-    model_id = getattr(capabilities, "model_id", "default_model")
-    context_id = _extract_context_id(context)
+    events = getattr(context, "events", context)
 
-    for k, cmd in enumerate(prefix.commands):
-        step_tau = curr_tau + k
+    for step_idx, cmd in enumerate(prefix.commands):
+        step_tau = curr_tau + step_idx
         cmd_bytes = _canonical_command_bytes(cmd)
         next_states: list[PhysicalState] = []
         next_tasks: list[Any] = []
@@ -240,27 +353,30 @@ def _step_edge(
 
         for m in range(3):
             h_m = curr_hypotheses[m]
-            parent_lineage = (
-                h_m.state.encoder_lineage,
-                h_m.state.memory_lineage,
-                h_m.state.boundary,
-                h_m.state.T_w_e.detach().cpu().numpy().tobytes(),
-                _extract_task_lineage(h_m.task),
-            )
+            state_digest = _physical_state_identity(h_m.state)
+            task_id = _extract_task_identity(h_m.task, capabilities)
             key = CacheKey(
-                parent_lineage=parent_lineage,
-                context_id=context_id,
+                parent_state_digest=state_digest,
+                task_identity=task_id,
+                context_identity=context_id,
                 head_id=m,
-                model_id=model_id,
+                composite_models=composite_models,
                 tau=step_tau,
                 command_bytes=cmd_bytes,
             )
 
-            cached = cache.get(key)
+            cached = cache.get(key, capabilities)
             if cached is not None:
                 next_st, next_tk, probs = cached
             else:
+                # Operation-level check and reservation
+                if not budget.check_model_interval(model_intervals_tracker[0]) or not budget.check_wall_budget(
+                    clock_fn() - start_time
+                ):
+                    raise BudgetExhausted("Model interval cap or wall budget reached during edge stepping")
+
                 pred = capabilities.predict_step(h_m.state, cmd, head_id=m)
+                model_intervals_tracker[0] += 1
                 next_st = pred.next_state
                 next_tk = capabilities.track_task(h_m.task, next_st, events)
                 term = capabilities.predict_terminal(h_m.state, h_m.task, next_st, next_tk, events, cmd)
@@ -295,44 +411,46 @@ def plan(
     context: Any,
     *,
     H: int,
-    budget: PlanningBudget | None = None,
-    capabilities: MethodCapabilities | None = None,
-    cfg: MethodConfig | None = None,
+    budget: PlanningBudget,
+    capabilities: MethodCapabilities,
+    cfg: MethodConfig | PlanningConfig,
     seed: int = 0,
-    initial_S: float | None = None,
-    iterations: int | None = None,
+    clock: Callable[[], float] | None = None,
+    recorder: Any = None,
 ) -> PlanningResult:
     """Execute progressive-widening MCTS over common absolute prefixes with root-scoped exact cache."""
+    if budget is None or not isinstance(budget, PlanningBudget):
+        raise ValueError("Explicit bounded PlanningBudget must be provided to plan")
     if capabilities is None:
         raise ValueError("capabilities must be provided to execute MCTS plan")
-    if cfg is None:
-        cfg = MethodConfig()
-    elif not isinstance(cfg, MethodConfig):
-        raise TypeError("cfg must be a MethodConfig")
+
+    p_cfg, dt0 = _resolve_planning_cfg(cfg)
 
     if isinstance(H, bool) or not isinstance(H, (int, np.integer)) or H < 0:
         raise ValueError("H must be a nonnegative integer")
     H = int(H)
-    if H > cfg.planning.H:
-        raise ValueError(f"H ({H}) cannot exceed cfg.planning.H ({cfg.planning.H})")
+    if H > p_cfg.H:
+        raise ValueError(f"H ({H}) cannot exceed cfg.planning.H ({p_cfg.H})")
 
     if not isinstance(state, PhysicalState):
         raise TypeError(f"state must be PhysicalState, got {type(state)}")
 
-    # Initialize root U from initial_S or evaluation
+    clock_fn = clock if clock is not None else time.monotonic
+    rec = recorder if recorder is not None else NoopRecorder()
+    start_time = clock_fn()
+
+    # Composite IDs
+    composite_models = _extract_model_identities(capabilities)
+    context_id = _extract_context_identity(context, capabilities)
+
+    # Initialize root U from evaluator with strict finite [0, 1] validation
     events = getattr(context, "events", context)
-    if initial_S is not None:
-        if isinstance(initial_S, bool) or not isinstance(initial_S, (int, float, np.floating)):
-            raise TypeError("initial_S must be a numeric float")
-        u_root = float(initial_S)
-    else:
-        root_eval = capabilities.evaluate_state(state, task, events, H=H)
-        c_stop = root_eval.calibrated_stop
-        if isinstance(c_stop, np.ndarray):
-            u_root = float(c_stop.flat[0])
-        else:
-            u_root = float(c_stop)
-    u_root = float(np.clip(u_root, 0.0, 1.0))
+    root_eval = capabilities.evaluate_state(state, task, events, H=H)
+    c_stop = float(np.asarray(root_eval.calibrated_stop).flat[0])
+    if not math.isfinite(c_stop) or c_stop < 0.0 or c_stop > 1.0:
+        raise ValueError(f"Root completion must be finite and within [0, 1], got {c_stop}")
+
+    u_root = c_stop
     f_root = 0.0
     w_root = (1.0 - u_root) / 3.0
 
@@ -359,84 +477,117 @@ def plan(
     next_edge_id = 0
     next_sample_idx = 0
     native_calls_count = 0
-    model_intervals_count = 0
+    model_intervals_tracker = [0]
     iteration_count = 0
 
-    # Determine iteration limit and budget bounds
-    start_time = time.perf_counter()
-    max_iters = iterations
-    if max_iters is None and budget is not None:
-        max_iters = budget.iterations_cap
-    if max_iters is None and budget is not None and budget.wall_budget_s is None and budget.native_call_cap is None:
-        max_iters = 1
-
     while True:
-        # Check budget limits
-        if max_iters is not None and iteration_count >= max_iters:
+        # Check all budget bounds before iteration
+        if not budget.check_wall_budget(clock_fn() - start_time):
             break
-        if budget is not None:
-            if budget.wall_budget_s is not None and (time.perf_counter() - start_time) >= budget.wall_budget_s:
-                break
-            if budget.native_call_cap is not None and native_calls_count >= budget.native_call_cap:
-                break
-            if budget.model_interval_cap is not None and model_intervals_count >= budget.model_interval_cap:
-                break
+        if not budget.check_native_call(native_calls_count):
+            break
+        if not budget.check_model_interval(model_intervals_tracker[0]):
+            break
 
         # Selection / descent
         curr_node = root_node
         path: list[MCTSEdge] = []
         visited_nodes: list[BeliefNode] = [root_node]
+        iteration_aborted = False
 
         while True:
-            step_intervals = min(cfg.planning.h, curr_node.H_root - curr_node.tau, cfg.planning.L - curr_node.tau)
+            step_intervals = min(p_cfg.h, curr_node.H_root - curr_node.tau, p_cfg.L - curr_node.tau)
             if curr_node.is_terminal or step_intervals <= 0:
                 leaf = curr_node
                 break
 
             limit = widening_limit(curr_node.visits, cfg)
-            if len(curr_node.candidate_edges) < limit:
-                # Progressive widening expands one new edge
-                rep = curr_node.select_representative()
-                rep_obs = rep.state.cached_world_cloud if hasattr(rep.state, "cached_world_cloud") else rep.state
-                sample_seed = (seed + next_sample_idx * 10007) & 0x7FFFFFFF
+            can_expand = (
+                len(curr_node.candidate_edges) < limit
+                and budget.check_native_call(native_calls_count)
+                and budget.check_wall_budget(clock_fn() - start_time)
+            )
 
-                candidate = capabilities.sample_prior(rep_obs, rep.task, context, seed=sample_seed)
+            if can_expand:
+                # Construct validated native Observation from representative
+                rep_hyp = curr_node.select_representative()
+                rep_st = rep_hyp.state
+                if rep_st.cached_world_cloud is not None and rep_st.cached_world_cloud_valid is not None:
+                    cloud = rep_st.cached_world_cloud[0]
+                    valid_mask = rep_st.cached_world_cloud_valid[0]
+                    points = cloud[valid_mask]
+                else:
+                    cloud = rep_st.x[0]
+                    valid_mask = rep_st.valid[0]
+                    points = cloud[valid_mask]
+
+                if points.shape[0] == 0:
+                    raise ValueError("Observation points cannot be empty")
+
+                rep_obs = Observation(
+                    points=points,
+                    T_w_e=rep_st.T_w_e[0],
+                    grip=float(rep_st.grip[0].item()),
+                )
+
+                sample_seed = (seed + next_sample_idx * 10007) & 0x7FFFFFFF
+                candidate = capabilities.sample_prior(rep_obs, rep_hyp.task, context, seed=sample_seed)
                 native_calls_count += 1
 
-                raw_prefix = capabilities.materialize_prefix(
+                prefix = capabilities.materialize_prefix(
                     candidate,
                     h=step_intervals,
-                    r=min(cfg.planning.r, step_intervals),
-                    duration_s=cfg.control.dt0,
+                    r=min(p_cfg.r, step_intervals),
+                    duration_s=dt0,
                 )
-                if len(raw_prefix.commands) != step_intervals:
-                    prefix = CommandPrefix(
-                        commands=raw_prefix.commands[:step_intervals],
-                        proposal_root=raw_prefix.proposal_root,
-                        raw_candidate_id=raw_prefix.raw_candidate_id,
+                if len(prefix.commands) != step_intervals:
+                    raise ValueError(
+                        f"materialize_prefix returned {len(prefix.commands)} commands, expected exactly {step_intervals}"
                     )
-                else:
-                    prefix = raw_prefix
 
-                # Audit record for candidate
+                cand_id = prefix.raw_candidate_id
                 prefix_bytes = b"".join(_canonical_command_bytes(c) for c in prefix.commands)
                 cmd_hash = hashlib.sha256(prefix_bytes).hexdigest()
                 is_dup = cmd_hash in seen_command_hashes
                 seen_command_hashes.add(cmd_hash)
-                cand_id = getattr(candidate, "raw_candidate_id", getattr(candidate, "index", f"cand_{next_sample_idx}"))
-                audit_records.append(
-                    CandidateAuditRecord(
-                        sample_index=next_sample_idx,
-                        candidate_id=str(cand_id),
-                        is_duplicate=is_dup,
-                        commands_hash=cmd_hash,
-                    )
+
+                audit_rec = CandidateAuditRecord(
+                    candidate_id=str(cand_id),
+                    order=next_sample_idx,
+                    is_duplicate=is_dup,
+                    commands_hash=cmd_hash,
+                )
+                audit_records.append(audit_rec)
+                rec.event(
+                    "candidate.audit",
+                    fields={
+                        "candidate_id": audit_rec.candidate_id,
+                        "order": audit_rec.order,
+                        "is_duplicate": audit_rec.is_duplicate,
+                        "commands_hash": audit_rec.commands_hash,
+                    },
                 )
                 next_sample_idx += 1
 
-                # Step child node across all 3 heads
-                child_node = _step_edge(curr_node, prefix, context, capabilities, exact_cache, cfg)
-                model_intervals_count += len(prefix.commands)
+                # Step edge with operation-level checks
+                try:
+                    child_node = _step_edge(
+                        curr_node,
+                        prefix,
+                        context,
+                        capabilities,
+                        exact_cache,
+                        cfg,
+                        budget,
+                        clock_fn,
+                        start_time,
+                        model_intervals_tracker,
+                        composite_models,
+                        context_id,
+                    )
+                except BudgetExhausted:
+                    iteration_aborted = True
+                    break
 
                 new_edge = MCTSEdge(
                     prefix=prefix,
@@ -453,18 +604,25 @@ def plan(
                 leaf = child_node
                 break
             else:
+                if not curr_node.candidate_edges:
+                    # Cannot expand and no edges exist; abort iteration
+                    iteration_aborted = True
+                    break
+
                 # Selection among existing edges
                 unvisited = [e for e in curr_node.candidate_edges if e.visits == 0]
                 if unvisited:
-                    # Tie selection by insertion ID
                     selected_edge = min(unvisited, key=lambda e: e.edge_id)
                 else:
-                    # Q + UCT bonus, tie selection by insertion ID
                     selected_edge = max(
                         curr_node.candidate_edges,
                         key=lambda e: (uct(e.total_return, e.visits, curr_node.visits, cfg), -e.edge_id),
                     )
 
+                rec.event(
+                    "mcts.selection",
+                    fields={"parent_tau": curr_node.tau, "selected_edge_id": selected_edge.edge_id},
+                )
                 path.append(selected_edge)
                 visited_nodes.append(selected_edge.child)
                 curr_node = selected_edge.child
@@ -473,52 +631,82 @@ def plan(
                     leaf = curr_node
                     break
 
+        if iteration_aborted:
+            break
+
         # Leaf evaluation
         rem = leaf.H_root - leaf.tau
         if rem == 0 or leaf.is_terminal:
             G = leaf_return(leaf.U, leaf.weights, np.zeros(3, dtype=np.float64), 0)
         else:
+            if not budget.check_wall_budget(clock_fn() - start_time):
+                break
             values = np.zeros(3, dtype=np.float64)
             for m in range(3):
                 h_m = leaf.hypotheses[m]
                 if h_m.weight > 0.0:
                     eval_res = capabilities.evaluate_state(h_m.state, h_m.task, events, rem)
                     cv = eval_res.calibrated_value
-                    if isinstance(cv, np.ndarray):
-                        values[m] = float(cv.flat[0])
-                    else:
-                        values[m] = float(cv)
+                    values[m] = float(np.asarray(cv).flat[0])
             G = leaf_return(leaf.U, leaf.weights, values, rem)
 
         # One G backup per visited path; node visit incremented once
         for edge in path:
             edge.total_return += G
             edge.visits += 1
+            rec.event(
+                "mcts.edge_backup",
+                fields={
+                    "edge_id": edge.edge_id,
+                    "visits": edge.visits,
+                    "total_return": edge.total_return,
+                    "q_value": edge.q_value,
+                },
+            )
         for node in visited_nodes:
             node.visits += 1
+            rec.event("mcts.node_visit", fields={"tau": node.tau, "visits": node.visits})
 
         iteration_count += 1
+        rec.event(
+            "mcts.iteration",
+            fields={
+                "iteration": iteration_count,
+                "leaf_tau": leaf.tau,
+                "G": G,
+                "path": [e.edge_id for e in path],
+            },
+        )
 
     # Final root choice: most visits, then greater mean return, then earlier insertion ID
-    if not root_node.candidate_edges:
+    eligible_edges = [e for e in root_node.candidate_edges if e.visits > 0]
+    if not eligible_edges:
         return PlanningResult(
             selected_prefix=None,
             completed=False,
-            fallback_reason="no_eligible_candidate",
+            fallback_reason="budget_exhausted",
             expected_return=None,
             call_count=iteration_count,
             timing_counters={
                 "iterations": iteration_count,
                 "native_calls": native_calls_count,
-                "model_intervals": model_intervals_count,
+                "model_intervals": model_intervals_tracker[0],
             },
             cache_counters=exact_cache.counters(),
-            audit_ids=tuple(rec.candidate_id for rec in audit_records),
+            audit_ids=tuple(r.candidate_id for r in audit_records),
         )
 
     best_edge = max(
-        root_node.candidate_edges,
+        eligible_edges,
         key=lambda e: (e.visits, e.q_value, -e.edge_id),
+    )
+    rec.event(
+        "mcts.root_choice",
+        fields={
+            "selected_edge_id": best_edge.edge_id,
+            "visits": best_edge.visits,
+            "q_value": best_edge.q_value,
+        },
     )
 
     return PlanningResult(
@@ -530,11 +718,8 @@ def plan(
         timing_counters={
             "iterations": iteration_count,
             "native_calls": native_calls_count,
-            "model_intervals": model_intervals_count,
+            "model_intervals": model_intervals_tracker[0],
         },
         cache_counters=exact_cache.counters(),
-        audit_ids=tuple(rec.candidate_id for rec in audit_records),
+        audit_ids=tuple(r.candidate_id for r in audit_records),
     )
-
-
-mcts_plan = plan

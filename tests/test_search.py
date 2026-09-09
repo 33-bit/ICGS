@@ -34,6 +34,7 @@ def _make_physical_state(
     points: np.ndarray | None = None,
     valid_mask: np.ndarray | None = None,
     boundary: int = 0,
+    grip: float = 0.0,
 ) -> PhysicalState:
     pose = np.eye(4, dtype=np.float32)
     if rotation is not None:
@@ -67,7 +68,7 @@ def _make_physical_state(
         p=torch.zeros(1, 13, dtype=torch.float32),
         memory=torch.zeros(1, 2, 256, dtype=torch.float32),
         T_w_e=torch.from_numpy(pose).unsqueeze(0),
-        grip=torch.zeros(1, 1, dtype=torch.float32),
+        grip=torch.tensor([[grip]], dtype=torch.float32),
         cached_world_cloud=pts,
         cached_world_cloud_valid=vmask,
         boundary=boundary,
@@ -520,12 +521,18 @@ class DeterministicMockCapabilities:
         step_terminal_probs: tuple[float, float, float] = (0.0, 0.0, 1.0),
         head_values: dict[int, float] | None = None,
         candidate_commands: list[tuple[TimedCommand, ...]] | None = None,
-        model_id: str = "test_model_v1",
+        world_model_id: str = "mock_world_model_v1",
+        task_tracker_id: str = "mock_tracker_v1",
+        terminal_id: str = "mock_terminal_v1",
+        stop_value: float = 0.1,
     ) -> None:
         self.step_terminal_probs = step_terminal_probs
         self.head_values = head_values or {0: 0.4, 1: 0.5, 2: 0.6}
         self.candidate_commands = candidate_commands or []
-        self.model_id = model_id
+        self.world_model_id = world_model_id
+        self.task_tracker_id = task_tracker_id
+        self.terminal_id = terminal_id
+        self.stop_value = stop_value
 
         self.sample_prior_calls: list[dict[str, Any]] = []
         self.materialize_calls: list[dict[str, Any]] = []
@@ -536,7 +543,7 @@ class DeterministicMockCapabilities:
 
     def sample_prior(self, observation: Any, task: Any, context: Any, *, seed: int) -> Any:
         idx = len(self.sample_prior_calls)
-        call_info = {"idx": idx, "seed": seed}
+        call_info = {"idx": idx, "seed": seed, "obs": observation, "task": task, "context": context}
         self.sample_prior_calls.append(call_info)
         return {"index": idx, "seed": seed, "raw_candidate_id": f"cand_{idx}"}
 
@@ -545,6 +552,11 @@ class DeterministicMockCapabilities:
         cand_idx = candidate["index"] if isinstance(candidate, dict) else 0
         if self.candidate_commands and cand_idx < len(self.candidate_commands):
             cmds = self.candidate_commands[cand_idx][:h]
+            if len(cmds) < h:
+                cmds = cmds + tuple(
+                    _make_timed_command(offset=0.01 * (cand_idx + 1) + 0.001 * step, duration_s=duration_s)
+                    for step in range(len(cmds), h)
+                )
         else:
             cmds = tuple(
                 _make_timed_command(offset=0.01 * (cand_idx + 1) + 0.001 * step, duration_s=duration_s)
@@ -585,7 +597,32 @@ class DeterministicMockCapabilities:
     def evaluate_state(self, state: PhysicalState, task: Any, events: Any, H: int) -> EvaluationOutput:
         self.evaluate_state_calls.append({"boundary": state.boundary, "H": H})
         val = 0.5
-        return _make_evaluation_output(value=val, stop=0.1, horizon=H)
+        return _make_evaluation_output(value=val, stop=self.stop_value, horizon=H)
+
+
+class TestRecorder:
+    """Recording spy implementing observability recorder seam for testing."""
+
+    def __init__(self) -> None:
+        self.events: list[dict[str, Any]] = []
+
+    def event(
+        self,
+        name: str,
+        *,
+        level: str = "INFO",
+        component: str | None = None,
+        fields: Mapping[str, Any] | None = None,
+    ) -> None:
+        self.events.append({
+            "name": name,
+            "level": level,
+            "component": component,
+            "fields": dict(fields or {}),
+        })
+
+    def find_events(self, name: str) -> list[dict[str, Any]]:
+        return [e for e in self.events if e["name"] == name]
 
 
 class SearchMCTSTests(unittest.TestCase):
@@ -593,18 +630,17 @@ class SearchMCTSTests(unittest.TestCase):
         self.cfg = MethodConfig()
 
     def test_step_1_progressive_widening_and_uct(self) -> None:
-        """Step 1 assertion body from task-2-brief.md."""
+        """Step 1 assertion body from task-2-brief.md with explicit config."""
         from icgs.algorithms.planning.mcts import widening_limit, uct
-        self.assertEqual(widening_limit(0), 1)
-        self.assertEqual(widening_limit(3), 3)
+        self.assertEqual(widening_limit(0, self.cfg), 1)
+        self.assertEqual(widening_limit(3, self.cfg), 3)
         with self.assertRaisesRegex(ValueError, 'unvisited'):
-            uct(0., 0, 1)
+            uct(0., 0, 1, self.cfg)
 
     def test_widening_limit_and_uct_validations_and_config(self) -> None:
         """Widening limit and UCT validate inputs and respect explicit config tuning."""
         from icgs.algorithms.planning.mcts import widening_limit, uct
 
-        # Custom config tuning
         custom_cfg = MethodConfig(
             planning={
                 "widening_coefficient": 2.0,
@@ -612,72 +648,98 @@ class SearchMCTSTests(unittest.TestCase):
                 "uct_exploration": 2.0,
             }
         )
-        # limit = floor(2.0 * (1 + 2)^1.0) = floor(6.0) = 6
         self.assertEqual(widening_limit(2, custom_cfg), 6)
-        # uct = 2.0 / 2 + 2.0 * sqrt(log(1 + 4) / 2)
         expected_uct = 1.0 + 2.0 * math.sqrt(math.log(5.0) / 2.0)
         self.assertAlmostEqual(uct(2.0, 2, 4, custom_cfg), expected_uct)
 
         # Negative visits rejected
         with self.assertRaises(ValueError):
-            widening_limit(-1)
+            widening_limit(-1, self.cfg)
         with self.assertRaises(ValueError):
-            uct(1.0, -1, 2)
+            uct(1.0, -1, 2, self.cfg)
         with self.assertRaises(ValueError):
-            uct(1.0, 2, -1)
+            uct(1.0, 2, -1, self.cfg)
 
         # Non-numeric types rejected
         with self.assertRaises(TypeError):
-            widening_limit("zero")  # type: ignore[arg-type]
+            widening_limit("zero", self.cfg)  # type: ignore[arg-type]
         with self.assertRaises(TypeError):
-            uct("one", 1, 1)  # type: ignore[arg-type]
+            uct("one", 1, 1, self.cfg)  # type: ignore[arg-type]
 
         # Non-finite returns rejected
         with self.assertRaises(ValueError):
-            uct(float("nan"), 1, 1)
+            uct(float("nan"), 1, 1, self.cfg)
         with self.assertRaises(ValueError):
-            uct(float("inf"), 1, 1)
+            uct(float("inf"), 1, 1, self.cfg)
 
     def test_hand_enumerated_two_depth_tree_visits_and_backup(self) -> None:
         """Hand-enumerated 3-iteration search generates a 2-depth tree with exact visits and one G backup."""
-        from icgs.algorithms.planning.mcts import mcts_plan
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
 
         caps = DeterministicMockCapabilities()
         state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
         task = {"history_id": "root_task", "step": 0}
-        context = {"reference_id": "ctx_0"}
+        context = {"context_id": "ctx_0"}
+        rec = TestRecorder()
 
-        # H=4, 3 iterations
-        result = mcts_plan(
+        # Bounded by native_call_cap=3 (3 expansions)
+        budget = PlanningBudget(native_call_cap=3)
+        result = plan(
             state,
             task,
             context,
-            capabilities=caps,
             H=4,
+            budget=budget,
+            capabilities=caps,
             cfg=self.cfg,
-            initial_S=0.1,
-            iterations=3,
+            recorder=rec,
         )
 
         self.assertTrue(result.completed)
         self.assertIsNone(result.fallback_reason)
         self.assertEqual(result.call_count, 3)
         self.assertEqual(result.timing_counters["iterations"], 3)
+        self.assertEqual(result.timing_counters["native_calls"], 3)
 
-        # Best edge should be edge 0 (visits=2) over edge 1 (visits=1)
+        # Verify node visits from recorder events
+        node_events = rec.find_events("mcts.node_visit")
+        # Root visited in all 3 iterations
+        root_visits = [e for e in node_events if e["fields"]["tau"] == 0]
+        self.assertEqual(len(root_visits), 3)
+        self.assertEqual(root_visits[-1]["fields"]["visits"], 3)
+
+        # Verify edge backups
+        edge_events = rec.find_events("mcts.edge_backup")
+        # Edge 0 visited in iteration 1 and iteration 3 -> final visits 2
+        edge0_backups = [e for e in edge_events if e["fields"]["edge_id"] == 0]
+        self.assertEqual(len(edge0_backups), 2)
+        self.assertEqual(edge0_backups[-1]["fields"]["visits"], 2)
+        self.assertAlmostEqual(edge0_backups[-1]["fields"]["total_return"], 0.65)
+
+        # Edge 1 visited in iteration 2 -> final visits 1
+        edge1_backups = [e for e in edge_events if e["fields"]["edge_id"] == 1]
+        self.assertEqual(len(edge1_backups), 1)
+        self.assertEqual(edge1_backups[-1]["fields"]["visits"], 1)
+        self.assertAlmostEqual(edge1_backups[-1]["fields"]["total_return"], 0.55)
+
+        # Edge 0 selected because it has 2 visits vs Edge 1's 1 visit
         self.assertIsNotNone(result.selected_prefix)
         self.assertAlmostEqual(result.expected_return, 0.325)
 
     def test_exact_cache_lineage_and_task_history_separation(self) -> None:
         """Exact cache reuses identical transitions and enforces task-history / time separation without fake visits."""
-        from icgs.algorithms.planning.mcts import CacheKey, ExactCache
+        from icgs.algorithms.planning.mcts import CacheKey, CompositeModelIdentity, ExactCache
 
+        caps = DeterministicMockCapabilities()
         cache = ExactCache("root_test")
+        models = CompositeModelIdentity("wm_1", "tt_1", "term_1")
         key1 = CacheKey(
-            parent_lineage=("enc_a", "mem_a", 0, b"pose_bytes_1", "task_h1"),
-            context_id="ctx_0",
+            parent_state_digest=b"digest_state_a",
+            task_identity="task_h1",
+            context_identity="ctx_0",
             head_id=0,
-            model_id="model_v1",
+            composite_models=models,
             tau=0,
             command_bytes=b"cmd_bytes_1",
         )
@@ -686,7 +748,7 @@ class SearchMCTSTests(unittest.TestCase):
         transition = (dummy_state, {"history_id": "task_h1_b1"}, dummy_probs)
 
         # Initial miss
-        self.assertIsNone(cache.get(key1))
+        self.assertIsNone(cache.get(key1, caps))
         self.assertEqual(cache.misses, 1)
         self.assertEqual(cache.hits, 0)
         self.assertEqual(cache.lookups, 1)
@@ -695,48 +757,51 @@ class SearchMCTSTests(unittest.TestCase):
         cache.put(key1, transition)
 
         # Cache hit with exact lineage
-        hit_result = cache.get(key1)
+        hit_result = cache.get(key1, caps)
         self.assertIsNotNone(hit_result)
         self.assertEqual(cache.hits, 1)
         self.assertEqual(cache.lookups, 2)
 
         # Task history separation: different task lineage must miss
         key_diff_task = CacheKey(
-            parent_lineage=("enc_a", "mem_a", 0, b"pose_bytes_1", "task_DIFF_HISTORY"),
-            context_id="ctx_0",
+            parent_state_digest=b"digest_state_a",
+            task_identity="task_DIFF_HISTORY",
+            context_identity="ctx_0",
             head_id=0,
-            model_id="model_v1",
+            composite_models=models,
             tau=0,
             command_bytes=b"cmd_bytes_1",
         )
-        self.assertIsNone(cache.get(key_diff_task))
+        self.assertIsNone(cache.get(key_diff_task, caps))
         self.assertEqual(cache.misses, 2)
 
         # Time / tau separation: different tau must miss
         key_diff_tau = CacheKey(
-            parent_lineage=("enc_a", "mem_a", 0, b"pose_bytes_1", "task_h1"),
-            context_id="ctx_0",
+            parent_state_digest=b"digest_state_a",
+            task_identity="task_h1",
+            context_identity="ctx_0",
             head_id=0,
-            model_id="model_v1",
+            composite_models=models,
             tau=1,
             command_bytes=b"cmd_bytes_1",
         )
-        self.assertIsNone(cache.get(key_diff_tau))
+        self.assertIsNone(cache.get(key_diff_tau, caps))
         self.assertEqual(cache.misses, 3)
 
     def test_exact_cache_root_separation(self) -> None:
         """Exact cache is root-scoped; transitions from one root are never carried to another root."""
-        from icgs.algorithms.planning.mcts import mcts_plan
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
 
         caps = DeterministicMockCapabilities()
         state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
         task = {"history_id": "root_task", "step": 0}
-        context = {"reference_id": "ctx_0"}
+        context = {"context_id": "ctx_0"}
 
         # Run root A
-        res_a = mcts_plan(state, task, context, capabilities=caps, H=4, cfg=self.cfg, iterations=1)
+        res_a = plan(state, task, context, H=4, budget=PlanningBudget(native_call_cap=1), capabilities=caps, cfg=self.cfg)
         # Run root B with fresh execution
-        res_b = mcts_plan(state, task, context, capabilities=caps, H=4, cfg=self.cfg, iterations=1)
+        res_b = plan(state, task, context, H=4, budget=PlanningBudget(native_call_cap=1), capabilities=caps, cfg=self.cfg)
 
         # Each root executed its own search and counters
         self.assertEqual(res_a.cache_counters["misses"], 2 * 3)  # 2 intervals * 3 heads
@@ -746,15 +811,16 @@ class SearchMCTSTests(unittest.TestCase):
 
     def test_materialize_once_and_command_equality_across_all_heads(self) -> None:
         """Candidate prefix is materialized ONCE and applied identically across all 3 heads."""
-        from icgs.algorithms.planning.mcts import mcts_plan
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
 
         caps = DeterministicMockCapabilities()
         state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
         task = {"history_id": "root_task", "step": 0}
-        context = {"reference_id": "ctx_0"}
+        context = {"context_id": "ctx_0"}
 
         # Run 1 iteration -> expands 1 edge (2 intervals)
-        mcts_plan(state, task, context, capabilities=caps, H=4, cfg=self.cfg, iterations=1)
+        plan(state, task, context, H=4, budget=PlanningBudget(native_call_cap=1), capabilities=caps, cfg=self.cfg)
 
         # materialize_prefix called exactly once
         self.assertEqual(len(caps.materialize_calls), 1)
@@ -776,72 +842,66 @@ class SearchMCTSTests(unittest.TestCase):
 
     def test_deterministic_selection_and_final_choice_tie_breaking(self) -> None:
         """Deterministic tie breaking: earlier insertion ID for selection ties; visits then Q then earlier ID for final choice."""
-        from icgs.algorithms.planning.mcts import MCTSEdge
-
-        s0 = _make_physical_state(translation=(0.0, 0.0, 0.0))
-        h0 = Hypothesis(head_id=0, state=s0, task=None, weight=1.0 / 3.0)
-        h1 = Hypothesis(head_id=1, state=s0, task=None, weight=1.0 / 3.0)
-        h2 = Hypothesis(head_id=2, state=s0, task=None, weight=1.0 / 3.0)
-        node = BeliefNode(tau=2, H_root=4, U=0.0, F=0.0, hypotheses=(h0, h1, h2), cfg=self.cfg)
-
-        cmd = _make_timed_command()
-        prefix0 = CommandPrefix(commands=(cmd,), proposal_root=np.eye(4), raw_candidate_id="c0")
-        prefix1 = CommandPrefix(commands=(cmd,), proposal_root=np.eye(4), raw_candidate_id="c1")
-
-        e0 = MCTSEdge(prefix=prefix0, child=node, visits=2, total_return=1.0, edge_id=0)  # Q = 0.5
-        e1 = MCTSEdge(prefix=prefix1, child=node, visits=2, total_return=1.0, edge_id=1)  # Q = 0.5
-
-        # Both have equal visits and equal Q: must break tie to earlier insertion ID (e0)
-        best = max([e1, e0], key=lambda e: (e.visits, e.q_value, -e.edge_id))
-        self.assertEqual(best.edge_id, 0)
-
-        # If e1 has higher Q, e1 must be selected
-        e1_higher = MCTSEdge(prefix=prefix1, child=node, visits=2, total_return=1.4, edge_id=1)  # Q = 0.7
-        best_higher = max([e0, e1_higher], key=lambda e: (e.visits, e.q_value, -e.edge_id))
-        self.assertEqual(best_higher.edge_id, 1)
-
-        # If e0 has more visits, e0 must be selected regardless of Q
-        e0_more_visits = MCTSEdge(prefix=prefix0, child=node, visits=3, total_return=0.9, edge_id=0)  # Q = 0.3
-        best_visits = max([e0_more_visits, e1_higher], key=lambda e: (e.visits, e.q_value, -e.edge_id))
-        self.assertEqual(best_visits.edge_id, 0)
-
-    def test_partial_edges_and_deadline_truncation(self) -> None:
-        """When remaining horizon H - tau < h, edge is truncated to a partial edge carrying actual remaining steps."""
-        from icgs.algorithms.planning.mcts import mcts_plan
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
 
         caps = DeterministicMockCapabilities()
         state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
         task = {"history_id": "root_task", "step": 0}
-        context = {"reference_id": "ctx_0"}
+        context = {"context_id": "ctx_0"}
+        rec = TestRecorder()
+
+        # Run 3 native calls:
+        # Iteration 1: Edge 0 (visits 1, Q 0.55)
+        # Iteration 2: Edge 1 (visits 1, Q 0.55)
+        # Iteration 3: Selection tie! Both Edge 0 and Edge 1 have equal UCT -> must select Edge 0
+        budget = PlanningBudget(native_call_cap=3)
+        res = plan(state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, recorder=rec)
+
+        # Check selection tie broke to edge 0
+        selections = rec.find_events("mcts.selection")
+        self.assertGreaterEqual(len(selections), 1)
+        self.assertEqual(selections[0]["fields"]["selected_edge_id"], 0)
+
+        # Root choice broke to Edge 0 (most visits: 2 > 1)
+        self.assertEqual(res.selected_prefix.raw_candidate_id, "cand_0")
+
+    def test_partial_edges_and_deadline_truncation(self) -> None:
+        """When remaining horizon H - tau < h, edge is truncated to a partial edge carrying actual remaining steps."""
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
+
+        caps = DeterministicMockCapabilities()
+        state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
 
         # Case 1: H=1 with h=2 at root -> partial edge with h=1
-        res_root_partial = mcts_plan(
+        res_root_partial = plan(
             state,
             task,
             context,
-            capabilities=caps,
             H=1,
+            budget=PlanningBudget(native_call_cap=1),
+            capabilities=caps,
             cfg=self.cfg,
-            initial_S=0.1,
-            iterations=1,
         )
         self.assertTrue(res_root_partial.completed)
         self.assertEqual(caps.materialize_calls[0]["h"], 1)
 
         # Case 2: H=3 with h=2:
-        # Iteration 1: expands Edge 0 at root with h=2 (Child 0 tau=2)
-        # Iteration 2: expands Edge 1 at root with h=2 (Child 1 tau=2)
-        # Iteration 3: root capacity reached, descends to Child 0 (tau=2, rem=1) -> partial edge with h=1
+        # Iteration 1: Edge 0 (h=2)
+        # Iteration 2: Edge 1 (h=2)
+        # Iteration 3: Child 0 has tau=2, rem=1 -> partial edge with h=1
         caps_deep = DeterministicMockCapabilities()
-        res_deep = mcts_plan(
+        res_deep = plan(
             state,
             task,
             context,
-            capabilities=caps_deep,
             H=3,
+            budget=PlanningBudget(native_call_cap=3),
+            capabilities=caps_deep,
             cfg=self.cfg,
-            initial_S=0.1,
-            iterations=3,
         )
         self.assertTrue(res_deep.completed)
         self.assertEqual(caps_deep.materialize_calls[0]["h"], 2)
@@ -850,26 +910,27 @@ class SearchMCTSTests(unittest.TestCase):
 
     def test_duplicate_sample_audit(self) -> None:
         """Duplicate candidate proposals are preserved in the audit log and flagged."""
-        from icgs.algorithms.planning.mcts import mcts_plan
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
 
-        # Configure mock to return identical commands for candidates 0 and 1
         identical_cmd = (_make_timed_command(offset=0.05), _make_timed_command(offset=0.06))
         caps = DeterministicMockCapabilities(
             candidate_commands=[identical_cmd, identical_cmd, identical_cmd]
         )
         state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
         task = {"history_id": "root_task", "step": 0}
-        context = {"reference_id": "ctx_0"}
+        context = {"context_id": "ctx_0"}
+        rec = TestRecorder()
 
-        result = mcts_plan(
+        result = plan(
             state,
             task,
             context,
-            capabilities=caps,
             H=4,
+            budget=PlanningBudget(native_call_cap=2),
+            capabilities=caps,
             cfg=self.cfg,
-            initial_S=0.1,
-            iterations=2,
+            recorder=rec,
         )
 
         self.assertTrue(result.completed)
@@ -877,32 +938,211 @@ class SearchMCTSTests(unittest.TestCase):
         # Verify second sample hit cache for identical transition commands
         self.assertGreater(result.cache_counters["hits"], 0)
 
+        # Verify duplicate flag and ordering via recorder
+        audit_events = rec.find_events("candidate.audit")
+        self.assertEqual(len(audit_events), 2)
+        self.assertFalse(audit_events[0]["fields"]["is_duplicate"])
+        self.assertEqual(audit_events[0]["fields"]["order"], 0)
+        self.assertTrue(audit_events[1]["fields"]["is_duplicate"])
+        self.assertEqual(audit_events[1]["fields"]["order"], 1)
+        self.assertEqual(
+            audit_events[0]["fields"]["commands_hash"],
+            audit_events[1]["fields"]["commands_hash"],
+        )
+
     def test_planning_budget_and_caps(self) -> None:
-        """PlanningBudget enforces iteration caps and populates PlanningResult properly."""
+        """PlanningBudget enforces call caps and populates PlanningResult properly."""
         from icgs.algorithms.planning.budget import PlanningBudget
-        from icgs.algorithms.planning.mcts import mcts_plan
+        from icgs.algorithms.planning.mcts import plan
 
         caps = DeterministicMockCapabilities()
         state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
         task = {"history_id": "root_task", "step": 0}
-        context = {"reference_id": "ctx_0"}
+        context = {"context_id": "ctx_0"}
 
-        budget = PlanningBudget(iterations_cap=2, native_call_cap=5)
-        result = mcts_plan(
+        budget = PlanningBudget(native_call_cap=2)
+        result = plan(
             state,
             task,
             context,
-            capabilities=caps,
             H=4,
             budget=budget,
+            capabilities=caps,
             cfg=self.cfg,
-            initial_S=0.1,
         )
 
         self.assertEqual(result.call_count, 2)
         self.assertEqual(result.timing_counters["iterations"], 2)
-        self.assertLessEqual(result.timing_counters["native_calls"], 5)
+        self.assertEqual(result.timing_counters["native_calls"], 2)
         self.assertTrue(result.completed)
+
+    def test_audit_issue_1_exact_parent_identity_tensors_masks_grip_and_branch_copy(self) -> None:
+        """Exact parent identity in cache key must differentiate states that differ only in physical tensors like points or grip."""
+        from icgs.algorithms.planning.mcts import CacheKey, CompositeModelIdentity, ExactCache, _physical_state_identity
+
+        caps = DeterministicMockCapabilities()
+        state_a = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
+        points_b = np.ones((1, 128, 3), dtype=np.float32) * 5.0
+        state_b = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0, points=points_b)
+
+        ident_a = _physical_state_identity(state_a)
+        ident_b = _physical_state_identity(state_b)
+        self.assertNotEqual(ident_a, ident_b)
+
+        # Grip difference also differentiates
+        state_grip1 = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0, grip=1.0)
+        ident_grip1 = _physical_state_identity(state_grip1)
+        self.assertNotEqual(ident_a, ident_grip1)
+
+        # Verify branch copy isolation in ExactCache
+        cache = ExactCache("root_test")
+        models = CompositeModelIdentity("wm_1", "tt_1", "term_1")
+        key = CacheKey(
+            parent_state_digest=ident_a,
+            task_identity="task_0",
+            context_identity="ctx_0",
+            head_id=0,
+            composite_models=models,
+            tau=0,
+            command_bytes=b"cmd",
+        )
+        dummy_state = _make_physical_state(boundary=1)
+        cache.put(key, (dummy_state, {"step": 1}, np.array([0.0, 0.0, 1.0])))
+
+        cached_1 = cache.get(key, caps)
+        self.assertIsNotNone(cached_1)
+        # Mutate retrieved state
+        cached_1[0].x[0, 0, 0] = 999.0
+
+        # Retrieve again - must NOT have the mutation
+        cached_2 = cache.get(key, caps)
+        self.assertNotEqual(float(cached_2[0].x[0, 0, 0].item()), 999.0)
+
+    def test_audit_issue_2_bounded_budget_and_operation_level_cap_interrupt(self) -> None:
+        """PlanningBudget requires at least one bound; cap reached during edge stepping interrupts without evaluating incomplete edge."""
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
+
+        # Budget requires at least one bound
+        with self.assertRaises(ValueError):
+            PlanningBudget()
+
+        caps = DeterministicMockCapabilities()
+        state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+
+        # Edge needs 2 steps * 3 heads = 6 model intervals.
+        # Cap at 1 model interval: first predict_step happens, then cap reached.
+        # Incomplete edge must NOT be evaluated, NOT added to tree, NOT backed up.
+        budget = PlanningBudget(model_interval_cap=1)
+        result = plan(state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg)
+
+        self.assertFalse(result.completed)
+        self.assertIsNone(result.selected_prefix)
+        self.assertEqual(result.fallback_reason, "budget_exhausted")
+        self.assertEqual(result.timing_counters["model_intervals"], 1)
+        self.assertEqual(len(caps.predict_step_calls), 1)
+
+    def test_audit_issue_3_native_observation_from_representative(self) -> None:
+        """Representative observation passed to sample_prior is a validated native Observation with points, T_w_e, grip."""
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
+        from icgs.contracts.records import Observation
+
+        caps = DeterministicMockCapabilities()
+        state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+
+        plan(state, task, context, H=4, budget=PlanningBudget(native_call_cap=1), capabilities=caps, cfg=self.cfg)
+
+        self.assertEqual(len(caps.sample_prior_calls), 1)
+        obs = caps.sample_prior_calls[0]["obs"]
+        self.assertIsInstance(obs, Observation)
+        self.assertEqual(obs.points.shape[-1], 3)
+        self.assertEqual(obs.T_w_e.shape, (4, 4))
+        self.assertIn(obs.grip, (0.0, 1.0))
+
+    def test_audit_issue_4_config_discipline_and_no_duck_typing(self) -> None:
+        """MethodConfig/PlanningConfig is strictly required; duck typing and legacy tunables are rejected."""
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan, widening_limit, uct
+
+        with self.assertRaises(TypeError):
+            widening_limit(0, object())  # type: ignore[arg-type]
+        with self.assertRaises(TypeError):
+            uct(1.0, 1, 1, object())  # type: ignore[arg-type]
+
+        caps = DeterministicMockCapabilities()
+        state = _make_physical_state()
+        task = {"history_id": "task_0"}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(native_call_cap=1)
+
+        with self.assertRaises(TypeError):
+            plan(state, task, context, H=4, budget=budget, capabilities=caps, cfg="not_a_config")  # type: ignore[arg-type]
+
+    def test_audit_issue_5_strict_materialization_length_and_finite_completion(self) -> None:
+        """Malformed completion or wrong prefix length from capabilities is strictly rejected without silent alteration."""
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
+
+        state = _make_physical_state()
+        task = {"history_id": "task_0"}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(native_call_cap=1)
+
+        # Invalid stop probability (> 1)
+        caps_bad_stop = DeterministicMockCapabilities(stop_value=1.5)
+        with self.assertRaises(ValueError):
+            plan(state, task, context, H=4, budget=budget, capabilities=caps_bad_stop, cfg=self.cfg)
+
+        # Invalid materialization length
+        class BadPrefixCapabilities(DeterministicMockCapabilities):
+            def materialize_prefix(self, candidate: Any, *, h: int, r: int, duration_s: float) -> CommandPrefix:
+                # Return 1 command when h was requested
+                cmds = (_make_timed_command(duration_s=duration_s),)
+                return CommandPrefix(commands=cmds, proposal_root=np.eye(4), raw_candidate_id="bad_cand")
+
+        caps_bad_prefix = BadPrefixCapabilities()
+        with self.assertRaises(ValueError):
+            plan(state, task, context, H=4, budget=budget, capabilities=caps_bad_prefix, cfg=self.cfg)
+
+    def test_audit_issue_6_duplicate_audit_exposure_and_flags(self) -> None:
+        """Preserve candidate ID from prefix; expose duplicate flag, ordering, and hash via recorder."""
+        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.mcts import plan
+
+        cmd = (_make_timed_command(offset=0.1), _make_timed_command(offset=0.2))
+        caps = DeterministicMockCapabilities(candidate_commands=[cmd, cmd])
+        state = _make_physical_state()
+        task = {"history_id": "task_0"}
+        context = {"context_id": "ctx_0"}
+        rec = TestRecorder()
+
+        result = plan(
+            state,
+            task,
+            context,
+            H=4,
+            budget=PlanningBudget(native_call_cap=2),
+            capabilities=caps,
+            cfg=self.cfg,
+            recorder=rec,
+        )
+
+        self.assertEqual(result.audit_ids, ("cand_0", "cand_1"))
+        audit_events = rec.find_events("candidate.audit")
+        self.assertEqual(len(audit_events), 2)
+        self.assertEqual(audit_events[0]["fields"]["candidate_id"], "cand_0")
+        self.assertEqual(audit_events[0]["fields"]["order"], 0)
+        self.assertFalse(audit_events[0]["fields"]["is_duplicate"])
+
+        self.assertEqual(audit_events[1]["fields"]["candidate_id"], "cand_1")
+        self.assertEqual(audit_events[1]["fields"]["order"], 1)
+        self.assertTrue(audit_events[1]["fields"]["is_duplicate"])
+        self.assertEqual(audit_events[0]["fields"]["commands_hash"], audit_events[1]["fields"]["commands_hash"])
 
 
 if __name__ == "__main__":
