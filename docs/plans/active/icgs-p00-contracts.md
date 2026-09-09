@@ -267,3 +267,12 @@ phase if an FG fails and request a scoped protocol decision.
   `python3 -B -S scripts/validate_fast.py` — 19/19 each. C1–C5, L2/C1–C5,
   L3/L4, model/tensor/checkpoint execution, downloads, collection, preprocessing,
   simulator workloads, training and robot motion remain **NOT RUN**.
+
+## Observability integration addendum — 2026-09-09
+
+P00 owns the typed `observability` configuration section and the capability
+boundary only; `MethodConfig`/reference projection validation remains separate
+from native `ExperimentConfig`. The recorder is an outer optional capability and
+does not enter contracts, state, graphs, or model ownership. Future P00 contract
+records remain planned until their producers exist; local run identity and
+completeness are not evidence of method readiness.

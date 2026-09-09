@@ -69,6 +69,7 @@ class PhysicalRollout:
         physical_memory: Any,
         *,
         config: MethodConfig,
+        recorder: Any = None,
     ) -> None:
         if not isinstance(config, MethodConfig):
             raise TypeError("config must be a resolved MethodConfig")
@@ -85,6 +86,7 @@ class PhysicalRollout:
         self.decoder = decoder
         self.physical_memory = physical_memory
         self.config = config
+        self.recorder = recorder
         dimensions = config.derived_dimensions()
         self.anchor_count = config.geometry.num_anchors
         self.width = config.geometry.width
@@ -107,10 +109,18 @@ class PhysicalRollout:
             raise TypeError("command must be a TimedCommand")
         validate_head_id(head_id)
 
+        if self.recorder is None:
+            from icgs.observability.recorder import NoopRecorder
+            recorder = NoopRecorder()
+        else:
+            recorder = self.recorder
+        bound = recorder.bind(boundary_index=state.boundary, head_id=head_id, origin=state.origin)
         branch = state.branch_copy()
-        tokens, token_valid = self.physical_memory.physical_tokens(branch)
-        u_before = action_descriptor(branch.T_w_e, command, config=self.config)
-        dynamics_value = self.dynamics(tokens, token_valid, u_before, head_id)
+        with bound.span("physical.memory.read", component="physical"):
+            tokens, token_valid = self.physical_memory.physical_tokens(branch)
+            u_before = action_descriptor(branch.T_w_e, command, config=self.config)
+        with bound.span("physical.dynamics", component="physical"):
+            dynamics_value = self.dynamics(tokens, token_valid, u_before, head_id)
         geometry_delta, pose_grip = _dynamics_outputs(
             dynamics_value,
             branch.X.shape[0],
@@ -128,13 +138,15 @@ class PhysicalRollout:
         x_tilde = branch.x + geometry.ell0_m * geometry_delta[..., point_slice]
         residual_encoded = EncodedCloud(X=X_tilde, x=x_tilde, anchor_valid=branch.valid)
 
-        decoded = self.decoder(residual_encoded)
+        with bound.span("physical.decode", component="physical"):
+            decoded = self.decoder(residual_encoded)
         if not isinstance(decoded, DecodedCloud):
             raise TypeError("decoder must return a DecodedCloud")
         _require_finite(decoded.points_w, "decoded cloud")
         if decoded.point_valid.dtype != torch.bool:
             raise ValueError("decoded point_valid must be boolean")
-        encoded_next = self.encoder(decoded.points_w, decoded.point_valid)
+        with bound.span("physical.encode", component="physical"):
+            encoded_next = self.encoder(decoded.points_w, decoded.point_valid)
         if not isinstance(encoded_next, EncodedCloud):
             raise TypeError("encoder must return an EncodedCloud")
 
@@ -152,13 +164,14 @@ class PhysicalRollout:
         gravity_start = 3 * self.point_dim + 1
         gravity = branch.p[:, gravity_start:gravity_start + self.point_dim]
         p_next = proprioception(T_next, grip_next, gravity, config=self.config)
-        memory_next = self.physical_memory(
-            encoded_next.X,
-            encoded_next.anchor_valid,
-            p_next,
-            u_before,
-            branch.memory,
-        )
+        with bound.span("physical.memory.update", component="physical"):
+            memory_next = self.physical_memory(
+                encoded_next.X,
+                encoded_next.anchor_valid,
+                p_next,
+                u_before,
+                branch.memory,
+            )
 
         next_boundary = branch.boundary + 1
         validate_next_boundary(branch.boundary, next_boundary)
@@ -222,6 +235,7 @@ def bind_predict_step(
     physical_memory: Any,
     *,
     config: MethodConfig,
+    recorder: Any = None,
 ) -> Callable[..., PhysicalPrediction]:
     """Return a bound three-argument ``predict_step`` capability.
 
@@ -235,6 +249,7 @@ def bind_predict_step(
         decoder,
         physical_memory,
         config=config,
+        recorder=recorder,
     ).predict_step
 
 

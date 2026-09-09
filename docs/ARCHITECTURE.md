@@ -37,6 +37,7 @@ training/evaluation → execution → policy + environment adapter
 | data | Native PyG preprocessing/datasets; safe versioned inference NPZ |
 | configuration | Frozen schema/defaults, explicit JSON parser, profiles and validation |
 | artifacts | Checkpoint inspection/translation, hash-bound published profile and legacy format repair |
+| observability | Optional local recorder, correlated context, bounded captures and offline inspection; outer boundaries only |
 | training | Lightning module versus runner; retained unsupported occupancy source |
 | cli | infer, train, evaluate, prepare-data and lightweight help |
 
@@ -44,6 +45,9 @@ Models never import policy, search, training, environment, CLI or checkpoint IO.
 Search/candidate algorithms use proposer capability, not concrete InstantPolicy.
 Runtime never imports old ip, instant_policy.so, docs, tests or root scripts.
 No sys.path/sys.modules aliases form part of the architecture.
+Observability is a library no-op by default and is attached only by outer CLI,
+execution, candidate and training boundaries; model/geometry/state ownership does
+not import file IO, W&B or logging handlers.
 
 ## Configuration and construction
 

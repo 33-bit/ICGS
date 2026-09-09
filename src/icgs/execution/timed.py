@@ -83,6 +83,7 @@ def materialize_prefix(
     h: int,
     r: int,
     duration_s: float,
+    recorder: Any = None,
 ) -> CommandPrefix:
     """Convert one B=1 native candidate into absolute timed commands.
 
@@ -123,7 +124,12 @@ def materialize_prefix(
         TimedCommand(target, grip, duration)
         for target, grip in zip(world_targets, materialized_grips)
     )
-    return CommandPrefix(commands, root, raw_id)
+    result = CommandPrefix(commands, root, raw_id)
+    if recorder is not None:
+        recorder.event("execution.materialize_prefix", component="execution",
+                       fields={"candidate_id": raw_id, "h": h, "r": r,
+                               "duration_s": duration})
+    return result
 
 
 __all__ = ["materialize_grips", "materialize_prefix"]

@@ -20,6 +20,9 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [V5 foundation status](components/v5-foundations.md) | Implemented/designed/deferred method-level ownership |
 | [Target ICGS method](method/README.md) | Approved target, neural/data/search specifications; not implemented status |
 | [ICGS parameters](method/parameters.md) | Central JSON defaults, units, locks, overrides and consumer readiness |
+| [Observability design](components/observability.md) | Approved local logging/tracing/capture design and current implementation boundary |
+| [Observability plan](plans/active/icgs-observability.md) | Recorder, debugging tools, CLI/training integration and acceptance |
+| [Observability boundary decision](decisions/0010-local-observability.md) | Accepted local-first recorder, retention and optional-backend boundary |
 | [Configuration decision](decisions/0009-central-method-configuration.md) | Packaged defaults and separate resolved/reference identities |
 | [Proposal provenance](proposals/README.md) | Immutable uploaded source, date and SHA256 |
 | [Target requirements](method/requirements.md) | Proposal-to-specification/plan/test traceability |

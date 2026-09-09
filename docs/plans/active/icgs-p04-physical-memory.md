@@ -271,3 +271,10 @@ phase if an FG fails and request a scoped protocol decision.
   preprocessing, downloads and training remain **NOT RUN** and are not claimed
   by this component-level wiring. Remaining risk is supported integration with
   future outer composition and the mandatory published checkpoints.
+
+## Observability integration addendum — 2026-09-09
+
+`PhysicalState` and memory objects do not store recorders. The outer physical
+rollout wrapper may emit memory-read/update spans with boundary, head and origin
+metadata already present at the seam; no task labels, tensor values or hidden
+state snapshots are produced. Causal memory lineage remains P04-owned.

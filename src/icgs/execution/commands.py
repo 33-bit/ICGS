@@ -14,7 +14,7 @@ class AbsolutePrefix:
     physics_substeps: int | None = None
 
 
-def absolute_prefix(trajectory, root_pose, length, *, command_duration_seconds=None):
+def absolute_prefix(trajectory, root_pose, length, *, command_duration_seconds=None, recorder=None):
     if isinstance(length,bool) or not isinstance(length,int):raise ValueError('prefix length must be an integer')
     actions=trajectory.transforms.detach().cpu().numpy()
     grips=trajectory.grips.detach().cpu().numpy()
@@ -26,4 +26,9 @@ def absolute_prefix(trajectory, root_pose, length, *, command_duration_seconds=N
     if root.shape!=(4,4):raise ValueError('one proposal root pose required')
     if command_duration_seconds is not None and (not np.isfinite(command_duration_seconds) or command_duration_seconds<=0):
         raise ValueError('known command duration must be positive')
-    return AbsolutePrefix(root@actions[:,:length],grips[:,:length].copy(),root,command_duration_seconds)
+    result = AbsolutePrefix(root@actions[:,:length],grips[:,:length].copy(),root,command_duration_seconds)
+    if recorder is not None:
+        recorder.event("execution.absolute_prefix", component="execution",
+                       fields={"length": length, "command_duration_seconds": command_duration_seconds,
+                               "batch_size": int(actions.shape[0])})
+    return result

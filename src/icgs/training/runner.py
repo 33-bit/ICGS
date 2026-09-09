@@ -1,26 +1,53 @@
 """Training orchestration, separate from mathematical objectives."""
-import lightning as L
 from icgs.configuration.defaults import to_legacy
 
 
-def run_training(model, resolved, data_path_train, data_path_val, *, use_wandb=False, run_name='test'):
+def build_training_logger(*, record, use_wandb, recorder=None, run_name='test'):
+    """Construct the outer logger without constructing datasets or a Trainer."""
+    from dataclasses import replace
+    from icgs.observability.config import default_config
+    from icgs.observability.lightning import RecorderLightningLogger
+    from icgs.observability.recorder import NoopRecorder
+    from icgs.observability.wandb import start as start_wandb
+
+    recorder = recorder or NoopRecorder()
+    if not record:
+        return None, None
+    remote = None
+    if use_wandb:
+        wandb_config = getattr(getattr(recorder, 'config', None), 'wandb', None)
+        if wandb_config is None:
+            wandb_config = replace(default_config().wandb, enabled=True)
+        elif not wandb_config.enabled:
+            wandb_config = replace(wandb_config, enabled=True)
+        remote = start_wandb(wandb_config, run_id=recorder.run_id or run_name,
+                             metadata={'run_name': run_name}, recorder=recorder)
+    return RecorderLightningLogger(recorder, remote=remote), remote
+
+
+def run_training(model, resolved, data_path_train, data_path_val, *, use_wandb=False, run_name='test', recorder=None):
     """Run the original Lightning training procedure on an already composed model.
 
     This launches potentially very long training; call only with explicit data/compute scope.
-    The historical record=True/use_wandb=False logger defect is not corrected here.
+    The historical record=True/use_wandb=False logger defect is handled by an
+    explicit local logger; no training job is started by logger construction.
     """
     import os
     import pickle
     import json
+    import lightning as L
     from torch_geometric.data import DataLoader
     from lightning.pytorch.callbacks import LearningRateMonitor
-    from lightning.pytorch.loggers import WandbLogger
+    from icgs.observability.recorder import NoopRecorder
     from icgs.data.datasets.native import RunningDataset
     from icgs.configuration.defaults import resolved_config
     config = to_legacy(resolved)
+    recorder = recorder or NoopRecorder()
     record, save_dir = config['record'], config['save_dir']
     if record and not os.path.exists(save_dir):
         os.makedirs(save_dir)
+    logger, remote = build_training_logger(record=record, use_wandb=use_wandb,
+                                           recorder=recorder, run_name=run_name)
     dset_val = RunningDataset(data_path_val, len(os.listdir(data_path_val)), rand_g_prob=0)
     dataloader_val = DataLoader(dset_val, batch_size=1, shuffle=False)
 
@@ -29,17 +56,10 @@ def run_training(model, resolved, data_path_train, data_path_val, *, use_wandb=F
                             num_workers=8, pin_memory=True)
     ####################################################################################################################
     if record:
-        if use_wandb:
-            logger = WandbLogger(project='Instant Policy',
-                                 name=f'{run_name}',
-                                 save_dir=save_dir,
-                                 log_model=False)
         # Dump config to save_dir
         pickle.dump(config, open(f'{save_dir}/config.pkl', 'wb'))
         with open(f'{save_dir}/resolved_config.json', 'w') as stream:
             json.dump(resolved_config(resolved), stream, indent=2)
-    else:
-        logger = None
     lr_monitor = LearningRateMonitor(logging_interval='step')
     trainer = L.Trainer(
         enable_checkpointing=False,  # We save the models manually.
@@ -55,17 +75,23 @@ def run_training(model, resolved, data_path_train, data_path_val, *, use_wandb=F
         log_every_n_steps=500,  # TODO: might want to change that.
         gradient_clip_val=1,
         gradient_clip_algorithm='norm',
-        callbacks=[lr_monitor],
+        callbacks=[lr_monitor] if logger is not None else [],
     )
 
-    trainer.fit(
-        model=model,
-        train_dataloaders=dataloader,
-        val_dataloaders=dataloader_val,
-    )
+    try:
+        with recorder.span("training.fit", component="training"):
+            trainer.fit(
+                model=model,
+                train_dataloaders=dataloader,
+                val_dataloaders=dataloader_val,
+            )
 
-    # Save last:
-    if record:
-        model.save_model(f'{save_dir}/last.pt')
+        # Save last:
+        if record:
+            with recorder.span("training.checkpoint", component="training"):
+                model.save_model(f'{save_dir}/last.pt')
+    finally:
+        if remote is not None:
+            remote.close()
 
     return model

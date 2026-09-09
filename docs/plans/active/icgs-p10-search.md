@@ -216,3 +216,10 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Nonpreemptible IP may exceed small budgets and deeper model rollout may exploit prediction errors.
+
+## Observability integration addendum — 2026-09-09
+
+The current sequential candidate seam emits `candidate.created` with supplied
+index, seed, source/artifact IDs, batch/horizon and measured seconds. It does not
+emit U/F masses, visits, ranking, tie breaks or fallback claims. Those records
+remain P10-owned and are not inferred from the selected action.

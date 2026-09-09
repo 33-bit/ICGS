@@ -218,3 +218,11 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Native compatibility and end-to-end learned behavior require actual supported-environment and simulator acceptance, not documentation or local L0.
+
+## Observability integration addendum — 2026-09-09
+
+Native CLI `infer`, `train`, `evaluate` and `prepare-data` now open/close an
+exclusive local run unless mode is `off`; `icgs logs inspect/trace` is a
+stdlib-only reader usable outside the checkout. Evaluation and execution seams
+accept the same optional recorder. P13 still owns end-to-end assembly and must
+reject incomplete audit evidence where required; local tests do not pass C1–C5.

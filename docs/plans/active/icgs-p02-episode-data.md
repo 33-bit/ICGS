@@ -228,3 +228,10 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Asset availability, sensor fidelity, controllable generation and storage cost need a capped pilot.
+
+## Observability integration addendum — 2026-09-09
+
+No P02 episode collector or replay producer exists, so this implementation emits
+no fabricated lineage, rejection, censoring or terminal records. Offline run
+inspection can link current outer-boundary records and explicit capture IDs, but it
+does not replace P02 schema validation, ancestry splits or executed evidence.

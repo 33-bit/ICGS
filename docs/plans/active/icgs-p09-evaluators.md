@@ -218,3 +218,9 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Low-sample labels and planner distribution shift can yield miscalibration even under correct likelihood semantics.
+
+## Observability integration addendum — 2026-09-09
+
+P09 value/completion/terminal producers are not implemented. The recorder has no
+authority to infer V/S/progress/terminal probabilities or calibration IDs from
+an action; those fields remain future evaluator-owned evidence.

@@ -98,12 +98,15 @@ def _merge_known(base: dict[str, Any], update: Any, prefix: str) -> None:
             base[key] = value
 
 
-def _resolve_paths(config: dict[str, Any], directory: Path) -> None:
+def _resolve_paths(config: dict[str, Any], directory: Path, prefix: str = "") -> None:
     for key, value in config.items():
+        name = f"{prefix}.{key}" if prefix else key
         if isinstance(value, dict):
-            _resolve_paths(value, directory)
+            _resolve_paths(value, directory, name)
         elif key.endswith("_path") or key == "output_dir":
             _optional_path(value, key)
+            if name == "observability.output_dir":
+                continue
             if value is not None:
                 if Path(value).is_absolute():
                     continue
@@ -138,6 +141,8 @@ def _require_absolute_paths(config: Mapping[str, Any], prefix="config") -> None:
             _require_absolute_paths(value, name)
         elif value is not None and (key.endswith("_path") or key == "output_dir"):
             _optional_path(value, name)
+            if name == "config.observability.output_dir":
+                continue
             if not Path(value).is_absolute():
                 raise ValueError(f"{name} must be absolute in a resolved configuration; "
                                  "resolve an input using MethodConfig.from_file or supply absolute paths")
@@ -520,6 +525,115 @@ class NumericsConfig(TypedSection):
     rotation_training_clip_margin: float = _default_field("numerics.rotation_training_clip_margin")
     mass_sum_atol_float32: float = _default_field("numerics.mass_sum_atol_float32")
     mass_sum_atol_float64: float = _default_field("numerics.mass_sum_atol_float64")
+
+
+_OBSERVABILITY_LEVELS = frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"})
+_OBSERVABILITY_MODES = frozenset({"off", "normal", "debug", "capture"})
+
+
+def _validate_observability_values(value: Any) -> None:
+    """Validate logging controls without coupling them to runtime/model config."""
+    if value.mode not in _OBSERVABILITY_MODES:
+        raise ValueError(f"observability.mode is unknown: {value.mode!r}")
+    for name in ("console_level", "file_level"):
+        if getattr(value, name) not in _OBSERVABILITY_LEVELS:
+            raise ValueError(f"observability.{name} is unknown: {getattr(value, name)!r}")
+    if not isinstance(value.output_dir, str) or not value.output_dir.strip():
+        raise ValueError("observability.output_dir must be a nonempty path")
+    positive_ints = (
+        "metric_every_steps", "queue_capacity", "event_chunk_bytes",
+        "max_event_chunks_per_process", "metrics_total_bytes_per_process",
+        "max_record_bytes", "max_field_string_chars", "recent_event_capacity",
+        "capture_max_count", "capture_max_bytes_each", "capture_total_bytes",
+    )
+    for name in positive_ints:
+        item = getattr(value, name)
+        if isinstance(item, bool) or not isinstance(item, int) or item < 1:
+            raise ValueError(f"observability.{name} must be a positive integer")
+    if (isinstance(value.reserved_critical_slots, bool)
+            or not isinstance(value.reserved_critical_slots, int)
+            or value.reserved_critical_slots < 0):
+        raise ValueError("observability.reserved_critical_slots must be a nonnegative integer")
+    if value.reserved_critical_slots >= value.queue_capacity:
+        raise ValueError("observability.reserved_critical_slots must be smaller than queue_capacity")
+    for name in ("flush_interval_s", "shutdown_timeout_s"):
+        item = getattr(value, name)
+        if isinstance(item, bool) or not isinstance(item, (int, float)) or not isfinite(float(item)) or item <= 0:
+            raise ValueError(f"observability.{name} must be finite and positive")
+    if value.capture_total_bytes < value.capture_max_bytes_each:
+        raise ValueError("observability.capture_total_bytes must cover one capture")
+    if not isinstance(value.capture_arrays, bool):
+        raise ValueError("observability.capture_arrays must be boolean")
+    wandb = value.wandb
+    if wandb.mode not in {"offline", "online"}:
+        raise ValueError(f"observability.wandb.mode is unknown: {wandb.mode!r}")
+    if not isinstance(wandb.enabled, bool) or not isinstance(wandb.send_config, bool) or not isinstance(wandb.upload_artifacts, bool):
+        raise ValueError("observability.wandb boolean controls must be boolean")
+    if not isinstance(wandb.project, str) or not wandb.project.strip():
+        raise ValueError("observability.wandb.project must be nonempty")
+    if wandb.entity is not None and (not isinstance(wandb.entity, str) or not wandb.entity.strip()):
+        raise ValueError("observability.wandb.entity must be nonempty or null")
+    for name, items in (("trace_components", value.trace_components),
+                        ("trace_episodes", value.trace_episodes),
+                        ("wandb.tags", wandb.tags)):
+        if not all(isinstance(item, str) and item.strip() for item in items):
+            raise ValueError(f"observability.{name} must contain nonempty strings")
+    if not wandb.metric_prefixes or not all(isinstance(item, str) and item.strip() for item in wandb.metric_prefixes):
+        raise ValueError("observability.wandb.metric_prefixes must be nonempty strings")
+
+
+@dataclass(frozen=True)
+class WandbConfig(TypedSection):
+    enabled: bool = _default_field("observability.wandb.enabled")
+    mode: str = _default_field("observability.wandb.mode")
+    project: str = _default_field("observability.wandb.project")
+    entity: str | None = _default_field("observability.wandb.entity")
+    tags: tuple[str, ...] = _default_field("observability.wandb.tags")
+    metric_prefixes: tuple[str, ...] = _default_field("observability.wandb.metric_prefixes")
+    send_config: bool = _default_field("observability.wandb.send_config")
+    upload_artifacts: bool = _default_field("observability.wandb.upload_artifacts")
+
+    def to_dict(self) -> dict[str, Any]:
+        return json_shape(self)
+
+
+@dataclass(frozen=True)
+class ObservabilityConfig(TypedSection):
+    mode: str = _default_field("observability.mode")
+    output_dir: str = _default_field("observability.output_dir")
+    console_level: str = _default_field("observability.console_level")
+    file_level: str = _default_field("observability.file_level")
+    trace_components: tuple[str, ...] = _default_field("observability.trace_components")
+    trace_episodes: tuple[str, ...] = _default_field("observability.trace_episodes")
+    metric_every_steps: int = _default_field("observability.metric_every_steps")
+    queue_capacity: int = _default_field("observability.queue_capacity")
+    reserved_critical_slots: int = _default_field("observability.reserved_critical_slots")
+    flush_interval_s: float = _default_field("observability.flush_interval_s")
+    shutdown_timeout_s: float = _default_field("observability.shutdown_timeout_s")
+    event_chunk_bytes: int = _default_field("observability.event_chunk_bytes")
+    max_event_chunks_per_process: int = _default_field("observability.max_event_chunks_per_process")
+    metrics_total_bytes_per_process: int = _default_field("observability.metrics_total_bytes_per_process")
+    max_record_bytes: int = _default_field("observability.max_record_bytes")
+    max_field_string_chars: int = _default_field("observability.max_field_string_chars")
+    recent_event_capacity: int = _default_field("observability.recent_event_capacity")
+    capture_max_count: int = _default_field("observability.capture_max_count")
+    capture_max_bytes_each: int = _default_field("observability.capture_max_bytes_each")
+    capture_total_bytes: int = _default_field("observability.capture_total_bytes")
+    capture_arrays: bool = _default_field("observability.capture_arrays")
+    wandb: WandbConfig = field(default_factory=WandbConfig)
+
+    def __post_init__(self):
+        super().__post_init__()
+        _validate_observability_values(self)
+
+    def validate(self) -> "ObservabilityConfig":
+        _validate_observability_values(self)
+        return self
+
+    def to_dict(self) -> dict[str, Any]:
+        return json_shape(self)
+
+
 @dataclass(frozen=True)
 class MethodConfig(TypedSection):
     schema_version: int = _default_field("schema_version")
@@ -548,6 +662,7 @@ class MethodConfig(TypedSection):
     benchmark: BenchmarkConfig = field(default_factory=BenchmarkConfig)
     sensors: SensorsConfig = field(default_factory=SensorsConfig)
     numerics: NumericsConfig = field(default_factory=NumericsConfig)
+    observability: ObservabilityConfig = field(default_factory=ObservabilityConfig)
 
     def __post_init__(self):
         super().__post_init__()
@@ -671,6 +786,9 @@ class MethodConfig(TypedSection):
         _optional_path(self.training.output_dir, "training.output_dir")
         if self.training.heads != 3 or not 1 <= _positive_int(self.training.H, "training.H") <= PRIMARY_HORIZON:
             raise ValueError("training head/horizon inventory is incompatible")
+        if type(self.observability) is not ObservabilityConfig:
+            raise ValueError("observability section is invalid")
+        self.observability.validate()
         self._validate_extended()
         return self
 
@@ -773,7 +891,7 @@ class MethodConfig(TypedSection):
         flatten(json_shape(self))
         zero_ints = {"optimizer.warmup_updates", "router.neighbor_events_before",
                      "router.neighbor_events_after", "stages.A1.burnin_intervals",
-                     "dataset.grip_timing_offset_intervals"}
+                     "dataset.grip_timing_offset_intervals", "observability.reserved_critical_slots"}
         nonnegative = {"neural.dropout", "optimizer.weight_decay", "optimizer.minimum_learning_rate",
                        "reactive.ddim_eta", "planning.uct_exploration"}
         probabilities = {
@@ -784,6 +902,9 @@ class MethodConfig(TypedSection):
             "benchmark.confidence_level", "planning.widening_exponent",
         }
         signed = {"decoder.grid_min", "decoder.grid_max", "sensors.gravity_w", "sensors.workspace_bounds_m"}
+        allow_empty_arrays = {
+            "observability.trace_components", "observability.trace_episodes", "observability.wandb.tags",
+        }
         for name, value in values.items():
             if value is None or isinstance(value, bool):
                 continue
@@ -807,7 +928,7 @@ class MethodConfig(TypedSection):
                 if name in probabilities and not 0 <= value <= 1:
                     raise ValueError(f"{name} must be a probability in [0, 1]")
             elif isinstance(value, list) and name not in signed:
-                if not value:
+                if not value and name not in allow_empty_arrays:
                     raise ValueError(f"{name} must be a nonempty array")
                 for item in value:
                     if isinstance(item, str):
@@ -828,6 +949,10 @@ class MethodConfig(TypedSection):
             "reactive.beta_schedule": {"squaredcos_cap_v2"}, "reactive.prediction_type": {"epsilon"},
             "benchmark.multiple_comparison": {"holm"},
             "sensors.foreground_policy": {"declared_objects_and_blockers"},
+            "observability.mode": set(_OBSERVABILITY_MODES),
+            "observability.console_level": set(_OBSERVABILITY_LEVELS),
+            "observability.file_level": set(_OBSERVABILITY_LEVELS),
+            "observability.wandb.mode": {"offline", "online"},
         }
         for name, allowed in choices.items():
             if values[name] not in allowed:

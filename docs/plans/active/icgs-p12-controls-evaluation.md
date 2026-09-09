@@ -308,3 +308,10 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Suite feasibility, equal-data training and matched compute measurements remain unexecuted; B3 can generate outside the IP pool.
+
+## Observability integration addendum — 2026-09-09
+
+P12 statistical panels and control predicates remain future producers. Local
+inspection reports requested/completed evidence only when supplied by an eventual
+runner; it cannot assert false-stop, timeout, support, regret or matched-suite
+causes without the P12-owned records.

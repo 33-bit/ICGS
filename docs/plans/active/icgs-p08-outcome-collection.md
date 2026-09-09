@@ -230,3 +230,10 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Weak reference support, scarce confident reversal pairs and expensive replay may block meaningful primary-scale evidence.
+
+## Observability integration addendum — 2026-09-09
+
+P08 remains a future producer of attempt, branch, replay discrepancy and
+observed-through records. The current recorder can store explicit links supplied
+by an eventual collector, but it does not restore simulators, deserialize replay
+artifacts or assert outcome causes.

@@ -77,6 +77,15 @@ adding nondefault propagation tests before a consumer is called configurable.
 P05–P13 missing models/collectors/trainers remain planned, not implemented by this
 configuration work. No setting can replace a missing execution capability.
 
+Observability is the one additional packaged section consumed by the outer
+logging adapter. Its values live under `observability` in the same primary JSON;
+the typed `ObservabilityConfig` validates mode, levels, queue/capture quotas and
+the optional W&B envelope. A logging-only file uses the explicit
+`{"schema_version": 1, "observability": {...}}` envelope and does not alter the
+native `ExperimentConfig` or published reference projection. Library calls remain
+no-op unless a caller explicitly starts a run. The full method fingerprint includes
+these logging settings, while `reference_fingerprint` intentionally excludes them.
+
 Runtime components receive typed sections or scalar arguments from outer composition;
 never parse JSON or read docs inside forward/step loops. Preserve default state-dict
 shapes, ordering and numerical behavior when wiring existing consumers. Do not

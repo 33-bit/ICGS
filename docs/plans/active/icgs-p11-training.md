@@ -225,3 +225,11 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Training cost, optimizer stability and scientific performance remain unknown before authorized pilots.
+
+## Observability integration addendum — 2026-09-09
+
+The native training logger defect for `record=True` with W&B disabled is fixed by
+initializing an explicit logger variable and using the optional local Lightning
+bridge. It preserves native metric names and optimizer-step axes; the lazy W&B
+mirror is rank-0/queue bounded and never starts unless explicitly requested.
+Training, checkpoint generation and remote transport remain **NOT RUN** here.

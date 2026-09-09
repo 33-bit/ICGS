@@ -352,3 +352,13 @@ phase if an FG fails and request a scoped protocol decision.
   controller timing, sensor/pose/cloud drift, and replay equivalence remain
   feasibility questions. P01 validates only the explicit collaborator seam and
   report vocabulary; P08 still owns engine restoration and replay pilots.
+
+## Observability integration addendum — 2026-09-09
+
+The existing `materialize_prefix` and `TimedRLBenchAdapter` boundaries accept an
+optional recorder and emit only existing command identity, requested/achieved
+duration, physics-substep, boundary and controller-status metadata. Reset,
+advance and close are host spans; safe-hold/close failures emit bounded
+lifecycle-error type information while preserving the original control error.
+The recorder does not infer timing, alter target-root math or claim controller
+success. Engine-specific restoration remains a P08 producer.

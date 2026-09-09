@@ -287,6 +287,39 @@
       "rotation_training_clip_margin": 0.000001,
       "mass_sum_atol_float32": 0.00001,
       "mass_sum_atol_float64": 0.000000000001
+    },
+    "observability": {
+      "mode": "normal",
+      "output_dir": "outputs/runs",
+      "console_level": "INFO",
+      "file_level": "INFO",
+      "trace_components": [],
+      "trace_episodes": [],
+      "metric_every_steps": 100,
+      "queue_capacity": 8192,
+      "reserved_critical_slots": 256,
+      "flush_interval_s": 1.0,
+      "shutdown_timeout_s": 2.0,
+      "event_chunk_bytes": 10485760,
+      "max_event_chunks_per_process": 10,
+      "metrics_total_bytes_per_process": 67108864,
+      "max_record_bytes": 65536,
+      "max_field_string_chars": 2048,
+      "recent_event_capacity": 200,
+      "capture_max_count": 3,
+      "capture_max_bytes_each": 16777216,
+      "capture_total_bytes": 50331648,
+      "capture_arrays": false,
+      "wandb": {
+        "enabled": false,
+        "mode": "offline",
+        "project": "icgs",
+        "entity": null,
+        "tags": [],
+        "metric_prefixes": ["train.", "val.", "evaluation.", "planning.", "runtime.", "Train_Loss", "Val_"],
+        "send_config": false,
+        "upload_artifacts": false
+      }
     }
   }
 }

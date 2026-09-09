@@ -394,3 +394,11 @@ phase if an FG fails and request a scoped protocol decision.
   bridge, ranking, efficacy, or contact-mode claim is made. Remaining risk:
   correlated deterministic heads and unrealizable decoded states may induce
   optimistic search despite correct bookkeeping, and no trained P07 artifact exists.
+
+## Observability integration addendum — 2026-09-09
+
+`PhysicalRollout` now accepts an optional outer recorder and emits nested
+`physical.memory.read`, `physical.dynamics`, `physical.decode`,
+`physical.encode` and `physical.memory.update` spans. These observe host-side
+boundary identity only and preserve collaborator order/math. No model-forward
+producer, replay snapshot or imagined-state capture is fabricated.

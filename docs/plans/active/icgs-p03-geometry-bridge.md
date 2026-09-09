@@ -304,3 +304,11 @@ phase if an FG fails and request a scoped protocol decision.
   crop profile is still explicit but optional because no calibrated numeric
   workspace was supplied; GPU floating-point tie ordering is not claimed
   bitwise identical.
+
+## Observability integration addendum — 2026-09-09
+
+P03 geometry modules remain recorder-free. When composed through the P07 physical
+rollout seam, outer wrappers record encode/decode span timing and safe metadata
+only; they do not convert tensors, synchronize CUDA or capture model values by
+default. Bridge discrepancy and geometry-fidelity producers remain P03-owned
+future work.

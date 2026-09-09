@@ -1,4 +1,7 @@
+import json
+from pathlib import Path
 from types import SimpleNamespace
+import tempfile
 import unittest
 
 import numpy as np
@@ -393,6 +396,112 @@ class TimedExecutionTests(unittest.TestCase):
             environment.reset(seed=3)
         self.assertEqual(controller.reset_calls, 2)
         self.assertEqual(controller.close_calls, 1)
+
+    def test_timed_adapter_records_measured_transition_and_cleanup_chain(self):
+        from icgs.contracts.method import TimedCommand
+        from icgs.environments.rlbench.timed import TimedLifecycleError, TimedRLBenchAdapter
+        from icgs.observability.config import from_mapping
+        from icgs.observability.recorder import RunRecorder
+
+        controller = _LifecycleController()
+        with tempfile.TemporaryDirectory() as directory:
+            recorder = RunRecorder.start(
+                from_mapping({
+                    "output_dir": directory,
+                    "flush_interval_s": 0.01,
+                    "shutdown_timeout_s": 1.0,
+                }),
+                command="timed-observability",
+            )
+            environment = TimedRLBenchAdapter(
+                controller,
+                physics_dt=0.005,
+                sensor_profile_id="fixture-sensor",
+                recorder=recorder,
+            )
+            environment.reset(seed=5)
+            environment.advance(TimedCommand(np.eye(4), 1, 0.1))
+            controller.step_failures = 1
+            controller.safe_hold_failures = 1
+            controller.close_failures = 1
+            with self.assertRaises(TimedLifecycleError) as raised:
+                environment.advance(TimedCommand(np.eye(4), 0, 0.1))
+            environment.close()
+            recorder.close(status="failed", error=raised.exception)
+
+            records = []
+            for path in sorted((Path(recorder.path) / "events").glob("*.jsonl")):
+                records.extend(json.loads(line) for line in path.read_text().splitlines())
+            transitions = [item for item in records if item["event"] == "execution.transition"]
+            self.assertEqual(len(transitions), 1)
+            self.assertEqual(transitions[0]["fields"]["physics_substeps"], 20)
+            self.assertAlmostEqual(transitions[0]["fields"]["achieved_duration_s"], 0.1)
+            fields = transitions[0]["fields"]
+            self.assertEqual(fields["before_boundary"], 0)
+            self.assertEqual(fields["after_boundary"], 1)
+            self.assertEqual(fields["commanded_grip"], 1)
+            self.assertEqual(fields["before_grip"], 0.0)
+            self.assertEqual(fields["after_grip"], 1.0)
+            self.assertEqual(fields["sensor_profile_id"], "fixture-sensor")
+            np.testing.assert_allclose(fields["commanded_target_w"], np.eye(4).tolist())
+            np.testing.assert_allclose(fields["before_pose_w"], np.eye(4).tolist())
+            np.testing.assert_allclose(fields["after_pose_w"], np.eye(4).tolist())
+            cleanup = [item for item in records if item["event"] == "execution.lifecycle.error"]
+            self.assertTrue(cleanup)
+            self.assertEqual(cleanup[-1]["fields"]["operation_error"], "RuntimeError")
+            self.assertEqual(cleanup[-1]["fields"]["safe_hold_error"], "RuntimeError")
+            self.assertEqual(cleanup[-1]["fields"]["close_error"], "RuntimeError")
+
+    def test_timed_adapter_contains_recorder_span_entry_failure(self):
+        from icgs.contracts.method import TimedCommand
+        from icgs.environments.rlbench.timed import TimedRLBenchAdapter
+
+        class BrokenRecorder:
+            def span(self, *args, **kwargs):
+                raise OSError("span entry failed")
+
+            def event(self, *args, **kwargs):
+                raise OSError("event failed")
+
+        controller = _LifecycleController()
+        environment = TimedRLBenchAdapter(
+            controller,
+            physics_dt=0.005,
+            sensor_profile_id="fixture-sensor",
+            recorder=BrokenRecorder(),
+        )
+        environment.reset(seed=7)
+        transition = environment.advance(TimedCommand(np.eye(4), 1, 0.1))
+        self.assertEqual(transition.after.boundary, 1)
+        self.assertIn("set_target", controller.calls)
+
+    def test_timed_cleanup_does_not_format_or_replace_unprintable_operation_error(self):
+        from icgs.contracts.method import TimedCommand
+        from icgs.environments.rlbench.timed import TimedLifecycleError, TimedRLBenchAdapter
+
+        class UnprintableError(RuntimeError):
+            def __str__(self):
+                raise OSError("formatting failed")
+
+        class UnprintableController(_LifecycleController):
+            def __init__(self):
+                super().__init__(safe_hold_failures=1, close_failures=1)
+                self.failure = UnprintableError()
+
+            def step_physics(self):
+                self.calls.append("step_physics")
+                raise self.failure
+
+        controller = UnprintableController()
+        environment = TimedRLBenchAdapter(
+            controller,
+            physics_dt=0.005,
+            sensor_profile_id="fixture-sensor",
+        )
+        environment.reset(seed=8)
+        with self.assertRaises(TimedLifecycleError) as raised:
+            environment.advance(TimedCommand(np.eye(4), 1, 0.1))
+        self.assertIs(raised.exception.operation_error, controller.failure)
 
     def test_timed_adapter_rejects_missing_low_level_physics_step(self):
         from icgs.environments.rlbench.timed import TimedRLBenchAdapter
