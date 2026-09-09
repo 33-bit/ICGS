@@ -11,18 +11,6 @@ from icgs.configuration.method import MethodConfig, NumericsConfig
 from icgs.state.physical import PhysicalState
 
 
-def _mass_atol(
-    values: Sequence[np.ndarray | float],
-    numerics: NumericsConfig,
-) -> float:
-    is_float32 = any(
-        getattr(v, "dtype", None) == np.float32
-        for v in values
-        if isinstance(v, np.ndarray)
-    )
-    return numerics.mass_sum_atol_float32 if is_float32 else numerics.mass_sum_atol_float64
-
-
 def propagate_mass(
     U: float,
     F: float,
@@ -59,10 +47,18 @@ def propagate_mass(
     if (w_arr < 0.0).any():
         raise ValueError("weights must be nonnegative")
 
-    is_float32 = w_arr.dtype == np.float32 or ev_arr.dtype == np.float32
-    atol = _mass_atol((w_arr, ev_arr), numerics)
+    operands_for_dtype = [w_arr.dtype, ev_arr.dtype]
+    if hasattr(U, "dtype"):
+        operands_for_dtype.append(U.dtype)
+    if hasattr(F, "dtype"):
+        operands_for_dtype.append(F.dtype)
+    target_dtype = np.result_type(*operands_for_dtype)
 
-    prior_mass = U + F + float(w_arr.sum())
+    w_arr = w_arr.astype(target_dtype, copy=False)
+    ev_arr = ev_arr.astype(target_dtype, copy=False)
+    atol = numerics.mass_sum_atol_float32 if target_dtype == np.float32 else numerics.mass_sum_atol_float64
+
+    prior_mass = float(U) + float(F) + float(w_arr.sum())
     if abs(prior_mass - 1.0) > atol:
         raise ValueError(f"prior mass must sum to 1.0 within {atol}, got {prior_mass}")
 
@@ -83,18 +79,14 @@ def propagate_mass(
     failure = ev_arr[:, 1]
     cont = ev_arr[:, 2]
 
-    if is_float32:
-        next_U = np.float32(U + (w_arr * success).sum())
-        next_F = np.float32(F + (w_arr * failure).sum())
-    else:
-        next_U = float(U + (w_arr * success).sum())
-        next_F = float(F + (w_arr * failure).sum())
-    next_weights = w_arr * cont
+    next_U = target_dtype.type(float(U) + (w_arr * success).sum())
+    next_F = target_dtype.type(float(F) + (w_arr * failure).sum())
+    next_weights = (w_arr * cont).astype(target_dtype, copy=False)
 
     # Zero active mass means exactly zero
-    next_weights = np.where(next_weights == 0.0, 0.0, next_weights)
+    next_weights = np.where(cont == 0.0, target_dtype.type(0.0), next_weights)
 
-    posterior_mass = next_U + next_F + float(next_weights.sum())
+    posterior_mass = float(next_U) + float(next_F) + float(next_weights.sum())
     if abs(posterior_mass - 1.0) > atol:
         raise ValueError(f"posterior mass must sum to 1.0 within {atol}, got {posterior_mass}")
 
@@ -213,13 +205,22 @@ class BeliefNode:
             if not isinstance(h, Hypothesis) or h.head_id != i:
                 raise ValueError(f"Hypothesis {i} must be a Hypothesis with head_id {i}")
 
-        is_float32 = (
-            getattr(self.U, "dtype", None) == np.float32
-            or getattr(self.F, "dtype", None) == np.float32
-            or any(getattr(h.weight, "dtype", None) == np.float32 for h in self.hypotheses)
+        mass_dtypes = [
+            getattr(x, "dtype", None)
+            for x in (self.U, self.F, *(h.weight for h in self.hypotheses))
+            if hasattr(x, "dtype")
+        ]
+        if mass_dtypes:
+            target_dtype = np.result_type(*mass_dtypes)
+        else:
+            target_dtype = np.dtype(np.float64)
+
+        self._weights_dtype = target_dtype.type
+        atol = (
+            self.cfg.numerics.mass_sum_atol_float32
+            if target_dtype == np.float32
+            else self.cfg.numerics.mass_sum_atol_float64
         )
-        self._weights_dtype = np.float32 if is_float32 else np.float64
-        atol = self.cfg.numerics.mass_sum_atol_float32 if is_float32 else self.cfg.numerics.mass_sum_atol_float64
         total_mass = float(self.U) + float(self.F) + sum(float(h.weight) for h in self.hypotheses)
         if abs(total_mass - 1.0) > atol:
             raise ValueError(f"BeliefNode total mass must sum to 1.0 within {atol}, got {total_mass}")

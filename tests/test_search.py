@@ -367,6 +367,56 @@ class SearchBeliefTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             BeliefNode(tau=0, H_root=5, U=0.0, F=0.0, hypotheses=(h0_64, h1_64, h2_64), cfg=self.cfg)
 
+    def test_regression_mixed_fp32_fp64_dtype_consistency_and_no_downcast(self) -> None:
+        """Mixed FP32 and FP64 inputs must promote via np.result_type to FP64 without downcasting drift."""
+        s0 = _make_physical_state(translation=(0.0, 0.0, 0.0))
+        s1 = _make_physical_state(translation=(0.01, 0.0, 0.0))
+        s2 = _make_physical_state(translation=(0.02, 0.0, 0.0))
+
+        # Mixed inputs: weights FP64, events FP32
+        w64 = np.array([0.3, 0.3, 0.3], dtype=np.float64)
+        ev32 = np.array([
+            [0.25, 0.25, 0.5],
+            [0.25, 0.25, 0.5],
+            [0.25, 0.25, 0.5],
+        ], dtype=np.float32)
+
+        u, f, w = propagate_mass(0.1, 0.0, w64, ev32, self.cfg)
+        # All outputs must be consistent FP64 (promoted by np.result_type)
+        self.assertEqual(getattr(u, "dtype", None), np.float64)
+        self.assertEqual(getattr(f, "dtype", None), np.float64)
+        self.assertEqual(w.dtype, np.float64)
+
+        # Mixed inputs reversed: weights FP32, events FP64
+        w32 = np.array([0.25, 0.25, 0.25], dtype=np.float32)
+        ev64 = np.array([
+            [0.25, 0.25, 0.5],
+            [0.25, 0.25, 0.5],
+            [0.25, 0.25, 0.5],
+        ], dtype=np.float64)
+        u_rev, f_rev, w_rev = propagate_mass(0.25, 0.0, w32, ev64, self.cfg)
+        self.assertEqual(getattr(u_rev, "dtype", None), np.float64)
+        self.assertEqual(getattr(f_rev, "dtype", None), np.float64)
+        self.assertEqual(w_rev.dtype, np.float64)
+
+        # Mixed node: FP64 weights with FP64 drift of 2e-7 must NOT be accepted under FP32 tolerance
+        # even if U or another operand was FP32
+        u_fp32 = np.float32(0.0)
+        w_drift_64 = np.array([0.3333333, 0.3333333, 0.3333335], dtype=np.float64)
+        h0_64 = Hypothesis(head_id=0, state=s0, task=None, weight=w_drift_64[0])
+        h1_64 = Hypothesis(head_id=1, state=s1, task=None, weight=w_drift_64[1])
+        h2_64 = Hypothesis(head_id=2, state=s2, task=None, weight=w_drift_64[2])
+        with self.assertRaises(ValueError):
+            BeliefNode(tau=0, H_root=5, U=u_fp32, F=0.0, hypotheses=(h0_64, h1_64, h2_64), cfg=self.cfg)
+
+        # When node is created from mixed inputs without drift, node.weights must be FP64 (not downcast)
+        w_nodrift_64 = np.array([1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0], dtype=np.float64)
+        h0_ok = Hypothesis(head_id=0, state=s0, task=None, weight=w_nodrift_64[0])
+        h1_ok = Hypothesis(head_id=1, state=s1, task=None, weight=w_nodrift_64[1])
+        h2_ok = Hypothesis(head_id=2, state=s2, task=None, weight=w_nodrift_64[2])
+        node_mixed = BeliefNode(tau=0, H_root=5, U=u_fp32, F=0.0, hypotheses=(h0_ok, h1_ok, h2_ok), cfg=self.cfg)
+        self.assertEqual(node_mixed.weights.dtype, np.float64)
+
     def test_regression_medoid_rotation_small_angles_and_pi(self) -> None:
         """Medoid rotation metric clamps [-1, 1] without training margin, selecting central small rotation."""
         import math
