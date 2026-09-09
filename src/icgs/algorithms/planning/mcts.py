@@ -27,12 +27,12 @@ from icgs.observability.recorder import NoopRecorder
 from icgs.state.physical import PhysicalState
 
 
-def _resolve_planning_cfg(cfg: MethodConfig | PlanningConfig) -> tuple[PlanningConfig, float]:
-    """Extract PlanningConfig and control dt0 without duck typing."""
+def _extract_planning_config(cfg: MethodConfig | PlanningConfig) -> PlanningConfig:
+    """Extract PlanningConfig without duck typing or invented fallbacks."""
     if isinstance(cfg, MethodConfig):
-        return cfg.planning, float(cfg.control.dt0)
+        return cfg.planning
     if isinstance(cfg, PlanningConfig):
-        return cfg, 0.1
+        return cfg
     raise TypeError(f"cfg must be MethodConfig or PlanningConfig, got {type(cfg)}")
 
 
@@ -41,7 +41,7 @@ def widening_limit(
     cfg: MethodConfig | PlanningConfig,
 ) -> int:
     """Calculate progressive widening candidate limit for a node."""
-    p_cfg, _ = _resolve_planning_cfg(cfg)
+    p_cfg = _extract_planning_config(cfg)
 
     if isinstance(visits, bool) or not isinstance(visits, (int, np.integer)):
         raise TypeError("visits must be an integer")
@@ -62,7 +62,7 @@ def uct(
     cfg: MethodConfig | PlanningConfig,
 ) -> float:
     """Calculate UCT selection value for a visited edge."""
-    p_cfg, _ = _resolve_planning_cfg(cfg)
+    p_cfg = _extract_planning_config(cfg)
 
     if isinstance(visits, bool) or not isinstance(visits, (int, np.integer)):
         raise TypeError("visits must be an integer")
@@ -241,9 +241,9 @@ def _extract_task_identity(task: Any, capabilities: Any) -> str:
     raise ValueError("task must provide an explicit history identity (e.g. history_id or capabilities.task_identity)")
 
 
-def _branch_copy_task(task: Any, capabilities: Any) -> Any:
+def _branch_copy_task(task: Any, capabilities: Any = None) -> Any:
     """Produce an isolated branch copy of task state."""
-    if hasattr(capabilities, "branch_copy_task") and callable(capabilities.branch_copy_task):
+    if capabilities is not None and hasattr(capabilities, "branch_copy_task") and callable(capabilities.branch_copy_task):
         return capabilities.branch_copy_task(task)
     if hasattr(task, "branch_copy") and callable(task.branch_copy):
         return task.branch_copy()
@@ -251,7 +251,7 @@ def _branch_copy_task(task: Any, capabilities: Any) -> Any:
         return copy.deepcopy(task)
     if hasattr(task, "__dict__"):
         return copy.deepcopy(task)
-    return task
+    return copy.deepcopy(task)
 
 
 def _canonical_command_bytes(cmd: TimedCommand) -> bytes:
@@ -260,6 +260,34 @@ def _canonical_command_bytes(cmd: TimedCommand) -> bytes:
     grip_bytes = int(cmd.grip).to_bytes(1, "big")
     dur_bytes = float(cmd.duration_s).hex().encode("ascii")
     return pose_bytes + grip_bytes + dur_bytes
+
+
+def _validate_scalar_probability(val: Any, name: str) -> float:
+    """Validate that val is a single finite scalar within [0, 1], rejecting multi-element arrays/tensors."""
+    if isinstance(val, (int, float, np.floating, np.integer)):
+        f_val = float(val)
+    elif isinstance(val, np.ndarray):
+        if val.size != 1:
+            raise ValueError(f"{name} must be a single scalar, got array of shape {val.shape}")
+        f_val = float(val.item())
+    elif hasattr(val, "numel") and callable(val.numel):
+        if val.numel() != 1:
+            raise ValueError(f"{name} must be a single scalar, got tensor of shape {tuple(val.shape)}")
+        f_val = float(val.item())
+    else:
+        try:
+            arr = np.asarray(val)
+            if arr.size != 1:
+                raise ValueError(f"{name} must be a single scalar, got shape {arr.shape}")
+            f_val = float(arr.item())
+        except (TypeError, ValueError) as e:
+            raise ValueError(f"{name} cannot be converted to scalar: {e}") from e
+
+    if not math.isfinite(f_val):
+        raise ValueError(f"{name} must be finite, got {f_val}")
+    if f_val < 0.0 or f_val > 1.0:
+        raise ValueError(f"{name} must be in [0.0, 1.0], got {f_val}")
+    return f_val
 
 
 @dataclass(frozen=True)
@@ -299,10 +327,19 @@ class ExactCache:
         self.misses += 1
         return None
 
-    def put(self, key: CacheKey, transition: tuple[PhysicalState, Any, np.ndarray]) -> None:
-        """Store transition in cache with branch isolation."""
+    def put(
+        self,
+        key: CacheKey,
+        transition: tuple[PhysicalState, Any, np.ndarray],
+        capabilities: Any = None,
+    ) -> None:
+        """Store transition in cache with branch isolation for all task representations."""
         st, tk, probs = transition
-        self._cache[key] = (st.branch_copy(), copy.deepcopy(tk) if isinstance(tk, dict) else tk, np.array(probs, copy=True))
+        self._cache[key] = (
+            st.branch_copy(),
+            _branch_copy_task(tk, capabilities),
+            np.array(probs, copy=True),
+        )
 
     def counters(self) -> dict[str, int]:
         return {
@@ -383,7 +420,7 @@ def _step_edge(
                 probs = np.asarray(term.probabilities if hasattr(term, "probabilities") else term.probs, dtype=np.float64)
                 if probs.ndim == 2:
                     probs = probs[0]
-                cache.put(key, (next_st, next_tk, probs))
+                cache.put(key, (next_st, next_tk, probs), capabilities)
 
             next_states.append(next_st)
             next_tasks.append(next_tk)
@@ -413,7 +450,7 @@ def plan(
     H: int,
     budget: PlanningBudget,
     capabilities: MethodCapabilities,
-    cfg: MethodConfig | PlanningConfig,
+    cfg: MethodConfig,
     seed: int = 0,
     clock: Callable[[], float] | None = None,
     recorder: Any = None,
@@ -423,8 +460,11 @@ def plan(
         raise ValueError("Explicit bounded PlanningBudget must be provided to plan")
     if capabilities is None:
         raise ValueError("capabilities must be provided to execute MCTS plan")
+    if not isinstance(cfg, MethodConfig):
+        raise TypeError(f"cfg must be MethodConfig, got {type(cfg)}")
 
-    p_cfg, dt0 = _resolve_planning_cfg(cfg)
+    p_cfg = cfg.planning
+    dt0 = float(cfg.control.dt0)
 
     if isinstance(H, bool) or not isinstance(H, (int, np.integer)) or H < 0:
         raise ValueError("H must be a nonnegative integer")
@@ -446,16 +486,17 @@ def plan(
     # Initialize root U from evaluator with strict finite [0, 1] validation
     events = getattr(context, "events", context)
     root_eval = capabilities.evaluate_state(state, task, events, H=H)
-    c_stop = float(np.asarray(root_eval.calibrated_stop).flat[0])
-    if not math.isfinite(c_stop) or c_stop < 0.0 or c_stop > 1.0:
-        raise ValueError(f"Root completion must be finite and within [0, 1], got {c_stop}")
-
-    u_root = c_stop
+    u_root = _validate_scalar_probability(root_eval.calibrated_stop, "Root calibrated_stop")
     f_root = 0.0
     w_root = (1.0 - u_root) / 3.0
 
     root_hypotheses = tuple(
-        Hypothesis(head_id=m, state=state, task=task, weight=w_root)
+        Hypothesis(
+            head_id=m,
+            state=state.branch_copy(),
+            task=_branch_copy_task(task, capabilities),
+            weight=w_root,
+        )
         for m in range(3)
     )
     root_node = BeliefNode(
@@ -470,6 +511,23 @@ def plan(
     # Cache is strictly scoped to this one root
     root_cache_id = f"root_{state.boundary}_{time.monotonic_ns()}_{seed}"
     exact_cache = ExactCache(root_cache_id)
+
+    # Prompt termination for H=0 or fully absorbed root
+    if H == 0 or root_node.is_terminal:
+        return PlanningResult(
+            selected_prefix=None,
+            completed=bool(root_node.U >= 1.0 - 1e-6),
+            fallback_reason="terminal_root" if root_node.is_terminal else "zero_horizon",
+            expected_return=float(root_node.U),
+            call_count=0,
+            timing_counters={
+                "iterations": 0,
+                "native_calls": 0,
+                "model_intervals": 0,
+            },
+            cache_counters=exact_cache.counters(),
+            audit_ids=(),
+        )
 
     # Accounting and audit tracking
     audit_records: list[CandidateAuditRecord] = []
@@ -513,21 +571,35 @@ def plan(
                 rep_hyp = curr_node.select_representative()
                 rep_st = rep_hyp.state
                 if rep_st.cached_world_cloud is not None and rep_st.cached_world_cloud_valid is not None:
-                    cloud = rep_st.cached_world_cloud[0]
-                    valid_mask = rep_st.cached_world_cloud_valid[0]
-                    points = cloud[valid_mask]
+                    cloud_t = rep_st.cached_world_cloud[0]
+                    valid_mask_t = rep_st.cached_world_cloud_valid[0]
+                    points_t = cloud_t[valid_mask_t]
                 else:
-                    cloud = rep_st.x[0]
-                    valid_mask = rep_st.valid[0]
-                    points = cloud[valid_mask]
+                    cloud_t = rep_st.x[0]
+                    valid_mask_t = rep_st.valid[0]
+                    points_t = cloud_t[valid_mask_t]
 
-                if points.shape[0] == 0:
-                    raise ValueError("Observation points cannot be empty")
+                points_np = np.ascontiguousarray(points_t.detach().cpu().numpy())
+                if points_np.ndim != 2 or points_np.shape[1] != 3 or points_np.shape[0] == 0:
+                    raise ValueError(f"Observation points must be non-empty (N, 3) array, got shape {points_np.shape}")
+                if not np.all(np.isfinite(points_np)):
+                    raise ValueError("Observation points must contain finite values")
+
+                pose_np = np.ascontiguousarray(rep_st.T_w_e[0].detach().cpu().numpy())
+                if pose_np.shape != (4, 4):
+                    raise ValueError(f"Observation pose must have shape (4, 4), got {pose_np.shape}")
+                if not np.all(np.isfinite(pose_np)):
+                    raise ValueError("Observation pose must contain finite values")
+
+                grip_raw = rep_st.grip[0].item() if hasattr(rep_st.grip[0], "item") else float(rep_st.grip[0])
+                grip_val = float(grip_raw)
+                if not math.isfinite(grip_val):
+                    raise ValueError("Observation grip must be finite float")
 
                 rep_obs = Observation(
-                    points=points,
-                    T_w_e=rep_st.T_w_e[0],
-                    grip=float(rep_st.grip[0].item()),
+                    points=points_np,
+                    T_w_e=pose_np,
+                    grip=grip_val,
                 )
 
                 sample_seed = (seed + next_sample_idx * 10007) & 0x7FFFFFFF
@@ -646,8 +718,8 @@ def plan(
                 h_m = leaf.hypotheses[m]
                 if h_m.weight > 0.0:
                     eval_res = capabilities.evaluate_state(h_m.state, h_m.task, events, rem)
-                    cv = eval_res.calibrated_value
-                    values[m] = float(np.asarray(cv).flat[0])
+                    cv = _validate_scalar_probability(eval_res.calibrated_value, "Leaf calibrated_value")
+                    values[m] = cv
             G = leaf_return(leaf.U, leaf.weights, values, rem)
 
         # One G backup per visited path; node visit incremented once

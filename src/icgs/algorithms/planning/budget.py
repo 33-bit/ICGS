@@ -37,9 +37,9 @@ class PlanningBudget:
         if not isinstance(self.clock_track, str) or not self.clock_track.strip():
             raise ValueError("clock_track must be nonempty string")
 
-        if self.wall_budget_s is None and self.native_call_cap is None and self.model_interval_cap is None:
+        if self.wall_budget_s is None and self.native_call_cap is None:
             raise ValueError(
-                "PlanningBudget must specify at least one bound (wall_budget_s, native_call_cap, or model_interval_cap)"
+                "PlanningBudget must specify wall_budget_s or native_call_cap (model_interval_cap alone is insufficient)"
             )
 
     def check_native_call(self, count: int) -> bool:

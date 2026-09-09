@@ -723,6 +723,23 @@ class SearchMCTSTests(unittest.TestCase):
         self.assertEqual(edge1_backups[-1]["fields"]["visits"], 1)
         self.assertAlmostEqual(edge1_backups[-1]["fields"]["total_return"], 0.55)
 
+        # Depth-2 edge (Edge 2) expanded and visited in iteration 3 -> final visits 1
+        edge2_backups = [e for e in edge_events if e["fields"]["edge_id"] == 2]
+        self.assertEqual(len(edge2_backups), 1)
+        self.assertEqual(edge2_backups[0]["fields"]["visits"], 1)
+        self.assertAlmostEqual(edge2_backups[0]["fields"]["total_return"], 0.1)
+
+        # Depth-1 child nodes at tau=2: Edge 0 child visited in iter 1 and 3 (final visits 2), Edge 1 child in iter 2 (visits 1)
+        child_visits = [e for e in node_events if e["fields"]["tau"] == 2]
+        self.assertEqual(len(child_visits), 3)
+        edge0_child_final = [e for e in child_visits if e["fields"]["visits"] == 2]
+        self.assertEqual(len(edge0_child_final), 1)
+
+        # Depth-2 leaf node at tau=4 visited in iteration 3 -> visits 1
+        leaf_visits = [e for e in node_events if e["fields"]["tau"] == 4]
+        self.assertEqual(len(leaf_visits), 1)
+        self.assertEqual(leaf_visits[0]["fields"]["visits"], 1)
+
         # Edge 0 selected because it has 2 visits vs Edge 1's 1 visit
         self.assertIsNotNone(result.selected_prefix)
         self.assertAlmostEqual(result.expected_return, 0.325)
@@ -863,8 +880,31 @@ class SearchMCTSTests(unittest.TestCase):
         self.assertGreaterEqual(len(selections), 1)
         self.assertEqual(selections[0]["fields"]["selected_edge_id"], 0)
 
-        # Root choice broke to Edge 0 (most visits: 2 > 1)
+        # Case 1: Root choice broke to Edge 0 (most visits: 2 > 1)
         self.assertEqual(res.selected_prefix.raw_candidate_id, "cand_0")
+
+        # Case 2: Equal visits (1 each), greater Q -> chooses edge with greater Q
+        class CustomEvalCapabilities(DeterministicMockCapabilities):
+            def evaluate_state(self, state: PhysicalState, task: Any, events: Any, H: int) -> EvaluationOutput:
+                # Leaf of Edge 0 (boundary 2) gets value 0.2; Leaf of Edge 1 (boundary 4) gets value 0.8
+                # But here boundary of Edge 0 is 2, and Edge 1 is also 2.
+                # Differentiate by command offset or head_id or call count:
+                eval_idx = len(self.evaluate_state_calls)
+                self.evaluate_state_calls.append({"boundary": state.boundary, "H": H})
+                # Root eval is idx 0. Iteration 1 eval is idx 1 (Edge 0). Iteration 2 eval is idx 2 (Edge 1).
+                val = 0.2 if eval_idx <= 3 else 0.8
+                return _make_evaluation_output(value=val, stop=self.stop_value, horizon=H)
+
+        caps_q = CustomEvalCapabilities()
+        res_q = plan(state, task, context, H=4, budget=PlanningBudget(native_call_cap=2), capabilities=caps_q, cfg=self.cfg)
+        # Both edges visited once; Edge 1 has higher Q (0.8 vs 0.2) -> chooses cand_1
+        self.assertEqual(res_q.selected_prefix.raw_candidate_id, "cand_1")
+
+        # Case 3: Equal visits (1 each), equal Q -> chooses earlier edge ID (cand_0 over cand_1)
+        caps_tie = DeterministicMockCapabilities()
+        res_tie = plan(state, task, context, H=4, budget=PlanningBudget(native_call_cap=2), capabilities=caps_tie, cfg=self.cfg)
+        # Both edges visited once, identical Q -> breaks tie to cand_0
+        self.assertEqual(res_tie.selected_prefix.raw_candidate_id, "cand_0")
 
     def test_partial_edges_and_deadline_truncation(self) -> None:
         """When remaining horizon H - tau < h, edge is truncated to a partial edge carrying actual remaining steps."""
@@ -1018,14 +1058,32 @@ class SearchMCTSTests(unittest.TestCase):
         cached_2 = cache.get(key, caps)
         self.assertNotEqual(float(cached_2[0].x[0, 0, 0].item()), 999.0)
 
+        # Verify non-dict mutable task child/cache isolation
+        class MutableTask:
+            def __init__(self, history_id: str, step: int) -> None:
+                self.history_id = history_id
+                self.step = step
+
+            def branch_copy(self) -> MutableTask:
+                import copy
+                return copy.deepcopy(self)
+
+        task_obj = MutableTask("task_custom", step=10)
+        cache.put(key, (dummy_state, task_obj, np.array([0.0, 0.0, 1.0])))
+        task_obj.step = 999
+        retrieved_tk = cache.get(key, caps)[1]
+        self.assertEqual(retrieved_tk.step, 10)
+
     def test_audit_issue_2_bounded_budget_and_operation_level_cap_interrupt(self) -> None:
         """PlanningBudget requires at least one bound; cap reached during edge stepping interrupts without evaluating incomplete edge."""
         from icgs.algorithms.planning.budget import PlanningBudget
         from icgs.algorithms.planning.mcts import plan
 
-        # Budget requires at least one bound
+        # Budget requires wall or native_call bound; model cap alone is insufficient
         with self.assertRaises(ValueError):
             PlanningBudget()
+        with self.assertRaises(ValueError):
+            PlanningBudget(model_interval_cap=1)
 
         caps = DeterministicMockCapabilities()
         state = _make_physical_state(translation=(0.0, 0.0, 0.0), boundary=0)
@@ -1033,9 +1091,9 @@ class SearchMCTSTests(unittest.TestCase):
         context = {"context_id": "ctx_0"}
 
         # Edge needs 2 steps * 3 heads = 6 model intervals.
-        # Cap at 1 model interval: first predict_step happens, then cap reached.
+        # Cap at 1 model interval with wall budget: first predict_step happens, then cap reached.
         # Incomplete edge must NOT be evaluated, NOT added to tree, NOT backed up.
-        budget = PlanningBudget(model_interval_cap=1)
+        budget = PlanningBudget(model_interval_cap=1, wall_budget_s=5.0)
         result = plan(state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg)
 
         self.assertFalse(result.completed)
@@ -1043,6 +1101,51 @@ class SearchMCTSTests(unittest.TestCase):
         self.assertEqual(result.fallback_reason, "budget_exhausted")
         self.assertEqual(result.timing_counters["model_intervals"], 1)
         self.assertEqual(len(caps.predict_step_calls), 1)
+
+        # H=0 terminates promptly under fixed fake clock without infinite loop
+        ticks_h0 = [0]
+        def fake_clock_h0() -> float:
+            ticks_h0[0] += 1
+            if ticks_h0[0] > 10:
+                raise TimeoutError("Plan looped infinitely on H=0")
+            return 0.0
+
+        res_h0 = plan(
+            state,
+            task,
+            context,
+            H=0,
+            budget=PlanningBudget(native_call_cap=5),
+            capabilities=caps,
+            cfg=self.cfg,
+            clock=fake_clock_h0,
+        )
+        self.assertFalse(res_h0.completed)
+        self.assertIsNone(res_h0.selected_prefix)
+        self.assertLessEqual(res_h0.call_count, 1)
+
+        # Absorbed root terminates promptly under fixed fake clock without infinite loop
+        ticks_abs = [0]
+        def fake_clock_abs() -> float:
+            ticks_abs[0] += 1
+            if ticks_abs[0] > 10:
+                raise TimeoutError("Plan looped infinitely on absorbed root")
+            return 0.0
+
+        caps_absorbed = DeterministicMockCapabilities(stop_value=1.0)
+        res_abs = plan(
+            state,
+            task,
+            context,
+            H=4,
+            budget=PlanningBudget(native_call_cap=5),
+            capabilities=caps_absorbed,
+            cfg=self.cfg,
+            clock=fake_clock_abs,
+        )
+        self.assertTrue(res_abs.completed)
+        self.assertIsNone(res_abs.selected_prefix)
+        self.assertLessEqual(res_abs.call_count, 1)
 
     def test_audit_issue_3_native_observation_from_representative(self) -> None:
         """Representative observation passed to sample_prior is a validated native Observation with points, T_w_e, grip."""
@@ -1060,12 +1163,21 @@ class SearchMCTSTests(unittest.TestCase):
         self.assertEqual(len(caps.sample_prior_calls), 1)
         obs = caps.sample_prior_calls[0]["obs"]
         self.assertIsInstance(obs, Observation)
+        # Must be detached CPU owned numpy arrays, not torch tensors
+        self.assertIsInstance(obs.points, np.ndarray)
+        self.assertIsInstance(obs.T_w_e, np.ndarray)
+        self.assertEqual(obs.points.ndim, 2)
         self.assertEqual(obs.points.shape[-1], 3)
+        self.assertGreater(obs.points.shape[0], 0)
+        self.assertTrue(np.all(np.isfinite(obs.points)))
         self.assertEqual(obs.T_w_e.shape, (4, 4))
+        self.assertTrue(np.all(np.isfinite(obs.T_w_e)))
+        self.assertIsInstance(obs.grip, float)
+        self.assertTrue(math.isfinite(obs.grip))
         self.assertIn(obs.grip, (0.0, 1.0))
 
     def test_audit_issue_4_config_discipline_and_no_duck_typing(self) -> None:
-        """MethodConfig/PlanningConfig is strictly required; duck typing and legacy tunables are rejected."""
+        """MethodConfig is strictly required for plan; formula helpers accept PlanningConfig."""
         from icgs.algorithms.planning.budget import PlanningBudget
         from icgs.algorithms.planning.mcts import plan, widening_limit, uct
 
@@ -1083,6 +1195,15 @@ class SearchMCTSTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             plan(state, task, context, H=4, budget=budget, capabilities=caps, cfg="not_a_config")  # type: ignore[arg-type]
 
+        # plan requires MethodConfig only; PlanningConfig alone must be rejected
+        with self.assertRaises(TypeError):
+            plan(state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg.planning)  # type: ignore[arg-type]
+
+        # formula helpers accept PlanningConfig
+        self.assertEqual(widening_limit(0, self.cfg.planning), 1)
+        expected_uct = 1.0 + float(self.cfg.planning.uct_exploration) * math.sqrt(math.log(2))
+        self.assertAlmostEqual(uct(1.0, 1, 1, self.cfg.planning), expected_uct)
+
     def test_audit_issue_5_strict_materialization_length_and_finite_completion(self) -> None:
         """Malformed completion or wrong prefix length from capabilities is strictly rejected without silent alteration."""
         from icgs.algorithms.planning.budget import PlanningBudget
@@ -1097,6 +1218,35 @@ class SearchMCTSTests(unittest.TestCase):
         caps_bad_stop = DeterministicMockCapabilities(stop_value=1.5)
         with self.assertRaises(ValueError):
             plan(state, task, context, H=4, budget=budget, capabilities=caps_bad_stop, cfg=self.cfg)
+
+        # Multi-element stop probability at root
+        caps_bad_shape_stop = DeterministicMockCapabilities(stop_value=np.array([0.2, 0.8]))  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            plan(state, task, context, H=4, budget=budget, capabilities=caps_bad_shape_stop, cfg=self.cfg)
+
+        # Leaf calibrated_value multi-element rejection
+        class BadValShapeCapabilities(DeterministicMockCapabilities):
+            def evaluate_state(self, state: PhysicalState, task: Any, events: Any, H: int) -> EvaluationOutput:
+                return _make_evaluation_output(value=np.array([0.3, 0.7]), stop=self.stop_value, horizon=H)  # type: ignore[arg-type]
+
+        with self.assertRaises(ValueError):
+            plan(state, task, context, H=4, budget=budget, capabilities=BadValShapeCapabilities(), cfg=self.cfg)
+
+        # Leaf calibrated_value > 1.0 rejection
+        class BadValHighCapabilities(DeterministicMockCapabilities):
+            def evaluate_state(self, state: PhysicalState, task: Any, events: Any, H: int) -> EvaluationOutput:
+                return _make_evaluation_output(value=1.5, stop=self.stop_value, horizon=H)
+
+        with self.assertRaises(ValueError):
+            plan(state, task, context, H=4, budget=budget, capabilities=BadValHighCapabilities(), cfg=self.cfg)
+
+        # Leaf calibrated_value < 0.0 rejection
+        class BadValLowCapabilities(DeterministicMockCapabilities):
+            def evaluate_state(self, state: PhysicalState, task: Any, events: Any, H: int) -> EvaluationOutput:
+                return _make_evaluation_output(value=-0.5, stop=self.stop_value, horizon=H)
+
+        with self.assertRaises(ValueError):
+            plan(state, task, context, H=4, budget=budget, capabilities=BadValLowCapabilities(), cfg=self.cfg)
 
         # Invalid materialization length
         class BadPrefixCapabilities(DeterministicMockCapabilities):
