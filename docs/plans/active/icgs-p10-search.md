@@ -196,7 +196,7 @@ Count encoding/native preprocessing/diffusion/transfer/synchronization/decode/re
   *Verified GREEN: 39 ran, 39 passed, 0 failed, 0 skipped in 0.783s via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 fast validation passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`. Historical full test suite at Task 3 completion: 333 tests selected, 324 executed/passed, 9 skipped (optional dependencies: 4 differential baseline, 1 RLBench, 1 CUDA RNG, 1 opt-in published checkpoint, 2 PyTorch Lightning), 0 failed in 14.700s (skipped optional suites; not an all-inclusive execution). Historical manager evidence at commit f5d519d: 346 selected, 337 executed/passed, 9 skipped.*
 - [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
-  *Verified exact diff: completed budget.py, rerank.py, shooting.py, mcts.py completed-only wall timing and fallback integration, comprehensive deterministic test suite in tests/test_search.py, clean L0/full test results.*
+  *Verified exact diff: completed budget.py, rerank.py, shooting.py, mcts.py completed-only wall timing and fallback integration, deterministic test suite in tests/test_search.py, passing L0 checks and partial full discovery with the skips recorded above.*
 
 ## Acceptance, resource limits and evidence
 
