@@ -109,11 +109,12 @@ def timed_operation(
     coverage: str = "inclusive",
     timing_counters: dict[str, int] | None = None,
     counter_key: str | None = None,
+    permit_beyond_deadline: bool = False,
 ) -> tuple[Any, float, bool]:
     """Execute capability operation with immediate precheck, explicit sync, completed/overshoot audit, and counters."""
     rec = recorder if recorder is not None else NoopRecorder()
     start_t = clock_fn()
-    if start_t >= deadline:
+    if not permit_beyond_deadline and start_t >= deadline:
         return None, start_t, False
 
     if timing_counters is not None and counter_key is not None:
@@ -131,44 +132,78 @@ def timed_operation(
 
     try:
         res = op()
-    except Exception as exc:
-        capabilities.synchronize()
+    except Exception as op_exc:
         if timing_counters is not None:
             timing_counters["sync_calls"] = timing_counters.get("sync_calls", 0) + 1
+        sync_exc = None
+        try:
+            capabilities.synchronize()
+        except Exception as se:
+            sync_exc = se
+
         finished_err = clock_fn()
         duration_err = max(0.0, finished_err - start_t)
-        if isinstance(exc, NonfiniteModelError):
+        if isinstance(op_exc, NonfiniteModelError):
             rec.event(
                 "model.error",
                 fields={
                     "operation": op_name,
                     "error": "nonfinite_model_output",
-                    "detail": str(exc),
+                    "detail": str(op_exc),
                     "duration_s": duration_err,
                     "finished": finished_err,
+                    "sync_error": str(sync_exc) if sync_exc is not None else None,
                 },
             )
-            raise
         rec.event(
             "operation.error",
             fields={
                 "operation": op_name,
-                "error": type(exc).__name__,
-                "detail": str(exc),
+                "error": type(op_exc).__name__,
+                "detail": str(op_exc),
                 "duration_s": duration_err,
                 "finished": finished_err,
+                "sync_error": str(sync_exc) if sync_exc is not None else None,
             },
         )
-        raise
+        raise op_exc
 
-    capabilities.synchronize()
     if timing_counters is not None:
         timing_counters["sync_calls"] = timing_counters.get("sync_calls", 0) + 1
+    try:
+        capabilities.synchronize()
+    except Exception as sync_exc:
+        finished_err = clock_fn()
+        duration_err = max(0.0, finished_err - start_t)
+        rec.event(
+            "operation.error",
+            fields={
+                "operation": op_name,
+                "error": type(sync_exc).__name__,
+                "detail": f"synchronization_failed: {sync_exc}",
+                "duration_s": duration_err,
+                "finished": finished_err,
+                "sync_error": str(sync_exc),
+            },
+        )
+        raise sync_exc
 
     finished_t = clock_fn()
-    eligible = eligible_completion(finished_t, deadline)
     duration_s = max(0.0, finished_t - start_t)
 
+    if permit_beyond_deadline:
+        rec.event(
+            "operation.completed",
+            fields={
+                "operation": op_name,
+                "finished": finished_t,
+                "duration_s": duration_s,
+                "coverage": coverage,
+            },
+        )
+        return res, finished_t, True
+
+    eligible = eligible_completion(finished_t, deadline)
     if eligible:
         rec.event(
             "operation.completed",
@@ -196,7 +231,8 @@ def timed_operation(
 
 
 def validate_root_and_context(state: Any, context: Any, capabilities: Any) -> Observation:
-    """Strictly validate root physical state geometry and context via capability protocol before any model evaluation."""
+    """Strictly validate root physical state geometry and context via capability protocol without mutating live state."""
+    import dataclasses
     from icgs.state.physical import PhysicalState
 
     if not isinstance(state, PhysicalState):
@@ -204,8 +240,11 @@ def validate_root_and_context(state: Any, context: Any, capabilities: Any) -> Ob
 
     capabilities.validate_context(context)
 
-    # Re-run physical state post-init checks to guarantee unmutated tensor validities
-    state.__post_init__()
+    # Validate physical state on isolated replace copy without mutating caller's live state
+    try:
+        dataclasses.replace(state)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"Root physical state validation failed: {exc}") from exc
 
     pts = state.cached_world_cloud if state.cached_world_cloud is not None else state.x
     mask = state.cached_world_cloud_valid if state.cached_world_cloud_valid is not None else state.valid
@@ -214,7 +253,13 @@ def validate_root_and_context(state: Any, context: Any, capabilities: Any) -> Ob
     if not bool(mask.any().item()):
         raise ValueError("points mask must contain at least one valid point")
 
-    pts_np = np.ascontiguousarray(pts[0].detach().cpu().numpy())
+    pts_valid = pts[0][mask[0]]
+    pts_np = np.ascontiguousarray(pts_valid.detach().cpu().numpy())
+    if pts_np.ndim != 2 or pts_np.shape[1] != 3 or pts_np.shape[0] == 0:
+        raise ValueError(f"Observation points must be non-empty (N, 3) array, got shape {pts_np.shape}")
+    if not np.all(np.isfinite(pts_np)):
+        raise ValueError("Observation points must contain finite values")
+
     pose_np = np.ascontiguousarray(state.T_w_e[0].detach().cpu().numpy())
     grip_val = float(state.grip[0].item())
 
@@ -222,15 +267,21 @@ def validate_root_and_context(state: Any, context: Any, capabilities: Any) -> Ob
 
 
 def validate_predicted_state(state: Any) -> None:
-    """Validate all selectable/cacheable state fields for finiteness, SE(3) validity, and shapes."""
+    """Validate all selectable/cacheable state fields for finiteness, SE(3) validity, and shapes without mutating live state."""
+    import dataclasses
     from icgs.state.physical import PhysicalState
 
     if not isinstance(state, PhysicalState):
         raise NonfiniteModelError("predicted state is not a PhysicalState")
     try:
-        state.__post_init__()
+        dataclasses.replace(state)
     except (ValueError, TypeError) as exc:
         raise NonfiniteModelError(f"predicted state validation failed: {exc}") from exc
+
+    if not bool(state.valid.any().item()):
+        raise NonfiniteModelError("predicted state.valid must contain at least one valid point")
+    if state.cached_world_cloud_valid is not None and not bool(state.cached_world_cloud_valid.any().item()):
+        raise NonfiniteModelError("predicted state cached_world_cloud_valid must contain at least one valid point")
 
 
 def validate_evaluation_output(eval_out: Any, name: str = "Evaluation") -> tuple[float, float]:
@@ -353,6 +404,7 @@ def audit_planning_start(
         "panel_matched": panel_matched,
     }
     if algorithm_params:
+        fields["algorithm_params"] = dict(algorithm_params)
         fields.update(algorithm_params)
 
     rec.event("planning.start", fields=fields)
@@ -581,39 +633,35 @@ def execute_fallback(
         cand = earliest_candidate
         reused = True
     else:
-        start_samp = clock_fn()
-        cand = capabilities.sample_prior(rep_obs, task, context, seed=seed)
-        capabilities.synchronize()
-        timing_counters["sync_calls"] = timing_counters.get("sync_calls", 0) + 1
-        finished_samp = clock_fn()
-        timing_counters["native_calls"] = timing_counters.get("native_calls", 0) + 1
-        rec.event(
-            "operation.completed",
-            fields={
-                "operation": "sample_prior",
-                "finished": finished_samp,
-                "duration_s": max(0.0, finished_samp - start_samp),
-                "coverage": "inclusive",
-            },
+        cand, finished_samp, _ = timed_operation(
+            "sample_prior",
+            lambda: capabilities.sample_prior(rep_obs, task, context, seed=seed),
+            clock_fn=clock_fn,
+            deadline=deadline,
+            budget=budget,
+            capabilities=capabilities,
+            recorder=rec,
+            coverage="inclusive",
+            timing_counters=timing_counters,
+            counter_key="native_calls",
+            permit_beyond_deadline=True,
         )
 
     r_val = min(p_cfg.r, step_intervals)
     dt0 = float(cfg.control.dt0)
 
-    start_mat = clock_fn()
-    prefix = capabilities.materialize_prefix(cand, h=step_intervals, r=r_val, duration_s=dt0)
-    capabilities.synchronize()
-    timing_counters["sync_calls"] = timing_counters.get("sync_calls", 0) + 1
-    finished_mat = clock_fn()
-    timing_counters["materialization_calls"] = timing_counters.get("materialization_calls", 0) + 1
-    rec.event(
-        "operation.completed",
-        fields={
-            "operation": "materialize_prefix",
-            "finished": finished_mat,
-            "duration_s": max(0.0, finished_mat - start_mat),
-            "coverage": "inclusive",
-        },
+    prefix, finished_mat, _ = timed_operation(
+        "materialize_prefix",
+        lambda: capabilities.materialize_prefix(cand, h=step_intervals, r=r_val, duration_s=dt0),
+        clock_fn=clock_fn,
+        deadline=deadline,
+        budget=budget,
+        capabilities=capabilities,
+        recorder=rec,
+        coverage="inclusive",
+        timing_counters=timing_counters,
+        counter_key="materialization_calls",
+        permit_beyond_deadline=True,
     )
 
     if not np.allclose(prefix.proposal_root, rep_obs.T_w_e, atol=1e-6):

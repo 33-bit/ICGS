@@ -1969,7 +1969,7 @@ class SearchTask3FixRound2Tests(unittest.TestCase):
         self.cfg = MethodConfig.from_file(primary_json)
 
     def test_regression_1_completed_candidate_preserved_after_subsequent_model_error(self) -> None:
-        """Completed results are preserved and selected even if a subsequent model error occurs."""
+        """Completed results are preserved and selected even if a subsequent model error occurs across ALL 3 planners."""
         import icgs.algorithms.planning.mcts as mcts_module
         import icgs.algorithms.planning.rerank as rerank_module
         import icgs.algorithms.planning.shooting as shooting_module
@@ -1980,7 +1980,7 @@ class SearchTask3FixRound2Tests(unittest.TestCase):
         context = {"context_id": "ctx_0"}
         budget = PlanningBudget(native_call_cap=3)
 
-        # Rerank test: cand_0 succeeds, cand_1 throws NonfiniteModelError
+        # 1. Rerank test: cand_0 succeeds, cand_1 throws NonfiniteModelError
         class ErrorOnCand1Caps(DeterministicMockCapabilities):
             def __init__(self):
                 super().__init__()
@@ -1993,45 +1993,97 @@ class SearchTask3FixRound2Tests(unittest.TestCase):
                 return _make_evaluation_output(value=0.8, stop=0.1, horizon=H)
 
         caps = ErrorOnCand1Caps()
-        rec = TestRecorder()
+        rec_rerank = TestRecorder()
         res_rerank = rerank_module.plan(
-            state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, recorder=rec
+            state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, recorder=rec_rerank
         )
         self.assertTrue(res_rerank.completed, "Rerank must complete with candidate 0")
         self.assertIsNone(res_rerank.fallback_reason)
         self.assertEqual(res_rerank.selected_prefix.raw_candidate_id, "cand_0")
 
+        # 2. MCTS test: iter 1 completes cand_0, iter 2 encounters NonfiniteModelError
+        class ErrorOnIter2MCTSCaps(DeterministicMockCapabilities):
+            def __init__(self):
+                super().__init__()
+                self.eval_call_count = 0
+
+            def evaluate_state(self, st, t, ev, H):
+                self.eval_call_count += 1
+                if self.eval_call_count > 4:  # root + leaf for iter 1 succeed
+                    raise NonfiniteModelError("mcts leaf nonfinite")
+                return _make_evaluation_output(value=0.8, stop=0.1, horizon=H)
+
+        caps_mcts = ErrorOnIter2MCTSCaps()
+        rec_mcts = TestRecorder()
+        res_mcts = mcts_module.plan(
+            state, task, context, H=4, budget=budget, capabilities=caps_mcts, cfg=self.cfg, recorder=rec_mcts
+        )
+        self.assertTrue(res_mcts.completed, "MCTS must complete with edge 0")
+        self.assertIsNone(res_mcts.fallback_reason)
+        self.assertEqual(res_mcts.selected_prefix.raw_candidate_id, "cand_0")
+
+        # 3. Shooting test: seq 0 completes, seq 1 encounters NonfiniteModelError
+        class ErrorOnSeq2ShootingCaps(DeterministicMockCapabilities):
+            def __init__(self):
+                super().__init__()
+                self.eval_call_count = 0
+
+            def evaluate_state(self, st, t, ev, H):
+                self.eval_call_count += 1
+                if self.eval_call_count > 4:  # root + leaf for seq 0 succeed
+                    raise NonfiniteModelError("shooting leaf nonfinite")
+                return _make_evaluation_output(value=0.8, stop=0.1, horizon=H)
+
+        caps_shoot = ErrorOnSeq2ShootingCaps()
+        rec_shoot = TestRecorder()
+        res_shoot = shooting_module.plan(
+            state, task, context, H=4, budget=budget, capabilities=caps_shoot, cfg=self.cfg, recorder=rec_shoot
+        )
+        self.assertTrue(res_shoot.completed, "Shooting must complete with seq 0")
+        self.assertIsNone(res_shoot.fallback_reason)
+        self.assertEqual(res_shoot.selected_prefix.raw_candidate_id, "cand_0")
+
     def test_regression_2_late_sampled_prior_reused_in_fallback(self) -> None:
-        """A sampled prior that completes after search deadline is preserved as earliest_candidate for fallback."""
+        """A sampled prior that completes after search deadline is preserved as earliest_candidate for fallback across ALL 3 planners."""
+        import icgs.algorithms.planning.mcts as mcts_module
         import icgs.algorithms.planning.rerank as rerank_module
+        import icgs.algorithms.planning.shooting as shooting_module
         from icgs.algorithms.planning.budget import PlanningBudget
 
         state = _make_physical_state(boundary=0)
         task = {"history_id": "root_task", "step": 0}
         context = {"context_id": "ctx_0"}
-        # Search deadline is 0.5s; sample_prior completes at 0.501s (late)
         budget = PlanningBudget(wall_budget_s=0.5)
 
-        t_val = [0.0]
-        def fake_clock():
-            return t_val[0]
+        for planner_name, planner_fn in [
+            ("rerank", rerank_module.plan),
+            ("mcts", mcts_module.plan),
+            ("shooting", shooting_module.plan),
+        ]:
+            t_val = [0.0]
+            def fake_clock():
+                return t_val[0]
 
-        caps = DeterministicMockCapabilities()
-        orig_sample = caps.sample_prior
-        def late_sample(*args, **kwargs):
-            t_val[0] = 0.501  # overshoots search deadline
-            return orig_sample(*args, **kwargs)
+            caps = DeterministicMockCapabilities()
+            orig_sample = caps.sample_prior
+            def late_sample(*args, **kwargs):
+                t_val[0] = 0.501  # overshoots search deadline
+                return orig_sample(*args, **kwargs)
 
-        caps.sample_prior = late_sample
+            caps.sample_prior = late_sample
 
-        rec = TestRecorder()
-        res = rerank_module.plan(
-            state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, clock=fake_clock, recorder=rec
-        )
-        self.assertFalse(res.completed)
-        self.assertEqual(res.fallback_reason, "budget_exhausted")
-        # Exactly ONE sample_prior call should have occurred (the late one was reused in fallback)
-        self.assertEqual(len(caps.sample_prior_calls), 1)
+            rec = TestRecorder()
+            res = planner_fn(
+                state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, clock=fake_clock, recorder=rec
+            )
+            self.assertFalse(res.completed, f"{planner_name} must not be completed on late sample")
+            self.assertEqual(res.fallback_reason, "budget_exhausted")
+            # Exactly ONE sample_prior call should have occurred (the late one was reused in fallback)
+            self.assertEqual(
+                len(caps.sample_prior_calls),
+                1,
+                f"{planner_name} must reuse late sampled prior in fallback without drawing a second sample",
+            )
 
     def test_regression_3_fallback_rejects_wrong_root_without_mutation(self) -> None:
         """Fallback rejects prefix with mismatching proposal_root without mutating frozen object."""
@@ -2042,13 +2094,17 @@ class SearchTask3FixRound2Tests(unittest.TestCase):
         context = {"context_id": "ctx_0"}
         budget = PlanningBudget(wall_budget_s=0.5)
 
+        bad_prefix_holder = []
+
         # Caps materializer returns proposal_root offset from root pose
         class WrongRootCaps(DeterministicMockCapabilities):
             def materialize_prefix(self, candidate, *, h, r, duration_s):
                 bad_root = np.eye(4, dtype=np.float64)
                 bad_root[0, 3] = 999.0  # wrong root
                 cmds = tuple(_make_timed_command(duration_s=duration_s) for _ in range(h))
-                return CommandPrefix(commands=cmds, proposal_root=bad_root, raw_candidate_id="bad_cand")
+                p = CommandPrefix(commands=cmds, proposal_root=bad_root, raw_candidate_id="bad_cand")
+                bad_prefix_holder.append(p)
+                return p
 
         caps = WrongRootCaps()
         rec = TestRecorder()
@@ -2071,87 +2127,171 @@ class SearchTask3FixRound2Tests(unittest.TestCase):
                 audit_ids=(),
                 recorder=rec,
             )
+        self.assertEqual(len(bad_prefix_holder), 1)
+        # Verify proposal_root was NOT mutated to match root pose
+        self.assertEqual(bad_prefix_holder[0].proposal_root[0, 3], 999.0)
 
     def test_residual_4_panel_status_not_applied_and_envelope(self) -> None:
-        """Panel dimensions accurately record not_applied and aggregate panel_matched is true when applied match."""
+        """Panel dimensions record not_applied, matched, override, and per-planner algorithm_params."""
+        import icgs.algorithms.planning.mcts as mcts_module
         import icgs.algorithms.planning.rerank as rerank_module
+        import icgs.algorithms.planning.shooting as shooting_module
         from icgs.algorithms.planning.budget import PlanningBudget
 
         state = _make_physical_state(boundary=0)
         task = {"history_id": "root_task", "step": 0}
         context = {"context_id": "ctx_0"}
-        # Only wall_budget_s is applied; native and model caps are None
-        budget = PlanningBudget(wall_budget_s=0.5)
 
+        # 1. Rerank with matched wall budget and not_applied native/model
+        budget_matched = PlanningBudget(wall_budget_s=0.5)
         caps = DeterministicMockCapabilities()
-        rec = TestRecorder()
-        res = rerank_module.plan(
-            state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, recorder=rec
+        rec_rerank = TestRecorder()
+        res_rerank = rerank_module.plan(
+            state, task, context, H=4, budget=budget_matched, capabilities=caps, cfg=self.cfg, recorder=rec_rerank
         )
-        self.assertTrue(res.completed)
-        start_events = [e for e in rec.events if e.get("name") == "planning.start"]
-        self.assertEqual(len(start_events), 1)
-        fields = start_events[0]["fields"]
+        self.assertTrue(res_rerank.completed)
+        ev_rerank = [e for e in rec_rerank.events if e.get("name") == "planning.start"][0]["fields"]
+        self.assertIn("resolved_config", ev_rerank)
+        self.assertEqual(ev_rerank["wall_panel_status"], "matched")
+        self.assertEqual(ev_rerank["native_panel_status"], "not_applied")
+        self.assertEqual(ev_rerank["model_panel_status"], "not_applied")
+        self.assertEqual(ev_rerank["clock_track_status"], "matched")
+        self.assertTrue(ev_rerank["panel_matched"])
+        self.assertEqual(ev_rerank["H"], 4)
+        self.assertEqual(ev_rerank["boundary"], 0)
+        self.assertIn("rollout_bound", ev_rerank["algorithm_params"])
+        self.assertIn("h", ev_rerank["algorithm_params"])
 
-        self.assertIn("resolved_config", fields)
-        self.assertEqual(fields["wall_panel_status"], "matched")
-        self.assertEqual(fields["native_panel_status"], "not_applied")
-        self.assertEqual(fields["model_panel_status"], "not_applied")
-        self.assertEqual(fields["clock_track_status"], "matched")
-        self.assertTrue(fields["panel_matched"], "panel_matched must be True when all applied dimensions match")
-        self.assertEqual(fields["H"], 4)
-        self.assertEqual(fields["boundary"], 0)
+        # 2. MCTS with wall budget override (e.g. 999.0s not in wall_budgets_s)
+        budget_override = PlanningBudget(wall_budget_s=999.0, native_call_cap=2)
+        rec_mcts = TestRecorder()
+        res_mcts = mcts_module.plan(
+            state, task, context, H=4, budget=budget_override, capabilities=caps, cfg=self.cfg, recorder=rec_mcts
+        )
+        self.assertTrue(res_mcts.completed)
+        ev_mcts = [e for e in rec_mcts.events if e.get("name") == "planning.start"][0]["fields"]
+        self.assertEqual(ev_mcts["wall_panel_status"], "override")
+        self.assertFalse(ev_mcts["panel_matched"], "panel_matched must be False on override")
+        self.assertIn("uct_exploration", ev_mcts["algorithm_params"])
+        self.assertIn("h", ev_mcts["algorithm_params"])
+
+        # 3. Shooting audit algorithm_params
+        rec_shoot = TestRecorder()
+        res_shoot = shooting_module.plan(
+            state, task, context, H=4, budget=budget_matched, capabilities=caps, cfg=self.cfg, recorder=rec_shoot
+        )
+        self.assertTrue(res_shoot.completed)
+        ev_shoot = [e for e in rec_shoot.events if e.get("name") == "planning.start"][0]["fields"]
+        self.assertIn("L", ev_shoot["algorithm_params"])
+        self.assertIn("h", ev_shoot["algorithm_params"])
 
     def test_residual_3_corrupted_physical_state_mutation_triggers_fallback(self) -> None:
-        """In-place mutated PhysicalState returned by predict_step triggers NonfiniteModelError and valid fallback."""
+        """Nonmutating validation preserves root tensor data_ptr, filters padding, and catches field-by-field corruption."""
         import icgs.algorithms.planning.mcts as mcts_module
-        from icgs.algorithms.planning.budget import PlanningBudget
+        from icgs.algorithms.planning.budget import (
+            PlanningBudget,
+            validate_root_and_context,
+            validate_predicted_state,
+            NonfiniteModelError,
+        )
 
         state = _make_physical_state(boundary=0)
         task = {"history_id": "root_task", "step": 0}
         context = {"context_id": "ctx_0"}
         budget = PlanningBudget(wall_budget_s=0.5)
+        caps = DeterministicMockCapabilities()
 
-        # Test 1: NaN x
-        class CorruptedXCaps(DeterministicMockCapabilities):
-            def predict_step(self, st, cmd, *, head_id):
-                pred = super().predict_step(st, cmd, head_id=head_id)
-                pred.next_state.x[0, 0, 0] = float("nan")
-                return pred
+        # 1. Live state preservation invariant: validation must NOT change tensor data_ptr
+        x_ptr_before = state.x.data_ptr()
+        X_ptr_before = state.X.data_ptr()
+        pose_ptr_before = state.T_w_e.data_ptr()
+        valid_ptr_before = state.valid.data_ptr()
 
-        res = mcts_module.plan(
-            state, task, context, H=4, budget=budget, capabilities=CorruptedXCaps(), cfg=self.cfg
-        )
-        self.assertFalse(res.completed)
-        self.assertEqual(res.fallback_reason, "nonfinite_model_error")
+        obs = validate_root_and_context(state, context, caps)
 
-        # Test 2: Non-orthonormal T_w_e
-        class CorruptedPoseCaps(DeterministicMockCapabilities):
-            def predict_step(self, st, cmd, *, head_id):
-                pred = super().predict_step(st, cmd, head_id=head_id)
-                pred.next_state.T_w_e[0, 0, 0] = 5.0  # violates R^T R == I
-                return pred
+        self.assertEqual(state.x.data_ptr(), x_ptr_before, "validate_root_and_context must not reallocate state.x")
+        self.assertEqual(state.X.data_ptr(), X_ptr_before, "validate_root_and_context must not reallocate state.X")
+        self.assertEqual(state.T_w_e.data_ptr(), pose_ptr_before, "validate_root_and_context must not reallocate state.T_w_e")
+        self.assertEqual(state.valid.data_ptr(), valid_ptr_before, "validate_root_and_context must not reallocate state.valid")
 
-        res_pose = mcts_module.plan(
-            state, task, context, H=4, budget=budget, capabilities=CorruptedPoseCaps(), cfg=self.cfg
-        )
-        self.assertFalse(res_pose.completed)
-        self.assertEqual(res_pose.fallback_reason, "nonfinite_model_error")
+        # 2. Masked padding absent from Observation: valid points filtered by mask
+        cloud = np.random.randn(20, 3).astype(np.float32)
+        cloud_mask = np.zeros(20, dtype=bool)
+        cloud_mask[:7] = True
+        state_masked = _make_physical_state(boundary=0, points=cloud, valid_mask=cloud_mask)
+        obs_masked = validate_root_and_context(state_masked, context, caps)
+        self.assertEqual(obs_masked.points.shape, (7, 3), "Observation points must filter out invalid padding from cached cloud")
 
-        # Test 3: Invalid grip not in {0, 1}
-        class CorruptedGripCaps(DeterministicMockCapabilities):
-            def predict_step(self, st, cmd, *, head_id):
-                pred = super().predict_step(st, cmd, head_id=head_id)
-                pred.next_state.grip[0, 0] = 0.5
-                return pred
+        state_x_only = _make_physical_state(boundary=0)
+        object.__setattr__(state_x_only, "cached_world_cloud", None)
+        object.__setattr__(state_x_only, "cached_world_cloud_valid", None)
+        state_x_only.valid[0, :10] = True
+        state_x_only.valid[0, 10:] = False
+        obs_x_only = validate_root_and_context(state_x_only, context, caps)
+        self.assertEqual(obs_x_only.points.shape, (10, 3), "Observation points must filter out invalid padding from state.x")
 
-        res_grip = mcts_module.plan(
-            state, task, context, H=4, budget=budget, capabilities=CorruptedGripCaps(), cfg=self.cfg
-        )
-        self.assertFalse(res_grip.completed)
-        self.assertEqual(res_grip.fallback_reason, "nonfinite_model_error")
+        # 3. Field-by-field corrupted predicted states raise NonfiniteModelError
+        valid_pred_state = _make_physical_state(boundary=1)
+        validate_predicted_state(valid_pred_state)  # valid must pass
 
-        # Test 4: Root evaluation returns NaN value
+        # Test X corruption
+        corrupt_X = _make_physical_state(boundary=1)
+        corrupt_X.X[0, 0, 0] = float("nan")
+        with self.assertRaises(NonfiniteModelError):
+            validate_predicted_state(corrupt_X)
+
+        # Test x corruption
+        corrupt_x = _make_physical_state(boundary=1)
+        corrupt_x.x[0, 0, 0] = float("nan")
+        with self.assertRaises(NonfiniteModelError):
+            validate_predicted_state(corrupt_x)
+
+        # Test p corruption
+        corrupt_p = _make_physical_state(boundary=1)
+        corrupt_p.p[0, 0] = float("nan")
+        with self.assertRaises(NonfiniteModelError):
+            validate_predicted_state(corrupt_p)
+
+        # Test memory corruption
+        corrupt_mem = _make_physical_state(boundary=1)
+        corrupt_mem.memory[0, 0, 0] = float("nan")
+        with self.assertRaises(NonfiniteModelError):
+            validate_predicted_state(corrupt_mem)
+
+        # Test cached_world_cloud corruption
+        corrupt_cloud = _make_physical_state(boundary=1)
+        object.__setattr__(corrupt_cloud, "cached_world_cloud", torch.zeros((1, 10, 3), dtype=torch.float32))
+        object.__setattr__(corrupt_cloud, "cached_world_cloud_valid", torch.ones((1, 10), dtype=torch.bool))
+        corrupt_cloud.cached_world_cloud[0, 0, 0] = float("nan")
+        with self.assertRaises(NonfiniteModelError):
+            validate_predicted_state(corrupt_cloud)
+
+        # Test cached_world_cloud_valid corruption
+        corrupt_cloud_mask = _make_physical_state(boundary=1)
+        object.__setattr__(corrupt_cloud_mask, "cached_world_cloud", torch.zeros((1, 10, 3), dtype=torch.float32))
+        object.__setattr__(corrupt_cloud_mask, "cached_world_cloud_valid", torch.zeros((1, 10), dtype=torch.float32))  # non-bool
+        with self.assertRaises(NonfiniteModelError):
+            validate_predicted_state(corrupt_cloud_mask)
+
+        # Test valid mask corruption (all False)
+        corrupt_mask = _make_physical_state(boundary=1)
+        corrupt_mask.valid[:] = False
+        with self.assertRaises(NonfiniteModelError):
+            validate_predicted_state(corrupt_mask)
+
+        # Test T_w_e corruption (non-orthonormal)
+        corrupt_pose = _make_physical_state(boundary=1)
+        corrupt_pose.T_w_e[0, 0, 0] = 5.0
+        with self.assertRaises(NonfiniteModelError):
+            validate_predicted_state(corrupt_pose)
+
+        # Test grip corruption (value 2.0)
+        corrupt_grip = _make_physical_state(boundary=1)
+        corrupt_grip.grip[0, 0] = 2.0
+        with self.assertRaises(NonfiniteModelError):
+            validate_predicted_state(corrupt_grip)
+
+        # End-to-end planner fallback on NaN root eval
         class NaNRootEvalCaps(DeterministicMockCapabilities):
             def evaluate_state(self, st, t, ev, H):
                 out = _make_evaluation_output(value=0.5, stop=0.1, horizon=H)
@@ -2167,12 +2307,18 @@ class SearchTask3FixRound2Tests(unittest.TestCase):
         self.assertTrue(np.allclose(res_root.selected_prefix.proposal_root, state.T_w_e[0]))
 
     def test_residual_2_timed_operation_start_audit_and_attempt_counters(self) -> None:
-        """timed_operation emits operation.started, increments counter at attempt, and aborts before start if late."""
-        from icgs.algorithms.planning.budget import timed_operation, PlanningBudget, NonfiniteModelError
+        """timed_operation and fallback handle attempt/sync counters, start/error audits, and op/sync double failure."""
+        import torch
+        from icgs.algorithms.planning.budget import (
+            timed_operation,
+            execute_fallback,
+            PlanningBudget,
+            NonfiniteModelError,
+        )
 
         budget = PlanningBudget(wall_budget_s=0.5)
         rec = TestRecorder()
-        counters = {"native_calls": 0, "sync_calls": 0}
+        counters = {"native_calls": 0, "materialization_calls": 0, "sync_calls": 0}
 
         # 1. Operation starts before deadline: emits operation.started and increments counter
         caps = DeterministicMockCapabilities()
@@ -2211,24 +2357,105 @@ class SearchTask3FixRound2Tests(unittest.TestCase):
         self.assertIsNone(res_late)
         self.assertEqual(counters["native_calls"], 1)  # not attempted, so still 1
 
-        # 3. Op attempts and throws: counter increments at attempt, sync called on error
-        def failing_op():
-            raise NonfiniteModelError("failing op")
+        # 3. Fallback permits beyond deadline: runs, emits operation.started and completed, increments counter
+        res_perm, fin_perm, elig_perm = timed_operation(
+            "sample_prior",
+            lambda: "fallback_result",
+            clock_fn=lambda: 0.6,
+            deadline=0.5,
+            budget=budget,
+            capabilities=caps,
+            recorder=rec,
+            timing_counters=counters,
+            counter_key="native_calls",
+            permit_beyond_deadline=True,
+        )
+        self.assertTrue(elig_perm)
+        self.assertEqual(res_perm, "fallback_result")
+        self.assertEqual(counters["native_calls"], 2)
 
-        with self.assertRaises(NonfiniteModelError):
+        # 4. Fallback execution failure: sample_prior throws; counters increment, error emitted
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+
+        class FailingSampleCaps(DeterministicMockCapabilities):
+            def sample_prior(self, *args, **kwargs):
+                raise RuntimeError("prior sampling failed")
+
+        fb_counters = {"native_calls": 0, "materialization_calls": 0, "sync_calls": 0}
+        rec_fb = TestRecorder()
+        with self.assertRaises(RuntimeError):
+            execute_fallback(
+                state,
+                task,
+                context,
+                H=4,
+                budget=budget,
+                capabilities=FailingSampleCaps(),
+                cfg=self.cfg,
+                seed=42,
+                clock_fn=lambda: 0.1,
+                start_time=0.0,
+                deadline=0.5,
+                earliest_candidate=None,
+                timing_counters=fb_counters,
+                cache_counters={},
+                audit_ids=(),
+                recorder=rec_fb,
+            )
+        self.assertEqual(fb_counters["native_calls"], 1, "Fallback sample_prior attempt must be counted")
+        self.assertEqual(fb_counters["sync_calls"], 1, "Fallback sync attempt must be counted")
+        err_events = [e for e in rec_fb.events if e.get("name") == "operation.error"]
+        self.assertTrue(len(err_events) > 0, "operation.error must be emitted on fallback failure")
+
+        # 5. Op + sync double failure: op raises RuntimeError, sync raises ValueError
+        # Must preserve original op exception (RuntimeError) and record sync_error in audit
+        class DoubleFailCaps(DeterministicMockCapabilities):
+            def synchronize(self):
+                raise ValueError("sync blew up")
+
+        rec_double = TestRecorder()
+        double_counters = {"native_calls": 0, "sync_calls": 0}
+        with self.assertRaises(RuntimeError) as cm:
             timed_operation(
-                "predict_step",
-                failing_op,
-                clock_fn=lambda: 0.2,
+                "sample_prior",
+                lambda: (_ for _ in ()).throw(RuntimeError("primary op error")),
+                clock_fn=lambda: 0.1,
                 deadline=0.5,
                 budget=budget,
-                capabilities=caps,
-                recorder=rec,
-                timing_counters=counters,
-                counter_key="model_intervals",
+                capabilities=DoubleFailCaps(),
+                recorder=rec_double,
+                timing_counters=double_counters,
+                counter_key="native_calls",
             )
-        self.assertEqual(counters.get("model_intervals", 0), 1, "Counter must increment at attempt even on error")
-        self.assertEqual(counters["sync_calls"], 2, "Sync must be called on error")
+        self.assertEqual(str(cm.exception), "primary op error", "Must preserve primary op exception")
+        self.assertEqual(double_counters["native_calls"], 1)
+        self.assertEqual(double_counters["sync_calls"], 1)
+        double_err_events = [e for e in rec_double.events if e.get("name") == "operation.error"]
+        self.assertEqual(len(double_err_events), 1)
+        self.assertIn("sync blew up", double_err_events[0]["fields"].get("sync_error", ""))
+
+        # 6. Successful op then sync failure: emits operation.error and raises sync exception
+        rec_sync_fail = TestRecorder()
+        sync_fail_counters = {"native_calls": 0, "sync_calls": 0}
+        with self.assertRaises(ValueError) as cm_sync:
+            timed_operation(
+                "sample_prior",
+                lambda: "success_val",
+                clock_fn=lambda: 0.1,
+                deadline=0.5,
+                budget=budget,
+                capabilities=DoubleFailCaps(),
+                recorder=rec_sync_fail,
+                timing_counters=sync_fail_counters,
+                counter_key="native_calls",
+            )
+        self.assertEqual(str(cm_sync.exception), "sync blew up")
+        self.assertEqual(sync_fail_counters["native_calls"], 1)
+        self.assertEqual(sync_fail_counters["sync_calls"], 1)
+        sync_err_events = [e for e in rec_sync_fail.events if e.get("name") == "operation.error"]
+        self.assertEqual(len(sync_err_events), 1)
 
 
 if __name__ == "__main__":

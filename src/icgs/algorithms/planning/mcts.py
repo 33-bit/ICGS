@@ -751,9 +751,8 @@ def plan(
                         timing_counters=timing_counters,
                         counter_key="native_calls",
                     )
-                except NonfiniteModelError as exc:
+                except NonfiniteModelError:
                     nonfinite_error = True
-                    rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
                     iteration_aborted = True
                     break
 
@@ -781,9 +780,8 @@ def plan(
                         timing_counters=timing_counters,
                         counter_key="materialization_calls",
                     )
-                except NonfiniteModelError as exc:
+                except NonfiniteModelError:
                     nonfinite_error = True
-                    rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
                     iteration_aborted = True
                     break
 
@@ -841,9 +839,8 @@ def plan(
                 except BudgetExhausted:
                     iteration_aborted = True
                     break
-                except NonfiniteModelError as exc:
+                except NonfiniteModelError:
                     nonfinite_error = True
-                    rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
                     iteration_aborted = True
                     break
 
@@ -905,9 +902,8 @@ def plan(
                 recorder=rec,
                 timing_counters=timing_counters,
             )
-        except NonfiniteModelError as exc:
+        except NonfiniteModelError:
             nonfinite_error = True
-            rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
             break
         if not eligible_leaf or G is None:
             break
