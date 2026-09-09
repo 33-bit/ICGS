@@ -193,7 +193,7 @@ Count encoding/native preprocessing/diffusion/transfer/synchronization/decode/re
 
 - [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-  *Verified GREEN: 39 ran, 39 passed, 0 failed, 0 skipped in 0.783s via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 fast validation passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`. Historical full test suite at Task 3 completion: 333 tests selected, 324 executed/passed, 9 skipped (optional dependencies: 4 differential baseline, 1 RLBench, 1 CUDA RNG, 1 opt-in published checkpoint, 2 PyTorch Lightning), 0 failed in 14.700s (not a clean full run due to skipped optional suites). Historical manager evidence at commit f5d519d: 346 selected, 337 executed/passed, 9 skipped.*
+  *Verified GREEN: 39 ran, 39 passed, 0 failed, 0 skipped in 0.783s via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 fast validation passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`. Historical full test suite at Task 3 completion: 333 tests selected, 324 executed/passed, 9 skipped (optional dependencies: 4 differential baseline, 1 RLBench, 1 CUDA RNG, 1 opt-in published checkpoint, 2 PyTorch Lightning), 0 failed in 14.700s (skipped optional suites; not an all-inclusive execution). Historical manager evidence at commit f5d519d: 346 selected, 337 executed/passed, 9 skipped.*
 - [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
   *Verified exact diff: completed budget.py, rerank.py, shooting.py, mcts.py completed-only wall timing and fallback integration, comprehensive deterministic test suite in tests/test_search.py, clean L0/full test results.*
@@ -227,10 +227,18 @@ phase if an FG fails and request a scoped protocol decision.
 
 - Documentation drafting: complete.
 - Component RED/GREEN commands: Task 1 (belief.py) accepted at a430cbf; Task 2 (mcts.py, budget.py seam) implemented at 72ba6e8 (23 passed), accepted only cfe6693 after 3 audit fixes (29 passed in 0.515s); Task 3 (budget.py, rerank.py, shooting.py, mcts.py completed-only wall timing and fallback) completed (39 passed in 0.783s); Task 3 Fix Round 1 (BASE b0d7ccb) addressed 6 audit findings (46 passed in 1.421s); Task 3 Fix Round 2 (BASE b1d152c) addressed 3 regressions and 3 residual audit findings (52 passed in 2.156s); Task 3 Fix Round 3 (BASE f9bb329) resolved remaining audit findings (52 passed in 2.892s); Task 3 Fix Round 4 (BASE f5d519d) test-only fix: injected NonfiniteModelError in predict_step during sequence 2 (call > 12) in test_regression_1_completed_candidate_preserved_after_subsequent_model_error to resolve shooting coverage gap where evaluator counter was unreached under native_call_cap=3, asserted model.error event and completed sequence selection (RED verified on unreached error assertion; 52 passed in 2.762s). L0 passed 19/19 on scripts/validate_fast.py (both invocations).
-- L1 search assertions: 52 executed, 52 passed in tests/test_search.py (2.762s) using .venv/bin/python (historical 23-test, 29-test, 39-test, 46-test, and 52-test runs preserved).
+- L1 search assertions: 55 executed, 55 passed in tests/test_search.py (2.729s) using .venv/bin/python (historical 23-test, 29-test, 39-test, 46-test, and 52-test runs preserved).
 - Full regression suite: 333 selected, 324 executed, 9 skipped (4 differential baseline requiring legacy source root, 1 RLBench not installed, 1 CUDA RNG requiring CUDA, 1 opt-in published checkpoint, 2 Lightning not installed), 0 failed in 14.700s (historical provenance at b0d7ccb).
-- L2/C1–C5: **NOT RUN** by this component task — required Feasibility Gate (FG) remains active and FG pilot is **NOT RUN / not accepted**.
-- L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
+- L2 / C1–C5: **NOT RUN** by this component task; published-native fidelity gates remain active and prior migration evidence is not invalidated.
+- Feasibility Gate (FG) trained-planner pilot: **NOT RUN / not accepted**.
+- L3/L4 research benchmarks, collection and training: **NOT RUN** — separate resource authorization required.
+- Manager final verification evidence (commit `1ea977e`):
+  - Discovery: `.venv/bin/python -B -m unittest discover -s tests -p 'test_*.py' -q` selected 349, executed 340, PASS 340, skipped 9 (4 IP_LEGACY_SOURCE_ROOT differential baseline, 1 RLBench, 1 CUDA-RNG, 1 opt-in published checkpoint, 2 Lightning), failed 0, errors 0 in 14.873s.
+  - Environment: cwd `/Users/33bit/AI/Research/VLA/ICGS`, macOS 15.7.2 arm64, `.venv` Python 3.11.15, torch 2.2.0, NumPy 1.26.4; system Python 3.14.4 running `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py` PASS 19 each; `git diff --check 14faa2f..1ea977e` PASS and working tree clean.
+  - Review status: Sol scoped re-review approved component with no Critical/Important findings. Tasks 1, 2, and 3 are complete; overall plan stays **ACTIVE** for subsequent feasibility gates and trained model integration (no trained deployment implied).
+  - Manager scoped rulings:
+    1. Explicit budget override is allowed and audits panel deviations.
+    2. Internal subwork timing uses inclusive synchronized capability timing with unavailable breakdown / pre-plan exclusions and no fake counters.
 - Remaining risk: Nonpreemptible IP may exceed small budgets and deeper model rollout may exploit prediction errors.
 
 ## Observability integration addendum — 2026-09-09
