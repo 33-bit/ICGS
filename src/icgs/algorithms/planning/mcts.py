@@ -479,9 +479,15 @@ def _step_edge(
                     raise BudgetExhausted("Model interval cap or wall budget reached during edge stepping")
 
                 counters_dict = timing_counters if isinstance(timing_counters, dict) else None
+
+                def _predict_op():
+                    p = capabilities.predict_step(h_m.state, cmd, head_id=m)
+                    validate_predicted_state(p.next_state)
+                    return p
+
                 pred, _, eligible_pred = timed_operation(
                     "predict_step",
-                    lambda: capabilities.predict_step(h_m.state, cmd, head_id=m),
+                    _predict_op,
                     clock_fn=clock_fn,
                     deadline=effective_deadline,
                     budget=budget,
@@ -497,7 +503,6 @@ def _step_edge(
                     raise BudgetExhausted("Operation overshot deadline during predict_step")
 
                 next_st = pred.next_state
-                validate_predicted_state(next_st)
 
                 next_tk, _, eligible_tk = timed_operation(
                     "track_task",
@@ -514,9 +519,13 @@ def _step_edge(
                 if not eligible_tk or next_tk is None:
                     raise BudgetExhausted("Operation overshot deadline during track_task")
 
+                def _term_op():
+                    t = capabilities.predict_terminal(h_m.state, h_m.task, next_st, next_tk, events, cmd)
+                    return validate_terminal_probabilities(t)
+
                 term, _, eligible_term = timed_operation(
                     "predict_terminal",
-                    lambda: capabilities.predict_terminal(h_m.state, h_m.task, next_st, next_tk, events, cmd),
+                    _term_op,
                     clock_fn=clock_fn,
                     deadline=effective_deadline,
                     budget=budget,
@@ -529,7 +538,7 @@ def _step_edge(
                 if not eligible_term or term is None:
                     raise BudgetExhausted("Operation overshot deadline during predict_terminal")
 
-                probs = validate_terminal_probabilities(term)
+                probs = term
                 if probs.ndim == 2:
                     probs = probs[0]
                 cache.put(key, (next_st, next_tk, probs), capabilities)
@@ -597,7 +606,16 @@ def plan(
     rep_obs = validate_root_and_context(state, context, capabilities)
 
     # Provenance audit
-    audit_planning_start(rec, "mcts", cfg, budget)
+    audit_planning_start(
+        rec,
+        "mcts",
+        cfg,
+        budget,
+        H=H,
+        boundary=state.boundary,
+        deadline=deadline,
+        algorithm_params={"uct_exploration": float(cfg.planning.uct_exploration), "h": cfg.planning.h},
+    )
 
     timing_counters = {
         "iterations": 0,
@@ -611,7 +629,7 @@ def plan(
     }
 
     # Evaluate root and handle H=0 / absorbed root
-    h0_res, u_root, should_abort = evaluate_root_and_check_h0(
+    h0_res, u_root, should_abort, abort_reason = evaluate_root_and_check_h0(
         state,
         task,
         context,
@@ -644,7 +662,7 @@ def plan(
             earliest_candidate=None,
             timing_counters=timing_counters,
             recorder=rec,
-            fallback_reason="budget_exhausted",
+            fallback_reason=abort_reason,
         )
 
     # Composite IDs
@@ -739,12 +757,12 @@ def plan(
                     iteration_aborted = True
                     break
 
+                if candidate is not None and earliest_candidate is None:
+                    earliest_candidate = candidate
+
                 if not eligible_cand or candidate is None:
                     iteration_aborted = True
                     break
-
-                if earliest_candidate is None:
-                    earliest_candidate = candidate
 
                 try:
                     prefix, _, eligible_mat = timed_operation(
@@ -875,17 +893,22 @@ def plan(
 
         # Leaf evaluation
         rem = leaf.H_root - leaf.tau
-        G, eligible_leaf = score_leaf_rollout(
-            leaf,
-            events,
-            remaining_H=rem,
-            clock_fn=clock_fn,
-            deadline=deadline,
-            budget=budget,
-            capabilities=capabilities,
-            recorder=rec,
-            timing_counters=timing_counters,
-        )
+        try:
+            G, eligible_leaf = score_leaf_rollout(
+                leaf,
+                events,
+                remaining_H=rem,
+                clock_fn=clock_fn,
+                deadline=deadline,
+                budget=budget,
+                capabilities=capabilities,
+                recorder=rec,
+                timing_counters=timing_counters,
+            )
+        except NonfiniteModelError as exc:
+            nonfinite_error = True
+            rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
+            break
         if not eligible_leaf or G is None:
             break
 
@@ -933,7 +956,7 @@ def plan(
 
     # Final root choice: most visits, then greater mean return, then earlier insertion ID
     eligible_edges = [e for e in root_node.candidate_edges if e.visits > 0]
-    if not eligible_edges or nonfinite_error:
+    if not eligible_edges:
         fb_reason = "nonfinite_model_error" if nonfinite_error else "budget_exhausted"
         return execute_fallback(
             state,

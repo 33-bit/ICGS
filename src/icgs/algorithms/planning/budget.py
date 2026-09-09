@@ -92,30 +92,9 @@ def eligible_completion(finished_at: float, deadline: float) -> bool:
 
 
 
-def synchronize_device(capabilities: Any = None) -> None:
+def synchronize_device(capabilities: Any) -> None:
     """Synchronize device operations via capability protocol (no duck typing)."""
-    if capabilities is not None and hasattr(capabilities, "synchronize") and callable(capabilities.synchronize):
-        capabilities.synchronize()
-
-
-def _is_nonfinite_model_error(exc: Exception) -> bool:
-    if isinstance(exc, NonfiniteModelError):
-        return True
-    if isinstance(exc, ValueError):
-        msg = str(exc).lower()
-        return any(
-            term in msg
-            for term in (
-                "finite",
-                "nan",
-                "inf",
-                "sum to one",
-                "probabilities must",
-                "calibrated value must be zero at h=0",
-                "valid se(3) pose",
-            )
-        )
-    return False
+    capabilities.synchronize()
 
 
 def timed_operation(
@@ -133,23 +112,56 @@ def timed_operation(
 ) -> tuple[Any, float, bool]:
     """Execute capability operation with immediate precheck, explicit sync, completed/overshoot audit, and counters."""
     rec = recorder if recorder is not None else NoopRecorder()
-    now = clock_fn()
-    if now >= deadline:
-        return None, now, False
-
     start_t = clock_fn()
+    if start_t >= deadline:
+        return None, start_t, False
+
+    if timing_counters is not None and counter_key is not None:
+        timing_counters[counter_key] = timing_counters.get(counter_key, 0) + 1
+
+    rec.event(
+        "operation.started",
+        fields={
+            "operation": op_name,
+            "started": start_t,
+            "deadline": deadline,
+            "coverage": coverage,
+        },
+    )
+
     try:
         res = op()
     except Exception as exc:
-        if _is_nonfinite_model_error(exc):
+        capabilities.synchronize()
+        if timing_counters is not None:
+            timing_counters["sync_calls"] = timing_counters.get("sync_calls", 0) + 1
+        finished_err = clock_fn()
+        duration_err = max(0.0, finished_err - start_t)
+        if isinstance(exc, NonfiniteModelError):
             rec.event(
                 "model.error",
-                fields={"operation": op_name, "error": "nonfinite_model_output", "detail": str(exc)},
+                fields={
+                    "operation": op_name,
+                    "error": "nonfinite_model_output",
+                    "detail": str(exc),
+                    "duration_s": duration_err,
+                    "finished": finished_err,
+                },
             )
-            raise NonfiniteModelError(str(exc)) from exc
+            raise
+        rec.event(
+            "operation.error",
+            fields={
+                "operation": op_name,
+                "error": type(exc).__name__,
+                "detail": str(exc),
+                "duration_s": duration_err,
+                "finished": finished_err,
+            },
+        )
         raise
 
-    synchronize_device(capabilities)
+    capabilities.synchronize()
     if timing_counters is not None:
         timing_counters["sync_calls"] = timing_counters.get("sync_calls", 0) + 1
 
@@ -158,8 +170,6 @@ def timed_operation(
     duration_s = max(0.0, finished_t - start_t)
 
     if eligible:
-        if timing_counters is not None and counter_key is not None:
-            timing_counters[counter_key] = timing_counters.get(counter_key, 0) + 1
         rec.event(
             "operation.completed",
             fields={
@@ -192,62 +202,38 @@ def validate_root_and_context(state: Any, context: Any, capabilities: Any) -> Ob
     if not isinstance(state, PhysicalState):
         raise TypeError("state must be PhysicalState")
 
-    if hasattr(capabilities, "validate_context") and callable(capabilities.validate_context):
-        capabilities.validate_context(context)
+    capabilities.validate_context(context)
+
+    # Re-run physical state post-init checks to guarantee unmutated tensor validities
+    state.__post_init__()
 
     pts = state.cached_world_cloud if state.cached_world_cloud is not None else state.x
-    if pts is None:
-        raise ValueError("state points must not be None")
-    if hasattr(pts, "detach"):
-        pts_np = np.ascontiguousarray(pts[0].detach().cpu().numpy())
-    else:
-        pts_np = np.ascontiguousarray(pts[0] if pts.ndim == 3 else pts)
+    mask = state.cached_world_cloud_valid if state.cached_world_cloud_valid is not None else state.valid
+    if pts is None or mask is None:
+        raise ValueError("state points and mask must not be None")
+    if not bool(mask.any().item()):
+        raise ValueError("points mask must contain at least one valid point")
 
-    if pts_np.ndim != 2 or pts_np.shape[1] != 3 or pts_np.shape[0] == 0:
-        raise ValueError("points must have shape [N, 3] with N > 0")
-    if not np.all(np.isfinite(pts_np)):
-        raise ValueError("points must contain only finite values")
+    pts_np = np.ascontiguousarray(pts[0].detach().cpu().numpy())
+    pose_np = np.ascontiguousarray(state.T_w_e[0].detach().cpu().numpy())
+    grip_val = float(state.grip[0].item())
 
-    pose = state.T_w_e
-    if hasattr(pose, "detach"):
-        pose_np = np.ascontiguousarray(pose[0].detach().cpu().numpy())
-    else:
-        pose_np = np.ascontiguousarray(pose[0] if pose.ndim == 3 else pose)
-    if pose_np.shape != (4, 4) or not np.all(np.isfinite(pose_np)):
-        raise ValueError("T_w_e must be a finite 4x4 matrix")
-    if not np.allclose(pose_np[3, :], np.array([0.0, 0.0, 0.0, 1.0], dtype=pose_np.dtype), atol=1e-6):
-        raise ValueError("T_w_e must be a valid SE(3) pose with bottom row [0, 0, 0, 1]")
-
-    grip_val = state.grip
-    if hasattr(grip_val, "detach"):
-        g = float(grip_val[0].item() if hasattr(grip_val[0], "item") else grip_val[0])
-    else:
-        g = float(grip_val[0] if hasattr(grip_val, "__len__") else grip_val)
-    if not isfinite(g) or g not in (0.0, 1.0):
-        raise ValueError("grip must be 0 or 1")
-
-    return Observation(points=pts_np, T_w_e=pose_np, grip=g)
+    return Observation(points=pts_np, T_w_e=pose_np, grip=grip_val)
 
 
 def validate_predicted_state(state: Any) -> None:
-    """Validate all selectable/cacheable state fields for finiteness and validity."""
+    """Validate all selectable/cacheable state fields for finiteness, SE(3) validity, and shapes."""
     from icgs.state.physical import PhysicalState
 
     if not isinstance(state, PhysicalState):
         raise NonfiniteModelError("predicted state is not a PhysicalState")
-    for name in ("x", "cached_world_cloud", "p", "memory", "T_w_e", "grip"):
-        val = getattr(state, name, None)
-        if val is None:
-            continue
-        if hasattr(val, "detach"):
-            arr = val.detach().cpu().numpy()
-        else:
-            arr = np.asarray(val)
-        if not np.all(np.isfinite(arr)):
-            raise NonfiniteModelError(f"predicted state field '{name}' contains nonfinite values")
+    try:
+        state.__post_init__()
+    except (ValueError, TypeError) as exc:
+        raise NonfiniteModelError(f"predicted state validation failed: {exc}") from exc
 
 
-def validate_evaluation_output(eval_out: Any, name: str = "Evaluation") -> tuple[float, np.ndarray]:
+def validate_evaluation_output(eval_out: Any, name: str = "Evaluation") -> tuple[float, float]:
     """Validate scalar stop and values from EvaluationOutput, returning (u_stop, calibrated_value)."""
     if eval_out is None:
         raise NonfiniteModelError(f"{name} output is None")
@@ -260,21 +246,26 @@ def validate_evaluation_output(eval_out: Any, name: str = "Evaluation") -> tuple
         stop_np = stop_raw.detach().cpu().numpy()
     else:
         stop_np = np.asarray(stop_raw)
+
     if stop_np.size != 1:
-        raise NonfiniteModelError(f"{name} calibrated_stop must be a scalar")
+        raise ValueError(f"{name} calibrated_stop must be a scalar")
     u_val = float(stop_np.reshape(-1)[0])
-    if not isfinite(u_val) or u_val < 0.0 or u_val > 1.0:
-        raise NonfiniteModelError(f"{name} calibrated_stop must be finite in [0, 1], got {u_val}")
+    if not isfinite(u_val):
+        raise NonfiniteModelError(f"{name} calibrated_stop must be finite, got {u_val}")
+    if u_val < 0.0 or u_val > 1.0:
+        raise ValueError(f"{name} calibrated_stop must be in [0, 1], got {u_val}")
 
     if hasattr(val_raw, "detach"):
         val_np = val_raw.detach().cpu().numpy()
     else:
         val_np = np.asarray(val_raw)
+
+    if not np.all(np.isfinite(val_np)):
+        raise NonfiniteModelError(f"{name} calibrated_value contains nonfinite values")
+
     if val_np.size != 1:
         raise ValueError(f"{name} calibrated_value must be a single scalar, got array of shape {val_np.shape}")
     c_val = float(val_np.reshape(-1)[0])
-    if not isfinite(c_val):
-        raise NonfiniteModelError(f"{name} calibrated_value must be finite, got {c_val}")
     if c_val < 0.0 or c_val > 1.0:
         raise ValueError(f"{name} calibrated_value must be in [0.0, 1.0], got {c_val}")
 
@@ -306,36 +297,65 @@ def audit_planning_start(
     alg_name: str,
     cfg: Any,
     budget: PlanningBudget,
+    *,
+    H: int,
+    boundary: int = 0,
+    deadline: float | None = None,
+    algorithm_params: Mapping[str, Any] | None = None,
 ) -> None:
-    """Audit planning start with resolved config fingerprint, effective limits, and clock track."""
+    """Audit planning start with resolved config envelope, effective invocation limits, and clock track."""
     from icgs.configuration.method import MethodConfig
 
     if not isinstance(cfg, MethodConfig):
         raise TypeError(f"cfg must be MethodConfig, got {type(cfg)}")
 
-    is_wall_in_panel = budget.wall_budget_s is not None and budget.wall_budget_s in cfg.planning.wall_budgets_s
-    is_native_in_panel = budget.native_call_cap is not None and budget.native_call_cap in cfg.planning.native_call_caps
-    is_model_in_panel = budget.model_interval_cap is not None and budget.model_interval_cap == cfg.planning.model_interval_cap
-    is_track_matching = budget.clock_track == cfg.control.clock_track
-
-    rec.event(
-        "planning.start",
-        fields={
-            "algorithm": alg_name,
-            "config_sha256": cfg.fingerprint(),
-            "schema_version": cfg.schema_version,
-            "wall_budget_s": budget.wall_budget_s,
-            "native_call_cap": budget.native_call_cap,
-            "model_interval_cap": budget.model_interval_cap,
-            "clock_track": budget.clock_track,
-            "configured_clock_track": cfg.control.clock_track,
-            "clock_track_override": not is_track_matching,
-            "panel_matched": bool(is_wall_in_panel and is_native_in_panel and is_model_in_panel and is_track_matching),
-            "wall_budget_panel_override": not is_wall_in_panel if budget.wall_budget_s is not None else False,
-            "native_cap_panel_override": not is_native_in_panel if budget.native_call_cap is not None else False,
-            "model_cap_panel_override": not is_model_in_panel if budget.model_interval_cap is not None else False,
-        },
+    wall_status = (
+        "not_applied"
+        if budget.wall_budget_s is None
+        else ("matched" if budget.wall_budget_s in cfg.planning.wall_budgets_s else "override")
     )
+    native_status = (
+        "not_applied"
+        if budget.native_call_cap is None
+        else ("matched" if budget.native_call_cap in cfg.planning.native_call_caps else "override")
+    )
+    model_status = (
+        "not_applied"
+        if budget.model_interval_cap is None
+        else ("matched" if budget.model_interval_cap == cfg.planning.model_interval_cap else "override")
+    )
+    clock_track_status = "matched" if budget.clock_track == cfg.control.clock_track else "override"
+
+    applied_statuses = [s for s in (wall_status, native_status, model_status) if s != "not_applied"]
+    panel_matched = bool(
+        clock_track_status == "matched"
+        and len(applied_statuses) > 0
+        and all(s == "matched" for s in applied_statuses)
+    )
+
+    fields: dict[str, Any] = {
+        "algorithm": alg_name,
+        "resolved_config": cfg.resolved_config(),
+        "config_sha256": cfg.fingerprint(),
+        "schema_version": cfg.schema_version,
+        "H": H,
+        "boundary": boundary,
+        "deadline": deadline,
+        "wall_budget_s": budget.wall_budget_s,
+        "native_call_cap": budget.native_call_cap,
+        "model_interval_cap": budget.model_interval_cap,
+        "clock_track": budget.clock_track,
+        "configured_clock_track": cfg.control.clock_track,
+        "clock_track_status": clock_track_status,
+        "wall_panel_status": wall_status,
+        "native_panel_status": native_status,
+        "model_panel_status": model_status,
+        "panel_matched": panel_matched,
+    }
+    if algorithm_params:
+        fields.update(algorithm_params)
+
+    rec.event("planning.start", fields=fields)
 
 
 def evaluate_root_and_check_h0(
@@ -353,25 +373,49 @@ def evaluate_root_and_check_h0(
     timing_counters: dict[str, int],
     cache_counters: Mapping[str, int],
     audit_ids: Sequence[str],
-) -> tuple[PlanningResult | None, float, bool]:
+) -> tuple[PlanningResult | None, float, bool, str]:
     """Evaluate root state and check H=0 / absorbed root conditions.
 
     Returns:
-        (result, u_root, should_abort_to_fallback)
+        (result, u_root, should_abort_to_fallback, abort_reason)
     """
     events = getattr(context, "events", context)
-    eval_res, finished_t, eligible = timed_operation(
-        "root_eval",
-        lambda: capabilities.evaluate_state(state, task, events, H=H),
-        clock_fn=clock_fn,
-        deadline=deadline,
-        budget=budget,
-        capabilities=capabilities,
-        recorder=recorder,
-        coverage="inclusive",
-        timing_counters=timing_counters,
-        counter_key="evaluator_calls",
-    )
+
+    def _eval_root_op() -> tuple[float, float]:
+        raw_eval = capabilities.evaluate_state(state, task, events, H=H)
+        return validate_evaluation_output(raw_eval, "Root evaluation")
+
+    try:
+        eval_res, finished_t, eligible = timed_operation(
+            "root_eval",
+            _eval_root_op,
+            clock_fn=clock_fn,
+            deadline=deadline,
+            budget=budget,
+            capabilities=capabilities,
+            recorder=recorder,
+            coverage="inclusive",
+            timing_counters=timing_counters,
+            counter_key="evaluator_calls",
+        )
+    except NonfiniteModelError:
+        if H == 0:
+            return (
+                PlanningResult(
+                    selected_prefix=None,
+                    completed=False,
+                    fallback_reason="nonfinite_model_error",
+                    expected_return=None,
+                    call_count=0,
+                    timing_counters=dict(timing_counters),
+                    cache_counters=dict(cache_counters),
+                    audit_ids=tuple(audit_ids),
+                ),
+                0.0,
+                False,
+                "nonfinite_model_error",
+            )
+        return None, 0.0, True, "nonfinite_model_error"
 
     if eval_res is None and not eligible:
         if H == 0:
@@ -388,10 +432,11 @@ def evaluate_root_and_check_h0(
                 ),
                 0.0,
                 False,
+                "zero_horizon_timeout",
             )
-        return None, 0.0, True
+        return None, 0.0, True, "budget_exhausted"
 
-    u_root, _ = validate_evaluation_output(eval_res, "Root evaluation")
+    u_root, _ = eval_res
 
     if H == 0:
         if eligible:
@@ -408,6 +453,7 @@ def evaluate_root_and_check_h0(
                 ),
                 u_root,
                 False,
+                "",
             )
         else:
             return (
@@ -423,11 +469,12 @@ def evaluate_root_and_check_h0(
                 ),
                 u_root,
                 False,
+                "zero_horizon_timeout",
             )
 
     if not eligible:
         # H > 0 and root eval overshot deadline: must trigger reference fallback!
-        return None, u_root, True
+        return None, u_root, True, "budget_exhausted"
 
     if u_root >= 1.0:
         return (
@@ -443,9 +490,10 @@ def evaluate_root_and_check_h0(
             ),
             u_root,
             False,
+            "",
         )
 
-    return None, u_root, False
+    return None, u_root, False, ""
 
 
 def score_leaf_rollout(
@@ -471,9 +519,13 @@ def score_leaf_rollout(
     for m in range(3):
         h_m = leaf_node.hypotheses[m]
         if h_m.weight > 0.0:
-            res, finished_t, eligible = timed_operation(
+            def _eval_leaf_op(m=m):
+                raw = capabilities.evaluate_state(h_m.state, h_m.task, events, H=remaining_H)
+                return validate_evaluation_output(raw, f"Leaf head {m} evaluation")
+
+            eval_res, finished_t, eligible = timed_operation(
                 "leaf_eval",
-                lambda m=m: capabilities.evaluate_state(h_m.state, h_m.task, events, H=remaining_H),
+                _eval_leaf_op,
                 clock_fn=clock_fn,
                 deadline=deadline,
                 budget=budget,
@@ -483,9 +535,9 @@ def score_leaf_rollout(
                 timing_counters=timing_counters,
                 counter_key="evaluator_calls",
             )
-            if not eligible or res is None:
+            if not eligible or eval_res is None:
                 return None, False
-            u_m, cv = validate_evaluation_output(res, f"Leaf head {m} evaluation")
+            u_m, cv = eval_res
             values[m] = cv
 
     G = leaf_return(leaf_node.U, leaf_node.weights, values, remaining_H)
@@ -513,71 +565,44 @@ def execute_fallback(
     fallback_reason: str = "budget_exhausted",
     observation_fn: Callable[[Any], Observation] | None = None,
 ) -> PlanningResult:
-    """Materialize fallback prefix using earliest sampled candidate or exactly one new reference sample."""
-    from icgs.configuration.method import MethodConfig
-
-    if not isinstance(cfg, MethodConfig):
-        raise TypeError(f"cfg must be MethodConfig, got {type(cfg)}")
-
+    """Execute reference fallback: reuse earliest candidate or sample once, materialize, and audit."""
     rec = recorder if recorder is not None else NoopRecorder()
-
-    if H == 0:
-        return PlanningResult(
-            selected_prefix=None,
-            completed=False,
-            fallback_reason=fallback_reason,
-            expected_return=None,
-            call_count=timing_counters.get("iterations", 0),
-            timing_counters=dict(timing_counters),
-            cache_counters=dict(cache_counters) if cache_counters is not None else {"lookups": 0, "hits": 0, "misses": 0},
-            audit_ids=tuple(audit_ids),
-        )
+    p_cfg = cfg.planning
 
     if observation_fn is not None:
         rep_obs = observation_fn(state)
     else:
         rep_obs = validate_root_and_context(state, context, capabilities)
 
+    step_intervals = min(p_cfg.h, H) if H > 0 else 0
+    reused = False
+
     if earliest_candidate is not None:
         cand = earliest_candidate
         reused = True
     else:
-        reused = False
-        start_native = clock_fn()
-        try:
-            cand = capabilities.sample_prior(rep_obs, task, context, seed=seed)
-        except Exception as exc:
-            if _is_nonfinite_model_error(exc):
-                rec.event("model.error", fields={"operation": "sample_prior", "error": str(exc)})
-                raise NonfiniteModelError(str(exc)) from exc
-            raise
-        synchronize_device(capabilities)
+        start_samp = clock_fn()
+        cand = capabilities.sample_prior(rep_obs, task, context, seed=seed)
+        capabilities.synchronize()
         timing_counters["sync_calls"] = timing_counters.get("sync_calls", 0) + 1
-        finished_native = clock_fn()
+        finished_samp = clock_fn()
         timing_counters["native_calls"] = timing_counters.get("native_calls", 0) + 1
         rec.event(
             "operation.completed",
             fields={
                 "operation": "sample_prior",
-                "finished": finished_native,
-                "duration_s": max(0.0, finished_native - start_native),
+                "finished": finished_samp,
+                "duration_s": max(0.0, finished_samp - start_samp),
                 "coverage": "inclusive",
             },
         )
 
-    step_intervals = min(cfg.planning.h, H)
-    r_val = min(cfg.planning.r, step_intervals)
+    r_val = min(p_cfg.r, step_intervals)
     dt0 = float(cfg.control.dt0)
 
     start_mat = clock_fn()
-    try:
-        prefix = capabilities.materialize_prefix(cand, h=step_intervals, r=r_val, duration_s=dt0)
-    except Exception as exc:
-        if _is_nonfinite_model_error(exc):
-            rec.event("model.error", fields={"operation": "materialize_prefix", "error": str(exc)})
-            raise NonfiniteModelError(str(exc)) from exc
-        raise
-    synchronize_device(capabilities)
+    prefix = capabilities.materialize_prefix(cand, h=step_intervals, r=r_val, duration_s=dt0)
+    capabilities.synchronize()
     timing_counters["sync_calls"] = timing_counters.get("sync_calls", 0) + 1
     finished_mat = clock_fn()
     timing_counters["materialization_calls"] = timing_counters.get("materialization_calls", 0) + 1
@@ -592,7 +617,9 @@ def execute_fallback(
     )
 
     if not np.allclose(prefix.proposal_root, rep_obs.T_w_e, atol=1e-6):
-        object.__setattr__(prefix, "proposal_root", np.array(rep_obs.T_w_e, copy=True))
+        raise ValueError(
+            f"Fallback prefix proposal_root does not match root pose: expected {rep_obs.T_w_e}, got {prefix.proposal_root}"
+        )
 
     finished_fallback = finished_mat
     overshoot = max(0.0, finished_fallback - deadline)

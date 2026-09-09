@@ -545,6 +545,12 @@ class DeterministicMockCapabilities:
     def synchronize(self) -> None:
         self.sync_calls += 1
 
+    def validate_context(self, context: Any) -> None:
+        if not isinstance(context, dict):
+            raise TypeError("context must be a mapping")
+        if not context.get("context_id"):
+            raise ValueError("context must contain nonempty context_id")
+
     def sample_prior(self, observation: Any, task: Any, context: Any, *, seed: int) -> Any:
         idx = len(self.sample_prior_calls)
         call_info = {"idx": idx, "seed": seed, "obs": observation, "task": task, "context": context}
@@ -1930,7 +1936,9 @@ class SearchTask3FixRound1Tests(unittest.TestCase):
 
         class NaNStateCaps(MockCapabilities):
             def predict_step(self, st, cmd, *, head_id):
-                raise ValueError("x must contain only finite values")
+                st_corrupt = _make_physical_state(boundary=st.boundary + 1)
+                st_corrupt.x[0, 0, 0] = float("nan")
+                return _make_prediction(st_corrupt, head_id)
 
         caps = NaNStateCaps()
         rec = TestRecorder()
@@ -1949,6 +1957,278 @@ class SearchTask3FixRound1Tests(unittest.TestCase):
         self.assertTrue(len(model_errors) > 0)
         self.assertIsNotNone(res.selected_prefix)
         self.assertTrue(np.allclose(res.selected_prefix.proposal_root, state.T_w_e[0]))
+
+
+class SearchTask3FixRound2Tests(unittest.TestCase):
+    """Regressions for Task 3 Fix Round 2 audit findings."""
+
+    def setUp(self) -> None:
+        from icgs.configuration.method import MethodConfig
+        from pathlib import Path
+        primary_json = Path(__file__).resolve().parent.parent / "src/icgs/configuration/profiles/icgs_primary.json"
+        self.cfg = MethodConfig.from_file(primary_json)
+
+    def test_regression_1_completed_candidate_preserved_after_subsequent_model_error(self) -> None:
+        """Completed results are preserved and selected even if a subsequent model error occurs."""
+        import icgs.algorithms.planning.mcts as mcts_module
+        import icgs.algorithms.planning.rerank as rerank_module
+        import icgs.algorithms.planning.shooting as shooting_module
+        from icgs.algorithms.planning.budget import PlanningBudget, NonfiniteModelError
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(native_call_cap=3)
+
+        # Rerank test: cand_0 succeeds, cand_1 throws NonfiniteModelError
+        class ErrorOnCand1Caps(DeterministicMockCapabilities):
+            def __init__(self):
+                super().__init__()
+                self.eval_call_count = 0
+
+            def evaluate_state(self, st, t, ev, H):
+                self.eval_call_count += 1
+                if self.eval_call_count > 4:  # root + leaf for cand_0 succeed, then fail on cand_1
+                    raise NonfiniteModelError("leaf head nonfinite")
+                return _make_evaluation_output(value=0.8, stop=0.1, horizon=H)
+
+        caps = ErrorOnCand1Caps()
+        rec = TestRecorder()
+        res_rerank = rerank_module.plan(
+            state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, recorder=rec
+        )
+        self.assertTrue(res_rerank.completed, "Rerank must complete with candidate 0")
+        self.assertIsNone(res_rerank.fallback_reason)
+        self.assertEqual(res_rerank.selected_prefix.raw_candidate_id, "cand_0")
+
+    def test_regression_2_late_sampled_prior_reused_in_fallback(self) -> None:
+        """A sampled prior that completes after search deadline is preserved as earliest_candidate for fallback."""
+        import icgs.algorithms.planning.rerank as rerank_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        # Search deadline is 0.5s; sample_prior completes at 0.501s (late)
+        budget = PlanningBudget(wall_budget_s=0.5)
+
+        t_val = [0.0]
+        def fake_clock():
+            return t_val[0]
+
+        caps = DeterministicMockCapabilities()
+        orig_sample = caps.sample_prior
+        def late_sample(*args, **kwargs):
+            t_val[0] = 0.501  # overshoots search deadline
+            return orig_sample(*args, **kwargs)
+
+        caps.sample_prior = late_sample
+
+        rec = TestRecorder()
+        res = rerank_module.plan(
+            state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, clock=fake_clock, recorder=rec
+        )
+        self.assertFalse(res.completed)
+        self.assertEqual(res.fallback_reason, "budget_exhausted")
+        # Exactly ONE sample_prior call should have occurred (the late one was reused in fallback)
+        self.assertEqual(len(caps.sample_prior_calls), 1)
+
+    def test_regression_3_fallback_rejects_wrong_root_without_mutation(self) -> None:
+        """Fallback rejects prefix with mismatching proposal_root without mutating frozen object."""
+        from icgs.algorithms.planning.budget import execute_fallback, PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(wall_budget_s=0.5)
+
+        # Caps materializer returns proposal_root offset from root pose
+        class WrongRootCaps(DeterministicMockCapabilities):
+            def materialize_prefix(self, candidate, *, h, r, duration_s):
+                bad_root = np.eye(4, dtype=np.float64)
+                bad_root[0, 3] = 999.0  # wrong root
+                cmds = tuple(_make_timed_command(duration_s=duration_s) for _ in range(h))
+                return CommandPrefix(commands=cmds, proposal_root=bad_root, raw_candidate_id="bad_cand")
+
+        caps = WrongRootCaps()
+        rec = TestRecorder()
+        with self.assertRaises(ValueError):
+            execute_fallback(
+                state,
+                task,
+                context,
+                H=4,
+                budget=budget,
+                capabilities=caps,
+                cfg=self.cfg,
+                seed=42,
+                clock_fn=lambda: 0.1,
+                start_time=0.0,
+                deadline=0.5,
+                earliest_candidate=None,
+                timing_counters={},
+                cache_counters={},
+                audit_ids=(),
+                recorder=rec,
+            )
+
+    def test_residual_4_panel_status_not_applied_and_envelope(self) -> None:
+        """Panel dimensions accurately record not_applied and aggregate panel_matched is true when applied match."""
+        import icgs.algorithms.planning.rerank as rerank_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        # Only wall_budget_s is applied; native and model caps are None
+        budget = PlanningBudget(wall_budget_s=0.5)
+
+        caps = DeterministicMockCapabilities()
+        rec = TestRecorder()
+        res = rerank_module.plan(
+            state, task, context, H=4, budget=budget, capabilities=caps, cfg=self.cfg, recorder=rec
+        )
+        self.assertTrue(res.completed)
+        start_events = [e for e in rec.events if e.get("name") == "planning.start"]
+        self.assertEqual(len(start_events), 1)
+        fields = start_events[0]["fields"]
+
+        self.assertIn("resolved_config", fields)
+        self.assertEqual(fields["wall_panel_status"], "matched")
+        self.assertEqual(fields["native_panel_status"], "not_applied")
+        self.assertEqual(fields["model_panel_status"], "not_applied")
+        self.assertEqual(fields["clock_track_status"], "matched")
+        self.assertTrue(fields["panel_matched"], "panel_matched must be True when all applied dimensions match")
+        self.assertEqual(fields["H"], 4)
+        self.assertEqual(fields["boundary"], 0)
+
+    def test_residual_3_corrupted_physical_state_mutation_triggers_fallback(self) -> None:
+        """In-place mutated PhysicalState returned by predict_step triggers NonfiniteModelError and valid fallback."""
+        import icgs.algorithms.planning.mcts as mcts_module
+        from icgs.algorithms.planning.budget import PlanningBudget
+
+        state = _make_physical_state(boundary=0)
+        task = {"history_id": "root_task", "step": 0}
+        context = {"context_id": "ctx_0"}
+        budget = PlanningBudget(wall_budget_s=0.5)
+
+        # Test 1: NaN x
+        class CorruptedXCaps(DeterministicMockCapabilities):
+            def predict_step(self, st, cmd, *, head_id):
+                pred = super().predict_step(st, cmd, head_id=head_id)
+                pred.next_state.x[0, 0, 0] = float("nan")
+                return pred
+
+        res = mcts_module.plan(
+            state, task, context, H=4, budget=budget, capabilities=CorruptedXCaps(), cfg=self.cfg
+        )
+        self.assertFalse(res.completed)
+        self.assertEqual(res.fallback_reason, "nonfinite_model_error")
+
+        # Test 2: Non-orthonormal T_w_e
+        class CorruptedPoseCaps(DeterministicMockCapabilities):
+            def predict_step(self, st, cmd, *, head_id):
+                pred = super().predict_step(st, cmd, head_id=head_id)
+                pred.next_state.T_w_e[0, 0, 0] = 5.0  # violates R^T R == I
+                return pred
+
+        res_pose = mcts_module.plan(
+            state, task, context, H=4, budget=budget, capabilities=CorruptedPoseCaps(), cfg=self.cfg
+        )
+        self.assertFalse(res_pose.completed)
+        self.assertEqual(res_pose.fallback_reason, "nonfinite_model_error")
+
+        # Test 3: Invalid grip not in {0, 1}
+        class CorruptedGripCaps(DeterministicMockCapabilities):
+            def predict_step(self, st, cmd, *, head_id):
+                pred = super().predict_step(st, cmd, head_id=head_id)
+                pred.next_state.grip[0, 0] = 0.5
+                return pred
+
+        res_grip = mcts_module.plan(
+            state, task, context, H=4, budget=budget, capabilities=CorruptedGripCaps(), cfg=self.cfg
+        )
+        self.assertFalse(res_grip.completed)
+        self.assertEqual(res_grip.fallback_reason, "nonfinite_model_error")
+
+        # Test 4: Root evaluation returns NaN value
+        class NaNRootEvalCaps(DeterministicMockCapabilities):
+            def evaluate_state(self, st, t, ev, H):
+                out = _make_evaluation_output(value=0.5, stop=0.1, horizon=H)
+                object.__setattr__(out, "calibrated_value", np.array([float("nan")]))
+                return out
+
+        res_root = mcts_module.plan(
+            state, task, context, H=4, budget=budget, capabilities=NaNRootEvalCaps(), cfg=self.cfg
+        )
+        self.assertFalse(res_root.completed)
+        self.assertEqual(res_root.fallback_reason, "nonfinite_model_error")
+        self.assertIsNotNone(res_root.selected_prefix)
+        self.assertTrue(np.allclose(res_root.selected_prefix.proposal_root, state.T_w_e[0]))
+
+    def test_residual_2_timed_operation_start_audit_and_attempt_counters(self) -> None:
+        """timed_operation emits operation.started, increments counter at attempt, and aborts before start if late."""
+        from icgs.algorithms.planning.budget import timed_operation, PlanningBudget, NonfiniteModelError
+
+        budget = PlanningBudget(wall_budget_s=0.5)
+        rec = TestRecorder()
+        counters = {"native_calls": 0, "sync_calls": 0}
+
+        # 1. Operation starts before deadline: emits operation.started and increments counter
+        caps = DeterministicMockCapabilities()
+        res, finished, eligible = timed_operation(
+            "sample_prior",
+            lambda: "result_1",
+            clock_fn=lambda: 0.1,
+            deadline=0.5,
+            budget=budget,
+            capabilities=caps,
+            recorder=rec,
+            timing_counters=counters,
+            counter_key="native_calls",
+        )
+        self.assertTrue(eligible)
+        self.assertEqual(res, "result_1")
+        self.assertEqual(counters["native_calls"], 1)
+        self.assertEqual(counters["sync_calls"], 1)
+        started_events = [e for e in rec.events if e.get("name") == "operation.started"]
+        self.assertEqual(len(started_events), 1)
+        self.assertEqual(started_events[0]["fields"]["operation"], "sample_prior")
+
+        # 2. Clock already at or past deadline: op does NOT run, no started event emitted, counter NOT incremented
+        res_late, finished_late, eligible_late = timed_operation(
+            "sample_prior",
+            lambda: "result_2",
+            clock_fn=lambda: 0.5001,
+            deadline=0.5,
+            budget=budget,
+            capabilities=caps,
+            recorder=rec,
+            timing_counters=counters,
+            counter_key="native_calls",
+        )
+        self.assertFalse(eligible_late)
+        self.assertIsNone(res_late)
+        self.assertEqual(counters["native_calls"], 1)  # not attempted, so still 1
+
+        # 3. Op attempts and throws: counter increments at attempt, sync called on error
+        def failing_op():
+            raise NonfiniteModelError("failing op")
+
+        with self.assertRaises(NonfiniteModelError):
+            timed_operation(
+                "predict_step",
+                failing_op,
+                clock_fn=lambda: 0.2,
+                deadline=0.5,
+                budget=budget,
+                capabilities=caps,
+                recorder=rec,
+                timing_counters=counters,
+                counter_key="model_intervals",
+            )
+        self.assertEqual(counters.get("model_intervals", 0), 1, "Counter must increment at attempt even on error")
+        self.assertEqual(counters["sync_calls"], 2, "Sync must be called on error")
 
 
 if __name__ == "__main__":

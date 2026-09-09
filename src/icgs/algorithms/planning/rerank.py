@@ -95,7 +95,16 @@ def plan(
     root_obs = validate_root_and_context(state, context, capabilities)
 
     # Provenance audit
-    audit_planning_start(rec, "rerank", cfg, budget)
+    audit_planning_start(
+        rec,
+        "rerank",
+        cfg,
+        budget,
+        H=H,
+        boundary=state.boundary,
+        deadline=deadline,
+        algorithm_params={"rollout_bound": rollout_bound, "h": p_cfg.h},
+    )
 
     timing_counters = {
         "iterations": 0,
@@ -109,7 +118,7 @@ def plan(
     }
 
     # Evaluate root and handle H=0 / absorbed root
-    h0_res, u_root, should_abort = evaluate_root_and_check_h0(
+    h0_res, u_root, should_abort, abort_reason = evaluate_root_and_check_h0(
         state,
         task,
         context,
@@ -142,7 +151,7 @@ def plan(
             earliest_candidate=None,
             timing_counters=timing_counters,
             recorder=rec,
-            fallback_reason="budget_exhausted",
+            fallback_reason=abort_reason,
         )
 
     # Composite IDs
@@ -212,11 +221,11 @@ def plan(
             rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
             break
 
+        if candidate is not None and earliest_candidate is None:
+            earliest_candidate = candidate
+
         if not eligible_cand or candidate is None:
             break
-
-        if earliest_candidate is None:
-            earliest_candidate = candidate
 
         try:
             prefix, _, eligible_mat = timed_operation(
@@ -300,17 +309,22 @@ def plan(
 
         # Leaf evaluation
         rem = leaf_node.H_root - leaf_node.tau
-        G, eligible_leaf = score_leaf_rollout(
-            leaf_node,
-            events,
-            remaining_H=rem,
-            clock_fn=clock_fn,
-            deadline=deadline,
-            budget=budget,
-            capabilities=capabilities,
-            recorder=rec,
-            timing_counters=timing_counters,
-        )
+        try:
+            G, eligible_leaf = score_leaf_rollout(
+                leaf_node,
+                events,
+                remaining_H=rem,
+                clock_fn=clock_fn,
+                deadline=deadline,
+                budget=budget,
+                capabilities=capabilities,
+                recorder=rec,
+                timing_counters=timing_counters,
+            )
+        except NonfiniteModelError as exc:
+            nonfinite_error = True
+            rec.event("model.error", fields={"error": "nonfinite_model_output", "detail": str(exc)})
+            break
         if not eligible_leaf or G is None:
             break
 
@@ -340,7 +354,7 @@ def plan(
         )
 
     # Candidate selection: highest G, breaking ties to earlier sampled order
-    if not evaluated_candidates or nonfinite_error:
+    if not evaluated_candidates:
         fb_reason = "nonfinite_model_error" if nonfinite_error else "budget_exhausted"
         return execute_fallback(
             state,
