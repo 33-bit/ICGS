@@ -2022,22 +2022,28 @@ class SearchTask3FixRound2Tests(unittest.TestCase):
         self.assertIsNone(res_mcts.fallback_reason)
         self.assertEqual(res_mcts.selected_prefix.raw_candidate_id, "cand_0")
 
-        # 3. Shooting test: seq 0 completes, seq 1 encounters NonfiniteModelError
+        # 3. Shooting test: seq 0 completes, seq 1 encounters NonfiniteModelError on predict_step
         class ErrorOnSeq2ShootingCaps(DeterministicMockCapabilities):
             def __init__(self):
                 super().__init__()
-                self.eval_call_count = 0
+                self.step_call_count = 0
 
-            def evaluate_state(self, st, t, ev, H):
-                self.eval_call_count += 1
-                if self.eval_call_count > 4:  # root + leaf for seq 0 succeed
-                    raise NonfiniteModelError("shooting leaf nonfinite")
-                return _make_evaluation_output(value=0.8, stop=0.1, horizon=H)
+            def predict_step(self, st, cmd, *, head_id):
+                self.step_call_count += 1
+                # First sequence completes: 2 chunks * 2 commands * 3 heads = 12 predict_step calls.
+                # In second sequence, predict_step raises NonfiniteModelError.
+                if self.step_call_count > 12:
+                    raise NonfiniteModelError("shooting predict_step nonfinite")
+                return super().predict_step(st, cmd, head_id=head_id)
 
         caps_shoot = ErrorOnSeq2ShootingCaps()
         rec_shoot = TestRecorder()
         res_shoot = shooting_module.plan(
             state, task, context, H=4, budget=budget, capabilities=caps_shoot, cfg=self.cfg, recorder=rec_shoot
+        )
+        self.assertTrue(
+            any(e.get("name") == "model.error" for e in rec_shoot.events),
+            "Shooting must record model.error on subsequent error",
         )
         self.assertTrue(res_shoot.completed, "Shooting must complete with seq 0")
         self.assertIsNone(res_shoot.fallback_reason)
