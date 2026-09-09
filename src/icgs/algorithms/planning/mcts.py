@@ -516,8 +516,8 @@ def plan(
     if H == 0 or root_node.is_terminal:
         return PlanningResult(
             selected_prefix=None,
-            completed=bool(root_node.U >= 1.0 - 1e-6),
-            fallback_reason="terminal_root" if root_node.is_terminal else "zero_horizon",
+            completed=True,
+            fallback_reason="zero_horizon" if H == 0 else "absorbed_root",
             expected_return=float(root_node.U),
             call_count=0,
             timing_counters={

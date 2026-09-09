@@ -1102,29 +1102,33 @@ class SearchMCTSTests(unittest.TestCase):
         self.assertEqual(result.timing_counters["model_intervals"], 1)
         self.assertEqual(len(caps.predict_step_calls), 1)
 
-        # H=0 terminates promptly under fixed fake clock without infinite loop
-        ticks_h0 = [0]
-        def fake_clock_h0() -> float:
-            ticks_h0[0] += 1
-            if ticks_h0[0] > 10:
-                raise TimeoutError("Plan looped infinitely on H=0")
-            return 0.0
+        # H=0 terminates promptly with completed=True and fallback_reason="zero_horizon", independent of U
+        for stop_val in (0.0, 0.5, 1.0):
+            ticks_h0 = [0]
+            def fake_clock_h0() -> float:
+                ticks_h0[0] += 1
+                if ticks_h0[0] > 10:
+                    raise TimeoutError(f"Plan looped infinitely on H=0 (stop_val={stop_val})")
+                return 0.0
 
-        res_h0 = plan(
-            state,
-            task,
-            context,
-            H=0,
-            budget=PlanningBudget(native_call_cap=5),
-            capabilities=caps,
-            cfg=self.cfg,
-            clock=fake_clock_h0,
-        )
-        self.assertFalse(res_h0.completed)
-        self.assertIsNone(res_h0.selected_prefix)
-        self.assertLessEqual(res_h0.call_count, 1)
+            caps_h0 = DeterministicMockCapabilities(stop_value=stop_val)
+            res_h0 = plan(
+                state,
+                task,
+                context,
+                H=0,
+                budget=PlanningBudget(native_call_cap=5),
+                capabilities=caps_h0,
+                cfg=self.cfg,
+                clock=fake_clock_h0,
+            )
+            self.assertTrue(res_h0.completed)
+            self.assertIsNone(res_h0.selected_prefix)
+            self.assertEqual(res_h0.fallback_reason, "zero_horizon")
+            self.assertEqual(res_h0.call_count, 0)
+            self.assertAlmostEqual(res_h0.expected_return, stop_val)
 
-        # Absorbed root terminates promptly under fixed fake clock without infinite loop
+        # Absorbed root (H=4, stop_value=1.0) terminates promptly with completed=True and fallback_reason="absorbed_root"
         ticks_abs = [0]
         def fake_clock_abs() -> float:
             ticks_abs[0] += 1
@@ -1145,7 +1149,9 @@ class SearchMCTSTests(unittest.TestCase):
         )
         self.assertTrue(res_abs.completed)
         self.assertIsNone(res_abs.selected_prefix)
-        self.assertLessEqual(res_abs.call_count, 1)
+        self.assertEqual(res_abs.fallback_reason, "absorbed_root")
+        self.assertEqual(res_abs.call_count, 0)
+        self.assertAlmostEqual(res_abs.expected_return, 1.0)
 
     def test_audit_issue_3_native_observation_from_representative(self) -> None:
         """Representative observation passed to sample_prior is a validated native Observation with points, T_w_e, grip."""

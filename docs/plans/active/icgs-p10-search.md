@@ -151,6 +151,11 @@ Tie selection by insertion ID; final choice visits,then Q,then earlier ID. Cache
 - [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
   *Verified exact source diff in mcts.py, budget.py, tests/test_search.py, active plan. Progressive widening, UCT, root-scoped exact cache, one G backup, node/edge visit semantics, and deterministic tie breaking all pass.*
+  - **Task 2 Cumulative Audit & Fix Trail:**
+    - **Original Implementation (`72ba6e8`):** Progressive widening MCTS + root-scoped exact cache. Evidence: 23 ran, 23 passed via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`.
+    - **Fix Round 1 (`0317f75`):** Addressed six initial audit findings (composite models, task identity, state identity across 13 fields, operation-level budget checks, structured recorder events). Evidence: 29 ran, 29 passed (0.524s) via `.venv`. Both L0 passed 19/19.
+    - **Fix Round 2 (`e0d5a0e`):** Addressed six re-audit findings (ExactCache task branch copy on all representations, wall/native_call budget invariant, full native Observation, MethodConfig requirement without dt0 fallback, scalar calibration [0, 1] validation, depth-2 tree & real tie tests). Evidence: 29 ran, 29 passed (0.550s) via `.venv`. Both L0 passed 19/19.
+    - **Fix Round 3 (this round):** Addressed two new findings from re-audit 2 (early-root evaluation sets completed=True independent of U, zero_horizon ordered before absorbed_root; explicit FG pilot NOT RUN/not accepted; durable active plan evidence updated without rewriting historical runs). Evidence: 29 ran, 29 passed (0.515s) via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. Both L0 passed 19/19.
 
 ### Task 3: Matched baselines, completed-only timing and fallback
 
@@ -217,9 +222,9 @@ phase if an FG fails and request a scoped protocol decision.
 ## Execution evidence
 
 - Documentation drafting: complete.
-- Component RED/GREEN commands: Task 1 (belief.py) accepted at a430cbf; Task 2 (mcts.py, budget.py seam) RED verified (14 ran, 1 errored), GREEN verified (23 ran, 23 passed) in test_search.py; L0 passed 19/19 on scripts/validate_fast.py. Task 3 pending.
-- L1 search assertions: 23 executed, 23 passed in tests/test_search.py (0.485s) using .venv/bin/python.
-- L2/C1–C5: **NOT RUN** by this component task — required FG acceptance remains ACTIVE.
+- Component RED/GREEN commands: Task 1 (belief.py) accepted at a430cbf; Task 2 (mcts.py, budget.py seam) original accepted at 72ba6e8 (23 passed), Round 1 at 0317f75 (29 passed), Round 2 at e0d5a0e (29 passed), Round 3 (29 passed in 0.515s); L0 passed 19/19 on scripts/validate_fast.py (both invocations). Task 3 pending.
+- L1 search assertions: 29 executed, 29 passed in tests/test_search.py (0.515s) using .venv/bin/python (historical 23-test run preserved).
+- L2/C1–C5: **NOT RUN** by this component task — required Feasibility Gate (FG) remains active and FG pilot is **NOT RUN / not accepted**.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Nonpreemptible IP may exceed small budgets and deeper model rollout may exploit prediction errors.
 
