@@ -33,6 +33,29 @@ def _owned(value: Any, *, shape: tuple[int, ...] | None = None, name: str) -> np
     return backing
 
 
+def _owned_prediction_logits(value: Any) -> Any:
+    """Own NumPy logits or clone torch logits without importing torch eagerly."""
+
+    module = getattr(type(value), "__module__", "")
+    if module == "torch" or module.startswith("torch."):
+        import torch
+
+        if not torch.is_tensor(value):
+            raise TypeError("grip_logits must be a tensor or NumPy-compatible array")
+        if value.ndim != 2 or value.shape[1] != 1:
+            raise ValueError("grip_logits must have shape [B,1]")
+        if not value.is_floating_point():
+            raise TypeError("tensor grip_logits must use a floating dtype")
+        if not bool(torch.isfinite(value).all().item()):
+            raise ValueError("grip_logits must contain only finite values")
+        return value.clone()
+
+    logits = np.asarray(value)
+    if logits.ndim != 2 or logits.shape[1] != 1:
+        raise ValueError("grip_logits must have shape [B,1]")
+    return _owned(logits, name="grip_logits")
+
+
 def _counter(value: Any, name: str) -> int:
     if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
         raise ValueError(f"{name} must be a nonnegative integer")
@@ -188,14 +211,11 @@ class SegmentRef:
 @dataclass(frozen=True)
 class PhysicalPrediction:
     next_state: "PhysicalState"
-    grip_logits: np.ndarray
+    grip_logits: Any
     head_id: int
 
     def __post_init__(self) -> None:
-        logits = np.asarray(self.grip_logits)
-        if logits.ndim != 2 or logits.shape[1] != 1:
-            raise ValueError("grip_logits must have shape [B,1]")
-        object.__setattr__(self, "grip_logits", _owned(logits, name="grip_logits"))
+        object.__setattr__(self, "grip_logits", _owned_prediction_logits(self.grip_logits))
         head = _counter(self.head_id, "head_id")
         if head > 2:
             raise ValueError("head_id must be one of three fixed heads")

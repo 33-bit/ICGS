@@ -168,6 +168,30 @@ class MethodContractTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(method, name))
 
+    def test_physical_prediction_owns_numpy_and_tensor_logits(self):
+        import torch
+
+        from icgs.contracts.method import PhysicalPrediction
+
+        numpy_source = np.zeros((1, 1), dtype=np.float32)
+        numpy_prediction = PhysicalPrediction(object(), numpy_source, 0)
+        numpy_source[0, 0] = 3.0
+        self.assertIsInstance(numpy_prediction.grip_logits, np.ndarray)
+        self.assertEqual(numpy_prediction.grip_logits.dtype, np.float64)
+        self.assertEqual(numpy_prediction.grip_logits[0, 0], 0.0)
+        self.assertFalse(numpy_prediction.grip_logits.flags.writeable)
+
+        tensor_source = torch.zeros((1, 1), requires_grad=True)
+        tensor_prediction = PhysicalPrediction(object(), tensor_source, 0)
+        self.assertIsInstance(tensor_prediction.grip_logits, torch.Tensor)
+        self.assertIsNot(tensor_prediction.grip_logits, tensor_source)
+        with torch.no_grad():
+            tensor_source.fill_(2.0)
+        self.assertEqual(tensor_prediction.grip_logits.item(), 0.0)
+        tensor_prediction.grip_logits.sum().backward()
+        self.assertIsNotNone(tensor_source.grad)
+        self.assertEqual(tensor_source.grad.item(), 1.0)
+
     def test_method_config_rejects_unknown_fields_and_commit_horizon(self):
         try:
             from icgs.configuration.method import MethodConfig
