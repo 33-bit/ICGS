@@ -73,7 +73,7 @@ Root tau0,U=S,F0,w=(1-U)/3. Each edge advances min(h,H_root-tau,L-tau). Every in
 **Test owner:** `tests/test_search.py`.
 **Consumes / produces:** Produces propagate_mass, leaf_return, Hypothesis, BeliefNode and representative selection.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -86,10 +86,11 @@ self.assertAlmostEqual(leaf_return(u, w, np.ones(3), 0), u)
 self.assertAlmostEqual(leaf_return(u, w, np.ones(3), 3), u+w.sum())
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+  *Verified: 7 ran, 1 failed, 6 errored (`NotImplementedError: propagate_mass is not implemented yet`).*
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 success, failure, cont = event_probabilities.T
@@ -100,10 +101,12 @@ next_weights = weights*cont
 ```
 
 FP32 mass tolerance1e-5,FP64 tests1e-12; zero active mass means exactly zero. Medoid minimizes active-head pairwise CD/.01²+translation/.01²+angle²/(5deg)², unweighted and tie lower head. Materialize candidate once from medoid root and apply identical absolute bytes to every head.
+*Implemented in `src/icgs/algorithms/planning/belief.py` with `propagate_mass`, `leaf_return`, `Hypothesis`, `BeliefNode`, and `select_representative`.*
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+  *Verified: 8 ran, 8 passed, 0 failed, 0 skipped in 0.115s. L0 fast validation passed 19/19. Full suite passed 302 tests (293 passed, 9 skipped).*
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
 
 ### Task 2: Progressive widening, selection, backup and exact cache
