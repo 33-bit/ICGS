@@ -115,7 +115,7 @@ FP32 mass tolerance1e-5,FP64 tests1e-12; zero active mass means exactly zero. Me
 **Test owner:** `tests/test_search.py`.
 **Consumes / produces:** Produces `widening_limit(visits)`, `uct(total_return, visits, parent_visits)` and MCTS plan capability.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -126,10 +126,11 @@ with self.assertRaisesRegex(ValueError, 'unvisited'):
     uct(0., 0, 1)
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+  *Verified RED: 14 ran, 13 passed, 1 errored (`NotImplementedError: widening_limit is not implemented yet`) in 0.230s via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`.*
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 limit = max(1, math.floor(cfg.planning.widening_coefficient *
@@ -144,10 +145,12 @@ for edge in path:
 
 Tie selection by insertion ID; final choice visits,then Q,then earlier ID. Cache requires byte-identical canonical commands/durations plus parent/context/head/model/time IDs, root-local only. Keep duplicate samples in audit. Tests use a hand-enumerated two-depth tree to check one backup, visit accounting, partial edges and task-history cache separation.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+  *Verified GREEN: 23 ran, 23 passed, 0 failed, 0 skipped in 0.485s via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 fast validation passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`.*
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
+  *Verified exact source diff in mcts.py, budget.py, tests/test_search.py, active plan. Progressive widening, UCT, root-scoped exact cache, one G backup, node/edge visit semantics, and deterministic tie breaking all pass.*
 
 ### Task 3: Matched baselines, completed-only timing and fallback
 
@@ -213,10 +216,10 @@ phase if an FG fails and request a scoped protocol decision.
 
 ## Execution evidence
 
-- Documentation drafting: this plan specifies future work only.
-- Component RED/GREEN commands: **NOT RUN** — runtime/test files are not implemented.
-- L1 model assertions: **NOT RUN** — future installed supported environment required.
-- L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
+- Documentation drafting: complete.
+- Component RED/GREEN commands: Task 1 (belief.py) accepted at a430cbf; Task 2 (mcts.py, budget.py seam) RED verified (14 ran, 1 errored), GREEN verified (23 ran, 23 passed) in test_search.py; L0 passed 19/19 on scripts/validate_fast.py. Task 3 pending.
+- L1 search assertions: 23 executed, 23 passed in tests/test_search.py (0.485s) using .venv/bin/python.
+- L2/C1–C5: **NOT RUN** by this component task — required FG acceptance remains ACTIVE.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Nonpreemptible IP may exceed small budgets and deeper model rollout may exploit prediction errors.
 
