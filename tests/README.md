@@ -43,6 +43,7 @@ acceptance job must run actual checkpoint tests and reference comparison.
 | test_composition.py | Encoder/graph/stage replacement and real PyG forward/backward |
 | test_policy.py | Public inference, owned immutable context, branch feature isolation, cache/reset |
 | test_candidates.py | K/B/P provenance and independent root-anchored prefixes |
+| test_search.py | P10 belief propagation, medoid selection, leaf return, MCTS/rerank/shooting, budget timing/fallback |
 | test_inference_contract.py | Safe NPZ and exception-safe Python/NumPy/CPU/CUDA RNG scope |
 | test_data.py | Native PyG serialization/augmentation and actual Open3D filtering when installed |
 | test_evaluation.py | Original metric/cadence/step exception behavior via fake environment, real action conversion |

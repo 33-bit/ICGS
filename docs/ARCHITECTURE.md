@@ -29,7 +29,7 @@ training/evaluation → execution → policy + environment adapter
 | models/backbones | GraphTransformer and native three-stage processing |
 | models/denoisers | Native graph denoiser with registered parameter names preserved |
 | algorithms/diffusion | Action codec, original schedule/objective/sampler in coherent files |
-| algorithms/planning | Sequential candidate proposer only; no fake search/value/dynamics |
+| algorithms/planning | Belief node, budget/timing/fallback, MCTS, rerank, and shooting over capability protocol |
 | policies | InstantPolicy public observation/context → native action inference |
 | execution | Rollout loop and root-relative → absolute command prefix |
 | environments/rlbench | Lazy simulator setup, tasks, observation/action conversion |

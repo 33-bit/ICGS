@@ -1,6 +1,6 @@
 # Planning, controls and research evaluation
 
-Status: target, not implemented search or measured benchmark results. PR refers
+Status: active P10 search runtime implemented with deterministic fixtures (`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`); full acceptance remains ACTIVE (trained model integration, pilots, C1–C5, and benchmark evaluations remain NOT RUN / not accepted this task). PR refers
 to the proposal's Budgeted Search, Benchmark and Reproducibility sections. AD/ID
 have the meanings in the [method index](README.md).
 

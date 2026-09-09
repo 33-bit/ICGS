@@ -30,11 +30,15 @@ def propagate_mass(
         raise TypeError("U must be a numeric float")
     if isinstance(F, bool) or not isinstance(F, (int, float, np.floating, np.integer)):
         raise TypeError("F must be a numeric float")
-    U = float(U)
-    F = float(F)
-    if not (np.isfinite(U) and np.isfinite(F)):
+
+    u_dtype = getattr(U, "dtype", None)
+    f_dtype = getattr(F, "dtype", None)
+
+    U_val = float(U)
+    F_val = float(F)
+    if not (np.isfinite(U_val) and np.isfinite(F_val)):
         raise ValueError("U and F must be finite numbers")
-    if U < 0.0 or F < 0.0:
+    if U_val < 0.0 or F_val < 0.0:
         raise ValueError("U and F must be nonnegative")
 
     w_arr = np.asarray(weights)
@@ -48,17 +52,17 @@ def propagate_mass(
         raise ValueError("weights must be nonnegative")
 
     operands_for_dtype = [w_arr.dtype, ev_arr.dtype]
-    if hasattr(U, "dtype"):
-        operands_for_dtype.append(U.dtype)
-    if hasattr(F, "dtype"):
-        operands_for_dtype.append(F.dtype)
+    if u_dtype is not None:
+        operands_for_dtype.append(u_dtype)
+    if f_dtype is not None:
+        operands_for_dtype.append(f_dtype)
     target_dtype = np.result_type(*operands_for_dtype)
 
     w_arr = w_arr.astype(target_dtype, copy=False)
     ev_arr = ev_arr.astype(target_dtype, copy=False)
     atol = numerics.mass_sum_atol_float32 if target_dtype == np.float32 else numerics.mass_sum_atol_float64
 
-    prior_mass = float(U) + float(F) + float(w_arr.sum())
+    prior_mass = U_val + F_val + float(w_arr.sum())
     if abs(prior_mass - 1.0) > atol:
         raise ValueError(f"prior mass must sum to 1.0 within {atol}, got {prior_mass}")
 
@@ -79,8 +83,8 @@ def propagate_mass(
     failure = ev_arr[:, 1]
     cont = ev_arr[:, 2]
 
-    next_U = target_dtype.type(float(U) + (w_arr * success).sum())
-    next_F = target_dtype.type(float(F) + (w_arr * failure).sum())
+    next_U = target_dtype.type(U_val + (w_arr * success).sum())
+    next_F = target_dtype.type(F_val + (w_arr * failure).sum())
     next_weights = (w_arr * cont).astype(target_dtype, copy=False)
 
     # Zero active mass means exactly zero
@@ -120,6 +124,8 @@ def leaf_return(
         raise ValueError("weights and active_values must have matching lengths")
     if not (np.isfinite(w_arr).all() and np.isfinite(v_arr).all()):
         raise ValueError("weights and active_values must contain only finite numbers")
+    if (w_arr < 0.0).any():
+        raise ValueError("weights must be nonnegative")
 
     if remaining == 0:
         return U

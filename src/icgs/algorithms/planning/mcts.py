@@ -998,4 +998,3 @@ def plan(
         cache_counters=exact_cache.counters(),
         audit_ids=tuple(r.candidate_id for r in audit_records),
     )
-

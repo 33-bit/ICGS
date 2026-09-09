@@ -12,7 +12,7 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — planned runtime NOT IMPLEMENTED**. This document is a category C
+Status: **ACTIVE — planned P10 runtime implemented with deterministic fixtures** (`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`); full method acceptance remains **ACTIVE / NOT ACCEPTED** (trained integration, pilots, C1–C5, and benchmark evaluations remain NOT RUN / not accepted this task). This document is a category C
 component of the approved docs-only research migration, not permission to execute it.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
@@ -191,10 +191,10 @@ if finished <= deadline:
 Count encoding/native preprocessing/diffusion/transfer/synchronization/decode/reencode/evaluation. Rerank h2/T8; shooting resamples prior through L and ties first completed. If no eligible evaluation reuse earliest prior sample or draw exactly one new reference fallback, record extra latency; invalid input aborts. Match wall0.1/.5/2s,L and diagnostic native caps16/64/256 plus independent model counters.
 *Implemented: Completed `src/icgs/algorithms/planning/budget.py` with `eligible_completion`, `synchronize_device`, `NonfiniteModelError`, and `execute_fallback`; completed B5 rerank in `src/icgs/algorithms/planning/rerank.py` (configured h and native T8 rollouts); completed B6 shooting in `src/icgs/algorithms/planning/shooting.py` (sequential resampling through L); integrated monotonic wall deadline gating, completed-only timing, device synchronization, overshoot recording, and fallback handling across MCTS, rerank, and shooting.*
 
-- [x] **Step 4 \u2014 Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-  *Verified GREEN: 39 ran, 39 passed, 0 failed, 0 skipped in 0.783s via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 fast validation passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`. Full test suite: 333 tests selected/executed: 324 passed, 9 skipped (optional dependencies: 4 differential baseline, 1 RLBench, 1 CUDA RNG, 1 opt-in published checkpoint, 2 PyTorch Lightning), 0 failed in 14.700s.*
-- [x] **Step 5 \u2014 Review:** Inspect the exact source/test diff and update this plan's
+  *Verified GREEN: 39 ran, 39 passed, 0 failed, 0 skipped in 0.783s via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 fast validation passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`. Historical full test suite at Task 3 completion: 333 tests selected, 324 executed/passed, 9 skipped (optional dependencies: 4 differential baseline, 1 RLBench, 1 CUDA RNG, 1 opt-in published checkpoint, 2 PyTorch Lightning), 0 failed in 14.700s (not a clean full run due to skipped optional suites). Historical manager evidence at commit f5d519d: 346 selected, 337 executed/passed, 9 skipped.*
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
   *Verified exact diff: completed budget.py, rerank.py, shooting.py, mcts.py completed-only wall timing and fallback integration, comprehensive deterministic test suite in tests/test_search.py, clean L0/full test results.*
 

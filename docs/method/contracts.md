@@ -1,6 +1,6 @@
 # Planned ICGS contracts
 
-Status: PR/AD target plus explicitly marked IDs. None of the types below exists
+Status: PR/AD target plus explicitly marked IDs; active P10 search runtime implemented with deterministic fixtures (`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`). None of the other planned types below exists
 yet unless called EI. See the [native contract](../components/policy-data-contract.md)
 for unchanged installed behavior and the [method index](README.md) for authority.
 

@@ -465,6 +465,65 @@ class SearchBeliefTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             BeliefNode(tau=0, H_root=self.cfg.planning.H + 1, U=0.0, F=0.0, hypotheses=(h0, h1, h2), cfg=self.cfg)
 
+    def test_regression_propagate_mass_scalar_dtype_preservation(self) -> None:
+        """propagate_mass must preserve NumPy scalar dtypes for U and F in np.result_type."""
+        w32 = np.array([0.25, 0.25, 0.25], dtype=np.float32)
+        ev32 = np.array([
+            [0.25, 0.25, 0.5],
+            [0.25, 0.25, 0.5],
+            [0.25, 0.25, 0.5],
+        ], dtype=np.float32)
+        u64 = np.float64(0.25)
+        f32 = np.float32(0.0)
+
+        # FP64 U with FP32 F, weights, and events -> must promote to FP64
+        u_out, f_out, w_out = propagate_mass(u64, f32, w32, ev32, self.cfg)
+        self.assertEqual(getattr(u_out, "dtype", None), np.float64)
+        self.assertEqual(getattr(f_out, "dtype", None), np.float64)
+        self.assertEqual(w_out.dtype, np.float64)
+
+        # FP64 F with FP32 U, weights, and events -> must promote to FP64
+        u32 = np.float32(0.25)
+        f64 = np.float64(0.0)
+        u_out_f, f_out_f, w_out_f = propagate_mass(u32, f64, w32, ev32, self.cfg)
+        self.assertEqual(getattr(u_out_f, "dtype", None), np.float64)
+        self.assertEqual(getattr(f_out_f, "dtype", None), np.float64)
+        self.assertEqual(w_out_f.dtype, np.float64)
+
+        # Pure FP32: FP32 U, F, weights, events -> remains FP32
+        u_out_32, f_out_32, w_out_32 = propagate_mass(u32, f32, w32, ev32, self.cfg)
+        self.assertEqual(getattr(u_out_32, "dtype", None), np.float32)
+        self.assertEqual(getattr(f_out_32, "dtype", None), np.float32)
+        self.assertEqual(w_out_32.dtype, np.float32)
+
+        # FP64 tolerance: drift in FP64 must be rejected under 1e-12 even with FP32 weights/events
+        u64_drift = np.float64(0.2500002)
+        with self.assertRaises(ValueError):
+            propagate_mass(u64_drift, f32, w32, ev32, self.cfg)
+
+    def test_regression_leaf_return_negative_weights(self) -> None:
+        """leaf_return must reject negative weights."""
+        with self.assertRaises(ValueError):
+            leaf_return(0.1, np.array([-0.1, 0.5, 0.6]), np.array([1.0, 1.0, 1.0]), remaining=5)
+
+    def test_regression_representative_selection_chamfer_driven(self) -> None:
+        """Medoid selects central cloud when poses are identical and only Chamfer distance differs."""
+        cloud0 = np.array([[-0.05, 0.0, 0.0]], dtype=np.float32)
+        cloud1 = np.array([[0.0, 0.0, 0.0]], dtype=np.float32)
+        cloud2 = np.array([[0.05, 0.0, 0.0]], dtype=np.float32)
+
+        s0 = _make_physical_state(points=cloud0)
+        s1 = _make_physical_state(points=cloud1)
+        s2 = _make_physical_state(points=cloud2)
+
+        h0 = Hypothesis(head_id=0, state=s0, task=None, weight=1.0 / 3.0)
+        h1 = Hypothesis(head_id=1, state=s1, task=None, weight=1.0 / 3.0)
+        h2 = Hypothesis(head_id=2, state=s2, task=None, weight=1.0 / 3.0)
+
+        # Head 1 has the central cloud, so pairwise Chamfer distance sum is minimal
+        rep = select_representative((h0, h1, h2), self.cfg)
+        self.assertEqual(rep.head_id, 1)
+
 
 def _make_timed_command(
     offset: float = 0.0,

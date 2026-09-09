@@ -697,5 +697,3 @@ def execute_fallback(
         cache_counters=dict(cache_counters) if cache_counters is not None else {"lookups": 0, "hits": 0, "misses": 0},
         audit_ids=final_audit_ids,
     )
-
-
