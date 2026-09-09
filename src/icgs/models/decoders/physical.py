@@ -5,6 +5,7 @@ from __future__ import annotations
 import torch
 from torch import Tensor, nn
 
+from icgs.configuration.method import DecoderConfig, GeometryConfig, MethodConfig, NeuralConfig
 from icgs.models.encoders.physical import EncodedCloud
 
 
@@ -27,23 +28,64 @@ class DecodedCloud:
 class PhysicalDecoder(nn.Module):
     """Decode sixteen fixed grid patches from every valid anchor."""
 
-    def __init__(self, width: int = 256):
+    def __init__(
+        self,
+        width: int | None = None,
+        *,
+        method_config: MethodConfig | None = None,
+        geometry_config: GeometryConfig | None = None,
+        neural_config: NeuralConfig | None = None,
+        decoder_config: DecoderConfig | None = None,
+    ):
         super().__init__()
+        if method_config is not None:
+            if not isinstance(method_config, MethodConfig):
+                raise TypeError("method_config must be a MethodConfig or None")
+            if any(section is not None for section in (geometry_config, neural_config, decoder_config)):
+                raise ValueError("method_config cannot be combined with typed sections")
+            geometry_config = method_config.geometry
+            neural_config = method_config.neural
+            decoder_config = method_config.decoder
+        if any(section is None for section in (geometry_config, neural_config, decoder_config)):
+            resolved = MethodConfig()
+            geometry_config = resolved.geometry if geometry_config is None else geometry_config
+            neural_config = resolved.neural if neural_config is None else neural_config
+            decoder_config = resolved.decoder if decoder_config is None else decoder_config
+        if not isinstance(geometry_config, GeometryConfig):
+            raise TypeError("geometry_config must be a GeometryConfig or None")
+        if not isinstance(neural_config, NeuralConfig):
+            raise TypeError("neural_config must be a NeuralConfig or None")
+        if not isinstance(decoder_config, DecoderConfig):
+            raise TypeError("decoder_config must be a DecoderConfig or None")
+        width = geometry_config.width if width is None else width
         if width != 256:
             raise ValueError("the physical decoder width is fixed at 256")
-        self.norm = nn.LayerNorm(width, eps=1e-5)
-        self.patch = nn.Sequential(
-            nn.Linear(258, 256),
-            nn.GELU(),
-            nn.Linear(256, 128),
-            nn.GELU(),
-            nn.Linear(128, 3),
+        if decoder_config.grid_side != 4:
+            raise ValueError("the physical decoder grid is fixed at 4x4")
+        if tuple(decoder_config.hidden_dims) != (256, 128):
+            raise ValueError("the physical decoder hidden widths are fixed at [256, 128]")
+        self.norm = nn.LayerNorm(width, eps=neural_config.layer_norm_eps)
+        hidden_dims = decoder_config.hidden_dims
+        patch_layers: list[nn.Module] = []
+        input_width = width + 2
+        for hidden_width in hidden_dims:
+            patch_layers.extend((nn.Linear(input_width, hidden_width), nn.GELU()))
+            input_width = hidden_width
+        patch_layers.append(nn.Linear(input_width, 3))
+        self.patch = nn.Sequential(*patch_layers)
+        values = torch.tensor(
+            tuple(
+                (decoder_config.grid_min * (decoder_config.grid_side - 1 - index)
+                 + decoder_config.grid_max * index) / (decoder_config.grid_side - 1)
+                for index in range(decoder_config.grid_side)
+            ),
+            dtype=torch.float32,
         )
-        values = torch.tensor((-1.0, -1.0 / 3.0, 1.0 / 3.0, 1.0), dtype=torch.float32)
         self.register_buffer("grid", torch.stack((
             values.repeat_interleave(4),
             values.repeat(4),
         ), dim=-1), persistent=False)
+        self.patch_radius_m = decoder_config.patch_radius_m
 
     def forward(self, encoded: EncodedCloud) -> DecodedCloud:
         if not isinstance(encoded, EncodedCloud):
@@ -69,7 +111,7 @@ class PhysicalDecoder(nn.Module):
         grid = self.grid.to(dtype=encoded.X.dtype, device=encoded.X.device)
         grid = grid[None, None, :, :].expand(encoded.X.shape[0], encoded.X.shape[1], -1, -1)
         decoder_input = torch.cat((normalized[:, :, None, :].expand(-1, -1, 16, -1), grid), dim=-1)
-        patches = encoded.x[:, :, None, :] + 0.10 * torch.tanh(self.patch(decoder_input))
+        patches = encoded.x[:, :, None, :] + self.patch_radius_m * torch.tanh(self.patch(decoder_input))
         point_valid = anchor_valid[:, :, None].expand(-1, -1, 16)
         patches = torch.where(point_valid[..., None], patches, torch.zeros_like(patches))
         return DecodedCloud(

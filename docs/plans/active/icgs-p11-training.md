@@ -26,6 +26,20 @@ Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
 before runtime execution. Inspect Git state; preserve unrelated work and user assets.
 
+## Configuration consumption addendum — 2026-09-09
+
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
+Consumed sections for this plan: **training, optimizer, stages, collection, losses, calibration**.
+
+Use optimizer fields and the current stages.A0/A1/B/D1/D2 record for batches, maximum updates, burn-in and curricula. Use stages seed fields and require actual values at run readiness. Preserve phase trainable-set semantics and save config.resolved_config() beside checkpoints before execution.
+
+Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
+Numeric shapes and test inputs below are baseline examples/compatibility assertions;
+they are not a second editable default source. New tunable implementation constants
+must be replaced by the matching configuration key. Preserve prior progress and
+evidence; this addendum does not certify that the component consumes every new field.
+
 ## Global constraints
 
 - Canonical runtime is `src/icgs`; no `ip` shims or wrapped legacy runtime.
@@ -85,6 +99,11 @@ stage_trainable = {'A0': {'geometry'}, 'A1': {'geometry','physical_memory','dyna
                    'D2': {'evaluation','terminal'}, 'E': {'temperatures'}, 'Test': set()}
 for name, module in components.items():
     module.requires_grad_(name in stage_trainable[stage])
+# Phase membership above is research semantics, not a hyperparameter.
+stage_config = getattr(cfg.stages, stage)  # trainable phases only
+optimizer = torch.optim.AdamW(trainable_parameters,
+    lr=cfg.optimizer.learning_rate, betas=cfg.optimizer.betas,
+    weight_decay=cfg.optimizer.weight_decay)
 ```
 
 Curricula A1 K1/2/4 in equal update thirds,D1 K2/4/8/16 in quarters; validate range/phase boundaries. Assert actual optimizer parameter IDs equal the permitted set and that frozen tensor hashes remain unchanged after tiny optimizer tests. A1 must train physical memory temporally before B freezes it.

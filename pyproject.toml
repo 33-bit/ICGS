@@ -22,3 +22,4 @@ include = ["icgs*"]
 
 [tool.setuptools.package-data]
 "icgs.artifacts" = ["profiles/*.json"]
+"icgs.configuration" = ["profiles/*.json"]

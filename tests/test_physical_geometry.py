@@ -283,6 +283,115 @@ class PhysicalGeometryTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finite"):
             decoder(EncodedCloud(X, invalid_x, valid))
 
+    def test_central_decoder_patch_radius_reaches_patch_scale(self):
+        from dataclasses import replace
+
+        from icgs.configuration.method import MethodConfig
+        from icgs.models.decoders.physical import PhysicalDecoder
+        from icgs.models.encoders.physical import EncodedCloud
+
+        base_config = MethodConfig()
+        custom_config = replace(
+            base_config,
+            decoder=replace(base_config.decoder, patch_radius_m=0.2),
+        )
+        torch.manual_seed(71)
+        base_decoder = PhysicalDecoder(method_config=base_config)
+        custom_decoder = PhysicalDecoder(method_config=custom_config)
+        custom_decoder.load_state_dict(base_decoder.state_dict())
+        with torch.no_grad():
+            base_decoder.patch[-1].weight.fill_(0.01)
+            base_decoder.patch[-1].bias.fill_(0.1)
+        custom_decoder.load_state_dict(base_decoder.state_dict())
+
+        encoded = EncodedCloud(
+            X=torch.zeros(1, 128, 256),
+            x=torch.zeros(1, 128, 3),
+            anchor_valid=torch.ones(1, 128, dtype=torch.bool),
+        )
+        with torch.no_grad():
+            base_points = base_decoder(encoded).points_w
+            custom_points = custom_decoder(encoded).points_w
+        torch.testing.assert_close(custom_points, base_points * 2.0)
+
+    def test_central_layer_norm_epsilon_reaches_encoder_blocks_and_decoder(self):
+        from dataclasses import replace
+
+        from icgs.configuration.method import MethodConfig
+        from icgs.models.decoders.physical import PhysicalDecoder
+        from icgs.models.encoders.physical import PhysicalEncoder
+
+        base_config = MethodConfig()
+        custom_config = replace(
+            base_config,
+            neural=replace(base_config.neural, layer_norm_eps=2e-4),
+        )
+        encoder = PhysicalEncoder(method_config=custom_config)
+        decoder = PhysicalDecoder(method_config=custom_config)
+
+        self.assertEqual(encoder.geometry_blocks[0].norm_attention.eps, 2e-4)
+        self.assertEqual(encoder.geometry_blocks[0].norm_feedforward.eps, 2e-4)
+        self.assertEqual(decoder.norm.eps, 2e-4)
+
+    def test_central_sensor_workspace_bounds_reach_physical_crop(self):
+        from dataclasses import replace
+
+        from icgs.configuration.method import MethodConfig
+        from icgs.models.encoders.physical import PhysicalEncoder
+
+        base_config = MethodConfig()
+        custom_config = replace(
+            base_config,
+            sensors=replace(
+                base_config.sensors,
+                workspace_bounds_m=((-0.01, -0.01, -0.01), (0.01, 0.01, 0.01)),
+            ),
+        )
+        encoder = PhysicalEncoder(method_config=custom_config)
+        points = torch.tensor([[[0.0, 0.0, 0.0], [0.02, 0.0, 0.0]]])
+        valid = torch.ones(1, 2, dtype=torch.bool)
+
+        encoded = encoder(points, valid)
+        self.assertEqual(int(encoded.anchor_valid.sum().item()), 1)
+        torch.testing.assert_close(encoded.x[0, 0], points[0, 0])
+
+    def test_seeded_defaults_match_explicit_method_config_state_and_tensors(self):
+        from icgs.configuration.method import MethodConfig
+        from icgs.models.decoders.physical import PhysicalDecoder
+        from icgs.models.encoders.physical import PhysicalEncoder
+
+        config = MethodConfig()
+        points = torch.zeros(1, 2048, 3)
+        points[:, 1, 0] = 0.02
+        valid = torch.zeros(1, 2048, dtype=torch.bool)
+        valid[:, :2] = True
+
+        torch.manual_seed(73)
+        default_encoder = PhysicalEncoder()
+        torch.manual_seed(73)
+        explicit_encoder = PhysicalEncoder(method_config=config)
+        self.assertEqual(default_encoder.state_dict().keys(), explicit_encoder.state_dict().keys())
+        for name, value in default_encoder.state_dict().items():
+            torch.testing.assert_close(value, explicit_encoder.state_dict()[name])
+        with torch.no_grad():
+            default_encoded = default_encoder(points, valid)
+            explicit_encoded = explicit_encoder(points, valid)
+        torch.testing.assert_close(default_encoded.X, explicit_encoded.X)
+        torch.testing.assert_close(default_encoded.x, explicit_encoded.x)
+
+        torch.manual_seed(79)
+        default_decoder = PhysicalDecoder()
+        torch.manual_seed(79)
+        explicit_decoder = PhysicalDecoder(method_config=config)
+        self.assertEqual(default_decoder.state_dict().keys(), explicit_decoder.state_dict().keys())
+        for name, value in default_decoder.state_dict().items():
+            torch.testing.assert_close(value, explicit_decoder.state_dict()[name])
+        with torch.no_grad():
+            default_decoded = default_decoder(default_encoded)
+            explicit_decoded = explicit_decoder(explicit_encoded)
+        torch.testing.assert_close(default_decoded.points_w, explicit_decoded.points_w)
+        self.assertTrue(torch.equal(default_decoded.point_valid, explicit_decoded.point_valid))
+
 
 if __name__ == "__main__":
     unittest.main()

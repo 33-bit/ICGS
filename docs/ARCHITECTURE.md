@@ -47,7 +47,11 @@ No sys.path/sys.modules aliases form part of the architecture.
 
 ## Configuration and construction
 
-Authoritative source defaults live in configuration.schema/defaults. Root JSON
+Authoritative native defaults live in configuration.schema/defaults. Added ICGS
+method defaults live in the packaged
+[primary JSON](../src/icgs/configuration/profiles/icgs_primary.json), with immutable
+typed validation in configuration.method. See [parameter ownership](method/parameters.md)
+for current versus planned consumers, shape locks and explicit overrides. Root JSON
 presets are explicit user inputs, not files implicitly read by an installed wheel.
 Precedence: runtime defaults/entry profile < explicit JSON sections < explicit CLI
 overrides. Relative artifact paths in JSON resolve against that file's directory.

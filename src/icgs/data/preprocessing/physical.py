@@ -14,6 +14,8 @@ from typing import Any, Mapping
 import torch
 from torch import Tensor
 
+from icgs.configuration.method import MethodConfig
+
 
 @dataclass(frozen=True)
 class PhysicalPreprocessConfig:
@@ -23,13 +25,62 @@ class PhysicalPreprocessConfig:
     specifying only one bound is rejected rather than inventing the other.
     """
 
-    voxel_size_m: float = 0.005
-    num_points: int = 2048
-    num_anchors: int = 128
-    num_neighbors: int = 32
+    voxel_size_m: float
+    num_points: int
+    num_anchors: int
+    num_neighbors: int
     crop_min: tuple[float, float, float] | None = None
     crop_max: tuple[float, float, float] | None = None
-    ell0: float = 1.0
+    ell0: float | None = None
+
+    def __init__(
+        self,
+        voxel_size_m: float | None = None,
+        num_points: int | None = None,
+        num_anchors: int | None = None,
+        num_neighbors: int | None = None,
+        crop_min: tuple[float, float, float] | None = None,
+        crop_max: tuple[float, float, float] | None = None,
+        ell0: float | None = None,
+        *,
+        method_config: MethodConfig | None = None,
+    ) -> None:
+        if method_config is not None and not isinstance(method_config, MethodConfig):
+            raise TypeError("method_config must be a MethodConfig or None")
+        if any(value is None for value in (voxel_size_m, num_points, num_anchors,
+                                           num_neighbors, ell0)):
+            resolved = method_config if method_config is not None else MethodConfig()
+            geometry = resolved.geometry
+            if voxel_size_m is None:
+                voxel_size_m = geometry.voxel_size_m
+            if num_points is None:
+                num_points = geometry.num_points
+            if num_anchors is None:
+                num_anchors = geometry.num_anchors
+            if num_neighbors is None:
+                num_neighbors = geometry.neighbors
+            if ell0 is None:
+                ell0 = geometry.ell0_m
+        if method_config is not None and crop_min is None and crop_max is None:
+            bounds = method_config.sensors.workspace_bounds_m
+            if bounds is not None:
+                crop_min, crop_max = bounds
+        object.__setattr__(self, "voxel_size_m", voxel_size_m)
+        object.__setattr__(self, "num_points", num_points)
+        object.__setattr__(self, "num_anchors", num_anchors)
+        object.__setattr__(self, "num_neighbors", num_neighbors)
+        object.__setattr__(self, "crop_min", crop_min)
+        object.__setattr__(self, "crop_max", crop_max)
+        object.__setattr__(self, "ell0", ell0)
+        self.__post_init__()
+
+    @classmethod
+    def from_method_config(cls, method_config: MethodConfig) -> "PhysicalPreprocessConfig":
+        """Build preprocessing settings from one already-resolved method config."""
+
+        if not isinstance(method_config, MethodConfig):
+            raise TypeError("method_config must be a MethodConfig")
+        return cls(method_config=method_config)
 
     def __post_init__(self) -> None:
         voxel_size = float(self.voxel_size_m)
@@ -83,9 +134,13 @@ class PreparedPhysicalCloud:
         return torch.gather(expanded, 2, indices)
 
 
-def _as_config(config: PhysicalPreprocessConfig | Mapping[str, Any] | None) -> PhysicalPreprocessConfig:
+def _as_config(
+    config: PhysicalPreprocessConfig | MethodConfig | Mapping[str, Any] | None,
+) -> PhysicalPreprocessConfig:
     if config is None:
         return PhysicalPreprocessConfig()
+    if isinstance(config, MethodConfig):
+        return PhysicalPreprocessConfig.from_method_config(config)
     if isinstance(config, PhysicalPreprocessConfig):
         return config
     if isinstance(config, Mapping):
@@ -216,7 +271,7 @@ def _nearest_neighbors(points: Tensor, point_valid: Tensor, anchors: Tensor,
 def prepare_physical_cloud(
     points: Tensor | Any,
     valid: Tensor | Any,
-    config: PhysicalPreprocessConfig | Mapping[str, Any] | None = None,
+    config: PhysicalPreprocessConfig | MethodConfig | Mapping[str, Any] | None = None,
 ) -> PreparedPhysicalCloud:
     """Voxelize, sample, FPS-anchor and kNN a world-frame point cloud.
 

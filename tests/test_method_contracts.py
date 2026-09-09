@@ -10,23 +10,55 @@ import numpy as np
 
 class MethodContractTests(unittest.TestCase):
     @staticmethod
-    def _reference_payload():
+    def _reference_payload(config=None):
+        from icgs.configuration.method import MethodConfig
+
+        config = config or MethodConfig()
+        resolved = config.to_dict()
+        geometry = resolved["geometry"]
         return {
             "ip_checksum": "a" * 64,
-            "native_profile": "instant-policy-original-65dc94e",
-            "geometry": {"voxel_size_m": 0.005, "anchors": 128},
-            "physical_weights": "physical-v1",
+            "native_profile": config.native_profile,
+            "geometry": geometry,
+            "physical_weights": {
+                "artifact_id": "physical-v1",
+                "config": {
+                "geometry": geometry,
+                "memory": resolved["memory"],
+                "neural": resolved["neural"],
+                "decoder": resolved["decoder"],
+                "numerics": resolved["numerics"],
+                "sensors": resolved["sensors"],
+                "control": {"dt0": resolved["control"]["dt0"]},
+                },
+            },
             "event_weights": "event-v1",
             "task_weights": "task-v1",
             "segmentation": {"id": "segments-v1"},
-            "router": {"id": "router-v1"},
-            "preprocessing": {"voxel_size_m": 0.005},
+            "router": {"artifact_id": "router-v1", "config": resolved["router"]},
+            "preprocessing": {
+                name: geometry[name]
+                for name in ("voxel_size_m", "num_anchors", "num_points", "neighbors",
+                             "ell0_m", "fps_start", "tie_break")
+            },
             "calibration": {"id": "cal-v1"},
             "camera": {"id": "camera-v1"},
             "gravity": [0.0, 0.0, -1.0],
             "workspace": {"id": "workspace-v1"},
-            "cadence": {"dt0": 0.1, "h": 2, "r": 2, "H": 512},
-            "rng_protocol": {"route": "route-v1", "diffusion": "diffusion-v1"},
+            "cadence": {
+                "dt0": resolved["control"]["dt0"],
+                "h": resolved["planning"]["h"],
+                "r": resolved["planning"]["r"],
+                "H": resolved["planning"]["H"],
+            },
+            "rng_protocol": {
+                "route": "route-v1",
+                "diffusion": "diffusion-v1",
+                "config": {
+                    name: resolved["stages"][name]
+                    for name in ("generator_seed", "reset_seed", "action_seed")
+                },
+            },
         }
 
     def test_timed_command_owns_read_only_pose_and_rejects_nan_duration(self):
@@ -135,6 +167,30 @@ class MethodContractTests(unittest.TestCase):
                      "Hypothesis", "BeliefNode"):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(method, name))
+
+    def test_physical_prediction_owns_numpy_and_tensor_logits(self):
+        import torch
+
+        from icgs.contracts.method import PhysicalPrediction
+
+        numpy_source = np.zeros((1, 1), dtype=np.float32)
+        numpy_prediction = PhysicalPrediction(object(), numpy_source, 0)
+        numpy_source[0, 0] = 3.0
+        self.assertIsInstance(numpy_prediction.grip_logits, np.ndarray)
+        self.assertEqual(numpy_prediction.grip_logits.dtype, np.float64)
+        self.assertEqual(numpy_prediction.grip_logits[0, 0], 0.0)
+        self.assertFalse(numpy_prediction.grip_logits.flags.writeable)
+
+        tensor_source = torch.zeros((1, 1), requires_grad=True)
+        tensor_prediction = PhysicalPrediction(object(), tensor_source, 0)
+        self.assertIsInstance(tensor_prediction.grip_logits, torch.Tensor)
+        self.assertIsNot(tensor_prediction.grip_logits, tensor_source)
+        with torch.no_grad():
+            tensor_source.fill_(2.0)
+        self.assertEqual(tensor_prediction.grip_logits.item(), 0.0)
+        tensor_prediction.grip_logits.sum().backward()
+        self.assertIsNotNone(tensor_source.grad)
+        self.assertEqual(tensor_source.grad.item(), 1.0)
 
     def test_method_config_rejects_unknown_fields_and_commit_horizon(self):
         try:
@@ -251,23 +307,26 @@ class MethodContractTests(unittest.TestCase):
         payload = self._reference_payload()
         reference_id = reference_fingerprint(payload)
         reordered = dict(reversed(tuple(payload.items())))
-        reordered["geometry"] = {"anchors": 128, "voxel_size_m": 0.005}
+        reordered["geometry"] = dict(reversed(tuple(payload["geometry"].items())))
         self.assertEqual(reference_fingerprint(reordered), reference_id)
 
         changed = copy.deepcopy(payload)
-        changed["router"]["id"] = "router-v2"
+        changed["router"]["artifact_id"] = "router-v2"
         self.assertNotEqual(reference_fingerprint(changed), reference_id)
         excluded = copy.deepcopy(payload)
         excluded["dynamics"] = {"id": "dynamics-v2"}
         excluded["evaluator"] = {"temperature": "te-v1"}
         excluded["learned_stopping"] = {"threshold": 0.95}
+        excluded["search"] = {"algorithm": "shooting"}
         self.assertEqual(reference_fingerprint(excluded), reference_id)
 
     def test_method_manifest_checks_reference_and_evaluator_lineage_before_reads(self):
         from icgs.artifacts.method import reference_fingerprint, validate_method_manifest
         from icgs.configuration.method import MethodConfig
 
-        payload = self._reference_payload()
+        config = MethodConfig.from_dict({"planning": {"h": 1, "r": 1},
+                                         "control": {"dt0": 0.2}})
+        payload = self._reference_payload(config)
         reference_id = reference_fingerprint(payload)
         manifest = {
             "schema_version": 1,
@@ -278,7 +337,6 @@ class MethodContractTests(unittest.TestCase):
             "evaluator_artifact_id": "evaluator-v1",
             "learned_stopping_artifact_id": "stopping-v1",
         }
-        config = MethodConfig.from_dict({})
 
         class ArtifactLoader:
             def __init__(self):
@@ -311,13 +369,65 @@ class MethodContractTests(unittest.TestCase):
                 artifact_loader=loader,
             )
         self.assertEqual(loader.calls, [])
-        mismatched_config = MethodConfig.from_dict({"planning": {"h": 1, "r": 1}})
+        mismatched_config = MethodConfig.from_dict({})
         with self.assertRaisesRegex(ValueError, "reference|cadence"):
             validate_method_manifest(manifest, mismatched_config)
         incomplete = dict(manifest)
         incomplete.pop("learned_stopping_artifact_id")
         with self.assertRaisesRegex(ValueError, "reference"):
             validate_method_manifest(incomplete, config)
+
+    def test_reference_projection_uses_canonical_aliases_and_selected_config_only(self):
+        from icgs.artifacts.method import reference_fingerprint, validate_method_manifest
+        from icgs.configuration.method import MethodConfig
+
+        configured = MethodConfig.from_dict({"planning": {"h": 1, "r": 1},
+                                              "control": {"dt0": 0.2}})
+        payload = self._reference_payload(configured)
+        alias_payload = copy.deepcopy(payload)
+        alias_payload["geometry"]["anchors"] = alias_payload["geometry"].pop("num_anchors")
+        alias_payload["preprocessing"]["anchors"] = alias_payload["preprocessing"].pop("num_anchors")
+        self.assertEqual(reference_fingerprint(alias_payload), reference_fingerprint(payload))
+
+        reference_id = reference_fingerprint(alias_payload)
+        manifest = {
+            "schema_version": 1,
+            "reference_id": reference_id,
+            "reference_payload": alias_payload,
+            "evaluator_reference_id": reference_id,
+            "dynamics_artifact_id": "dynamics-v1",
+            "evaluator_artifact_id": "evaluator-v1",
+            "learned_stopping_artifact_id": "stopping-v1",
+        }
+        self.assertEqual(validate_method_manifest(manifest, configured), reference_id)
+
+        wrong_geometry = copy.deepcopy(manifest)
+        wrong_geometry["reference_payload"]["geometry"]["anchors"] = 127
+        wrong_geometry["reference_id"] = reference_fingerprint(wrong_geometry["reference_payload"])
+        wrong_geometry["evaluator_reference_id"] = wrong_geometry["reference_id"]
+        with self.assertRaisesRegex(ValueError, "geometry/config"):
+            validate_method_manifest(wrong_geometry, configured)
+
+        wrong_memory = copy.deepcopy(manifest)
+        wrong_memory["reference_payload"]["physical_weights"]["config"]["memory"]["slots"] = 1
+        wrong_memory["reference_id"] = reference_fingerprint(wrong_memory["reference_payload"])
+        wrong_memory["evaluator_reference_id"] = wrong_memory["reference_id"]
+        with self.assertRaisesRegex(ValueError, "physical/config"):
+            validate_method_manifest(wrong_memory, configured)
+
+        wrong_cadence = copy.deepcopy(manifest)
+        wrong_cadence["reference_payload"]["cadence"]["dt0"] = 0.1
+        wrong_cadence["reference_id"] = reference_fingerprint(wrong_cadence["reference_payload"])
+        wrong_cadence["evaluator_reference_id"] = wrong_cadence["reference_id"]
+        with self.assertRaisesRegex(ValueError, "dt0/config"):
+            validate_method_manifest(wrong_cadence, configured)
+
+        stopping_only = MethodConfig.from_dict({
+            "planning": {"h": 1, "r": 1}, "control": {"dt0": 0.2},
+            "stopping": {"threshold": 0.9},
+        })
+        self.assertNotEqual(configured.fingerprint(), stopping_only.fingerprint())
+        self.assertEqual(validate_method_manifest(manifest, stopping_only), reference_id)
 
 
 if __name__ == "__main__":

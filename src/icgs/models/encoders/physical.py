@@ -8,6 +8,7 @@ from typing import Any, Mapping
 import torch
 from torch import Tensor, nn
 
+from icgs.configuration.method import MethodConfig
 from icgs.data.preprocessing.physical import (
     PhysicalPreprocessConfig,
     PreparedPhysicalCloud,
@@ -25,31 +26,61 @@ class EncodedCloud:
     anchor_valid: Tensor
 
 
-def _config(config: PhysicalPreprocessConfig | Mapping[str, Any] | None) -> PhysicalPreprocessConfig:
+def _config(
+    config: PhysicalPreprocessConfig | Mapping[str, Any] | MethodConfig | None,
+    method_config: MethodConfig,
+) -> PhysicalPreprocessConfig:
     if config is None:
-        return PhysicalPreprocessConfig()
+        return PhysicalPreprocessConfig.from_method_config(method_config)
+    if isinstance(config, MethodConfig):
+        return PhysicalPreprocessConfig.from_method_config(config)
     if isinstance(config, PhysicalPreprocessConfig):
         return config
     if isinstance(config, Mapping):
-        return PhysicalPreprocessConfig(**dict(config))
+        return PhysicalPreprocessConfig(method_config=method_config, **dict(config))
     raise TypeError("config must be PhysicalPreprocessConfig, mapping, or None")
 
 
 class PhysicalEncoder(nn.Module):
     """Encode deterministic FPS anchors with masked local neighborhoods."""
 
-    def __init__(self, config: PhysicalPreprocessConfig | Mapping[str, Any] | None = None):
+    def __init__(
+        self,
+        config: PhysicalPreprocessConfig | Mapping[str, Any] | MethodConfig | None = None,
+        *,
+        method_config: MethodConfig | None = None,
+    ):
         super().__init__()
-        self.config = _config(config)
-        self.width = 256
-        self.local = nn.Sequential(
-            nn.Linear(6, 64),
-            nn.GELU(),
-            nn.Linear(64, 128),
-            nn.GELU(),
-            nn.Linear(128, 256),
+        if method_config is not None and not isinstance(method_config, MethodConfig):
+            raise TypeError("method_config must be a MethodConfig or None")
+        if isinstance(config, MethodConfig):
+            if method_config is not None:
+                raise ValueError("a MethodConfig cannot be supplied twice")
+            method_config = config
+            config = None
+        resolved = method_config if method_config is not None else MethodConfig()
+        self.config = _config(config, resolved)
+        geometry = resolved.geometry
+        neural = resolved.neural
+        self.width = geometry.width
+        local_hidden_dims = geometry.local_hidden_dims
+        local_layers: list[nn.Module] = []
+        input_width = 2 * geometry.point_dim
+        for hidden_width in local_hidden_dims:
+            local_layers.extend((nn.Linear(input_width, hidden_width), nn.GELU()))
+            input_width = hidden_width
+        local_layers.append(nn.Linear(input_width, self.width))
+        self.local = nn.Sequential(*local_layers)
+        self.geometry_blocks = nn.ModuleList(
+            GeometryBlock(
+                width=self.width,
+                heads=neural.attention_heads,
+                ffn_width=neural.ffn_width,
+                geometry_config=geometry,
+                neural_config=neural,
+            )
+            for _ in range(geometry.transformer_layers)
         )
-        self.geometry_blocks = nn.ModuleList((GeometryBlock(256, 8, 1024), GeometryBlock(256, 8, 1024)))
 
     def _encode_prepared(self, prepared: PreparedPhysicalCloud) -> EncodedCloud:
         neighbors = prepared.neighbors

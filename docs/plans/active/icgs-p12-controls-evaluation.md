@@ -23,6 +23,20 @@ Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
 before runtime execution. Inspect Git state; preserve unrelated work and user assets.
 
+## Configuration consumption addendum — 2026-09-09
+
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
+Consumed sections for this plan: **reactive, action_value, benchmark, planning, stages, dataset, losses**.
+
+Use reactive schedule/scale/weight and action_value architecture controls; read matched panel/statistics/predicate settings from benchmark and proposal splits from dataset. Bind named comparison metrics to resolved config; do not treat optional-track values as permission to execute.
+
+Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
+Numeric shapes and test inputs below are baseline examples/compatibility assertions;
+they are not a second editable default source. New tunable implementation constants
+must be replaced by the matching configuration key. Preserve prior progress and
+evidence; this addendum does not certify that the component consumes every new field.
+
 ## Global constraints
 
 - Canonical runtime is `src/icgs`; no `ip` shims or wrapped legacy runtime.
@@ -108,7 +122,7 @@ self.assertTrue(all(torch.isfinite(p.grad).all() for p in net.parameters() if p.
 - [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
-targets = torch.cat((root_relative_translation / .08, root_relative_rot6,
+targets = torch.cat((root_relative_translation / cfg.reactive.translation_scale_m, root_relative_rot6,
                      commanded_grip_pm1), -1)  # [B,8,10], executed prefix mask
 if not action_valid.any(dim=1).all():
     raise ValueError('each example requires at least one valid action target')
@@ -118,7 +132,9 @@ noisy_targets = alpha_bar.sqrt()*targets + (1-alpha_bar).sqrt()*noise
 epsilon = student(noisy_targets, diffusion_time, physical_tokens, event_keys, task_r,
                   physical_valid=physical_valid, event_valid=event_valid, action_valid=action_valid)
 per_example = masked_mean((epsilon-noise).square(), action_valid, dims=(1,2))
-loss = (outcome_weight(returns)*per_example).sum()/outcome_weight(returns).sum()
+floor = cfg.reactive.outcome_weight_floor
+weights = floor + (1-floor)*returns if cfg.reactive.outcome_weighted else torch.ones_like(returns)
+loss = (weights*per_example).sum()/weights.sum()
 ```
 
 Eight256-wide action tokens with horizon positions and sinusoidal timestep embedding256;4 decoder blocks self/cross attention to[S;K;r],8heads,FFN1024,dropout0;head256→256→10. Separate100-step squared-cosine DDPM epsilon schedule,DDIM eta0 four inference steps,no clipping. Decode Rot6 Gram-Schmidt; norm<1e-6/nonfinite rejects with counted reference fallback. Use executed commands only, masked tails; terminal return1/0 or active k(H)/n at sampled recorded H, no H inference input. Batch128,max100k,shared optimizer defaults; unweighted retrained control uses same bank.

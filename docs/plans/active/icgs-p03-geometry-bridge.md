@@ -24,6 +24,20 @@ Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
 before runtime execution. Inspect Git state; preserve unrelated work and user assets.
 
+## Configuration consumption addendum — 2026-09-09
+
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
+Consumed sections for this plan: **geometry, neural, decoder, sensors, numerics**.
+
+Wire the typed geometry/preprocessing and block/decoder sections when extending existing constructors. Preserve fixed shape locks and original default initialization order; tests must show a supported nondefault scalar reaches its consumer. Existing fixed constructors are not retroactively controlled by merely loading MethodConfig.
+
+Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
+Numeric shapes and test inputs below are baseline examples/compatibility assertions;
+they are not a second editable default source. New tunable implementation constants
+must be replaced by the matching configuration key. Preserve prior progress and
+evidence; this addendum does not certify that the component consumes every new field.
+
 ## Global constraints
 
 - Canonical runtime is `src/icgs`; no `ip` shims or wrapped legacy runtime.
@@ -209,10 +223,12 @@ phase if an FG fails and request a scoped protocol decision.
 - Repository state: correction was performed in the shared checkout
   `/Users/33bit/AI/Research/VLA/ICGS` on `main`; no worktree, subagent,
   commit, stage, reset, checkout, download, training, preprocessing job,
-  simulator, or robot action was used. P00 paths remain byte-for-byte
-  unchanged. Correction-round files are the existing P03 runtime modules and
-  `tests/test_physical_geometry.py`; the justified lazy preprocessing
-  initializer remains unchanged.
+  simulator, or robot action was used. No P00 path was edited by the P03
+  correction or this configuration-consumption follow-up. Correction-round
+  files are the existing P03 runtime modules and `tests/test_physical_geometry.py`;
+  the justified lazy preprocessing initializer remains unchanged. Unrelated
+  dirty work outside this follow-up that was present at final inspection was
+  preserved exactly.
 - Interpreter/environment: `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3`,
   Python 3.14.4, repository-root cwd. This is outside the declared supported
   `>=3.10,<3.13` range and `icgs` is not installed.
@@ -246,11 +262,38 @@ phase if an FG fails and request a scoped protocol decision.
   passed; L1/L2/L3/L4 were not run by this command.
 - L0 PASS: `python3 -B -S scripts/validate_fast.py` from the repository root —
   the same 19/19 harness self-tests passed.
-- Supported installed L1 **SKIPPED**: the exact plan command
+- Prior host/source-path Python 3.14 L1 diagnostic **SKIPPED**: the exact plan command
   `python3 -B -m unittest discover -s tests -p 'test_physical_geometry.py' -v`
   was attempted from the repository root after the bridge correction and ran
   16 selected tests, all 16 ending in `ModuleNotFoundError: No module named 'icgs'`.
-  No supported installed environment is available; this is not PASS.
+  This historical diagnostic is not a supported installed-environment result
+  and is not PASS.
+- Configuration-consumption follow-up RED: from repository-root cwd, the
+  focused command `PYTHONPATH=src .venv/bin/python -B -m unittest discover -s
+  tests -p 'test_physical_geometry.py' -v` used the supported Python 3.11.15 /
+  torch 2.2.0 environment and selected/executed 20 tests: 16 passed, 4 errored,
+  0 failed and 0 skipped. The four new central-consumption tests reached the
+  missing `method_config` constructor boundary; no implementation for this
+  follow-up was present before this RED run.
+- Configuration-consumption follow-up GREEN: the same source-path-focused
+  command selected/executed 20 tests with 20 passed, 0 failures, 0 errors and
+  0 skips. It covers decoder patch-radius propagation, shared LayerNorm-epsilon
+  propagation, sensor workspace-crop propagation through encoder preprocessing,
+  and seeded default-versus-explicit-`MethodConfig` state/output equivalence,
+  in addition to the existing P03 checks. No host Python 3.14 diagnostic was
+  run in this follow-up.
+- Supported installed L1 PASS: from repository-root cwd, `.venv/bin/python -B
+  -m unittest discover -s tests -p 'test_physical_geometry.py' -v` (Python
+  3.11.15 / torch 2.2.0) selected/executed 20 tests; 20 passed, 0 failed,
+  0 errored and 0 skipped.
+- P04-facing API changes: none. Existing positional `PhysicalEncoder`,
+  `PhysicalDecoder` and `GeometryBlock` construction remains compatible; the
+  P04 memory/state surface was not modified.
+- L0 PASS: from repository-root cwd, `.venv/bin/python -B scripts/validate_fast.py`
+  and `.venv/bin/python -B -S scripts/validate_fast.py` each passed syntax,
+  local-link and static-boundary checks plus 19/19 harness self-tests. Each
+  command explicitly reported L1 CPU smoke, L2 model, L3 simulator and L4
+  benchmark as NOT RUN.
 - L2/C1–C5, L3/L4, collection, training and benchmark validation: **NOT RUN**
   by explicit task authorization. Native codec, transforms, graph, sampler,
   published profile, and native preprocessing behavior were not modified.

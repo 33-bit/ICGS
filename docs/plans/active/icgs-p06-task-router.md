@@ -23,6 +23,20 @@ Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
 before runtime execution. Inspect Git state; preserve unrelated work and user assets.
 
+## Configuration consumption addendum — 2026-09-09
+
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
+Consumed sections for this plan: **tracker, router, event, memory, neural, control, planning**.
+
+Consume tracker layers, router mixture/epsilon/fallback/window settings and passed native sessions. Reference fingerprints include every behavior-affecting resolved section plus weights/protocol IDs. Do not put stopping or evaluator options into the reference fingerprint.
+
+Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
+Numeric shapes and test inputs below are baseline examples/compatibility assertions;
+they are not a second editable default source. New tunable implementation constants
+must be replaced by the matching configuration key. Preserve prior progress and
+evidence; this addendum does not certify that the component consumes every new field.
+
 ## Global constraints
 
 - Canonical runtime is `src/icgs`; no `ip` shims or wrapped legacy runtime.
@@ -117,10 +131,11 @@ torch.testing.assert_close(f, torch.tensor([1., 0., 0.]))
 - [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
-v = torch.where(valid_windows, (alpha + 1e-6)*eligible, 0.)
-if v.sum() < 1e-6:
+v = torch.where(valid_windows, (alpha + cfg.router.probability_epsilon)*eligible, 0.)
+if v.sum() < cfg.router.fallback_threshold:
     return torch.cat((v.new_ones(1), v.new_zeros(v.numel())))
-return torch.cat((v.new_tensor([0.5]), 0.5*v/v.sum()))
+p_full = cfg.router.full_context_probability
+return torch.cat((v.new_tensor([p_full]), (1-p_full)*v/v.sum()))
 ```
 
 Window includes same-demo event and immediate previous/next interactions. Preserve unique endpoints/grip transitions; >10 mandatory or <10 unique frames makes invalid. Fill evenly spaced unused ranks, tie earlier, sort chronologically. Invalid window falls back through mixture; invalid full context aborts setup.
@@ -198,4 +213,3 @@ phase if an FG fails and request a scoped protocol decision.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Reference may have weak support or low completion rates, which require measured pilot diagnosis rather than relabeling.
-

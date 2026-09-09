@@ -12,8 +12,8 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — planned runtime NOT IMPLEMENTED**. This document is a category C
-component of the approved docs-only research migration, not permission to execute it.
+Status: **ACTIVE — P04 modules/tests and scoped central-configuration wiring implemented; supported integration gates pending**. This document is a category C
+component of the approved docs-only research migration; it does not authorize expensive workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
 
@@ -22,6 +22,20 @@ Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [baseline](../../baselines/instant_policy.md), [native contract](../../components/policy-data-contract.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
 before runtime execution. Inspect Git state; preserve unrelated work and user assets.
+
+## Configuration consumption addendum — 2026-09-09
+
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
+Consumed sections for this plan: **geometry, memory, neural, control**.
+
+Use geometry.ell0_m and control.dt0 to build proprioception/action descriptors; pass the before-pose descriptor explicitly. Derive input/token dimensions from these sections and fixed pose/grip semantics. Existing physical modules need explicit constructor/adapter wiring, not a new resource read on every update.
+
+Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
+Numeric shapes and test inputs below are baseline examples/compatibility assertions;
+they are not a second editable default source. New tunable implementation constants
+must be replaced by the matching configuration key. Preserve prior progress and
+evidence; this addendum does not certify that the component consumes every new field.
 
 ## Global constraints
 
@@ -47,7 +61,7 @@ Public capability boundary (planned; not currently importable):
 ```python
 physical_update(encoded, observation, previous_descriptor, memory) -> PhysicalState
 PhysicalState.branch_copy() -> PhysicalState
-physical_tokens(state: PhysicalState) -> tuple[Tensor, Tensor]
+PhysicalMemory.physical_tokens(state: PhysicalState) -> tuple[Tensor, Tensor]
 validate_next_boundary(previous: int, current: int) -> None
 ```
 
@@ -59,7 +73,7 @@ PhysicalState has X[B,128,256],x[B,128,3],valid[B,128],p[B,13],memory[B,2,256],p
 **Test owner:** `tests/test_physical_memory.py`.
 **Consumes / produces:** Produces `proprioception(T_w_e, grip, gravity)` and `action_descriptor(T_w_e, command)`; consumes P03 SE(3).
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -82,10 +96,10 @@ self.assertNotAlmostEqual(u_before[0, 0].item(),
                           action_descriptor(successor, command)[0, 0].item())
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 rot6 = torch.cat((T_w_e[..., :3, 0], T_w_e[..., :3, 1]), dim=-1)
@@ -102,18 +116,18 @@ translated +0.06m, assert previous_descriptor[0,0] == 0.10, not 0.04.
 For different before-pose hypotheses under the same command, descriptors differ
 while target_w remains identical. Add joint-yaw and invalid pose/gravity/grip tests.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
 
 ### Task 2: Two-layer temporal update and masked token set
 
 **Files:** Create physical memory module and state record.
 **Test owner:** `tests/test_physical_memory.py`.
-**Consumes / produces:** Produces `PhysicalMemory.forward(X, valid, p, previous_u, memory)` returning memory; `physical_tokens(state)` returns131 rows and validity.
+**Consumes / produces:** Produces `PhysicalMemory.forward(X, valid, p, previous_u, memory)` returning memory; `PhysicalMemory.physical_tokens(state)` returns 131 rows and validity.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -127,10 +141,10 @@ m.sum().backward()
 self.assertTrue(any(p.grad is not None for p in net.parameters()))
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 v = input_mlp(torch.cat((masked_mean(X, valid, 1), p, previous_u), -1))
@@ -141,9 +155,9 @@ return torch.stack((m1, m2), dim=1)
 
 Input MLP277→256→256; PyTorch GRUCell reset-after-hidden-affine semantics. Physical tokens concatenate geometry/proprioception/two memories with type embeddings; invalid geometry rows remain masked. Ensure A1 temporal loss reaches these GRUs before reference freeze; geometry-only warm-up is insufficient.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
 
 ### Task 3: Boundary uniqueness and mutation isolation
@@ -152,7 +166,7 @@ Input MLP277→256→256; PyTorch GRUCell reset-after-hidden-affine semantics. P
 **Test owner:** `tests/test_physical_memory.py`.
 **Consumes / produces:** Produces `validate_next_boundary`, branch_copy and real-update origin/lineage validation.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -163,10 +177,10 @@ for boundary in (3, 5):
         validate_next_boundary(3, boundary)
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 if current != previous + 1:
@@ -177,9 +191,9 @@ if current != previous + 1:
 
 Reset boundary0 is encoded once; replanning at an existing boundary is a read, not another GRU update. Reject imagined state as a measured-history update. Test two branches mutate independently, context swap leaves physical state reusable only under matching physical lineage, and full-history replay equals sequential updates.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_physical_memory.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
 
 ## Acceptance, resource limits and evidence
@@ -209,9 +223,51 @@ phase if an FG fails and request a scoped protocol decision.
 
 ## Execution evidence
 
-- Documentation drafting: this plan specifies future work only.
-- Component RED/GREEN commands: **NOT RUN** — runtime/test files are not implemented.
-- L1 model assertions: **NOT RUN** — future installed supported environment required.
+- Documentation drafting: the P04 component modules/tests were implemented in the planned owners after exact source/test-diff review; no native integration was added.
+- Component RED/GREEN commands: source-path diagnostic RED/GREEN evidence is recorded in the controller ledger and implementation report. Final diagnostic GREEN before the ownership fix was 13 selected/13 executed/0 skipped; the fix-round GREEN is 14 selected/14 executed/0 skipped in Python 3.14.4 with torch 2.11.0. The exact installed-environment command was attempted but remains unavailable because `icgs` is not installed in the host interpreter; it is not counted as PASS.
+- Fix round 1/5: after exact source/test-diff review, the learned token projector is registered inside each `PhysicalMemory`; `physical_tokens` is now the instance method `PhysicalMemory.physical_tokens(state)`, with no global learned module or cache. The ownership RED was feature-specific (`AttributeError` for the absent method); GREEN covered registration in `parameters()`/`state_dict()`, nonzero token gradients, per-instance parameter identity, and zero invalid geometry rows.
+- L1 model assertions: **SKIPPED** for the supported installed environment — no Python >=3.10,<3.13 environment with the pinned ICGS installation is available. The source-path run is diagnostic smoke evidence only, not supported L1 acceptance.
+- L0 PASS: `python3 -B scripts/validate_fast.py`, 19/19 harness self-tests, syntax/links/boundaries pass; L1/L2/L3/L4 not run by this command.
+- L0 PASS: `python3 -B -S scripts/validate_fast.py`, 19/19 harness self-tests, syntax/links/boundaries pass; L1/L2/L3/L4 not run by this command.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
-- Remaining risk: History may be insufficient for physical ambiguity and memory training remains unexecuted.
+- Remaining risk: supported-environment L1 compatibility, temporal training usefulness, physical ambiguity sufficiency, native integration, and mandatory C1–C5 remain unverified. No training, downloads, preprocessing jobs, simulator workloads, robot motion, or network work was run.
+
+### Configuration centralization follow-up — 2026-09-09
+
+- Scope was limited to `src/icgs/models/memories/physical.py` and
+  `tests/test_physical_memory.py`; `src/icgs/state/physical.py`, the central
+  schema/profile, P03 shared layers, native IP and other component-owner paths
+  were unchanged. The addendum's typed `geometry`, `memory`, `neural` and
+  `control` sections are resolved once at each public P04 construction/helper
+  boundary and are not read during `forward()` or `physical_tokens()`.
+- TDD RED: `.venv/bin/python -B -m unittest discover -s tests -p
+  'test_physical_memory.py' -v` from
+  `/Users/33bit/AI/Research/VLA/ICGS` after adding the config tests — **17
+  selected, 14 passed, 2 failed, 1 errored**. The feature-specific failures
+  were the missing `config`/section injection seams and constructor support;
+  no unrelated import or environment failure was involved.
+- TDD GREEN: the same command with the amended source — **17 selected, 17
+  executed, 17 PASS, 0 skipped**. Coverage includes default state-dict key/order
+  and values, supported `control.dt0=0.2` planned-duration propagation, typed
+  section injection, rejection of unsupported architecture dimensions, branch
+  isolation, token-projector registration/gradients/per-instance ownership and
+  invalid-geometry masking. `control.dt0` is the sole supported nondefault
+  scalar demonstrated here; the locked geometry scale remains sourced from
+  `geometry.ell0_m`.
+- Relevant central-config regression: `.venv/bin/python -B -m unittest
+  discover -s tests -p 'test_method_config.py' -v` — **24 selected, 24
+  executed, 24 PASS, 0 skipped**.
+- Environment for both test commands: cwd
+  `/Users/33bit/AI/Research/VLA/ICGS`, `.venv/bin/python` Python **3.11.15**,
+  PyTorch **2.2.0**, NumPy **1.26.4**, editable `icgs` import. No host-Python
+  or `PYTHONPATH` diagnostic was counted as supported L1 evidence.
+- L0: `.venv/bin/python -B scripts/validate_fast.py` and
+  `.venv/bin/python -B -S scripts/validate_fast.py` — **PASS** for both;
+  each reported Python syntax, local documentation links, static harness
+  boundary, and **19/19** harness self-tests. Each explicitly reported L1 CPU
+  smoke, L2 model, L3 simulator and L4 benchmark **NOT RUN**.
+- L2/C1–C5, native integration, simulator/robot workloads, collection,
+  preprocessing, downloads and training remain **NOT RUN** and are not claimed
+  by this component-level wiring. Remaining risk is supported integration with
+  future outer composition and the mandatory published checkpoints.
