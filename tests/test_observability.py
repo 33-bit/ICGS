@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -7,6 +8,38 @@ from unittest.mock import patch
 
 
 class ObservabilityConfigurationTests(unittest.TestCase):
+    def test_cli_dotenv_enables_wandb_without_overwriting_exported_credentials(self):
+        """A project-local opt-in config must not replace shell credentials."""
+        from types import SimpleNamespace
+
+        from icgs.cli.observability import start_cli_run
+
+        args = SimpleNamespace(logging_config=None, log_dir=None, log_level=None,
+                               trace_mode=None)
+        previous_cwd = Path.cwd()
+        with tempfile.TemporaryDirectory() as directory, \
+             patch.dict(os.environ, {"WANDB_API_KEY": "exported-key"}, clear=False), \
+             patch("icgs.cli.observability.RunRecorder.start") as start:
+            Path(directory, ".env").write_text(
+                "ICGS_WANDB_ENABLED=true\n"
+                "ICGS_WANDB_MODE=online\n"
+                "ICGS_WANDB_PROJECT=icgs-local\n"
+                "WANDB_API_KEY=dotenv-key\n",
+                encoding="utf-8",
+            )
+            try:
+                os.chdir(directory)
+                start_cli_run(args, "infer")
+                credential = os.environ["WANDB_API_KEY"]
+            finally:
+                os.chdir(previous_cwd)
+
+        config = start.call_args.args[0]
+        self.assertTrue(config.wandb.enabled)
+        self.assertEqual(config.wandb.mode, "online")
+        self.assertEqual(config.wandb.project, "icgs-local")
+        self.assertEqual(credential, "exported-key")
+
     def test_primary_defaults_are_typed_and_logging_is_separate_from_reference_identity(self):
         from icgs.configuration.method import MethodConfig
         from icgs.artifacts.method import reference_fingerprint

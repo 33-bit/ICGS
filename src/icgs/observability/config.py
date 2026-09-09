@@ -35,12 +35,15 @@ def from_mapping(update: Mapping[str, Any] | None = None) -> ObservabilityConfig
     return MethodConfig.from_dict({"observability": base}).observability
 
 
-def load_config(path: str | Path | None = None, *, overrides: Mapping[str, Any] | None = None,
+def load_config(path: str | Path | None = None, *, base_overrides: Mapping[str, Any] | None = None,
+                overrides: Mapping[str, Any] | None = None,
                 output_dir: str | Path | None = None, log_level: str | None = None,
                 trace_mode: str | None = None) -> ObservabilityConfig:
-    """Load an explicit logging envelope and apply only explicit CLI overrides."""
+    """Load logging defaults, optional local defaults, and explicit overrides."""
     base = default_config().to_dict()
     directory = Path.cwd()
+    if base_overrides is not None:
+        _merge_known(base, base_overrides, "observability.")
     if path is not None:
         file_path = Path(path).expanduser().resolve()
         directory = file_path.parent

@@ -129,6 +129,29 @@ class CliTests(unittest.TestCase):
         self.assertEqual(len(recorder.resolved_calls), 1)
         self.assertEqual(recorder.close_calls, [{"status": "succeeded", "error": None}])
 
+    def test_train_uses_wandb_enabled_by_local_observability_config(self):
+        """Removing --use-wandb must not disable an explicit local W&B opt-in."""
+        from icgs.cli.train import run
+
+        recorder = _LifecycleRecorder()
+        recorder.config = SimpleNamespace(wandb=SimpleNamespace(enabled=True))
+        config = SimpleNamespace(runtime=SimpleNamespace(device="cpu"))
+        args = SimpleNamespace(
+            logging_config=None, log_dir=None, log_level=None, trace_mode=None,
+            device="cpu", run_name="test", use_wandb=False,
+            config="config.json", data_train="train", data_val="val", checkpoint=None,
+        )
+        observed = {}
+
+        with patch("icgs.cli.observability.start_cli_run", return_value=recorder), \
+             patch("icgs.configuration.loader.load_config", return_value=config), \
+             patch("icgs.composition.build_training_module", return_value="module"), \
+             patch("icgs.training.runner.run_training",
+                   side_effect=lambda *a, **k: observed.update(k) or "trained"):
+            self.assertEqual(run(args), "trained")
+
+        self.assertTrue(observed["use_wandb"])
+
     def test_prepare_data_success_lifecycle_preserves_save_order(self):
         from icgs.cli.prepare_data import run
 

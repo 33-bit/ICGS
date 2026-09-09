@@ -168,9 +168,14 @@ fault. Cross-link causal identifiers and preserve unknown cause explicitly.
 Add an `observability` section to the existing primary JSON. All values below become
 central defaults, not duplicated Python literals. Native CLIs accept optional
 `--logging-config`, `--log-dir`, `--log-level` and `--trace-mode`; precedence is
-packaged logging defaults, explicit file, explicit CLI. Logging-only file envelope
+packaged logging defaults, user-local CLI `.env`, explicit file, explicit CLI. The
+project-root `.env` is read only by CLI startup (never library calls), accepts the
+`ICGS_WANDB_*` variables shown in `.env.example`, and may set `WANDB_API_KEY` for
+the W&B SDK without invoking `wandb login`; exported environment values take
+precedence over `.env`. It is intentionally ignored by Git. Logging-only file envelope
 is `{schema_version:1, observability:{...}}`; reuse the exact typed section rather
-than a second schema. No implicit configuration file search.
+than a second schema. No implicit configuration file search occurs outside this
+user-authorized project-local `.env`.
 
 | Setting | Default / behavior |
 | --- | --- |

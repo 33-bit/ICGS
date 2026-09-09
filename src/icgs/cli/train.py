@@ -31,7 +31,10 @@ def run(args):
         if args.checkpoint:
             with recorder.span("checkpoint.load", component="artifacts"):
                 load_checkpoint_state(args.checkpoint,module,strict=True,map_location=config.runtime.device)
-        return run_training(module,config,args.data_train,args.data_val,use_wandb=args.use_wandb,
+        use_wandb = args.use_wandb or bool(getattr(getattr(recorder, "config", None),
+                                              "wandb", None)
+                                          and recorder.config.wandb.enabled)
+        return run_training(module,config,args.data_train,args.data_val,use_wandb=use_wandb,
                             run_name=args.run_name, recorder=recorder)
     except BaseException as exc:
         error = exc
