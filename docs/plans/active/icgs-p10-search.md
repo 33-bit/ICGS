@@ -152,10 +152,10 @@ Tie selection by insertion ID; final choice visits,then Q,then earlier ID. Cache
   evidence. At authorized execution time, make a focused commit only after that review.
   *Verified exact source diff in mcts.py, budget.py, tests/test_search.py, active plan. Progressive widening, UCT, root-scoped exact cache, one G backup, node/edge visit semantics, and deterministic tie breaking all pass.*
   - **Task 2 Cumulative Audit & Fix Trail:**
-    - **Original Implementation (`72ba6e8`):** Progressive widening MCTS + root-scoped exact cache. Evidence: 23 ran, 23 passed via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`.
+    - **Original Implementation (`72ba6e8`):** Progressive widening MCTS + root-scoped exact cache (implemented then; accepted only at `cfe6693` after 3 audit fixes). Evidence: 23 ran, 23 passed via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`.
     - **Fix Round 1 (`0317f75`):** Addressed six initial audit findings (composite models, task identity, state identity across 13 fields, operation-level budget checks, structured recorder events). Evidence: 29 ran, 29 passed (0.524s) via `.venv`. Both L0 passed 19/19.
     - **Fix Round 2 (`e0d5a0e`):** Addressed six re-audit findings (ExactCache task branch copy on all representations, wall/native_call budget invariant, full native Observation, MethodConfig requirement without dt0 fallback, scalar calibration [0, 1] validation, depth-2 tree & real tie tests). Evidence: 29 ran, 29 passed (0.550s) via `.venv`. Both L0 passed 19/19.
-    - **Fix Round 3 (this round):** Addressed two new findings from re-audit 2 (early-root evaluation sets completed=True independent of U, zero_horizon ordered before absorbed_root; explicit FG pilot NOT RUN/not accepted; durable active plan evidence updated without rewriting historical runs). Evidence: 29 ran, 29 passed (0.515s) via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. Both L0 passed 19/19.
+    - **Fix Round 3 (`cfe6693`):** Addressed two new findings from re-audit 2 (early-root evaluation sets completed=True independent of U, zero_horizon ordered before absorbed_root; explicit FG pilot NOT RUN/not accepted; durable active plan evidence updated without rewriting historical runs). Accepted at `cfe6693`. Evidence: 29 ran, 29 passed (0.515s) via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. Both L0 passed 19/19.
 
 ### Task 3: Matched baselines, completed-only timing and fallback
 
@@ -163,7 +163,7 @@ Tie selection by insertion ID; final choice visits,then Q,then earlier ID. Cache
 **Test owner:** `tests/test_search.py`.
 **Consumes / produces:** Produces `eligible_completion(finished_at, deadline)` and matched plan adapters; consumes monotonic clock and capability counters.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 \u2014 RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -172,10 +172,11 @@ self.assertTrue(eligible_completion(0.5, 0.5))
 self.assertFalse(eligible_completion(0.5001, 0.5))
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
+- [x] **Step 2 \u2014 Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+  *Verified RED: 30 ran, 29 passed, 1 errored (`NotImplementedError: eligible_completion is not implemented yet`) in 0.521s via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`.*
+- [x] **Step 3 \u2014 GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 if clock() >= deadline or counters.at_cap():
@@ -188,11 +189,14 @@ if finished <= deadline:
 ```
 
 Count encoding/native preprocessing/diffusion/transfer/synchronization/decode/reencode/evaluation. Rerank h2/T8; shooting resamples prior through L and ties first completed. If no eligible evaluation reuse earliest prior sample or draw exactly one new reference fallback, record extra latency; invalid input aborts. Match wall0.1/.5/2s,L and diagnostic native caps16/64/256 plus independent model counters.
+*Implemented: Completed `src/icgs/algorithms/planning/budget.py` with `eligible_completion`, `synchronize_device`, `NonfiniteModelError`, and `execute_fallback`; completed B5 rerank in `src/icgs/algorithms/planning/rerank.py` (configured h and native T8 rollouts); completed B6 shooting in `src/icgs/algorithms/planning/shooting.py` (sequential resampling through L); integrated monotonic wall deadline gating, completed-only timing, device synchronization, overshoot recording, and fallback handling across MCTS, rerank, and shooting.*
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
+- [x] **Step 4 \u2014 Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+  *Verified GREEN: 39 ran, 39 passed, 0 failed, 0 skipped in 0.783s via `.venv/bin/python -B -m unittest discover -s tests -p 'test_search.py' -v`. L0 fast validation passed 19/19 on both `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`. Full test suite: 333 tests selected/executed: 324 passed, 9 skipped (optional dependencies: 4 differential baseline, 1 RLBench, 1 CUDA RNG, 1 opt-in published checkpoint, 2 PyTorch Lightning), 0 failed in 14.700s.*
+- [x] **Step 5 \u2014 Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
+  *Verified exact diff: completed budget.py, rerank.py, shooting.py, mcts.py completed-only wall timing and fallback integration, comprehensive deterministic test suite in tests/test_search.py, clean L0/full test results.*
 
 ## Acceptance, resource limits and evidence
 
@@ -222,8 +226,9 @@ phase if an FG fails and request a scoped protocol decision.
 ## Execution evidence
 
 - Documentation drafting: complete.
-- Component RED/GREEN commands: Task 1 (belief.py) accepted at a430cbf; Task 2 (mcts.py, budget.py seam) original accepted at 72ba6e8 (23 passed), Round 1 at 0317f75 (29 passed), Round 2 at e0d5a0e (29 passed), Round 3 (29 passed in 0.515s); L0 passed 19/19 on scripts/validate_fast.py (both invocations). Task 3 pending.
-- L1 search assertions: 29 executed, 29 passed in tests/test_search.py (0.515s) using .venv/bin/python (historical 23-test run preserved).
+- Component RED/GREEN commands: Task 1 (belief.py) accepted at a430cbf; Task 2 (mcts.py, budget.py seam) implemented at 72ba6e8 (23 passed), accepted only cfe6693 after 3 audit fixes (29 passed in 0.515s); Task 3 (budget.py, rerank.py, shooting.py, mcts.py completed-only wall timing and fallback) completed (39 passed in 0.783s). L0 passed 19/19 on scripts/validate_fast.py (both invocations).
+- L1 search assertions: 39 executed, 39 passed in tests/test_search.py (0.783s) using .venv/bin/python (historical 23-test and 29-test runs preserved).
+- Full regression suite: 333 selected/executed, 324 passed, 9 skipped (4 differential baseline requiring legacy source root, 1 RLBench not installed, 1 CUDA RNG requiring CUDA, 1 opt-in published checkpoint, 2 Lightning not installed), 0 failed in 14.700s.
 - L2/C1–C5: **NOT RUN** by this component task — required Feasibility Gate (FG) remains active and FG pilot is **NOT RUN / not accepted**.
 - L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
 - Remaining risk: Nonpreemptible IP may exceed small budgets and deeper model rollout may exploit prediction errors.
