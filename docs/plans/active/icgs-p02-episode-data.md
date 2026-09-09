@@ -77,7 +77,7 @@ Persist episode/source/asset/program/split IDs, commands, before/after observati
 **Test owner:** `tests/test_episode_data.py`.
 **Consumes / produces:** Produces `validate_episode` and `validate_online_fields(mapping)`; consumes P00 records.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -88,9 +88,10 @@ with self.assertRaisesRegex(ValueError, 'privileged'):
 ```
 
 - [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v`.
-  Expect the new test to fail because its new implementation is absent or violates
-  the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+  The original RED command was not run in a supported installed environment, so
+  it remains unchecked. A later supported-Python regression RED for duplicated
+  online/transition observations is recorded below.
+- [ ] **Step 3 — GREEN (partial):** Implement the boundary using this algorithm/code sketch.
 
 ```python
 online = {'points', 'T_w_e', 'grip', 'point_valid'}
@@ -99,12 +100,26 @@ for key in mapping:
         raise ValueError(f'privileged or unknown online field: {key}')
 ```
 
-Validate shapes/dtypes/finite values separately from field allowlisting. Store variable clouds via offsets and validity, calibration IDs per episode, observation origin and schema version. Verify transition boundary adjacency, nonnegative durations and raw/materialized provenance; reject unknown or incomplete schema.
+Validation now covers field allowlisting, shapes/dtypes/finite values, metadata
+separation, transition adjacency/timing, and consistency between the materialized
+online observation and its P00 `ExecutedTransition` observation. Consecutive
+transitions also require exact equality of simulator timestamp, measured wall
+timestamp, and sensor-profile ID at their shared boundary. It does **not**
+implement JSON manifest/NPZ shard storage, ragged cloud offsets, checksums, atomic
+publication, or quarantine. The approved documents do not define the necessary
+manifest/shard key inventory or checksum/offset contract, so that storage work
+remains blocked rather than being invented here.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v`.
-  Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+- [x] **Step 4 — Verify GREEN (validation boundary only):** The supported installed
+  Python 3.12 targeted suite executed the current Task1/2 assertions with no skips.
+  This does not validate the unimplemented archive roundtrip acceptance.
+- [x] **Step 5 — Review:** Inspected the new schema and test files plus
+  `git diff --check`; no native source, loader, or P01 path was changed. No commit
+  was made.
+
+Task 1 status: **PARTIAL** — the in-memory validation boundary is implemented;
+versioned manifest/NPZ persistence and ragged-offset roundtrips require an approved
+concrete storage protocol.
 
 ### Task 2: Split by ancestry and expose only causal history
 
@@ -112,7 +127,7 @@ Validate shapes/dtypes/finite values separately from field allowlisting. Store v
 **Test owner:** `tests/test_episode_data.py`.
 **Consumes / produces:** Produces `validate_split_lineage`, `causal_prefix`, and geom/dyn/task/terminal/value/pair/calib/audit views.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -124,9 +139,9 @@ with self.assertRaisesRegex(ValueError, 'lineage'):
 ```
 
 - [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v`.
-  Expect the new test to fail because its new implementation is absent or violates
-  the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+  The original RED command was not run in a supported installed environment, so
+  it remains unchecked.
+- [ ] **Step 3 — GREEN (partial):** Implement the boundary using this algorithm/code sketch.
 
 ```python
 splits_by_lineage = {}
@@ -136,12 +151,29 @@ for row in rows:
         raise ValueError('source lineage crosses splits')
 ```
 
-Keep mesh-family and augmentation descendants together; lock 20 train/4 development/12 test skeletons before generation. Split development selection/calibration by lineage. Query episode must differ from every context episode; horizons share trial-group IDs. Count overlapping views as unique transitions, not new data.
+`validate_split_lineage` implements the explicit literal-`lineage_id` rule and
+`causal_prefix` implements boundary-limited transition history. The declared
+`build_view(manifest, view) -> EpisodeView` and the geom/dyn/task/terminal/value/
+pair/calib/audit selections are **not** implemented: no approved manifest payload,
+`EpisodeView` type, transition-ID field, context/query selection representation,
+or view-specific mask/unique-count contract exists. Query/context independence and
+overlap accounting therefore cannot be enforced without inventing an API.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v`.
-  Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+No existing source/document contract defines `root_lineage_id`, parent lineage, or
+ancestry closure. Descendant-aware mesh-family and augmentation split validation is
+blocked on that manifest/lineage protocol decision; literal duplicate lineage IDs
+remain guarded.
+
+- [ ] **Step 4 — Verify GREEN:** The supported targeted suite passes the implemented
+  helper assertions, but Task2 acceptance is incomplete until the approved view and
+  descendant-lineage protocols exist and their assertions can run.
+- [x] **Step 5 — Review:** Inspected the new dataset helper and deterministic tests;
+  no simulator, collection, native data loader, or P01 source was changed. The
+  current partial/blocker status is recorded here; no commit was made.
+
+Task 2 status: **PARTIAL/BLOCKED** — literal lineage isolation and causal prefixes
+exist, but views, context independence, unique-count accounting, padding/mask view
+semantics, and descendant ancestry require an approved manifest/view protocol.
 
 ### Task 3: Retain failed attempts and intervention provenance
 
@@ -222,16 +254,44 @@ phase if an FG fails and request a scoped protocol decision.
 
 ## Execution evidence
 
-- Documentation drafting: this plan specifies future work only.
-- Component RED/GREEN commands: **NOT RUN** — runtime/test files are not implemented.
-- L1 model assertions: **NOT RUN** — future installed supported environment required.
-- L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
-- L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
-- Remaining risk: Asset availability, sensor fidelity, controllable generation and storage cost need a capped pilot.
+- Scope audit: P00 timed records and protocols exist. P01's concrete timed
+  environment, fixed-interval materializer, executed-transition producer, and
+  replay provider do not; Tasks 1–2 only were touched. Task3 remains untouched.
+- Correctness RED: supported installed Python 3.12 ran the targeted suite after
+  mismatch tests were added and before correspondence validation. **FAIL**, 6
+  executed, 1 failure, 0 skips: a changed online point cloud was accepted despite
+  disagreeing with its transition observation.
+- Correctness GREEN: supported installed Python 3.12 ran the targeted suite after
+  the online/transition fix. **PASS**, 6 executed, 6 passed, 0 failures/errors/skips.
+  This validates
+  only the in-memory helper boundary, not archive storage or view construction.
+- Shared-boundary metadata RED: supported installed Python 3.12 ran the targeted
+  suite after adding simulator-time, wall-time, and sensor-profile mismatches and
+  before their validator. **FAIL**, 7 executed, 3 failures, 0 skips; all three
+  inconsistent shared boundaries were accepted.
+- Shared-boundary metadata GREEN: the same supported suite after the exact metadata
+  checks. **PASS**, 7 executed, 7 passed, 0 failures/errors/skips.
+- Supported targeted command: `PATH=/home/hunganh/miniconda3/envs/a0_py312/bin:$PATH
+  python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v` — **PASS**,
+  7 executed, 7 passed, 0 failures/errors/skips. The host-default `python3` is
+  Python 3.13.12 and unsupported; no `PYTHONPATH` diagnostic is counted as
+  acceptance evidence.
+- L0: `PATH=/home/hunganh/miniconda3/envs/a0_py312/bin:$PATH python3 -B
+  scripts/validate_fast.py` — **FAIL** overall. Python syntax and static harness
+  boundary passed; its 19 harness tests passed with zero skips. Five pre-existing
+  missing evidence-log links under `docs/experiments/vv19-validation` still fail
+  local-link validation; no unrelated link was changed.
+- Supported installed L2/C1–C5, L3/L4, collection and training: **NOT RUN**. No
+  simulator, training, download, preprocessing job, GPU workload, or robot motion
+  was launched.
+- Remaining protocol blockers: (1) manifest/NPZ shard key, offset, checksum and
+  publication/quarantine contract; (2) `EpisodeView`/view payload and unique-ID,
+  query/context, and mask rules; (3) root/parent/descendant lineage representation;
+  (4) P01 timing/replay runtime and FG assets/calibration before collection.
 
 ## Observability integration addendum — 2026-09-09
 
-No P02 episode collector or replay producer exists, so this implementation emits
-no fabricated lineage, rejection, censoring or terminal records. Offline run
-inspection can link current outer-boundary records and explicit capture IDs, but it
-does not replace P02 schema validation, ancestry splits or executed evidence.
+No P02 episode collector or replay producer exists, so observability emits no
+fabricated lineage, rejection, censoring or terminal records. Offline run inspection
+can link current outer-boundary records and explicit capture IDs, but it does not
+replace approved episode storage, ancestry splitting, views, or executed evidence.
