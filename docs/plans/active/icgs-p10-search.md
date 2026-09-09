@@ -105,7 +105,7 @@ FP32 mass tolerance1e-5,FP64 tests1e-12; zero active mass means exactly zero. Me
 
 - [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_search.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-  *Verified: 8 ran, 8 passed, 0 failed, 0 skipped in 0.115s. L0 fast validation passed 19/19. Full suite passed 302 tests (293 passed, 9 skipped).*
+  *Verified: 12 ran, 12 passed, 0 failed, 0 skipped in 0.167s. L0 fast validation passed 19/19 (selected=19, executed=19, skipped=0). Full suite results: selected=302, executed=293, skipped=9; all 293 executed tests passed (9 skipped due to optional external dependencies: 4 differential baseline tests requiring IP_LEGACY_SOURCE_ROOT, 1 RLBench test requiring RLBench, 1 CUDA RNG test requiring CUDA, 1 opt-in published checkpoint test, and 2 PyTorch Lightning tests requiring lightning).*
 - [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
 

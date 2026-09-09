@@ -309,6 +309,101 @@ class SearchBeliefTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             propagate_mass(0.1, 0.0, w_fp64, ev_fp64_bad, self.cfg)
 
+    def test_regression_strict_probability_bounds(self) -> None:
+        """Probabilities strictly outside [0, 1] must be rejected even if within float32 sum atol."""
+        weights = np.array([0.3, 0.3, 0.4], dtype=np.float32)
+        # Element strictly > 1.0 (e.g. 1.000005) must fail
+        events_over = np.array([
+            [1.000005, 0.0, 0.0],
+            [0.2, 0.1, 0.7],
+            [0.2, 0.1, 0.7],
+        ], dtype=np.float32)
+        with self.assertRaises(ValueError):
+            propagate_mass(0.0, 0.0, weights, events_over, self.cfg)
+
+        # Element strictly < 0.0 must fail
+        events_under = np.array([
+            [-0.000005, 0.5, 0.5],
+            [0.2, 0.1, 0.7],
+            [0.2, 0.1, 0.7],
+        ], dtype=np.float32)
+        with self.assertRaises(ValueError):
+            propagate_mass(0.0, 0.0, weights, events_under, self.cfg)
+
+    def test_regression_dtype_continuity_propagate_hypothesis_belief_node(self) -> None:
+        """Mass arithmetic dtype must be preserved through propagate -> Hypothesis -> BeliefNode."""
+        s0 = _make_physical_state(translation=(0.0, 0.0, 0.0))
+        s1 = _make_physical_state(translation=(0.01, 0.0, 0.0))
+        s2 = _make_physical_state(translation=(0.02, 0.0, 0.0))
+
+        w_fp32 = np.array([0.3, 0.3, 0.3], dtype=np.float32)
+        ev_fp32 = np.array([
+            [0.2, 0.1, 0.7],
+            [0.2, 0.1, 0.7],
+            [0.2, 0.1, 0.7],
+        ], dtype=np.float32)
+        u, f, w = propagate_mass(0.1, 0.0, w_fp32, ev_fp32, self.cfg)
+
+        h0 = Hypothesis(head_id=0, state=s0, task=None, weight=w[0])
+        h1 = Hypothesis(head_id=1, state=s1, task=None, weight=w[1])
+        h2 = Hypothesis(head_id=2, state=s2, task=None, weight=w[2])
+
+        node = BeliefNode(tau=0, H_root=5, U=u, F=f, hypotheses=(h0, h1, h2), cfg=self.cfg)
+        self.assertEqual(node.weights.dtype, np.float32)
+
+        # Drift of 2e-7 in FP32 must be accepted under atol=1e-5
+        w_drift_fp32 = np.array([0.3333333, 0.3333333, 0.3333335], dtype=np.float32)
+        h0_d = Hypothesis(head_id=0, state=s0, task=None, weight=w_drift_fp32[0])
+        h1_d = Hypothesis(head_id=1, state=s1, task=None, weight=w_drift_fp32[1])
+        h2_d = Hypothesis(head_id=2, state=s2, task=None, weight=w_drift_fp32[2])
+        node_fp32 = BeliefNode(tau=0, H_root=5, U=0.0, F=0.0, hypotheses=(h0_d, h1_d, h2_d), cfg=self.cfg)
+        self.assertEqual(node_fp32.weights.dtype, np.float32)
+
+        # Drift of 2e-7 in FP64 must be rejected under atol=1e-12
+        w_drift_fp64 = np.array([0.3333333, 0.3333333, 0.3333335], dtype=np.float64)
+        h0_64 = Hypothesis(head_id=0, state=s0, task=None, weight=w_drift_fp64[0])
+        h1_64 = Hypothesis(head_id=1, state=s1, task=None, weight=w_drift_fp64[1])
+        h2_64 = Hypothesis(head_id=2, state=s2, task=None, weight=w_drift_fp64[2])
+        with self.assertRaises(ValueError):
+            BeliefNode(tau=0, H_root=5, U=0.0, F=0.0, hypotheses=(h0_64, h1_64, h2_64), cfg=self.cfg)
+
+    def test_regression_medoid_rotation_small_angles_and_pi(self) -> None:
+        """Medoid rotation metric clamps [-1, 1] without training margin, selecting central small rotation."""
+        import math
+
+        def _rot_z(theta: float) -> np.ndarray:
+            c, s = math.cos(theta), math.sin(theta)
+            return np.array([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]], dtype=np.float32)
+
+        s0 = _make_physical_state(rotation=_rot_z(0.0))
+        s1 = _make_physical_state(rotation=_rot_z(0.0005))
+        s2 = _make_physical_state(rotation=_rot_z(0.001))
+
+        h0 = Hypothesis(head_id=0, state=s0, task=None, weight=1.0 / 3.0)
+        h1 = Hypothesis(head_id=1, state=s1, task=None, weight=1.0 / 3.0)
+        h2 = Hypothesis(head_id=2, state=s2, task=None, weight=1.0 / 3.0)
+
+        # Head 1 is strictly central: medoid must select head 1
+        rep = select_representative((h0, h1, h2), self.cfg)
+        self.assertEqual(rep.head_id, 1)
+
+    def test_regression_belief_node_h_root_bound(self) -> None:
+        """BeliefNode H_root cannot exceed cfg.planning.H."""
+        s0 = _make_physical_state()
+        s1 = _make_physical_state()
+        s2 = _make_physical_state()
+        h0 = Hypothesis(head_id=0, state=s0, task=None, weight=1.0 / 3.0)
+        h1 = Hypothesis(head_id=1, state=s1, task=None, weight=1.0 / 3.0)
+        h2 = Hypothesis(head_id=2, state=s2, task=None, weight=1.0 / 3.0)
+
+        # H_root == cfg.planning.H is allowed
+        node_valid = BeliefNode(tau=0, H_root=self.cfg.planning.H, U=0.0, F=0.0, hypotheses=(h0, h1, h2), cfg=self.cfg)
+        self.assertEqual(node_valid.H_root, self.cfg.planning.H)
+
+        # H_root > cfg.planning.H must be rejected
+        with self.assertRaises(ValueError):
+            BeliefNode(tau=0, H_root=self.cfg.planning.H + 1, U=0.0, F=0.0, hypotheses=(h0, h1, h2), cfg=self.cfg)
+
 
 if __name__ == "__main__":
     unittest.main()

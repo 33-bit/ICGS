@@ -59,6 +59,7 @@ def propagate_mass(
     if (w_arr < 0.0).any():
         raise ValueError("weights must be nonnegative")
 
+    is_float32 = w_arr.dtype == np.float32 or ev_arr.dtype == np.float32
     atol = _mass_atol((w_arr, ev_arr), numerics)
 
     prior_mass = U + F + float(w_arr.sum())
@@ -71,8 +72,8 @@ def propagate_mass(
         raise ValueError("event_probabilities rows must match weights length")
     if not np.isfinite(ev_arr).all():
         raise ValueError("event_probabilities must contain only finite values")
-    if (ev_arr < 0.0).any() or (ev_arr > 1.0 + atol).any():
-        raise ValueError("event_probabilities elements must be in [0, 1]")
+    if (ev_arr < 0.0).any() or (ev_arr > 1.0).any():
+        raise ValueError("event_probabilities elements must be strictly in [0, 1]")
 
     row_sums = ev_arr.sum(axis=-1)
     if np.any(np.abs(row_sums - 1.0) > atol):
@@ -82,8 +83,12 @@ def propagate_mass(
     failure = ev_arr[:, 1]
     cont = ev_arr[:, 2]
 
-    next_U = float(U + (w_arr * success).sum())
-    next_F = float(F + (w_arr * failure).sum())
+    if is_float32:
+        next_U = np.float32(U + (w_arr * success).sum())
+        next_F = np.float32(F + (w_arr * failure).sum())
+    else:
+        next_U = float(U + (w_arr * success).sum())
+        next_F = float(F + (w_arr * failure).sum())
     next_weights = w_arr * cont
 
     # Zero active mass means exactly zero
@@ -136,7 +141,7 @@ class Hypothesis:
     head_id: int
     state: PhysicalState
     task: Any
-    weight: float
+    weight: float | np.floating
 
     def __post_init__(self) -> None:
         if isinstance(self.head_id, bool) or not isinstance(self.head_id, (int, np.integer)):
@@ -151,7 +156,9 @@ class Hypothesis:
 
         if isinstance(self.weight, bool) or not isinstance(self.weight, (int, float, np.floating, np.integer)):
             raise TypeError("weight must be a float")
-        weight = float(self.weight)
+        weight = self.weight
+        if isinstance(weight, (int, np.integer)):
+            weight = float(weight)
         if not np.isfinite(weight):
             raise ValueError("weight must be finite")
         if weight < 0.0:
@@ -165,12 +172,13 @@ class BeliefNode:
 
     tau: int
     H_root: int
-    U: float
-    F: float
+    U: float | np.floating
+    F: float | np.floating
     hypotheses: tuple[Hypothesis, ...]
     cfg: MethodConfig
     candidate_edges: list[Any] = field(default_factory=list)
     visits: int = 0
+    _weights_dtype: Any = field(init=False, repr=False, default=np.float64)
 
     def __post_init__(self) -> None:
         if not isinstance(self.cfg, MethodConfig):
@@ -180,6 +188,8 @@ class BeliefNode:
             raise ValueError("tau must be a nonnegative integer")
         if isinstance(self.H_root, bool) or not isinstance(self.H_root, (int, np.integer)) or self.H_root < 0:
             raise ValueError("H_root must be a nonnegative integer")
+        if self.H_root > self.cfg.planning.H:
+            raise ValueError(f"H_root ({self.H_root}) cannot exceed cfg.planning.H ({self.cfg.planning.H})")
         if self.tau > self.H_root:
             raise ValueError("tau cannot exceed H_root")
 
@@ -187,8 +197,8 @@ class BeliefNode:
             raise TypeError("U must be float")
         if isinstance(self.F, bool) or not isinstance(self.F, (int, float, np.floating, np.integer)):
             raise TypeError("F must be float")
-        U = float(self.U)
-        F = float(self.F)
+        U = self.U if isinstance(self.U, np.floating) else float(self.U)
+        F = self.F if isinstance(self.F, np.floating) else float(self.F)
         if not (np.isfinite(U) and np.isfinite(F)):
             raise ValueError("U and F must be finite")
         if U < 0.0 or F < 0.0:
@@ -203,12 +213,14 @@ class BeliefNode:
             if not isinstance(h, Hypothesis) or h.head_id != i:
                 raise ValueError(f"Hypothesis {i} must be a Hypothesis with head_id {i}")
 
-        is_float32 = any(
-            getattr(h.weight, "dtype", None) == np.float32
-            for h in self.hypotheses
+        is_float32 = (
+            getattr(self.U, "dtype", None) == np.float32
+            or getattr(self.F, "dtype", None) == np.float32
+            or any(getattr(h.weight, "dtype", None) == np.float32 for h in self.hypotheses)
         )
+        self._weights_dtype = np.float32 if is_float32 else np.float64
         atol = self.cfg.numerics.mass_sum_atol_float32 if is_float32 else self.cfg.numerics.mass_sum_atol_float64
-        total_mass = self.U + self.F + sum(h.weight for h in self.hypotheses)
+        total_mass = float(self.U) + float(self.F) + sum(float(h.weight) for h in self.hypotheses)
         if abs(total_mass - 1.0) > atol:
             raise ValueError(f"BeliefNode total mass must sum to 1.0 within {atol}, got {total_mass}")
 
@@ -217,7 +229,7 @@ class BeliefNode:
 
     @property
     def weights(self) -> np.ndarray:
-        return np.array([h.weight for h in self.hypotheses], dtype=np.float64)
+        return np.array([h.weight for h in self.hypotheses], dtype=self._weights_dtype)
 
     @property
     def is_terminal(self) -> bool:
@@ -284,7 +296,6 @@ def select_representative(
     cloud_scale = cfg.planning.medoid_cloud_scale_m ** 2
     trans_scale = cfg.planning.medoid_translation_scale_m ** 2
     rot_scale = math.radians(cfg.planning.medoid_rotation_scale_deg) ** 2
-    margin = cfg.numerics.rotation_training_clip_margin
 
     def _pairwise_dist(geom_i: tuple[np.ndarray, np.ndarray, np.ndarray], geom_j: tuple[np.ndarray, np.ndarray, np.ndarray]) -> float:
         pts_i, t_i, R_i = geom_i
@@ -297,7 +308,7 @@ def select_representative(
         trans = float(np.sum((t_i - t_j) ** 2))
 
         rel_R = R_i.T @ R_j
-        cos_theta = float(np.clip((np.trace(rel_R) - 1.0) / 2.0, -1.0 + margin, 1.0 - margin))
+        cos_theta = float(np.clip((np.trace(rel_R) - 1.0) / 2.0, -1.0, 1.0))
         rot = math.acos(cos_theta) ** 2
 
         return cd / cloud_scale + trans / trans_scale + rot / rot_scale
