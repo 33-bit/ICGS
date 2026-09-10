@@ -172,6 +172,155 @@ class EpisodeDataTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'boundary'):
             causal_prefix(episode, 3)
 
+    def test_attempt_counts_retains_failures_and_rejects_malformed_statuses(self):
+        from icgs.data.collection.attempts import attempt_counts
+
+        counts = attempt_counts([
+            {'status': 'success'},
+            {'status': 'timeout'},
+            {'status': 'invalid-input'},
+        ])
+        self.assertEqual(counts, {'attempts': 3, 'successes': 1, 'invalid': 1})
+        with self.assertRaisesRegex(ValueError, 'status'):
+            attempt_counts([{}])
+        with self.assertRaisesRegex(ValueError, 'status'):
+            attempt_counts([{'status': ''}])
+        with self.assertRaisesRegex(ValueError, 'canonical'):
+            attempt_counts([{'status': ' success '}])
+
+    def test_program_catalog_is_explicit_immutable_and_uses_locked_ids(self):
+        from icgs.data.collection.programs import get_program, program_catalog
+
+        catalog = program_catalog()
+        self.assertEqual(get_program('T01').steps, ('grasp A', 'lift A'))
+        self.assertEqual(get_program('V01').split, 'development')
+        self.assertEqual(get_program('P1').steps, ('open', 'place A', 'place B', 'close'))
+        self.assertEqual(get_program('G1').family, 'grasp-transport-fit')
+        self.assertEqual(get_program('R1').family, 'park-retrieve-restore')
+        self.assertEqual(tuple(catalog), tuple(program_catalog()))
+        self.assertEqual(sum(spec.split == 'train' for spec in catalog.values()), 20)
+        self.assertEqual(sum(spec.split == 'development' for spec in catalog.values()), 4)
+        self.assertEqual(
+            tuple(spec.program_id for spec in catalog.values() if spec.split == 'test'),
+            ('P1', 'P2', 'P3', 'P4', 'G1', 'G2', 'G3', 'G4', 'R1', 'R2', 'R3', 'R4'),
+        )
+        with self.assertRaises(TypeError):
+            catalog['T01'] = get_program('T01')
+        with self.assertRaisesRegex(ValueError, 'unknown program_id'):
+            get_program('P01')
+
+    def test_event_annotation_uses_event_coverage_ties_and_semantic_masks(self):
+        from icgs.data.collection.annotations import Interval, PrimitiveInterval, map_event_annotation
+
+        event = Interval(10, 20)
+        annotation = map_event_annotation(event, (
+            PrimitiveInterval('earlier', 5, 15),
+            PrimitiveInterval('later', 15, 25),
+        ))
+        self.assertEqual(annotation.primitive_id, 'earlier')
+        self.assertTrue(annotation.mapping_valid)
+        self.assertTrue(annotation.semantic_valid)
+
+        event_coverage = map_event_annotation(
+            Interval(10, 20), (PrimitiveInterval('long', 15, 115),)
+        )
+        self.assertEqual(event_coverage.primitive_id, 'long')
+        self.assertTrue(event_coverage.mapping_valid)
+
+        insufficient = map_event_annotation(Interval(0, 10), (PrimitiveInterval('short', 0, 4),))
+        self.assertIsNone(insufficient.primitive_id)
+        self.assertFalse(insufficient.mapping_valid)
+        self.assertFalse(insufficient.semantic_valid)
+
+        free_space = map_event_annotation(
+            Interval(0, 10), (PrimitiveInterval('move', 0, 10, semantic_valid=False),)
+        )
+        self.assertEqual(free_space.primitive_id, 'move')
+        self.assertTrue(free_space.mapping_valid)
+        self.assertFalse(free_space.semantic_valid)
+
+        ambiguous = map_event_annotation(Interval(0, 10), (
+            PrimitiveInterval('first', 0, 10),
+            PrimitiveInterval('second', 0, 10),
+        ))
+        self.assertIsNone(ambiguous.primitive_id)
+        self.assertFalse(ambiguous.mapping_valid)
+        self.assertFalse(ambiguous.semantic_valid)
+
+    def test_task_labels_keep_history_current_relations_eligibility_and_masks_separate(self):
+        from icgs.data.collection.annotations import task_labels
+
+        initial = task_labels(occurred=False, current_relation=False, eligible=False)
+        self.assertEqual((initial.rho, initial.nu, initial.eligibility), (False, False, False))
+        self.assertEqual((initial.rho_valid, initial.nu_valid, initial.eligibility_valid), (True, True, True))
+
+        complete = task_labels(occurred=True, current_relation=True, eligible=True)
+        self.assertEqual((complete.rho, complete.nu, complete.eligibility), (True, True, True))
+
+        displaced = task_labels(occurred=True, current_relation=False, eligible=False)
+        self.assertEqual((displaced.rho, displaced.nu, displaced.eligibility), (True, False, False))
+
+        free_space = task_labels(
+            occurred=True, current_relation=True, eligible=True, postcondition_identifiable=False,
+        )
+        self.assertTrue(free_space.rho)
+        self.assertTrue(free_space.rho_valid)
+        self.assertFalse(free_space.nu_valid)
+        self.assertTrue(free_space.eligibility)
+        self.assertTrue(free_space.eligibility_valid)
+
+        unknown = task_labels(occurred=True, current_relation=None, eligible=None)
+        self.assertFalse(unknown.nu_valid)
+        self.assertFalse(unknown.eligibility_valid)
+
+    def test_first_terminal_resolution_preserves_precedence(self):
+        from icgs.data.collection.annotations import first_terminal
+
+        self.assertEqual(first_terminal(success=True, failure=False, absorbed_success=False), 'success')
+        self.assertEqual(first_terminal(success=False, failure=True, absorbed_success=False), 'failure')
+        self.assertEqual(first_terminal(success=False, failure=False, absorbed_success=False), 'continue')
+        self.assertEqual(first_terminal(success=True, failure=True, absorbed_success=False), 'failure')
+        self.assertEqual(first_terminal(success=False, failure=True, absorbed_success=True), 'success')
+
+    def test_injected_task_monitor_keeps_predicates_outside_online_observation(self):
+        from icgs.evaluation.dependencies import TaskMonitor
+        from icgs.data.schemas.episodes import validate_online_fields
+
+        class Predicates:
+            def __init__(self):
+                self.seen_config = None
+
+            def annotate(self, transition, *, config):
+                self.seen_config = config
+                return {'predicate_label': 'inside', 'simulator_only': {'joint': 3}}
+
+        predicates = Predicates()
+        config = object()
+        annotation = TaskMonitor(predicates, config).annotate(self._transition())
+        self.assertEqual(annotation['predicate_label'], 'inside')
+        self.assertIs(predicates.seen_config, config)
+        with self.assertRaises(TypeError):
+            annotation['predicate_label'] = 'changed'
+        with self.assertRaises(ValueError):
+            TaskMonitor(Predicates(), None)
+
+        class BadPredicates:
+            def annotate(self, transition, *, config):
+                return ['not', 'a', 'mapping']
+
+        with self.assertRaisesRegex(ValueError, 'mapping'):
+            TaskMonitor(BadPredicates(), config).annotate(self._transition())
+
+        for key, value in (
+            ('program_id', 'T01'),
+            ('role_id', 'A'),
+            ('predicate_label', 'inside'),
+            ('simulator_only', {'joint': 3}),
+        ):
+            with self.subTest(key=key):
+                with self.assertRaisesRegex(ValueError, 'privileged'):
+                    validate_online_fields({key: value})
+
 
 if __name__ == '__main__':
     unittest.main()

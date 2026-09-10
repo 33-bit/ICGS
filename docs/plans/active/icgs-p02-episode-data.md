@@ -12,8 +12,10 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — planned runtime NOT IMPLEMENTED**. This document is a category C
-component of the approved docs-only research migration, not permission to execute it.
+Status: **ACTIVE — Tasks 1–2 in-memory boundaries and the Task 3 deterministic
+foundation are implemented; versioned storage/views and runtime collection remain
+NOT IMPLEMENTED**. This document is a category C component of the approved
+research migration; its gates still do not authorize simulator collection.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
 
@@ -181,7 +183,7 @@ semantics, and descendant ancestry require an approved manifest/view protocol.
 **Test owner:** `tests/test_episode_data.py`.
 **Consumes / produces:** Produces `attempt_counts(records)` and bounded attempt collector consuming TimedEnvironment and separate TaskMonitor.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
@@ -193,10 +195,12 @@ self.assertEqual(counts['successes'], 1)
 self.assertEqual(counts['invalid'], 1)
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v`.
-  Expect the new test to fail because its new implementation is absent or violates
-  the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v`.
+  The supported Python 3.12 run failed with six expected missing-module errors
+  after the seven pre-existing assertions passed; no unrelated failure was used
+  as RED evidence.
+- [x] **Step 3 — GREEN (deterministic foundation only):** Implement the boundary
+  using this algorithm/code sketch.
 
 ```python
 counts = {'attempts': len(records), 'successes': 0, 'invalid': 0}
@@ -205,6 +209,12 @@ for row in records:
     counts['invalid'] += int(row['status'] == 'invalid-input')
 return counts
 ```
+
+Implemented `attempt_counts`, an immutable explicit proposal catalog, temporal
+event/primitive mapping, causal rho/nu/eligibility labels with masks, first-terminal
+resolution, and an injected external `TaskMonitor` capability. The monitor contains
+no predicate tolerances and requires an approved capability/configuration injection.
+It does not instantiate a timed environment or write an episode record.
 
 Run object-frame waypoint adaptations and free-space connectors only through physics; retain valid failed attempts, pauses/retries and bounded perturbations with intervention IDs. Warm-up mixture70/30 attempts/perturbed; frozen-reference mixture50/30/20 attempts/reference/recovery. Preserve generator limits, source meshes and empirical acceptance rates.
 
@@ -219,13 +229,22 @@ corresponding demo events, with null for unrepresented recovery. Use the externa
 TaskMonitor capability implemented here and consumed by P12, never an online
 program-ID tensor. Implement `first_terminal(success, failure, absorbed_success)`:
 absorbed success wins, otherwise failure wins a simultaneous first event, else
-success or continue. Implement the exact predicate/stability defaults in
-data-training.md; unavailable force/penetration measurements block G2.
+success or continue. Concrete predicate/stability defaults must be supplied by
+the injected resolved configuration only after predicate-protocol approval;
+unavailable force/penetration measurements block G2 rather than receiving a
+local substitute threshold.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v`.
-  Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+- [x] **Step 4 — Verify GREEN:** The supported Python 3.12 targeted suite passed:
+  13 executed, 13 passed, 0 failures/errors/skips. It covers synthetic fixtures
+  only and does not certify simulator collection or G2 bindings.
+- [x] **Step 5 — Review:** Inspected the exact source/test diff and `git diff
+  --check`. No native IP, P01 execution/replay, simulator, or training path was
+  changed. No commit was made.
+
+Task 3 status: **PARTIAL** — deterministic accounting/catalog/annotation/monitor
+foundations are implemented. `TimedEnvironment` integration, the bounded attempt
+collector, simulator execution, concrete assets/seeds/tolerances, collection, and
+all G2-dependent bindings remain deferred.
 
 ## Acceptance, resource limits and evidence
 
@@ -256,7 +275,8 @@ phase if an FG fails and request a scoped protocol decision.
 
 - Scope audit: P00 timed records and protocols exist. P01's concrete timed
   environment, fixed-interval materializer, executed-transition producer, and
-  replay provider do not; Tasks 1–2 only were touched. Task3 remains untouched.
+  replay provider do not. Task 3 implements only deterministic accounting,
+  catalog, annotation, and external-monitor boundaries; it does not collect data.
 - Correctness RED: supported installed Python 3.12 ran the targeted suite after
   mismatch tests were added and before correspondence validation. **FAIL**, 6
   executed, 1 failure, 0 skips: a changed online point cloud was accepted despite
@@ -273,21 +293,34 @@ phase if an FG fails and request a scoped protocol decision.
   checks. **PASS**, 7 executed, 7 passed, 0 failures/errors/skips.
 - Supported targeted command: `PATH=/home/hunganh/miniconda3/envs/a0_py312/bin:$PATH
   python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v` — **PASS**,
-  7 executed, 7 passed, 0 failures/errors/skips. The host-default `python3` is
+  13 executed, 13 passed, 0 failures/errors/skips. The host-default `python3` is
   Python 3.13.12 and unsupported; no `PYTHONPATH` diagnostic is counted as
-  acceptance evidence.
+  acceptance evidence. Task 3 RED in the same environment was **FAIL**, 13
+  executed with 6 expected missing-module errors and 0 skips before its source
+  files existed.
+- Task 3 label/status refinement used the repository `.venv/bin/python`, CPython
+  3.10.20, after an editable no-dependency install of the current checkout. RED
+  was **FAIL**, 13 executed with exactly 2 assertion failures: noncanonical padded
+  status was accepted and unidentifiable postcondition masked an independently
+  observable eligibility label. GREEN was **PASS**, 13 executed, 13 passed, 0
+  failures/errors/skips. The same environment passed `test_architecture.py` 3/3
+  and `compileall` for the new collection/evaluation modules.
 - L0: `PATH=/home/hunganh/miniconda3/envs/a0_py312/bin:$PATH python3 -B
-  scripts/validate_fast.py` — **FAIL** overall. Python syntax and static harness
-  boundary passed; its 19 harness tests passed with zero skips. Five pre-existing
-  missing evidence-log links under `docs/experiments/vv19-validation` still fail
-  local-link validation; no unrelated link was changed.
+  scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py` — **FAIL**
+  overall. Both variants passed Python syntax, static harness boundary, and 19
+  harness tests with zero skips. Five pre-existing missing evidence-log links under
+  `docs/experiments/vv19-validation` still fail local-link validation; no unrelated
+  link was changed. Repeating both commands through `.venv/bin/python` produced
+  the same result.
 - Supported installed L2/C1–C5, L3/L4, collection and training: **NOT RUN**. No
   simulator, training, download, preprocessing job, GPU workload, or robot motion
   was launched.
 - Remaining protocol blockers: (1) manifest/NPZ shard key, offset, checksum and
   publication/quarantine contract; (2) `EpisodeView`/view payload and unique-ID,
   query/context, and mask rules; (3) root/parent/descendant lineage representation;
-  (4) P01 timing/replay runtime and FG assets/calibration before collection.
+  (4) P01 timing/replay runtime and FG assets/calibration before collection;
+  (5) Task 3 bounded `TimedEnvironment` collector and concrete G2 predicate
+  bindings.
 
 ## Observability integration addendum — 2026-09-09
 
