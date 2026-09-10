@@ -12,7 +12,7 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — P05 Task 1 COMPLETE; P05 remains PARTIAL because Tasks 2–3 and
+Status: **ACTIVE — P05 Tasks 1–2 COMPLETE; P05 remains PARTIAL because Task 3 and
 measured feasibility gates are NOT IMPLEMENTED**. This document is a category C
 component of the approved research migration; it does not authorize simulator,
 collection, or training workloads.
@@ -127,17 +127,36 @@ indices into that sequence and every reference preserves the injected hash.
 
 Task 1 status: **COMPLETE** — deterministic measured-state segmentation and
 synthetic contract evidence are implemented. Overall P05 remains **PARTIAL**:
-Task 2 event encoding, Task 3 EventMemory/MethodContext, and measured suitability/
-overflow gates remain deferred.
+Task 3 EventMemory/MethodContext and measured suitability/overflow gates remain
+deferred.
 
 ### Task 2: Encode event geometry and per-demo order
 
-**Files:** Create `src/icgs/models/encoders/event.py`.
+**Files:** Create `src/icgs/models/encoders/event.py`; modify
+`src/icgs/models/layers/method.py` with a generic masked self-attention block.
 **Test owner:** `tests/test_event_memory.py`.
-**Consumes / produces:** Produces `event_features(d_start,d_end,d_mean,xi,g_start,g_end)` and `EventEncoder` implementing encode_events.
+**Consumes / produces:** Produces strict
+`event_features(d_start,d_end,d_mean,xi,g_start,g_end)`, transient
+`EventEncoding(tokens, valid)`, and a tensor-only `EventEncoder`. Public
+`encode_events(raw_demos, segments) -> EventMemory`, `SegmentRef` tensorization,
+token/reference correspondence, and owned context composition remain Task 3.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
-  `unittest.TestCase` method in the test owner, with the shown imports.
+**Accepted boundary record:** The P05 neural specification and owner-approved
+Task 2 contract authorize only synthetic tensor inputs to `EventEncoder` and
+`EventEncoding` output. `START_KIND=0`, `INTERACTION_KIND=1`, and `END_KIND=2`
+are the tensor kind vocabulary; no demo ID/global concatenation position is an
+embedding. `SegmentRef`, content hashes, `EventMemory`, `MethodContext`, routing,
+simulator and training behavior are forbidden from this task. Valid entries must
+be finite. Masked anchor/event padding may contain sentinel or nonfinite values,
+but must be sanitized before pooling, gather, division, feature construction or
+attention. Valid landmarks must have `a == b` and input twist L2 norm at most
+`LANDMARK_TWIST_ATOL=1e-6`; the encoder validates and never rewrites twist. This
+constant is a fixed numerical validation guard with `rtol=0`, not a configurable
+segmentation threshold or LayerNorm epsilon. Violations reject the named tensor
+or invariant so the Task 3 tensorization caller can correct its input.
+
+- [x] **Step 1 — RED:** Add focused assertions to the test owner for the complete
+  tensor boundary, including the primary-profile compatibility assertion below.
 
 ```python
 import torch
@@ -147,24 +166,78 @@ f = event_features(v, v, v, torch.zeros(1, 6), torch.zeros(1, 1), torch.ones(1, 
 self.assertEqual(tuple(f.shape), (1, 776))
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_event_memory.py' -v`.
-  Expect the new test to fail because its new implementation is absent or violates
-  the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 2 — Verify RED:** `.venv/bin/python -B -m unittest discover -s
+  tests -p 'test_event_memory.py' -v` selected/executed 18 tests with 0 skips:
+  the 9 retained Task 1 tests passed, while all 9 new Task 2 tests produced the
+  expected errors for absent `icgs.models.encoders.event` or absent
+  `MaskedSelfAttentionBlock`. No dependency, collection, or syntax failure was
+  counted as RED proof.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
-d = frame_mlp(torch.cat((masked_mean(X, valid, 1), p), -1))
-e = event_mlp(torch.cat((d_start, d_end, d_mean, xi, g_start, g_end), -1))
-order = order_mlp(torch.stack((j / J, torch.ones_like(j) / J), -1))
-tokens = block2(block1(e + order + landmark_type, valid), valid)
+@dataclass(frozen=True)
+class EventEncoding:
+    tokens: Tensor  # [B,L,event.width]
+    valid: Tensor   # bool [B,L]
+
+
+class EventEncoder(nn.Module):
+    def forward(
+        self, frame_tokens, anchor_valid, proprio, segment_start, segment_end,
+        twist, grip_start, grip_end, event_kind, event_valid,
+        local_index, local_count,
+    ) -> EventEncoding:
+        ...
 ```
 
-Frame MLP269→256→256,event776→512→256,order2→256→256; two masked attention blocks. J counts landmarks, j begins0; landmarks a=b have zero twist. Test demo permutation remaps SegmentRefs and leaves pooled result invariant within numerical tolerance; masked padding and frame means exclude invalid data.
+The processing order is fixed: validate dtype/outer shape; validate finite values
+only on valid entries; validate valid-landmark constraints; validate valid-row
+indices/counts; sanitize every masked row; then gather/inclusive segment mean,
+compute local order, call strict `event_features`, apply MLP/embeddings and generic
+masked attention, zero invalid output rows, and construct `EventEncoding`.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_event_memory.py' -v`.
-  Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+Require `segment_start/segment_end` to be `torch.long` and
+`anchor_valid/event_valid` to be `torch.bool`. Only valid event rows must satisfy
+`0 <= start <= end < F`, `local_count > 0`, and
+`0 <= local_index < local_count`; sanitize padding indices/counts before gather or
+division. `event_features` has no mask and rejects every NaN/Inf. The encoder mask
+permits nonfinite padding only by checking valid entries first and replacing all
+masked padding before calling that strict helper. Landmark twist is validated,
+not replaced.
+
+Derive frame input width as `geometry.width + 13` and event input width as
+`3 * event.width + 8`; 269 and 776 are primary-profile acceptance values rather
+than implementation literals. Frame MLP is
+`(geometry.width+13)->event.width->event.width`; event MLP is
+`(3*event.width+8)->event.token_hidden_dim->event.width`; order MLP is
+`2->event.width->event.width`. `local_index/local_count` supplies
+`[j/J,1/J]`, where j starts at zero and J includes landmarks.
+
+Implemented `MaskedSelfAttentionBlock` using the existing pre-LN/head/FFN/dropout/mask
+conventions without `GeometryBlock`'s relative-3D bias. Instantiate exactly
+`event.transformer_layers` blocks. `EventEncoder` requires either one explicit
+resolved `MethodConfig`, or all three explicit `GeometryConfig`, `EventConfig`,
+and `NeuralConfig` sections; it never constructs defaults internally.
+
+RED coverage must distinguish allowed poisoned padding from forbidden valid
+nonfinite values, verify padding is sanitized before any intermediate operation,
+lock inclusive `[a,b]` frame means and unchanged accepted landmark twist, assert
+kind/dtype/index/count validation, and prove demo-block permutation equivariance
+plus valid-token pooled invariance within numerical tolerance. A focused source
+boundary assertion forbids Task 3 ownership types from `event.py`; it is not a
+complete dynamic dependency proof.
+
+- [x] **Step 4 — Verify GREEN:** `.venv/bin/python -B -m unittest discover -s
+  tests -p 'test_event_memory.py' -v` passed all 18 selected/executed tests with
+  0 failures/errors/skips. The retained Task 1 tests remained unchanged and green.
+- [x] **Step 5 — Review:** Inspected the exact source/test diff, explicit config
+  propagation, gradient finiteness, forbidden owner names, padding sanitization,
+  and `git diff --check`. No native IP, Task 3, simulator, collection, routing, or
+  training owner was changed. No commit was made.
+
+Task 2 status: **Task 2 tensor encoder — COMPLETE; public
+`encode_events`/`EventMemory` composition — deferred to Task 3.** P05 remains
+PARTIAL until Task 3 and the required measured feasibility gates are complete.
 
 ### Task 3: Owned context, lineage and native windows remain distinct
 
@@ -237,16 +310,31 @@ phase if an FG fails and request a scoped protocol decision.
   failures/errors/skips. Fixtures cover validation-only ownership, command
   independence, exact injected hashes, debounce, cumulative strict motion/time
   thresholds, canonical short/cap merging, protected boundaries, and overflow.
+- Task 2 RED: the same command after adding the final tensor contract tests —
+  **FAIL as expected**, 18 selected/executed, 9 existing Task 1 tests passed and
+  9 new Task 2 tests errored, 0 skips. Eight errors were the missing planned
+  `icgs.models.encoders.event` module and one was the missing generic
+  `MaskedSelfAttentionBlock`; the installed dependencies and test collection
+  succeeded. GREEN implementation was not started in this phase.
+- Task 2 GREEN: the same command — **PASS**, 18 selected/executed/passed, 0
+  failures/errors/skips. The tensor tests cover strict feature finiteness,
+  allowed poisoned padding, exact mask zeroing, valid-row dtype/index/order and
+  landmark guards, inclusive segment pooling, explicit configuration, generic
+  non-geometric attention, finite gradients, and demo-block permutation behavior.
 - Related L1 regressions: `test_method_contracts.py` **PASS** 17/17,
-  `test_method_config.py` **PASS** 24/24, `test_episode_data.py` **PASS** 13/13,
-  and `test_architecture.py` **PASS** 3/3; all had 0 skips.
+  `test_method_config.py` **PASS** 24/24, `test_physical_geometry.py` **PASS**
+  20/20, `test_episode_data.py` **PASS** 13/13, and `test_architecture.py`
+  **PASS** 3/3; all had 0 skips.
 - L0: `.venv/bin/python -B scripts/validate_fast.py` and `.venv/bin/python -B -S
   scripts/validate_fast.py` — **FAIL** overall. At this run both variants passed
   Python syntax, static harness boundary, and 19/19 harness self-tests with 0 skips;
   the only failures were the same five pre-existing missing evidence-log links
-  under `docs/experiments/vv19-validation`. No evidence file/link was changed.
+  under `docs/experiments/vv19-validation`. Both variants were rechecked after
+  the Task 2 RED additions with the same result. No evidence file/link was changed.
 - L2/C1–C5: **NOT RUN** by this task — mandatory final integration acceptance
   remains outstanding.
 - L3/L4, simulator, collection and training: **NOT RUN** — outside authorized scope.
 - Remaining risk: Observable segmentation need not recover symbolic interactions;
   real-demo overflow/suitability and native window validity remain empirical.
+  Task 2 is synthetic CPU evidence only; public event-memory composition, GPU or
+  mixed-precision numerical behavior, and measured demonstrations remain untested.
