@@ -12,8 +12,10 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — planned runtime NOT IMPLEMENTED**. This document is a category C
-component of the approved docs-only research migration, not permission to execute it.
+Status: **ACTIVE — P05 Task 1 COMPLETE; P05 remains PARTIAL because Tasks 2–3 and
+measured feasibility gates are NOT IMPLEMENTED**. This document is a category C
+component of the approved research migration; it does not authorize simulator,
+collection, or training workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
 
@@ -71,21 +73,23 @@ SegmentRef stores content hash,a,b,kind and valid action-window flag. At most30 
 
 **Files:** Create `src/icgs/data/preprocessing/events.py`.
 **Test owner:** `tests/test_event_memory.py`.
-**Consumes / produces:** Produces `debounced_grip_boundaries(grips)` and `segment_demo`.
+**Consumes / produces:** Produces `debounced_grip_boundaries(grips, event_config)` and `segment_demo`.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
+from icgs.configuration.method import MethodConfig
 from icgs.data.preprocessing.events import debounced_grip_boundaries
-self.assertEqual(debounced_grip_boundaries([0, 1, 0, 1, 1]), (4,))
-self.assertEqual(debounced_grip_boundaries([1, 1, 0, 0]), (3,))
+cfg = MethodConfig().event
+self.assertEqual(debounced_grip_boundaries([0, 1, 0, 1, 1], cfg), (4,))
+self.assertEqual(debounced_grip_boundaries([1, 1, 0, 0], cfg), (3,))
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_event_memory.py' -v`.
-  Expect the new test to fail because its new implementation is absent or violates
-  the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 2 — Verify RED:** The supported `.venv` run selected 9 tests and
+  produced 9 expected missing-module errors before `events.py` existed. No
+  unrelated import or dependency failure was counted as RED proof.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 stable = grips[0]
@@ -97,12 +101,34 @@ for t in range(1, len(grips)):
 return tuple(boundaries)
 ```
 
-Mark at confirmation t, never backdate. Sum consecutive translation/geodesic angles; split at >0.12m,>30deg or >=20 intervals. Retain endpoints; shortest-first short-segment merge chooses shorter neighbor then earlier index, never erasing grip boundaries. Cap merges minimum combined adjacent duration, tie earlier; overflow rather than truncation.
+Mark at confirmation t, never backdate. Sum consecutive translation/geodesic angles;
+split at >0.12m,>30deg or >=20 intervals. Retain endpoints. Process short
+segments shortest-first; merge with the adjacent segment having shorter duration,
+tie to the earlier segment, and never erase a grip boundary. For capacity, merge
+the adjacent legal pair having minimum combined duration, tie to the earlier pair;
+emit overflow rather than truncate when protected boundaries cannot fit.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_event_memory.py' -v`.
-  Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+Implemented `TimedDemoInput` as a frozen validation-only boundary over a nonempty
+tuple of adjacent, contiguous `ExecutedTransition` records and an unchanged
+injected demo-content hash. Segmentation extracts N+1 measured observations from
+before/after records without reading `TimedCommand`; `SegmentRef.a/b` are local
+indices into that sequence and every reference preserves the injected hash.
+
+- [x] **Step 4 — Verify GREEN:** The supported `.venv` suite passed: 9 selected,
+  9 executed/passed, 0 failures/errors/skips. A review refinement first proved
+  that a missing explicit config was accepted (**FAIL**, 1 executed, 1 failure),
+  then rejected it and restored the 9/9 GREEN result. A follow-up separately
+  proved the debounce helper still accepted implicit config (**FAIL**, 1 executed,
+  1 failure), removed that fallback, and again restored the 9/9 GREEN result.
+- [x] **Step 5 — Review:** Inspected the exact source/test diff, command-access
+  audit, trailing whitespace, and `git diff --check`. No command fields, native IP,
+  P01 execution/replay, simulator, collection, or training path was changed. No
+  commit was made.
+
+Task 1 status: **COMPLETE** — deterministic measured-state segmentation and
+synthetic contract evidence are implemented. Overall P05 remains **PARTIAL**:
+Task 2 event encoding, Task 3 EventMemory/MethodContext, and measured suitability/
+overflow gates remain deferred.
 
 ### Task 2: Encode event geometry and per-demo order
 
@@ -202,9 +228,25 @@ phase if an FG fails and request a scoped protocol decision.
 
 ## Execution evidence
 
-- Documentation drafting: this plan specifies future work only.
-- Component RED/GREEN commands: **NOT RUN** — runtime/test files are not implemented.
-- L1 model assertions: **NOT RUN** — future installed supported environment required.
-- L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
-- L3/L4, collection and training: **NOT RUN** — separate resource authorization required.
-- Remaining risk: Observable segmentation need not recover symbolic interactions; window validity and semantic mapping are empirical.
+- Environment: repository `.venv/bin/python`, CPython 3.10.20, editable
+  no-dependency install of the current checkout; cwd repository root.
+- Initial RED: `.venv/bin/python -B -m unittest discover -s tests -p
+  'test_event_memory.py' -v` — **FAIL**, 9 selected/executed, 9 expected
+  `ModuleNotFoundError` errors for the absent planned module, 0 skips.
+- GREEN: the same command — **PASS**, 9 selected, 9 executed/passed, 0
+  failures/errors/skips. Fixtures cover validation-only ownership, command
+  independence, exact injected hashes, debounce, cumulative strict motion/time
+  thresholds, canonical short/cap merging, protected boundaries, and overflow.
+- Related L1 regressions: `test_method_contracts.py` **PASS** 17/17,
+  `test_method_config.py` **PASS** 24/24, `test_episode_data.py` **PASS** 13/13,
+  and `test_architecture.py` **PASS** 3/3; all had 0 skips.
+- L0: `.venv/bin/python -B scripts/validate_fast.py` and `.venv/bin/python -B -S
+  scripts/validate_fast.py` — **FAIL** overall. At this run both variants passed
+  Python syntax, static harness boundary, and 19/19 harness self-tests with 0 skips;
+  the only failures were the same five pre-existing missing evidence-log links
+  under `docs/experiments/vv19-validation`. No evidence file/link was changed.
+- L2/C1–C5: **NOT RUN** by this task — mandatory final integration acceptance
+  remains outstanding.
+- L3/L4, simulator, collection and training: **NOT RUN** — outside authorized scope.
+- Remaining risk: Observable segmentation need not recover symbolic interactions;
+  real-demo overflow/suitability and native window validity remain empirical.
