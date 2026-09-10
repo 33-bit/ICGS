@@ -1,8 +1,12 @@
 # Planned ICGS contracts
 
-Status: PR/AD target plus explicitly marked IDs; active P10 search runtime implemented with deterministic fixtures (`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`). None of the other planned types below exists
-yet unless called EI. See the [native contract](../components/policy-data-contract.md)
-for unchanged installed behavior and the [method index](README.md) for authority.
+Status: PR/AD target plus explicitly marked IDs. Runtime implementation now
+includes P05 `EventMemory`/`MethodContext` and the active P10 search modules with
+deterministic fixtures (`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`).
+For every other entry, consult its owning active plan rather than inferring runtime
+availability from this inventory. See the
+[native contract](../components/policy-data-contract.md) for unchanged installed
+behavior and the [method index](README.md) for authority.
 
 ## Online information and frame/time contract
 
@@ -57,10 +61,10 @@ tensors. Shared immutable content uses non-writeable owned backing.
 | `TimedObservation` | existing Observation, boundary index, simulator timestamp, measured wall timestamp, sensor-profile ID | contracts |
 | `ExecutedTransition` | before/after TimedObservation, TimedCommand, achieved duration, physics substeps, controller status; no oracle labels | contracts |
 | `PhysicalState` | `X [B,128,256]`, `x [B,128,3]`, `anchor_valid [B,128]`, `p [B,13]`, `memory [B,2,256]`, `T_w_e [B,4,4]`, `grip [B,1]`, cached world cloud/mask, boundary, encoder/physical-memory lineage, origin real/imagined | state |
-| `SegmentRef` | demo content hash, boundary indices a,b, kind interaction/start/end, valid action-window flag; indices into immutable raw data | contracts |
-| `EventMemory` | `tokens [B,Lc,256]`, `valid [B,Lc]`, SegmentRef sequence, demo-content/encoder/segmentation lineage | state |
+| `SegmentRef` | demo content hash, boundary indices a,b, kind interaction/start/end, structural action-window eligibility; indices into immutable raw data | contracts |
+| `EventMemory` | `tokens [B,Lc,256]`, `valid [B,Lc]`, exactly aligned optional SegmentRefs `[B,Lc]`, ordered raw-demo hashes and per-batch demonstration-representation fingerprints, plus shared encoder/segmentation lineage | state |
 | `TaskState` | `r [B,256]`, `alpha [B,Lc+1]` (last null), rho/nu/eligible `[B,Lc]`, boundary, context/tracker lineage | state |
-| `MethodContext` | immutable raw demos + EventMemory + separately owned native full/window PreparedContexts, reference ID; no task state | state |
+| `MethodContext` | online-B=1 immutable raw demos + EventMemory + injected, separately owned native full/window PreparedContexts and derived native-window validity, reference ID; no task state | state |
 | `PhysicalPrediction` | next PhysicalState, grip logits `[B,1]`, head ID; contains no context/task output | contracts |
 | `TerminalProbabilities` | success/failure/continue `[B,3]`, finite nonnegative sum 1, event-temperature artifact ID | contracts |
 | `EvaluationOutput` | value/completion/progress logits, calibrated V/S and temperatures ID; V(H=0)=0 | contracts |
@@ -74,6 +78,17 @@ and replay capabilities live in data/environment/benchmark owners and join by ID
 Context hash changes invalidate TaskState; physical state remains reusable only
 when its own causal/encoder lineage is identical. A context swap recomputes q by
 replaying the same physical history, not by changing only M_C at the final step.
+`SegmentRef.valid_action_window` is only structural eligibility. Final native
+window validity is derived as event-valid AND structurally eligible AND an injected
+native window exists; a structurally eligible interaction may remain invalid when
+P06 cannot materialize the native waypoint budget. It is never an independent
+caller-authored mask.
+
+An EventMemory fingerprint identifies ordered demonstrations and their encoded
+representation lineage. It is distinct from `reference_id`: the latter identifies
+the frozen reference policy's broader behavioral lineage, including its separately
+owned configuration/artifact/protocol inputs. Changing demo order changes provenance
+even though the event model remains permutation-compatible.
 
 ## Planned Python interfaces
 

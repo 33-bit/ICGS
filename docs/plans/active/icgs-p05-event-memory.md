@@ -12,8 +12,9 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — P05 Tasks 1–2 COMPLETE; P05 remains PARTIAL because Task 3 and
-measured feasibility gates are NOT IMPLEMENTED**. This document is a category C
+Status: **ACTIVE — P05 Tasks 1–2 and Task 3A COMPLETE; P05 remains PARTIAL because
+raw-demo tensor orchestration, native-window construction/session validation,
+routing, and measured feasibility gates are NOT IMPLEMENTED**. This document is a category C
 component of the approved research migration; it does not authorize simulator,
 collection, or training workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
@@ -59,7 +60,7 @@ evidence; this addendum does not certify that the component consumes every new f
 - Create: `src/icgs/state/method_context.py` — EventMemory and MethodContext.
 - Test: `tests/test_event_memory.py`.
 
-Public capability boundary (planned; not currently importable):
+Public capability boundary (partially implemented):
 
 ```python
 segment_demo(raw_demo, segmentation_config) -> tuple[SegmentRef, ...]
@@ -67,7 +68,14 @@ encode_events(raw_demos, segments) -> EventMemory
 MethodContext(raw_demos, events, native_full, native_windows, reference_id)
 ```
 
-SegmentRef stores content hash,a,b,kind and valid action-window flag. At most30 interaction events+start/end per demo; overflow is explicit. No demo-ID embedding or global concatenation-index embedding; context hash binds raw data, preprocessing, segmentation and weights.
+`segment_demo`, pure `build_event_memory`, `EventMemory`, and `MethodContext` are
+implemented. P13 still owns the public `encode_events` orchestration facade; it is
+not implemented by this plan.
+
+SegmentRef stores content hash,a,b,kind and structural action-window eligibility.
+At most 30 interaction events plus start/end per demo; overflow is explicit. No demo-ID
+embedding or global concatenation-index embedding; context hash binds raw data,
+preprocessing, segmentation and weights.
 
 ### Task 1: Deterministic motion/grip boundaries and protected merges
 
@@ -127,8 +135,8 @@ indices into that sequence and every reference preserves the injected hash.
 
 Task 1 status: **COMPLETE** — deterministic measured-state segmentation and
 synthetic contract evidence are implemented. Overall P05 remains **PARTIAL**:
-Task 3 EventMemory/MethodContext and measured suitability/overflow gates remain
-deferred.
+raw-demo tensor orchestration, native-window construction/session validation,
+routing, and measured suitability/overflow gates remain deferred.
 
 ### Task 2: Encode event geometry and per-demo order
 
@@ -233,20 +241,44 @@ complete dynamic dependency proof.
 - [x] **Step 5 — Review:** Inspected the exact source/test diff, explicit config
   propagation, gradient finiteness, forbidden owner names, padding sanitization,
   and `git diff --check`. No native IP, Task 3, simulator, collection, routing, or
-  training owner was changed. No commit was made.
+  training owner was changed. Committed as `37cca4c feat(events): add masked event
+  encoder`.
 
-Task 2 status: **Task 2 tensor encoder — COMPLETE; public
-`encode_events`/`EventMemory` composition — deferred to Task 3.** P05 remains
-PARTIAL until Task 3 and the required measured feasibility gates are complete.
+Task 2 status: **Task 2 tensor encoder — COMPLETE.** Task 3A now owns pure
+`EventEncoding` to `EventMemory` composition; public `encode_events` orchestration
+remains deferred to P13. P05 remains PARTIAL until the remaining integration owners
+and required measured feasibility gates are complete.
 
-### Task 3: Owned context, lineage and native windows remain distinct
+### Task 3A: State ownership and lineage remain distinct
 
 **Files:** Create `src/icgs/state/method_context.py`.
 **Test owner:** `tests/test_event_memory.py`.
-**Consumes / produces:** Produces `context_fingerprint(raw_hashes, encoder_id, segmentation_id)` and immutable MethodContext ownership.
+**Consumes / produces:** Produces
+`context_fingerprint(raw_hashes, encoder_id, segmentation_id)`, pure
+`build_event_memory(encoding, segment_refs, raw_hashes, encoder_id,
+segmentation_id)`, batched `EventMemory`, and online-B=1 `MethodContext`
+ownership. P13 owns raw-demo tensorization/orchestration behind the public
+`encode_events` facade. P06 owns native-window construction, routing and native
+session compatibility; this task only stores already prepared contexts.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
-  `unittest.TestCase` method in the test owner, with the shown imports.
+**Accepted boundary record:** EventMemory aligns refs as an exact nested `[B,L]`
+tuple and ordered raw hashes as `[B,D]`. It clones tokens without detaching their
+autograd graph, clones validity, validates finite tokens and exact-zero invalid
+rows, and computes one domain-separated fingerprint per batch row. Fingerprints
+are derived, never caller input. Within each row, raw hashes are unique and every
+declared hash owns one nonempty contiguous valid-ref block; those blocks occur in
+exactly the declared raw-hash order. MethodContext requires EventMemory B=1, an exact
+ordered raw-demo hash match, one mandatory injected full `PreparedContext`, and an
+injected `PreparedContext | None` tuple of length L. It stores these objects
+unchanged, rejects object or mutable-buffer aliases, and derives
+`native_window_valid`; it never branches, copies, prepares, mutates or infers
+D1/D2 owner compatibility. A structurally eligible interaction with no materialized
+window is valid state with derived false. No TaskState, router, artifact IO,
+calibration, simulator or model orchestration enters this module.
+
+- [x] **Step 1 — RED:** Add focused fingerprint, batched alignment/autograd,
+  ownership, alias and derived-window assertions to the test owner, including the
+  following basic identity check.
 
 ```python
 from icgs.state.method_context import context_fingerprint
@@ -256,10 +288,12 @@ self.assertNotEqual(a, b)
 self.assertEqual(a, context_fingerprint(('demo-a',), 'encoder-a', 'segments-a'))
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_event_memory.py' -v`.
-  Expect the new test to fail because its new implementation is absent or violates
-  the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 2 — Verify RED:** `.venv/bin/python -B -m unittest discover -s tests
+  -p 'test_event_memory.py' -v` selected/executed 25 tests with 0 skips: all 18
+  retained Task 1–2 tests passed and all 7 new Task 3A tests produced the expected
+  missing-`icgs.state.method_context` errors. Test collection and installed
+  dependencies succeeded; no unrelated failure was counted as RED proof.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
 payload = dict(raw_hashes=tuple(raw_hashes), encoder_id=encoder_id,
@@ -267,12 +301,34 @@ payload = dict(raw_hashes=tuple(raw_hashes), encoder_id=encoder_id,
 return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 ```
 
-Copy raw numeric arrays into non-writeable owned backing; keep mutable native PreparedContexts separately owner-bound. Store event validity, token/SegmentRef correspondence and native window validity. Context has no TaskState; stale task caches reject and context swap replays full physical history.
+Use canonical JSON with domain `icgs.event-memory`, schema 1, ordered raw hashes,
+opaque injected encoder lineage and segmentation lineage, then SHA-256. Build
+EventMemory from `EventEncoding` without detaching. Require `valid=True` exactly
+when the aligned ref is non-None, every ref hash to belong to that row's raw hashes,
+every declared raw hash to be represented exactly once at the block level, and
+those unique demo blocks to follow declared order. Invalid token rows must be
+finite exact zero rather than being sanitized.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_event_memory.py' -v`.
-  Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+MethodContext stores existing immutable `TimedDemoInput` records and exact injected
+PreparedContext objects. Require `len(native_windows) == L`; any non-None window
+must align with a valid structurally eligible interaction. None is permitted for
+such an interaction and derives false. Reject aliases among full/windows and their
+mutable embeddings/positions; do not enforce owners equal because P06/P13 own D1/D2
+session validation. Full context is mandatory. Context has no TaskState; context
+swap replay remains P06.
+
+- [x] **Step 4 — Verify GREEN:** The supported `.venv` command passed all 25
+  selected/executed tests with 0 failures/errors/skips. All 18 retained Task 1–2
+  tests remained green.
+- [x] **Step 5 — Review:** Inspected the exact source/test/documentation diff,
+  ownership and source-boundary guards, `git diff --check`, focused compilation,
+  related regressions, and both L0 variants. No P06/P13 owner, native IP, simulator,
+  collection, preprocessing, or training path was changed. No commit was made.
+
+Task 3A completion wording: **Task 3A state/lineage ownership — COMPLETE; raw-demo
+tensor orchestration, native-window construction/session validation, routing and
+MethodRuntime composition — deferred.** P05 remains PARTIAL until those owners and
+the required measured feasibility gates are complete.
 
 ## Acceptance, resource limits and evidence
 
@@ -321,20 +377,38 @@ phase if an FG fails and request a scoped protocol decision.
   allowed poisoned padding, exact mask zeroing, valid-row dtype/index/order and
   landmark guards, inclusive segment pooling, explicit configuration, generic
   non-geometric attention, finite gradients, and demo-block permutation behavior.
+- Task 3A RED: the same command after adding the final ownership tests — **FAIL as
+  expected**, 25 selected/executed, 18 retained Task 1–2 tests passed and all 7 new
+  tests errored only because `icgs.state.method_context` did not yet exist; 0 skips.
+- Task 3A GREEN: the same command — **PASS**, 25 selected/executed/passed, 0
+  failures/errors/skips. One preceding GREEN attempt passed 24 tests and failed one
+  assertion because the diagnostic capitalization did not match its regex; the
+  runtime rejection itself was correct, the diagnostic was clarified, and the
+  complete suite then passed.
+- Task 3A lineage refinement RED: after adding unique/completeness/order coverage,
+  the same command selected/executed 29 tests with 0 skips: 25 passed and exactly
+  the four new duplicate, missing, reordered and split demo-lineage cases failed
+  because the runtime did not yet reject them. The added valid-row nonfinite case
+  already passed and confirmed the existing finiteness guard.
+- Task 3A lineage refinement GREEN: the same command — **PASS**, 29
+  selected/executed/passed, 0 failures/errors/skips.
 - Related L1 regressions: `test_method_contracts.py` **PASS** 17/17,
   `test_method_config.py` **PASS** 24/24, `test_physical_geometry.py` **PASS**
   20/20, `test_episode_data.py` **PASS** 13/13, and `test_architecture.py`
-  **PASS** 3/3; all had 0 skips.
+  **PASS** 3/3, plus `test_policy.py` **PASS** 6/6; all had 0 skips.
 - L0: `.venv/bin/python -B scripts/validate_fast.py` and `.venv/bin/python -B -S
   scripts/validate_fast.py` — **FAIL** overall. At this run both variants passed
   Python syntax, static harness boundary, and 19/19 harness self-tests with 0 skips;
   the only failures were the same five pre-existing missing evidence-log links
   under `docs/experiments/vv19-validation`. Both variants were rechecked after
-  the Task 2 RED additions with the same result. No evidence file/link was changed.
+  the Task 3A implementation with the same result. A newly introduced Markdown
+  reference ambiguity was found and fixed before this final result. No evidence
+  file/link was changed.
 - L2/C1–C5: **NOT RUN** by this task — mandatory final integration acceptance
   remains outstanding.
 - L3/L4, simulator, collection and training: **NOT RUN** — outside authorized scope.
 - Remaining risk: Observable segmentation need not recover symbolic interactions;
   real-demo overflow/suitability and native window validity remain empirical.
-  Task 2 is synthetic CPU evidence only; public event-memory composition, GPU or
+  Tasks 2–3A have synthetic CPU evidence only; public raw-demo tensorization,
+  `encode_events` orchestration, native-window/session construction, GPU or
   mixed-precision numerical behavior, and measured demonstrations remain untested.

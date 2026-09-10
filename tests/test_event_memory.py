@@ -1,3 +1,5 @@
+import hashlib
+import json
 import math
 import inspect
 import unittest
@@ -588,6 +590,393 @@ class EventEncoderContractTests(unittest.TestCase):
         torch.testing.assert_close(
             permuted.tokens.mean(dim=1), original.tokens.mean(dim=1), rtol=1e-5, atol=1e-5
         )
+
+
+class EventMemoryOwnershipTests(unittest.TestCase):
+    @staticmethod
+    def _memory_inputs(batch=1, *, requires_grad=False):
+        from icgs.contracts.method import SegmentRef
+        from icgs.models.encoders.event import EventEncoding
+
+        valid = torch.tensor([[True, True, True, False]] * batch, dtype=torch.bool)
+        source = torch.arange(batch * 4 * 256, dtype=torch.float32).reshape(
+            batch, 4, 256
+        ) / 1000.0
+        source.requires_grad_(requires_grad)
+        tokens = torch.where(valid[..., None], source, torch.zeros_like(source))
+        raw_hashes = tuple((f"demo-{row}",) for row in range(batch))
+        refs = tuple(
+            (
+                SegmentRef(raw_hashes[row][0], 0, 0, "start", False),
+                SegmentRef(raw_hashes[row][0], 0, 1, "interaction", True),
+                SegmentRef(raw_hashes[row][0], 1, 1, "end", False),
+                None,
+            )
+            for row in range(batch)
+        )
+        return EventEncoding(tokens, valid), refs, raw_hashes, source
+
+    @staticmethod
+    def _raw_demo(content_hash):
+        from icgs.data.preprocessing.events import TimedDemoInput
+
+        return TimedDemoInput(EventSegmentationTests._transitions([0.0, 0.0]), content_hash)
+
+    @staticmethod
+    def _prepared(name, *, owner=None, embeddings=None, positions=None):
+        from icgs.state.context_cache import PreparedContext
+
+        return PreparedContext(
+            [{"name": name}],
+            object() if owner is None else owner,
+            torch.tensor([float(len(name))]) if embeddings is None else embeddings,
+            torch.tensor([float(len(name) + 1)]) if positions is None else positions,
+            source_id=name,
+        )
+
+    @staticmethod
+    def _lineage_inputs(ref_hashes, raw_hashes):
+        from icgs.contracts.method import SegmentRef
+        from icgs.models.encoders.event import EventEncoding
+
+        event_count = len(ref_hashes)
+        encoding = EventEncoding(
+            torch.ones(1, event_count, 256),
+            torch.ones(1, event_count, dtype=torch.bool),
+        )
+        refs = (tuple(
+            SegmentRef(content_hash, index, index + 1, "interaction", True)
+            for index, content_hash in enumerate(ref_hashes)
+        ),)
+        return encoding, refs, (tuple(raw_hashes),)
+
+    def test_context_fingerprint_is_canonical_domain_separated_and_order_sensitive(self):
+        from icgs.state.method_context import context_fingerprint
+
+        raw_hashes = ("demo-a", "demo-b")
+        expected_payload = {
+            "domain": "icgs.event-memory",
+            "schema": 1,
+            "raw_hashes": list(raw_hashes),
+            "encoder_id": "encoder-a",
+            "segmentation_id": "segments-a",
+        }
+        expected = hashlib.sha256(
+            json.dumps(
+                expected_payload,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        actual = context_fingerprint(raw_hashes, "encoder-a", "segments-a")
+        self.assertEqual(actual, expected)
+        self.assertEqual(actual, context_fingerprint(raw_hashes, "encoder-a", "segments-a"))
+        self.assertNotEqual(actual, context_fingerprint(tuple(reversed(raw_hashes)), "encoder-a", "segments-a"))
+        self.assertNotEqual(actual, context_fingerprint(raw_hashes, "encoder-b", "segments-a"))
+        self.assertNotEqual(actual, context_fingerprint(raw_hashes, "encoder-a", "segments-b"))
+
+        with self.assertRaisesRegex(TypeError, "raw_hashes.*tuple"):
+            context_fingerprint(list(raw_hashes), "encoder-a", "segments-a")
+        with self.assertRaisesRegex(ValueError, "raw_hashes.*nonempty"):
+            context_fingerprint((), "encoder-a", "segments-a")
+        for args, message in (
+            ((("",), "encoder-a", "segments-a"), "raw_hashes"),
+            ((raw_hashes, " ", "segments-a"), "encoder_id"),
+            ((raw_hashes, "encoder-a", " "), "segmentation_id"),
+        ):
+            with self.subTest(args=args):
+                with self.assertRaisesRegex(ValueError, message):
+                    context_fingerprint(*args)
+
+    def test_event_memory_is_batched_owned_and_keeps_autograd(self):
+        from icgs.state.method_context import build_event_memory, context_fingerprint
+
+        encoding, refs, raw_hashes, source = self._memory_inputs(batch=2, requires_grad=True)
+        memory = build_event_memory(
+            encoding,
+            refs,
+            raw_hashes,
+            "encoder-a",
+            "segments-a",
+        )
+        self.assertEqual(tuple(memory.tokens.shape), (2, 4, 256))
+        self.assertEqual(tuple(memory.valid.shape), (2, 4))
+        self.assertEqual(memory.refs, refs)
+        self.assertEqual(memory.raw_hashes, raw_hashes)
+        self.assertEqual(
+            memory.fingerprints,
+            tuple(
+                context_fingerprint(row, "encoder-a", "segments-a")
+                for row in raw_hashes
+            ),
+        )
+        self.assertIsNot(memory.tokens, encoding.tokens)
+        self.assertIsNot(memory.valid, encoding.valid)
+        self.assertNotEqual(memory.tokens.data_ptr(), encoding.tokens.data_ptr())
+        self.assertNotEqual(memory.valid.data_ptr(), encoding.valid.data_ptr())
+
+        memory.tokens.sum().backward()
+        self.assertIsNotNone(source.grad)
+        self.assertTrue(torch.isfinite(source.grad).all().item())
+        snapshot = memory.tokens.detach().clone()
+        with torch.no_grad():
+            encoding.tokens.add_(1000.0)
+            encoding.valid.zero_()
+        torch.testing.assert_close(memory.tokens, snapshot)
+        self.assertTrue(memory.valid.any().item())
+
+    def test_event_memory_rejects_invalid_alignment_hashes_and_padding(self):
+        from icgs.contracts.method import SegmentRef
+        from icgs.models.encoders.event import EventEncoding
+        from icgs.state.method_context import EventMemory, build_event_memory
+
+        encoding, refs, raw_hashes, _ = self._memory_inputs()
+        missing_ref = (tuple([None, *refs[0][1:]]),)
+        with self.assertRaisesRegex(ValueError, "valid.*ref|ref.*valid"):
+            build_event_memory(encoding, missing_ref, raw_hashes, "encoder-a", "segments-a")
+
+        padded_ref = (tuple([*refs[0][:3], refs[0][1]]),)
+        with self.assertRaisesRegex(ValueError, "padding|invalid.*ref|ref.*invalid"):
+            build_event_memory(encoding, padded_ref, raw_hashes, "encoder-a", "segments-a")
+
+        foreign = list(refs[0])
+        foreign[1] = SegmentRef("foreign", 0, 1, "interaction", True)
+        with self.assertRaisesRegex(ValueError, "hash|raw"):
+            build_event_memory(
+                encoding, (tuple(foreign),), raw_hashes, "encoder-a", "segments-a"
+            )
+
+        nonzero = encoding.tokens.clone()
+        nonzero[0, 3, 0] = 1.0
+        with self.assertRaisesRegex(ValueError, "invalid.*zero|padding.*zero"):
+            build_event_memory(
+                EventEncoding(nonzero, encoding.valid),
+                refs,
+                raw_hashes,
+                "encoder-a",
+                "segments-a",
+            )
+        nonfinite = encoding.tokens.clone()
+        nonfinite[0, 3, 0] = float("nan")
+        with self.assertRaisesRegex(ValueError, "finite"):
+            build_event_memory(
+                EventEncoding(nonfinite, encoding.valid),
+                refs,
+                raw_hashes,
+                "encoder-a",
+                "segments-a",
+            )
+        valid_nonfinite = encoding.tokens.clone()
+        valid_nonfinite[0, 1, 0] = float("inf")
+        with self.assertRaisesRegex(ValueError, "finite"):
+            build_event_memory(
+                EventEncoding(valid_nonfinite, encoding.valid),
+                refs,
+                raw_hashes,
+                "encoder-a",
+                "segments-a",
+            )
+        with self.assertRaisesRegex(ValueError, "batch|raw_hashes"):
+            build_event_memory(
+                encoding, refs, (raw_hashes[0], raw_hashes[0]), "encoder-a", "segments-a"
+            )
+        with self.assertRaises(TypeError):
+            EventMemory(
+                encoding.tokens,
+                encoding.valid,
+                refs,
+                raw_hashes,
+                "encoder-a",
+                "segments-a",
+                fingerprints=("caller-owned",),
+            )
+
+    def test_event_memory_rejects_duplicate_raw_hashes(self):
+        from icgs.state.method_context import build_event_memory
+
+        encoding, refs, raw_hashes = self._lineage_inputs(
+            ("demo-a", "demo-a"),
+            ("demo-a", "demo-a"),
+        )
+        with self.assertRaisesRegex(ValueError, "unique"):
+            build_event_memory(
+                encoding, refs, raw_hashes, "encoder-a", "segments-a"
+            )
+
+    def test_event_memory_rejects_declared_but_unrepresented_demo(self):
+        from icgs.state.method_context import build_event_memory
+
+        encoding, refs, raw_hashes = self._lineage_inputs(
+            ("demo-a", "demo-a"),
+            ("demo-a", "demo-b"),
+        )
+        with self.assertRaisesRegex(ValueError, "declared.*represented|represented.*declared"):
+            build_event_memory(
+                encoding, refs, raw_hashes, "encoder-a", "segments-a"
+            )
+
+    def test_event_memory_rejects_demo_block_order_mismatch(self):
+        from icgs.state.method_context import build_event_memory
+
+        encoding, refs, raw_hashes = self._lineage_inputs(
+            ("demo-b", "demo-b", "demo-a", "demo-a"),
+            ("demo-a", "demo-b"),
+        )
+        with self.assertRaisesRegex(ValueError, "block.*order|order.*block"):
+            build_event_memory(
+                encoding, refs, raw_hashes, "encoder-a", "segments-a"
+            )
+
+    def test_event_memory_rejects_split_demo_blocks(self):
+        from icgs.state.method_context import build_event_memory
+
+        encoding, refs, raw_hashes = self._lineage_inputs(
+            ("demo-a", "demo-b", "demo-a", "demo-b"),
+            ("demo-a", "demo-b"),
+        )
+        with self.assertRaisesRegex(ValueError, "block.*order|order.*block"):
+            build_event_memory(
+                encoding, refs, raw_hashes, "encoder-a", "segments-a"
+            )
+
+    def test_method_context_derives_window_validity_and_preserves_injected_objects(self):
+        from icgs.state.method_context import MethodContext, build_event_memory
+
+        encoding, refs, raw_hashes, _ = self._memory_inputs()
+        events = build_event_memory(encoding, refs, raw_hashes, "encoder-a", "segments-a")
+        raw_demos = (self._raw_demo("demo-0"),)
+        full = self._prepared("full", owner=object())
+        window = self._prepared("window", owner=object())
+        windows = (None, window, None, None)
+        full_buffers = (full.embeddings, full.positions)
+        window_buffers = (window.embeddings, window.positions)
+
+        context = MethodContext(raw_demos, events, full, windows, "reference-a")
+        self.assertIsNot(full.owner, window.owner)
+        self.assertIs(context.raw_demos, raw_demos)
+        self.assertIs(context.events, events)
+        self.assertIs(context.native_full, full)
+        self.assertIs(context.native_windows, windows)
+        self.assertIs(context.native_windows[1], window)
+        self.assertIs(full.embeddings, full_buffers[0])
+        self.assertIs(full.positions, full_buffers[1])
+        self.assertIs(window.embeddings, window_buffers[0])
+        self.assertIs(window.positions, window_buffers[1])
+        torch.testing.assert_close(
+            context.native_window_valid,
+            torch.tensor([[False, True, False, False]], dtype=torch.bool),
+        )
+
+        absent = MethodContext(raw_demos, events, full, (None,) * 4, "reference-a")
+        self.assertFalse(absent.native_window_valid.any().item())
+        self.assertNotIn("native_window_valid", MethodContext.__dataclass_fields__)
+        other_reference = MethodContext(raw_demos, events, full, windows, "reference-b")
+        self.assertEqual(other_reference.events.fingerprints, context.events.fingerprints)
+
+    def test_method_context_rejects_window_placement_length_and_missing_full(self):
+        from icgs.state.method_context import MethodContext, build_event_memory
+
+        encoding, refs, raw_hashes, _ = self._memory_inputs()
+        events = build_event_memory(encoding, refs, raw_hashes, "encoder-a", "segments-a")
+        demos = (self._raw_demo("demo-0"),)
+        full = self._prepared("full")
+        window = self._prepared("window")
+        with self.assertRaisesRegex(ValueError, "native_windows.*L|length"):
+            MethodContext(demos, events, full, (None,) * 3, "reference-a")
+        with self.assertRaisesRegex(ValueError, "structural|interaction|event"):
+            MethodContext(demos, events, full, (window, None, None, None), "reference-a")
+        with self.assertRaisesRegex(ValueError, "structural|interaction|event|padding"):
+            MethodContext(demos, events, full, (None, None, None, window), "reference-a")
+        with self.assertRaisesRegex(TypeError, "native_full|PreparedContext"):
+            MethodContext(demos, events, None, (None,) * 4, "reference-a")
+
+    def test_method_context_rejects_context_and_mutable_buffer_aliases(self):
+        from icgs.state.method_context import MethodContext, build_event_memory
+
+        encoding, refs, raw_hashes, _ = self._memory_inputs()
+        events = build_event_memory(encoding, refs, raw_hashes, "encoder-a", "segments-a")
+        demos = (self._raw_demo("demo-0"),)
+        full = self._prepared("full")
+        with self.assertRaisesRegex(ValueError, "alias|distinct"):
+            MethodContext(demos, events, full, (None, full, None, None), "reference-a")
+
+        shared = torch.ones(2)
+        full_shared = self._prepared("full-shared", embeddings=shared)
+        window_shared = self._prepared("window-shared", embeddings=shared)
+        with self.assertRaisesRegex(ValueError, "alias|buffer"):
+            MethodContext(
+                demos,
+                events,
+                full_shared,
+                (None, window_shared, None, None),
+                "reference-a",
+            )
+
+        positions = torch.arange(4.0)
+        full_view = self._prepared("full-view", positions=positions[:2])
+        window_view = self._prepared("window-view", positions=positions[1:3])
+        with self.assertRaisesRegex(ValueError, "alias|buffer"):
+            MethodContext(
+                demos,
+                events,
+                full_view,
+                (None, window_view, None, None),
+                "reference-a",
+            )
+
+    def test_method_context_requires_online_batch_and_exact_raw_demo_order(self):
+        import icgs.state.method_context as context_module
+        from icgs.contracts.method import SegmentRef
+        from icgs.models.encoders.event import EventEncoding
+        from icgs.state.method_context import MethodContext, build_event_memory
+
+        batched_encoding, batched_refs, batched_hashes, _ = self._memory_inputs(batch=2)
+        batched = build_event_memory(
+            batched_encoding,
+            batched_refs,
+            batched_hashes,
+            "encoder-a",
+            "segments-a",
+        )
+        with self.assertRaisesRegex(ValueError, "B=1|batch"):
+            MethodContext(
+                (self._raw_demo("demo-0"),),
+                batched,
+                self._prepared("full-batched"),
+                (None,) * 4,
+                "reference-a",
+            )
+
+        valid = torch.ones(1, 6, dtype=torch.bool)
+        tokens = torch.ones(1, 6, 256)
+        hashes = (("demo-a", "demo-b"),)
+        refs = ((
+            SegmentRef("demo-a", 0, 0, "start", False),
+            SegmentRef("demo-a", 0, 1, "interaction", True),
+            SegmentRef("demo-a", 1, 1, "end", False),
+            SegmentRef("demo-b", 0, 0, "start", False),
+            SegmentRef("demo-b", 0, 1, "interaction", True),
+            SegmentRef("demo-b", 1, 1, "end", False),
+        ),)
+        events = build_event_memory(
+            EventEncoding(tokens, valid), refs, hashes, "encoder-a", "segments-a"
+        )
+        full = self._prepared("full-ordered")
+        demos = (self._raw_demo("demo-a"), self._raw_demo("demo-b"))
+        MethodContext(demos, events, full, (None,) * 6, "reference-a")
+        with self.assertRaisesRegex(ValueError, "order|raw.*hash"):
+            MethodContext(tuple(reversed(demos)), events, full, (None,) * 6, "reference-a")
+
+        source = inspect.getsource(context_module)
+        for forbidden in (
+            "TaskState",
+            "InstantPolicy",
+            "router",
+            "branch_copy(",
+            "deepcopy(",
+            ".prepare(",
+        ):
+            self.assertNotIn(forbidden, source)
 
 
 if __name__ == "__main__":
