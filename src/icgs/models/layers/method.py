@@ -40,6 +40,104 @@ def _activation(name: str) -> nn.Module:
     raise ValueError(f"method attention supports only GELU, got {name!r}")
 
 
+class MaskedCrossAttentionBlock(nn.Module):
+    """Generic masked pre-LN query-to-key/value attention."""
+
+    def __init__(self, *, width: int, neural_config: NeuralConfig):
+        super().__init__()
+        if isinstance(width, bool) or not isinstance(width, int) or width <= 0:
+            raise ValueError("width must be a positive integer")
+        if not isinstance(neural_config, NeuralConfig):
+            raise TypeError("neural_config must be an explicit NeuralConfig")
+        heads = neural_config.attention_heads
+        if heads <= 0 or width % heads:
+            raise ValueError("neural attention heads must divide width")
+        if not neural_config.pre_norm:
+            raise ValueError("method attention requires pre_norm=True")
+
+        self.width = width
+        self.norm_query = nn.LayerNorm(width, eps=neural_config.layer_norm_eps)
+        self.norm_keys = nn.LayerNorm(width, eps=neural_config.layer_norm_eps)
+        self.attention = nn.MultiheadAttention(
+            width,
+            heads,
+            dropout=neural_config.dropout,
+            batch_first=True,
+        )
+        self.dropout_attention = nn.Dropout(neural_config.dropout)
+        self.norm_feedforward = nn.LayerNorm(width, eps=neural_config.layer_norm_eps)
+        self.feedforward = nn.Sequential(
+            nn.Linear(width, neural_config.ffn_width),
+            _activation(neural_config.activation),
+            nn.Linear(neural_config.ffn_width, width),
+        )
+        self.dropout_feedforward = nn.Dropout(neural_config.dropout)
+
+    def forward(
+        self,
+        query: Tensor,
+        query_valid: Tensor,
+        keys: Tensor,
+        key_valid: Tensor,
+    ) -> Tensor:
+        if (
+            not torch.is_tensor(query)
+            or query.ndim != 3
+            or query.shape[-1] != self.width
+            or query.shape[1] <= 0
+        ):
+            raise ValueError(f"query must have nonempty shape [B,Q,{self.width}]")
+        if (
+            not torch.is_tensor(keys)
+            or keys.ndim != 3
+            or keys.shape[0] != query.shape[0]
+            or keys.shape[-1] != self.width
+            or keys.shape[1] <= 0
+        ):
+            raise ValueError(f"keys must have nonempty shape [B,K,{self.width}]")
+        if not query.is_floating_point() or not keys.is_floating_point():
+            raise TypeError("query and keys must use floating dtypes")
+        if query.dtype != keys.dtype or query.device != keys.device:
+            raise ValueError("query and keys must share dtype and device")
+        if not torch.is_tensor(query_valid) or query_valid.shape != query.shape[:2]:
+            raise ValueError("query_valid must have shape [B,Q]")
+        if not torch.is_tensor(key_valid) or key_valid.shape != keys.shape[:2]:
+            raise ValueError("key_valid must have shape [B,K]")
+        if query_valid.dtype != torch.bool or key_valid.dtype != torch.bool:
+            raise TypeError("query_valid and key_valid must use torch.bool dtype")
+        if query_valid.device != query.device or key_valid.device != keys.device:
+            raise ValueError("attention masks must share their tensor device")
+        if bool((~key_valid).all(dim=1).any().item()):
+            raise ValueError("masked cross-attention requires at least one valid key")
+
+        expanded_query_valid = query_valid[..., None].expand_as(query)
+        expanded_key_valid = key_valid[..., None].expand_as(keys)
+        if not bool(torch.isfinite(query.masked_select(expanded_query_valid)).all().item()):
+            raise ValueError("valid query values must contain only finite values")
+        if not bool(torch.isfinite(keys.masked_select(expanded_key_valid)).all().item()):
+            raise ValueError("valid key values must contain only finite values")
+
+        query_mask = query_valid[..., None]
+        key_mask = key_valid[..., None]
+        query = torch.where(query_mask, query, torch.zeros_like(query))
+        keys = torch.where(key_mask, keys, torch.zeros_like(keys))
+        normalized_query = self.norm_query(query)
+        normalized_keys = self.norm_keys(keys)
+        attended, _ = self.attention(
+            normalized_query,
+            normalized_keys,
+            normalized_keys,
+            key_padding_mask=~key_valid,
+            need_weights=False,
+        )
+        query = query + self.dropout_attention(attended)
+        query = torch.where(query_mask, query, torch.zeros_like(query))
+
+        feedforward = self.feedforward(self.norm_feedforward(query))
+        query = query + self.dropout_feedforward(feedforward)
+        return torch.where(query_mask, query, torch.zeros_like(query))
+
+
 class MaskedSelfAttentionBlock(nn.Module):
     """Generic masked pre-LN attention without spatial geometry bias."""
 
@@ -195,4 +293,9 @@ class GeometryBlock(nn.Module):
         return torch.where(row_mask, values, torch.zeros_like(values))
 
 
-__all__ = ["GeometryBlock", "MaskedSelfAttentionBlock", "masked_mean"]
+__all__ = [
+    "GeometryBlock",
+    "MaskedCrossAttentionBlock",
+    "MaskedSelfAttentionBlock",
+    "masked_mean",
+]
