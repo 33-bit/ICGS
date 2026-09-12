@@ -12,8 +12,9 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — Task 1A tensor tracker COMPLETE; P06 remains PARTIAL because
-TaskState, objectives, routing and native sessions are NOT IMPLEMENTED**. This
+Status: **ACTIVE — Task 1A tensor tracker and Task 1B owned TaskState COMPLETE;
+P06 remains PARTIAL because objectives, routing and native sessions are NOT
+IMPLEMENTED**. This
 document is a category C component of the approved research migration; it does not
 authorize simulator or training workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
@@ -154,11 +155,45 @@ supervised objectives, routing and native sessions — deferred.** P06 remains P
 
 **Files:** Create `src/icgs/state/task.py`.
 **Test owner:** `tests/test_task_router.py`.
-**Status:** Deferred. Convert transient logits into masked probabilities, own `r`,
-alignment including null, rho/nu/eligibility and exact tracker/context/boundary
-lineage. Reset initializes `r=0`; each real boundary updates once. A context change
-requires explicit full-history replay by its orchestration owner rather than an
-in-place lineage swap.
+**Status:** COMPLETE. Convert transient logits into masked
+probabilities, own `r`, alignment including null, rho/nu/eligible and exact
+tracker/context/boundary lineage. Reset initializes `r=0`; each real boundary
+updates once. A context change requires explicit full-history replay by its
+orchestration owner rather than an in-place lineage swap.
+
+**Accepted boundary record:** `TaskState` owns cloned-but-not-detached tensors and
+contains no second event-valid mask. Its intrinsic validation covers compatible
+`[B,W]`, `[B,Lc+1]` and `[B,Lc]` shapes, finite probabilities in `[0,1]`,
+nonnegative alignment whose rows sum to one within a dtype-derived numerical
+tolerance, a nonnegative causal boundary, ordered context fingerprints and a
+tracker identifier. `build_task_state` alone validates the mask-dependent
+contract against `EventMemory.valid`, derives ordered context fingerprints from
+the event-memory owner, writes invalid event probabilities as exact zero and
+materializes the learned null/event probabilities from raw Task 1A logits.
+`rho`, `nu` and `eligible` remain independent; recovery and `rho=1, nu=0` are
+legal. `validate_task_update` requires unchanged B/W/L shape, event-memory
+fingerprints and tracker lineage followed by exactly one boundary. Context replay
+is deliberately deferred to orchestration.
+
+- [x] **Step 1 — RED:** Add focused allowed and forbidden fixtures for reset,
+  probability materialization, null fallback, intrinsic shapes/ranges, exact
+  padding zeros, derived lineage, tensor ownership/autograd, branch-copy isolation
+  and update continuity.
+- [x] **Step 2 — Verify RED:** Run `.venv/bin/python -B -m unittest discover -s
+  tests -p 'test_task_router.py' -v`; existing Task 1A tests must remain green and
+  every new Task 1B failure must identify only the absent planned module/surface.
+- [x] **Step 3 — GREEN:** Implement `TaskState`, `initial_task_memory`,
+  `build_task_state` and `validate_task_update` without orchestration, objectives,
+  routing or native-policy dependencies.
+- [x] **Step 4 — Verify GREEN:** Repeat the focused suite, related state/model
+  regressions, `py_compile`, `git diff --check`, and both L0 variants. Report
+  pre-existing documentation-link failures separately from new regressions.
+- [x] **Step 5 — Review:** Inspect the exact source/test/contract/plan diff and
+  leave Task 1C, router and native sessions deferred.
+
+Task 1B completion wording: **Task 1B owned TaskState — COMPLETE; supervised
+objectives, routing, replay orchestration and native sessions — deferred.** P06
+remains PARTIAL.
 
 ### Task 1C: Independently masked supervised objectives
 
@@ -244,12 +279,13 @@ Independently construct D1 and D2 native sessions from identical frozen weights 
 
 ## Acceptance, resource limits and evidence
 
-Task 1A L1 checks raw tensor features, explicit configuration, query/key masks,
-finite sentinels/zeros, full physical-token pooling, gradients and demo-block
-permutation. Later P06 L1 adds route probabilities, all-invalid fallback, window
-boundary counts, context replay and no mutation of native config. L2 FG one-demo
-verifies strict published load/inference for D1 and independent D2; capped L3 pilot
-measures stage-aware behavior before outcome collection.
+Task 1A/1B L1 checks raw tensor features, explicit configuration, query/key masks,
+finite sentinels/zeros, full physical-token pooling, gradients, demo-block
+permutation, owned task probabilities and causal/context lineage. Later P06 L1
+adds objectives, route probabilities, window boundary counts, context replay and
+no mutation of native config. L2 FG one-demo verifies strict published
+load/inference for D1 and independent D2; capped L3 pilot measures stage-aware
+behavior before outcome collection.
 
 - L0: `python3 -B scripts/validate_fast.py` and
   `python3 -B -S scripts/validate_fast.py`; syntax/links/boundaries only.
@@ -282,6 +318,20 @@ phase if an FG fails and request a scoped protocol decision.
   named the absent cross-attention export.
 - Task 1A GREEN: the same command after implementation and the final coverage
   refinement — **PASS**, 10 selected/executed/passed, 0 failures/errors/skips.
+- Task 1B RED: the same focused command — **FAIL as expected**, 23 selected and
+  executed: all 10 existing Task 1A tests passed and all 13 new Task 1B tests
+  raised only `ModuleNotFoundError` for the absent `icgs.state.task`; 0 skips.
+- Task 1B GREEN: the same command after implementation and final numerical guard
+  refinement — **PASS**, 23/23 selected/executed/passed, 0 failures/errors/skips.
+  Coverage includes allowed and forbidden mask/shape/lineage cases, exact padding
+  zeros, independent rho/nu/eligible, all-invalid null normalization, derived
+  fingerprints, storage ownership, branch copying, nonzero weighted-alignment
+  gradient, all three event-head gradient paths, and exact-zero padding gradients.
+- The first focused run after the gradient refinement passed 22/23 and exposed an
+  indexing error in the new assertion: an `[B,L]` mask was applied to `[B,L+1]`
+  alignment logits. Restricting that assertion to the event portion `[:, :-1]`
+  corrected the test harness; the subsequent focused run passed 23/23. No runtime
+  implementation changed during this correction.
 - One proposed `memory_slots=True` negative fixture failed inside the existing
   typed `TrackerConfig` constructor before reaching TaskTracker. It was removed as
   duplicate schema coverage and was not counted as Task 1A RED evidence.
@@ -289,15 +339,23 @@ phase if an FG fails and request a scoped protocol decision.
   `test_physical_memory.py` **PASS** 17/17, `test_method_config.py` **PASS** 24/24,
   `test_method_contracts.py` **PASS** 17/17, `test_architecture.py` **PASS** 3/3,
   and `test_policy.py` **PASS** 6/6; 96/96 total with 0 skips.
+- A noncanonical positional unittest invocation executed the first 90 related
+  assertions successfully, then failed to collect `test_policy.py` because its
+  sibling `test_composition` import was not on the discovery path. The canonical
+  `discover -s tests -p 'test_policy.py'` correction passed 6/6; the invocation
+  error is not counted as a runtime regression.
+- `.venv/bin/python -B -m py_compile src/icgs/state/task.py
+  tests/test_task_router.py` and `git diff --check` — **PASS**.
 - L0: `.venv/bin/python -B scripts/validate_fast.py` and `.venv/bin/python -B -S
-  scripts/validate_fast.py` — **FAIL** overall with no new failure versus `64402db`.
+  scripts/validate_fast.py` — **FAIL** overall with no new failure versus `73691a4`.
   Both variants passed Python syntax, static harness boundary, and 19/19 harness
   self-tests with 0 skips; the only failures remain the same five pre-existing
   missing evidence-log links under `docs/experiments/vv19-validation`.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, simulator, preprocessing, collection and training: **NOT RUN** — separate
   resource authorization required.
-- Remaining risk: Task 1A has synthetic CPU evidence only. Owned task state,
-  probability materialization, masked objectives, GPU/mixed-precision behavior,
-  context replay, routing, native sessions and measured reference support remain
-  unverified.
+- Remaining risk: Task 1A/1B have synthetic CPU/float32 evidence only. In
+  particular, the dtype-derived alpha normalization tolerance has not been
+  validated for float16/bfloat16. Masked objectives, GPU/mixed-precision behavior,
+  context replay orchestration, routing, native sessions and measured reference
+  support remain unverified.

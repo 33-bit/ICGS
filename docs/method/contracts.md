@@ -1,8 +1,9 @@
 # Planned ICGS contracts
 
 Status: PR/AD target plus explicitly marked IDs. Runtime implementation now
-includes P05 `EventMemory`/`MethodContext` and the active P10 search modules with
-deterministic fixtures (`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`).
+includes P05 `EventMemory`/`MethodContext`, P06 `TaskState`, and the active P10
+search modules with deterministic fixtures
+(`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`).
 For every other entry, consult its owning active plan rather than inferring runtime
 availability from this inventory. See the
 [native contract](../components/policy-data-contract.md) for unchanged installed
@@ -63,7 +64,7 @@ tensors. Shared immutable content uses non-writeable owned backing.
 | `PhysicalState` | `X [B,128,256]`, `x [B,128,3]`, `anchor_valid [B,128]`, `p [B,13]`, `memory [B,2,256]`, `T_w_e [B,4,4]`, `grip [B,1]`, cached world cloud/mask, boundary, encoder/physical-memory lineage, origin real/imagined | state |
 | `SegmentRef` | demo content hash, boundary indices a,b, kind interaction/start/end, structural action-window eligibility; indices into immutable raw data | contracts |
 | `EventMemory` | `tokens [B,Lc,256]`, `valid [B,Lc]`, exactly aligned optional SegmentRefs `[B,Lc]`, ordered raw-demo hashes and per-batch demonstration-representation fingerprints, plus shared encoder/segmentation lineage | state |
-| `TaskState` | `r [B,256]`, `alpha [B,Lc+1]` (last null), rho/nu/eligible `[B,Lc]`, boundary, context/tracker lineage | state |
+| `TaskState` | `r [B,W]`, `alpha [B,Lc+1]` (last null), rho/nu/eligible `[B,Lc]`, boundary, ordered context fingerprints and tracker lineage | state |
 | `MethodContext` | online-B=1 immutable raw demos + EventMemory + injected, separately owned native full/window PreparedContexts and derived native-window validity, reference ID; no task state | state |
 | `PhysicalPrediction` | next PhysicalState, grip logits `[B,1]`, head ID; contains no context/task output | contracts |
 | `TerminalProbabilities` | success/failure/continue `[B,3]`, finite nonnegative sum 1, event-temperature artifact ID | contracts |
