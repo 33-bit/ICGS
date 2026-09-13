@@ -12,9 +12,9 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — Task 1A tensor tracker and Task 1B owned TaskState COMPLETE;
-P06 remains PARTIAL because objectives, routing and native sessions are NOT
-IMPLEMENTED**. This
+Status: **ACTIVE — Task 1A tensor tracker, Task 1B owned TaskState and Task 1C
+masked objectives COMPLETE; P06 remains PARTIAL because routing and native
+sessions are NOT IMPLEMENTED**. This
 document is a category C component of the approved research migration; it does not
 authorize simulator or training workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
@@ -32,9 +32,13 @@ before runtime execution. Inspect Git state; preserve unrelated work and user as
 
 Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
 with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
-Consumed sections for this plan: **tracker, router, event, memory, neural, control, planning**.
+Consumed sections for this plan: **tracker, router, event, memory, neural, losses,
+control, planning**.
 
-Consume tracker layers, router mixture/epsilon/fallback/window settings and passed native sessions. Reference fingerprints include every behavior-affecting resolved section plus weights/protocol IDs. Do not put stopping or evaluator options into the reference fingerprint.
+Consume tracker layers, task-loss weights, router mixture/epsilon/fallback/window
+settings and passed native sessions. Reference fingerprints include every
+behavior-affecting resolved section plus weights/protocol IDs. Do not put stopping
+or evaluator options into the reference fingerprint.
 
 Use an explicitly resolved `cfg: MethodConfig` (or injected section) in implementation.
 Numeric shapes and test inputs below are baseline examples/compatibility assertions;
@@ -199,9 +203,45 @@ remains PARTIAL.
 
 **Files:** Create `src/icgs/algorithms/objectives/task.py`.
 **Test owner:** `tests/test_task_router.py`.
-**Status:** Deferred. Consume raw Task 1A logits and separate P02 alignment,
-rho/nu/eligibility targets plus validity masks. Free-space invalid `nu` must not mask
-valid eligibility; no privileged target enters TaskTracker or TaskState inference.
+**Status:** COMPLETE. Consume raw Task 1A logits and separate P02
+alignment, rho/nu/eligibility targets plus validity masks. Free-space invalid `nu`
+must not mask valid eligibility; no privileged target enters TaskTracker or
+TaskState inference.
+
+**Accepted boundary record:** `task_loss` consumes a caller-supplied soft alignment
+distribution `[B,Lc+1]`, with null last, and boolean rho/nu/eligibility targets
+`[B,Lc]`. It validates and uses a valid multi-support distribution exactly; it
+does not infer corresponding events, enforce uniform semantic mass, or tensorize
+P02 annotations. Valid alignment rows are finite, nonnegative, sum to one within
+a dtype-derived numerical guard and assign exact-zero mass to invalid event rows;
+masked alignment rows are the all-zero placeholder. Each auxiliary target uses an
+independent boolean supervision mask contained by `TaskEncoding.event_valid`, and
+every masked target uses the canonical false placeholder. Alignment CE and the
+three BCE-with-logits terms average their valid entries independently before the
+four explicit `MethodConfig.losses` weights are applied. An empty pool contributes
+a differentiable zero through its own logits. Alignment targets may use a different
+floating dtype from logits but every input tensor shares one device. The objective
+knows only tensors, `MethodConfig` and raw `TaskEncoding`; TaskState, event-memory
+lineage, data tensorization, routing, native policy and training orchestration are
+outside this task.
+
+- [x] **Step 1 — RED:** Add lazy-import tests for the exact four-term formula,
+  multi-support/null alignment, independent masks and denominators, canonical
+  placeholders, empty-pool zero, gradients and strict tensor validation.
+- [x] **Step 2 — Verify RED:** Run `.venv/bin/python -B -m unittest discover -s
+  tests -p 'test_task_router.py' -v`; all 23 Task 1A/1B tests must pass and every
+  new Task 1C test must fail only because the objective module is absent.
+- [x] **Step 3 — GREEN:** Implement the narrow objective and package export without
+  a target builder, TaskState conversion, dataset adapter, runner or router.
+- [x] **Step 4 — Verify GREEN:** Repeat the focused suite, P02/config/world-model
+  and existing P05/P06 regressions, `py_compile`, `git diff --check`, and both L0
+  variants. Record selected/executed/skipped counts and pre-existing link failures.
+- [x] **Step 5 — Review:** Inspect the exact source/test/plan diff and leave P02
+  task-view tensorization, Stage B training, routing and native sessions deferred.
+
+Task 1C completion wording: **Task 1C independently masked objectives — COMPLETE;
+P02 task-view tensorization, Stage B training integration, routing and native
+sessions — deferred.** P06 remains PARTIAL.
 
 ### Task 2: Valid windows and 50/50 routed mixture
 
@@ -279,11 +319,12 @@ Independently construct D1 and D2 native sessions from identical frozen weights 
 
 ## Acceptance, resource limits and evidence
 
-Task 1A/1B L1 checks raw tensor features, explicit configuration, query/key masks,
-finite sentinels/zeros, full physical-token pooling, gradients, demo-block
-permutation, owned task probabilities and causal/context lineage. Later P06 L1
-adds objectives, route probabilities, window boundary counts, context replay and
-no mutation of native config. L2 FG one-demo verifies strict published
+Task 1A/1B/1C L1 checks raw tensor features, explicit configuration, query/key
+masks, finite sentinels/zeros, full physical-token pooling, gradients, demo-block
+permutation, owned task probabilities, causal/context lineage and independently
+masked task objectives. Later P06 L1 adds route probabilities, window boundary
+counts, context replay and no mutation of native config. L2 FG one-demo verifies
+strict published
 load/inference for D1 and independent D2; capped L3 pilot measures stage-aware
 behavior before outcome collection.
 
@@ -332,6 +373,27 @@ phase if an FG fails and request a scoped protocol decision.
   alignment logits. Restricting that assertion to the event portion `[:, :-1]`
   corrected the test harness; the subsequent focused run passed 23/23. No runtime
   implementation changed during this correction.
+- Task 1C RED: the focused command selected/executed 31 tests — **FAIL as
+  expected**: all 23 Task 1A/1B tests passed and all 8 new Task 1C tests raised
+  only `ModuleNotFoundError` for absent `icgs.algorithms.objectives.task`; 0 skips.
+- Task 1C initial GREEN: the same command after implementation and refinement —
+  **PASS**, 31/31 selected/executed/passed with 0 failures/errors/skips. Coverage includes
+  exact configured soft-CE plus three-BCE arithmetic with four independent
+  denominators, multi-support/null targets, canonical placeholders, free-space
+  nu versus eligibility separation, differentiable empty pools, device/dtype/shape
+  diagnostics, four supervised gradient paths and exact-zero masked gradients.
+- The first Task 1C GREEN run passed 30/31 and exposed an overbroad static-test
+  substring: `annotations` matched Python's `from __future__ import annotations`.
+  The guard was narrowed to the forbidden data-module path while its AST import
+  allowlist was expanded to cover both `import` and `from ... import`; the next
+  run passed 31/31. No objective arithmetic changed during this correction.
+- Task 1C pre-commit refinement: the focused command — **PASS**, 32/32
+  selected/executed/passed with 0 failures/errors/skips. The added malformed raw
+  `TaskEncoding` test covers event-logit shape, event-valid dtype, valid nonfinite
+  alignment/event logits, padding sentinel and padding-zero violations. Formula
+  fixtures now use distinct auxiliary denominator counts 4/3/2, and one mixed
+  alignment batch row is masked with an all-zero target and exact-zero gradient.
+  Objective arithmetic was unchanged.
 - One proposed `memory_slots=True` negative fixture failed inside the existing
   typed `TrackerConfig` constructor before reaching TaskTracker. It was removed as
   duplicate schema coverage and was not counted as Task 1A RED evidence.
@@ -339,6 +401,9 @@ phase if an FG fails and request a scoped protocol decision.
   `test_physical_memory.py` **PASS** 17/17, `test_method_config.py` **PASS** 24/24,
   `test_method_contracts.py` **PASS** 17/17, `test_architecture.py` **PASS** 3/3,
   and `test_policy.py` **PASS** 6/6; 96/96 total with 0 skips.
+- Task 1C also ran `test_episode_data.py` **PASS** 13/13 and
+  `test_world_model.py` **PASS** 28/28. Together with the 96 tests above, related
+  regressions passed 137/137 with 0 skips.
 - A noncanonical positional unittest invocation executed the first 90 related
   assertions successfully, then failed to collect `test_policy.py` because its
   sibling `test_composition` import was not on the discovery path. The canonical
@@ -346,16 +411,23 @@ phase if an FG fails and request a scoped protocol decision.
   error is not counted as a runtime regression.
 - `.venv/bin/python -B -m py_compile src/icgs/state/task.py
   tests/test_task_router.py` and `git diff --check` — **PASS**.
+- `.venv/bin/python -B -m py_compile src/icgs/algorithms/objectives/task.py
+  src/icgs/algorithms/objectives/__init__.py tests/test_task_router.py`,
+  `git diff --check`, and the changed-file trailing-whitespace scan — **PASS**.
 - L0: `.venv/bin/python -B scripts/validate_fast.py` and `.venv/bin/python -B -S
-  scripts/validate_fast.py` — **FAIL** overall with no new failure versus `73691a4`.
+  scripts/validate_fast.py` — **FAIL** overall with no new failure versus `273b7b3`.
   Both variants passed Python syntax, static harness boundary, and 19/19 harness
   self-tests with 0 skips; the only failures remain the same five pre-existing
   missing evidence-log links under `docs/experiments/vv19-validation`.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, simulator, preprocessing, collection and training: **NOT RUN** — separate
   resource authorization required.
-- Remaining risk: Task 1A/1B have synthetic CPU/float32 evidence only. In
-  particular, the dtype-derived alpha normalization tolerance has not been
-  validated for float16/bfloat16. Masked objectives, GPU/mixed-precision behavior,
-  context replay orchestration, routing, native sessions and measured reference
-  support remain unverified.
+- Remaining risk: Task 1A/1B/1C have synthetic CPU/float32 evidence only. In
+  particular, the dtype-derived TaskState alpha and Task 1C alignment-target
+  normalization tolerances have not been validated for float16/bfloat16. Strict
+  validation also uses host-reading `.item()` checks that may synchronize each GPU
+  batch; before real Stage B training, decide from measurement whether those checks
+  remain on the hot path or move partly to dataset/debug validation. P02 task-view
+  tensorization, Stage B training, GPU/mixed-precision behavior, context replay
+  orchestration, routing, native sessions and measured reference support remain
+  unverified.

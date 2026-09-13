@@ -1,3 +1,4 @@
+import ast
 import inspect
 import unittest
 from dataclasses import replace
@@ -754,6 +755,388 @@ class TaskStateOwnershipTests(unittest.TestCase):
             with self.subTest(message=message):
                 with self.assertRaisesRegex(ValueError, message):
                     validate_task_update(previous, invalid)
+
+
+class TaskObjectiveTests(unittest.TestCase):
+    @staticmethod
+    def _encoding(*, requires_grad=False):
+        from icgs.models.memories.task import TaskEncoding
+
+        sentinel = torch.finfo(torch.float32).min
+        event_valid = torch.tensor(
+            [[True, True, False], [True, False, True]], dtype=torch.bool
+        )
+        r = torch.zeros(2, MethodConfig().event.width)
+        alignment_logits = torch.tensor(
+            [[0.2, -0.3, sentinel, 0.1], [-0.2, sentinel, 0.4, 0.0]],
+            dtype=torch.float32,
+        )
+        event_logits = torch.tensor(
+            [
+                [[0.1, -0.2, 0.3], [-0.4, 0.2, -0.1], [0.0, 0.0, 0.0]],
+                [[0.2, 0.1, -0.3], [0.0, 0.0, 0.0], [-0.2, 0.4, 0.1]],
+            ],
+            dtype=torch.float32,
+        )
+        if requires_grad:
+            alignment_logits.requires_grad_(True)
+            event_logits.requires_grad_(True)
+        return TaskEncoding(r, alignment_logits, event_logits, event_valid)
+
+    @staticmethod
+    def _targets():
+        return {
+            "alignment_target": torch.tensor(
+                [[0.5, 0.5, 0.0, 0.0], [0.0, 0.0, 0.0, 1.0]],
+                dtype=torch.float64,
+            ),
+            "alignment_valid": torch.tensor([True, True], dtype=torch.bool),
+            "rho_target": torch.tensor(
+                [[True, False, False], [False, False, True]], dtype=torch.bool
+            ),
+            "rho_valid": torch.tensor(
+                [[True, True, False], [True, False, True]], dtype=torch.bool
+            ),
+            "nu_target": torch.tensor(
+                [[False, True, False], [True, False, False]], dtype=torch.bool
+            ),
+            "nu_valid": torch.tensor(
+                [[True, True, False], [True, False, False]], dtype=torch.bool
+            ),
+            "eligibility_target": torch.tensor(
+                [[True, False, False], [False, False, True]], dtype=torch.bool
+            ),
+            "eligibility_valid": torch.tensor(
+                [[True, False, False], [False, False, True]], dtype=torch.bool
+            ),
+        }
+
+    @staticmethod
+    def _masked_mean(values, mask):
+        weight = mask.to(dtype=values.dtype)
+        return (values * weight).sum() / weight.sum().clamp_min(1)
+
+    def test_task_loss_matches_exact_weighted_soft_ce_and_bce_formula(self):
+        from torch.nn import functional as F
+
+        from icgs.algorithms.objectives.task import task_loss
+
+        encoding = self._encoding()
+        targets = self._targets()
+        config = MethodConfig.from_dict(
+            {
+                "losses": {
+                    "alignment_weight": 2.0,
+                    "occurrence_weight": 3.0,
+                    "relation_weight": 4.0,
+                    "eligibility_weight": 5.0,
+                }
+            }
+        )
+        snapshots = {name: value.clone() for name, value in targets.items()}
+        alignment_target = targets["alignment_target"].to(
+            encoding.alignment_logits.dtype
+        )
+        alignment = -(
+            alignment_target
+            * F.log_softmax(encoding.alignment_logits, dim=-1)
+        ).sum(dim=-1)
+        event_targets = (
+            targets["rho_target"],
+            targets["nu_target"],
+            targets["eligibility_target"],
+        )
+        event_valid = (
+            targets["rho_valid"],
+            targets["nu_valid"],
+            targets["eligibility_valid"],
+        )
+        event_terms = []
+        for channel, (target, valid) in enumerate(zip(event_targets, event_valid)):
+            values = F.binary_cross_entropy_with_logits(
+                encoding.event_logits[..., channel],
+                target.to(dtype=encoding.event_logits.dtype),
+                reduction="none",
+            )
+            event_terms.append(self._masked_mean(values, valid))
+        expected = (
+            2.0 * self._masked_mean(alignment, targets["alignment_valid"])
+            + 3.0 * event_terms[0]
+            + 4.0 * event_terms[1]
+            + 5.0 * event_terms[2]
+        )
+        actual = task_loss(encoding, config=config, **targets)
+        self.assertEqual(actual.ndim, 0)
+        self.assertTrue(targets["rho_valid"][0, 0].item())
+        self.assertTrue(targets["rho_target"][0, 0].item())
+        self.assertTrue(targets["nu_valid"][0, 0].item())
+        self.assertFalse(targets["nu_target"][0, 0].item())
+        torch.testing.assert_close(actual, expected)
+        for name, snapshot in snapshots.items():
+            torch.testing.assert_close(targets[name], snapshot)
+
+    def test_free_space_nu_mask_does_not_mask_valid_eligibility(self):
+        from torch.nn import functional as F
+
+        from icgs.algorithms.objectives.task import task_loss
+
+        encoding = self._encoding()
+        targets = self._targets()
+        targets["alignment_valid"].zero_()
+        targets["alignment_target"].zero_()
+        targets["rho_valid"].zero_()
+        targets["rho_target"].zero_()
+        targets["nu_valid"].zero_()
+        targets["nu_target"].zero_()
+        targets["eligibility_valid"].zero_()
+        targets["eligibility_target"].zero_()
+        targets["eligibility_valid"][0, 0] = True
+        targets["eligibility_target"][0, 0] = True
+        config = MethodConfig.from_dict(
+            {
+                "losses": {
+                    "alignment_weight": 0.0,
+                    "occurrence_weight": 0.0,
+                    "relation_weight": 0.0,
+                    "eligibility_weight": 1.0,
+                }
+            }
+        )
+        actual = task_loss(encoding, config=config, **targets)
+        expected = F.binary_cross_entropy_with_logits(
+            encoding.event_logits[0, 0, 2],
+            torch.ones((), dtype=encoding.event_logits.dtype),
+        )
+        torch.testing.assert_close(actual, expected)
+
+    def test_auxiliary_masks_require_event_valid_and_false_placeholders(self):
+        from icgs.algorithms.objectives.task import task_loss
+
+        encoding = self._encoding()
+        base = self._targets()
+        cases = []
+        bad_placeholder = {name: value.clone() for name, value in base.items()}
+        bad_placeholder["nu_target"][0, 0] = True
+        bad_placeholder["nu_valid"][0, 0] = False
+        cases.append((bad_placeholder, "nu_target.*placeholder"))
+        bad_padding = {name: value.clone() for name, value in base.items()}
+        bad_padding["rho_valid"][0, 2] = True
+        cases.append((bad_padding, "rho_valid.*event_valid"))
+        for invalid, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    task_loss(encoding, config=MethodConfig(), **invalid)
+
+    def test_alignment_target_validation_and_null_last(self):
+        from icgs.algorithms.objectives.task import task_loss
+
+        encoding = self._encoding()
+        base = self._targets()
+        cases = []
+
+        padding_mass = {name: value.clone() for name, value in base.items()}
+        padding_mass["alignment_target"][0] = torch.tensor(
+            [0.45, 0.45, 0.1, 0.0], dtype=torch.float64
+        )
+        cases.append((padding_mass, "invalid event"))
+
+        masked_nonzero = {name: value.clone() for name, value in base.items()}
+        masked_nonzero["alignment_valid"][0] = False
+        cases.append((masked_nonzero, "zero placeholder"))
+
+        bad_sum = {name: value.clone() for name, value in base.items()}
+        bad_sum["alignment_target"][0] = torch.tensor(
+            [0.4, 0.4, 0.0, 0.0], dtype=torch.float64
+        )
+        cases.append((bad_sum, "sum to one"))
+
+        negative = {name: value.clone() for name, value in base.items()}
+        negative["alignment_target"][0] = torch.tensor(
+            [-0.1, 0.6, 0.0, 0.5], dtype=torch.float64
+        )
+        cases.append((negative, "nonnegative"))
+
+        nonfinite = {name: value.clone() for name, value in base.items()}
+        nonfinite["alignment_target"][0, 0] = float("nan")
+        cases.append((nonfinite, "finite"))
+
+        for invalid, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    task_loss(encoding, config=MethodConfig(), **invalid)
+
+    def test_empty_supervision_pools_are_differentiable_zero(self):
+        from icgs.algorithms.objectives.task import task_loss
+
+        encoding = self._encoding(requires_grad=True)
+        targets = self._targets()
+        for name in (
+            "alignment_target",
+            "alignment_valid",
+            "rho_target",
+            "rho_valid",
+            "nu_target",
+            "nu_valid",
+            "eligibility_target",
+            "eligibility_valid",
+        ):
+            targets[name].zero_()
+        loss = task_loss(encoding, config=MethodConfig(), **targets)
+        torch.testing.assert_close(loss, torch.zeros_like(loss))
+        loss.backward()
+        self.assertIsNotNone(encoding.alignment_logits.grad)
+        self.assertIsNotNone(encoding.event_logits.grad)
+        torch.testing.assert_close(
+            encoding.alignment_logits.grad,
+            torch.zeros_like(encoding.alignment_logits.grad),
+        )
+        torch.testing.assert_close(
+            encoding.event_logits.grad,
+            torch.zeros_like(encoding.event_logits.grad),
+        )
+
+    def test_task_loss_gradients_cover_four_heads_and_exclude_masked_entries(self):
+        from icgs.algorithms.objectives.task import task_loss
+
+        encoding = self._encoding(requires_grad=True)
+        targets = self._targets()
+        targets["alignment_valid"][1] = False
+        targets["alignment_target"][1].zero_()
+        loss = task_loss(encoding, config=MethodConfig(), **targets)
+        loss.backward()
+        alignment_grad = encoding.alignment_logits.grad
+        event_grad = encoding.event_logits.grad
+        self.assertIsNotNone(alignment_grad)
+        self.assertIsNotNone(event_grad)
+        self.assertTrue(torch.isfinite(alignment_grad).all().item())
+        self.assertTrue(torch.isfinite(event_grad).all().item())
+        self.assertTrue((alignment_grad[targets["alignment_valid"]] != 0).any().item())
+        torch.testing.assert_close(
+            alignment_grad[~targets["alignment_valid"]],
+            torch.zeros_like(alignment_grad[~targets["alignment_valid"]]),
+        )
+        torch.testing.assert_close(
+            alignment_grad[:, :-1][~encoding.event_valid],
+            torch.zeros_like(alignment_grad[:, :-1][~encoding.event_valid]),
+        )
+        for channel, name in enumerate(("rho", "nu", "eligibility")):
+            valid = targets[f"{name}_valid"]
+            self.assertTrue((event_grad[..., channel][valid] != 0).all().item())
+            torch.testing.assert_close(
+                event_grad[..., channel][~valid],
+                torch.zeros_like(event_grad[..., channel][~valid]),
+            )
+
+    def test_task_loss_rejects_bad_shapes_dtypes_and_config(self):
+        from icgs.algorithms.objectives.task import task_loss
+
+        encoding = self._encoding()
+        base = self._targets()
+        cases = []
+        bad_alignment_dtype = {name: value.clone() for name, value in base.items()}
+        bad_alignment_dtype["alignment_target"] = bad_alignment_dtype[
+            "alignment_target"
+        ].to(torch.long)
+        cases.append((bad_alignment_dtype, "alignment_target.*floating"))
+        bad_target_dtype = {name: value.clone() for name, value in base.items()}
+        bad_target_dtype["rho_target"] = bad_target_dtype["rho_target"].float()
+        cases.append((bad_target_dtype, "rho_target.*bool"))
+        bad_mask_dtype = {name: value.clone() for name, value in base.items()}
+        bad_mask_dtype["eligibility_valid"] = bad_mask_dtype[
+            "eligibility_valid"
+        ].long()
+        cases.append((bad_mask_dtype, "eligibility_valid.*bool"))
+        bad_shape = {name: value.clone() for name, value in base.items()}
+        bad_shape["nu_target"] = bad_shape["nu_target"][:, :-1]
+        cases.append((bad_shape, "nu_target.*shape"))
+        bad_device = {name: value.clone() for name, value in base.items()}
+        bad_device["alignment_valid"] = torch.ones(
+            2, dtype=torch.bool, device="meta"
+        )
+        cases.append((bad_device, "alignment_valid.*device"))
+        for invalid, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex((TypeError, ValueError), message):
+                    task_loss(encoding, config=MethodConfig(), **invalid)
+        with self.assertRaisesRegex(TypeError, "MethodConfig"):
+            task_loss(encoding, config=object(), **base)
+
+    def test_task_loss_rejects_malformed_raw_task_encoding(self):
+        from icgs.algorithms.objectives.task import task_loss
+
+        encoding = self._encoding()
+        targets = self._targets()
+
+        nonfinite_alignment = encoding.alignment_logits.clone()
+        nonfinite_alignment[0, 0] = float("nan")
+        nonfinite_events = encoding.event_logits.clone()
+        nonfinite_events[0, 0, 0] = float("inf")
+        bad_padding_alignment = encoding.alignment_logits.clone()
+        bad_padding_alignment[0, 2] = 0.0
+        bad_padding_events = encoding.event_logits.clone()
+        bad_padding_events[0, 2, 0] = 0.1
+        cases = (
+            (replace(encoding, event_logits=encoding.event_logits[..., :2]), "event_logits.*shape"),
+            (replace(encoding, event_valid=encoding.event_valid.long()), "event_valid.*bool"),
+            (replace(encoding, alignment_logits=nonfinite_alignment), "alignment_logits.*finite"),
+            (replace(encoding, event_logits=nonfinite_events), "event_logits.*finite"),
+            (replace(encoding, alignment_logits=bad_padding_alignment), "sentinel"),
+            (replace(encoding, event_logits=bad_padding_events), "exactly zero"),
+        )
+        for invalid, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex((TypeError, ValueError), message):
+                    task_loss(invalid, config=MethodConfig(), **targets)
+
+    def test_task_objective_has_narrow_dependency_and_api_surface(self):
+        import icgs.algorithms.objectives.task as task_module
+        from icgs.algorithms.objectives.task import task_loss
+
+        parameters = tuple(inspect.signature(task_loss).parameters)
+        self.assertEqual(
+            parameters,
+            (
+                "encoding",
+                "alignment_target",
+                "alignment_valid",
+                "rho_target",
+                "rho_valid",
+                "nu_target",
+                "nu_valid",
+                "eligibility_target",
+                "eligibility_valid",
+                "config",
+            ),
+        )
+        source = inspect.getsource(task_module)
+        tree = ast.parse(source)
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module is not None:
+                imported.add(node.module)
+            elif isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+        self.assertLessEqual(
+            imported,
+            {
+                "__future__",
+                "torch",
+                "torch.nn",
+                "icgs.configuration.method",
+                "icgs.models.memories.task",
+            },
+        )
+        for forbidden in (
+            "TaskState",
+            "EventMemory",
+            "MethodContext",
+            "InstantPolicy",
+            "router",
+            "data.collection.annotations",
+            "program_id",
+            "rlbench",
+        ):
+            self.assertNotIn(forbidden, source)
 
 
 if __name__ == "__main__":
