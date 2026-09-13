@@ -12,9 +12,10 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — Task 1A tensor tracker, Task 1B owned TaskState and Task 1C
-masked objectives COMPLETE; P06 remains PARTIAL because routing and native
-sessions are NOT IMPLEMENTED**. This
+Status: **ACTIVE — Task 1A tensor tracker, Task 1B owned TaskState, Task 1C
+masked objectives and Task 2 deterministic routing/window selection COMPLETE;
+P06 remains PARTIAL because native context materialization, sessions, seeded
+sampling and reference calls are NOT IMPLEMENTED**. This
 document is a category C component of the approved research migration; it does not
 authorize simulator or training workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
@@ -66,13 +67,14 @@ evidence; this addendum does not certify that the component consumes every new f
 - Create: `src/icgs/algorithms/planning/router.py` — window selection and route RNG.
 - Create: `src/icgs/algorithms/objectives/task.py`; Test: `tests/test_task_router.py`.
 
-Public capability boundary (planned; not currently importable):
+Implemented/planned capability vocabulary (Task 3 surfaces remain unavailable):
 
 ```python
 track_task(previous: TaskState | None, state: PhysicalState, events: EventMemory) -> TaskState
 sample_prior(observation, task: TaskState, context: MethodContext, *, seed: int) -> Candidate
-router_probabilities(alpha, eligible, valid_windows) -> Tensor
-select_window_indices(a, b, neighbors, grips, count: int=10) -> tuple[int, ...]
+router_probabilities(event_alpha, eligible, native_window_valid, config) -> Tensor
+select_window_indices(target, demo_interactions, grip_transition_indices, config,
+                      *, native_waypoint_count) -> tuple[int, ...] | None
 ```
 
 TaskState r[B,W],alpha[B,Lc+1] including null,rho/nu/eligible[B,Lc],boundary/context/tracker lineage. Nonmonotonic recovery is legal. Reference pi_ref is exactly one routed sample plus r2 execution, with no V,H-conditioned choice or learned stop.
@@ -245,42 +247,121 @@ sessions — deferred.** P06 remains PARTIAL.
 
 ### Task 2: Valid windows and 50/50 routed mixture
 
+**Status:** COMPLETE. Batched route arithmetic and deterministic structural
+window indices only; native context materialization and routed policy execution
+remain Task 3.
+
 **Files:** Create `src/icgs/algorithms/planning/router.py`.
 **Test owner:** `tests/test_task_router.py`.
-**Consumes / produces:** Produces `router_probabilities` returning full-context followed by event-window probabilities.
+**Consumes / produces:** `router_probabilities` consumes event-only alignment
+probabilities (`TaskState.alpha[..., :-1]`), eligibility and the final derived
+`MethodContext.native_window_valid`; it returns full-context followed by
+event-window probabilities. `select_window_indices` consumes one target plus the
+complete interaction partition for that target's single demo and P05-owned
+debounced grip-transition indices; it returns exact native frame indices or
+`None` when a well-formed window cannot fit the native waypoint budget.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
+Task 2A is batched routing arithmetic only. Task 2B is deterministic structural
+index selection only. Neither task constructs `PreparedContext`, calls native
+preprocessing or Instant Policy, owns native sessions, or splits seeds.
+
+- [x] **Step 1 — RED:** Add the following assertion body to a named
   `unittest.TestCase` method in the test owner, with the shown imports.
 
 ```python
 import torch
 from icgs.algorithms.planning.router import router_probabilities
-p = router_probabilities(torch.tensor([.4, .6]), torch.ones(2),
-                         torch.tensor([True, False]))
-torch.testing.assert_close(p, torch.tensor([.5, .5, 0.]))
-f = router_probabilities(torch.zeros(2), torch.zeros(2), torch.ones(2,dtype=torch.bool))
-torch.testing.assert_close(f, torch.tensor([1., 0., 0.]))
+from icgs.configuration.method import MethodConfig
+
+cfg = MethodConfig()
+p = router_probabilities(
+    torch.tensor([[.4, .6]]),
+    torch.ones(1, 2),
+    torch.tensor([[True, False]]),
+    cfg,
+)
+torch.testing.assert_close(p, torch.tensor([[.5, .5, 0.]]))
+f = router_probabilities(
+    torch.zeros(1, 2),
+    torch.zeros(1, 2),
+    torch.ones(1, 2, dtype=torch.bool),
+    cfg.router,
+)
+torch.testing.assert_close(f, torch.tensor([[1., 0., 0.]]))
 ```
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_task_router.py' -v`.
+- [x] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_task_router.py' -v`.
   Expect the new test to fail because its new implementation is absent or violates
   the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
 
 ```python
-v = torch.where(valid_windows, (alpha + cfg.router.probability_epsilon)*eligible, 0.)
-if v.sum() < cfg.router.fallback_threshold:
-    return torch.cat((v.new_ones(1), v.new_zeros(v.numel())))
-p_full = cfg.router.full_context_probability
-return torch.cat((v.new_tensor([p_full]), (1-p_full)*v/v.sum()))
+v = torch.where(
+    native_window_valid,
+    (event_alpha + cfg.probability_epsilon) * eligible,
+    0.0,
+)
+mass = v.sum(dim=-1, keepdim=True)
+fallback = mass < cfg.fallback_threshold
+safe_mass = torch.where(fallback, torch.ones_like(mass), mass)
+normalized = v / safe_mass
+routed = (1.0 - cfg.full_context_probability) * normalized
+probs = torch.cat(
+    (torch.full_like(mass, cfg.full_context_probability), routed), dim=-1
+)
+full_fallback = torch.cat((torch.ones_like(mass), torch.zeros_like(v)), dim=-1)
+return torch.where(fallback, full_fallback, probs)
 ```
 
-Window includes same-demo event and immediate previous/next interactions. Preserve unique endpoints/grip transitions; >10 mandatory or <10 unique frames makes invalid. Fill evenly spaced unused ranks, tie earlier, sort chronologically. Invalid window falls back through mixture; invalid full context aborts setup.
+`event_alpha`, `eligible` and `native_window_valid` have shape `[B,L]`; the
+returned tensor has shape `[B,L+1]` with full context at slot zero. Fallback is
+per row, the threshold comparison is strict `<`, invalid-window probabilities
+and gradients are exact zero, and configuration is always an explicitly resolved
+`MethodConfig` or injected `RouterConfig`. Both `probability_epsilon` and
+`fallback_threshold` are strictly positive, matching central `MethodConfig`
+validation; this is not a router-local fallback default.
+Normalize before multiplying by the routed-mixture mass so subnormal FP16 values
+are not rounded or underflowed before their common mass is divided out.
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_task_router.py' -v`.
+For Task 2B, every `demo_interactions` entry must be an interaction with the
+target's exact `demo_content_hash`; target occurs exactly once. Entries are in
+chronological order and form a contiguous shared-endpoint partition:
+`current.b == next.a`. Gaps, interior overlap and zero-length interactions are
+malformed and reject. Grip-transition indices are sorted unique nonnegative
+integers, reject booleans, lie in the full demo range and come from P05's
+`debounced_grip_boundaries`; P06 does not reimplement debounce.
+
+The window includes target plus configured immediate previous/next interactions.
+Mandatory indices are every selected interaction endpoint plus every supplied
+debounced grip-transition index inside the selected span, deduplicated. The
+native waypoint count is a required positive integer injected from the selected
+native graph configuration, never a method default. More mandatory indices than
+the budget, or fewer unique span frames than the budget, returns `None`; malformed
+input raises.
+
+Let sorted unused indices be `U` of length `M`, and let `K` slots remain after
+mandatory indices. For `K=1`, choose rank `(M-1)//2`. For `K>1`, rank `i` is the
+nearest integer to `i*(M-1)/(K-1)` with exact half ties going to the lower rank:
+
+```python
+lower, remainder = divmod(i * (M - 1), K - 1)
+rank = lower + int(2 * remainder > K - 1)
+```
+
+Canonical examples are `U=[2,4,6,8], K=1 -> [4]`,
+`U=[1,3,5,7,9,11,13], K=4 -> [1,5,9,13]`, and
+`U=[2,4,6,8], K=3 -> [2,4,8]`. The final tuple is unique and chronological.
+Invalid windows fall back through the mixture; invalid full context aborts setup.
+
+- [x] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_task_router.py' -v`.
   Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
+- [x] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
   evidence. At authorized execution time, make a focused commit only after that review.
+
+Task 2 completion wording: **Task 2 deterministic routing math and structural
+window selection — COMPLETE; native `PreparedContext` materialization, D1/D2
+sessions, seed splitting, frozen-IP calls, candidate/audit construction and
+end-to-end final-availability derivation — deferred.** P06 remains PARTIAL.
 
 ### Task 3: Reference sessions, seeds and immutable fingerprint
 
@@ -394,6 +475,36 @@ phase if an FG fails and request a scoped protocol decision.
   fixtures now use distinct auxiliary denominator counts 4/3/2, and one mixed
   alignment batch row is masked with an all-zero target and exact-zero gradient.
   Objective arithmetic was unchanged.
+- Task 2 RED: the focused command selected/executed 45 tests — **FAIL as
+  expected**: all 32 Task 1A/1B/1C tests passed and all 13 new Task 2 tests raised
+  only `ModuleNotFoundError` for absent `icgs.algorithms.planning.router`; 0
+  skips. This established the missing implementation surface without weakening
+  earlier task evidence.
+- Task 2 initial GREEN: the focused command passed 44/45. All numerical,
+  validation and structural behavior passed; the only failure was the static
+  dependency fixture omitting standard-library `math` from its allowlist while
+  the implementation used `math.isfinite` for scalar config validation. Adding
+  `math` to that test allowlist corrected the harness; no router behavior changed.
+- Task 2 final GREEN after adding the P05/P06 boundary fixture: the focused
+  command — **PASS**, 46/46 selected/executed/passed with 0
+  failures/errors/skips. Coverage includes per-row fallback, strict threshold,
+  exact invalid-window probabilities/gradients, malformed tensor/config inputs,
+  shared-endpoint partitions, gap/interior-overlap/zero-length rejection,
+  same-demo target ownership, exact uniform-rank tie breaking, impossible-window
+  `None`, edge-bounded neighbors and consumption of P05 debounce confirmation
+  indices without a second debounce implementation.
+- Task 2 pre-commit numerical review added a CPU-FP16 subnormal-mass fixture,
+  explicit zero-epsilon rejection and direct input non-mutation proof. The first
+  focused run selected/executed 48 tests: 47 passed and the new FP16 fixture
+  failed as intended because clamping mass to `torch.float16.tiny` changed a
+  non-fallback denominator. Replacing the fallback-only divisor with
+  `where(fallback, 1, mass)` exposed a second FP16 operation-order issue:
+  multiplying subnormal `v` by the mixture mass before division still rounded
+  the window probability to 0.4707. Normalizing `v/mass` first and multiplying
+  the resulting distribution second fixed the invariant. The final focused
+  command — **PASS**, 48/48 selected/executed/passed with 0
+  failures/errors/skips. `probability_epsilon > 0` remains deliberate and now
+  test-locked because central `MethodConfig` already requires it.
 - One proposed `memory_slots=True` negative fixture failed inside the existing
   typed `TrackerConfig` constructor before reaching TaskTracker. It was removed as
   duplicate schema coverage and was not counted as Task 1A RED evidence.
@@ -404,6 +515,16 @@ phase if an FG fails and request a scoped protocol decision.
 - Task 1C also ran `test_episode_data.py` **PASS** 13/13 and
   `test_world_model.py` **PASS** 28/28. Together with the 96 tests above, related
   regressions passed 137/137 with 0 skips.
+- Task 2 related regressions reran `test_episode_data.py` **PASS** 13/13,
+  `test_world_model.py` **PASS** 28/28, `test_event_memory.py` **PASS** 29/29,
+  `test_physical_memory.py` **PASS** 17/17, `test_method_config.py` **PASS**
+  24/24, `test_method_contracts.py` **PASS** 17/17, `test_architecture.py`
+  **PASS** 3/3 and canonical-discovery `test_policy.py` **PASS** 6/6: 137/137
+  related tests passed with 0 skips. A combined positional unittest invocation
+  first passed 131 assertions but could not collect `test_policy.py` because its
+  sibling `test_composition` import was outside that invocation's module path;
+  rerunning that owner through canonical discovery passed 6/6. This collection
+  error is not counted as runtime regression evidence.
 - A noncanonical positional unittest invocation executed the first 90 related
   assertions successfully, then failed to collect `test_policy.py` because its
   sibling `test_composition` import was not on the discovery path. The canonical
@@ -414,20 +535,29 @@ phase if an FG fails and request a scoped protocol decision.
 - `.venv/bin/python -B -m py_compile src/icgs/algorithms/objectives/task.py
   src/icgs/algorithms/objectives/__init__.py tests/test_task_router.py`,
   `git diff --check`, and the changed-file trailing-whitespace scan — **PASS**.
+- Task 2 `.venv/bin/python -B -m py_compile
+  src/icgs/algorithms/planning/router.py tests/test_task_router.py`, `git diff
+  --check`, and the changed-file trailing-whitespace scan — **PASS**.
 - L0: `.venv/bin/python -B scripts/validate_fast.py` and `.venv/bin/python -B -S
   scripts/validate_fast.py` — **FAIL** overall with no new failure versus `273b7b3`.
   Both variants passed Python syntax, static harness boundary, and 19/19 harness
   self-tests with 0 skips; the only failures remain the same five pre-existing
   missing evidence-log links under `docs/experiments/vv19-validation`.
+- Task 2 L0 rerun: both commands remain **FAIL** overall with exactly those same
+  five pre-existing missing evidence-log targets. Both passed Python syntax,
+  static harness boundary and 19/19 harness self-tests with 0 skips; no new L0
+  failure was introduced relative to `bc019c9`.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, simulator, preprocessing, collection and training: **NOT RUN** — separate
   resource authorization required.
-- Remaining risk: Task 1A/1B/1C have synthetic CPU/float32 evidence only. In
+- Remaining risk: Tasks 1A/1B/1C/2 have primarily synthetic CPU/float32 evidence;
+  Task 2 additionally has one CPU-FP16 subnormal normalization regression. In
   particular, the dtype-derived TaskState alpha and Task 1C alignment-target
   normalization tolerances have not been validated for float16/bfloat16. Strict
   validation also uses host-reading `.item()` checks that may synchronize each GPU
   batch; before real Stage B training, decide from measurement whether those checks
   remain on the hot path or move partly to dataset/debug validation. P02 task-view
   tensorization, Stage B training, GPU/mixed-precision behavior, context replay
-  orchestration, routing, native sessions and measured reference support remain
+  orchestration, native window materialization/final-availability integration,
+  routed policy execution, native sessions and measured reference support remain
   unverified.

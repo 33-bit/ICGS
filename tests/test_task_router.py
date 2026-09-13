@@ -1139,5 +1139,434 @@ class TaskObjectiveTests(unittest.TestCase):
             self.assertNotIn(forbidden, source)
 
 
+class RouterValidationTests(unittest.TestCase):
+    @staticmethod
+    def _tensors():
+        return (
+            torch.tensor([[0.4, 0.6]], dtype=torch.float32),
+            torch.ones(1, 2, dtype=torch.float32),
+            torch.tensor([[True, False]], dtype=torch.bool),
+        )
+
+    def test_router_rejects_malformed_tensors_and_configuration(self):
+        from icgs.algorithms.planning.router import router_probabilities
+
+        alpha, eligible, valid = self._tensors()
+        cases = (
+            ((alpha[0], eligible, valid, MethodConfig()), "event_alpha.*\[B,L\]"),
+            ((alpha, eligible[:, :1], valid, MethodConfig()), "shape"),
+            ((alpha.long(), eligible, valid, MethodConfig()), "event_alpha.*floating"),
+            ((alpha, eligible.bool(), valid, MethodConfig()), "eligible.*floating"),
+            ((alpha, eligible, valid.long(), MethodConfig()), "native_window_valid.*bool"),
+            ((alpha, eligible.double(), valid, MethodConfig()), "dtype"),
+            ((alpha, eligible, valid, object()), "RouterConfig or MethodConfig"),
+        )
+        for arguments, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex((TypeError, ValueError), message):
+                    router_probabilities(*arguments)
+
+        for name, index, value in (
+            ("event_alpha", (0, 0), float("nan")),
+            ("eligible", (0, 0), float("inf")),
+            ("event_alpha", (0, 0), -0.1),
+            ("eligible", (0, 0), 1.1),
+        ):
+            with self.subTest(name=name, value=value):
+                values = {
+                    "event_alpha": alpha.clone(),
+                    "eligible": eligible.clone(),
+                    "native_window_valid": valid.clone(),
+                }
+                values[name][index] = value
+                with self.assertRaisesRegex(ValueError, f"{name}.*(finite|\[0,1\])"):
+                    router_probabilities(config=MethodConfig(), **values)
+
+        with self.assertRaises(TypeError):
+            router_probabilities(alpha, eligible, valid)
+        with self.assertRaisesRegex(ValueError, "probability_epsilon.*strictly positive"):
+            router_probabilities(
+                alpha,
+                eligible,
+                valid,
+                replace(MethodConfig().router, probability_epsilon=0.0),
+            )
+
+    def test_window_rejects_malformed_same_demo_partition(self):
+        from icgs.algorithms.planning.router import select_window_indices
+        from icgs.contracts.method import SegmentRef
+
+        target = SegmentRef("demo-a", 4, 9, "interaction", True)
+        malformed = (
+            (
+                (
+                    SegmentRef("demo-a", 0, 4, "interaction", True),
+                    target,
+                    SegmentRef("demo-a", 10, 13, "interaction", True),
+                ),
+                "contiguous",
+            ),
+            (
+                (
+                    SegmentRef("demo-a", 0, 5, "interaction", True),
+                    SegmentRef("demo-a", 4, 9, "interaction", True),
+                ),
+                "contiguous",
+            ),
+            ((SegmentRef("demo-a", 4, 4, "interaction", True),), "positive"),
+            (
+                (
+                    SegmentRef("demo-a", 0, 4, "interaction", True),
+                    SegmentRef("demo-b", 4, 9, "interaction", True),
+                ),
+                "demo_content_hash",
+            ),
+            ((SegmentRef("demo-a", 0, 0, "start", False), target), "interaction"),
+        )
+        for interactions, message in malformed:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    select_window_indices(
+                        target,
+                        interactions,
+                        (),
+                        MethodConfig(),
+                        native_waypoint_count=5,
+                    )
+
+        valid_partition = (
+            SegmentRef("demo-a", 0, 4, "interaction", True),
+            target,
+            SegmentRef("demo-a", 9, 13, "interaction", True),
+        )
+        with self.assertRaisesRegex(ValueError, "exactly once"):
+            select_window_indices(
+                SegmentRef("demo-a", 1, 3, "interaction", True),
+                valid_partition,
+                (),
+                MethodConfig(),
+                native_waypoint_count=5,
+            )
+        with self.assertRaisesRegex(ValueError, "exactly once"):
+            select_window_indices(
+                target,
+                (target, target),
+                (),
+                MethodConfig(),
+                native_waypoint_count=5,
+            )
+
+    def test_window_rejects_malformed_transition_indices_and_budget(self):
+        from icgs.algorithms.planning.router import select_window_indices
+        from icgs.contracts.method import SegmentRef
+
+        target = SegmentRef("demo-a", 0, 9, "interaction", True)
+        cases = (
+            ((2, 1), 5, MethodConfig(), "sorted"),
+            ((2, 2), 5, MethodConfig(), "unique"),
+            ((True,), 5, MethodConfig(), "integer"),
+            ((10,), 5, MethodConfig(), "demo range"),
+            ((), 0, MethodConfig(), "positive integer"),
+            ((), True, MethodConfig(), "positive integer"),
+            ((), 5, None, "RouterConfig or MethodConfig"),
+        )
+        for transitions, count, config, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex((TypeError, ValueError), message):
+                    select_window_indices(
+                        target,
+                        (target,),
+                        transitions,
+                        config,
+                        native_waypoint_count=count,
+                    )
+
+
+class RouterNumericalTests(unittest.TestCase):
+    def test_router_primary_mixture_and_exact_invalid_zero(self):
+        from icgs.algorithms.planning.router import router_probabilities
+
+        probabilities = router_probabilities(
+            torch.tensor([[0.4, 0.6]]),
+            torch.ones(1, 2),
+            torch.tensor([[True, False]]),
+            MethodConfig(),
+        )
+        torch.testing.assert_close(probabilities, torch.tensor([[0.5, 0.5, 0.0]]))
+        torch.testing.assert_close(
+            probabilities.sum(dim=-1), torch.ones(probabilities.shape[0])
+        )
+
+    def test_router_fallback_is_independent_per_batch_row(self):
+        from icgs.algorithms.planning.router import router_probabilities
+
+        probabilities = router_probabilities(
+            torch.tensor([[0.4, 0.6], [0.2, 0.8]]),
+            torch.tensor([[1.0, 1.0], [0.0, 0.0]]),
+            torch.tensor([[True, False], [True, True]]),
+            MethodConfig().router,
+        )
+        torch.testing.assert_close(
+            probabilities,
+            torch.tensor([[0.5, 0.5, 0.0], [1.0, 0.0, 0.0]]),
+        )
+
+    def test_router_fallback_threshold_comparison_is_strict(self):
+        from icgs.algorithms.planning.router import router_probabilities
+
+        config = replace(
+            MethodConfig().router,
+            full_context_probability=0.25,
+            probability_epsilon=0.125,
+            fallback_threshold=0.125,
+        )
+        probabilities = router_probabilities(
+            torch.zeros(1, 1),
+            torch.ones(1, 1),
+            torch.ones(1, 1, dtype=torch.bool),
+            config,
+        )
+        torch.testing.assert_close(probabilities, torch.tensor([[0.25, 0.75]]))
+
+    def test_router_preserves_fp16_subnormal_nonfallback_normalization(self):
+        from icgs.algorithms.planning.router import router_probabilities
+
+        config = replace(
+            MethodConfig().router,
+            probability_epsilon=1e-6,
+            fallback_threshold=1e-6,
+        )
+        probabilities = router_probabilities(
+            torch.zeros(1, 1, dtype=torch.float16),
+            torch.ones(1, 1, dtype=torch.float16),
+            torch.ones(1, 1, dtype=torch.bool),
+            config,
+        )
+        torch.testing.assert_close(
+            probabilities,
+            torch.tensor([[0.5, 0.5]], dtype=torch.float16),
+        )
+        torch.testing.assert_close(
+            probabilities.sum(dim=-1),
+            torch.ones(1, dtype=torch.float16),
+        )
+
+    def test_router_invalid_windows_have_zero_probability_and_gradient(self):
+        from icgs.algorithms.planning.router import router_probabilities
+
+        event_alpha = torch.tensor([[0.2, 0.3, 0.5]], requires_grad=True)
+        eligible = torch.tensor([[0.7, 0.8, 0.9]], requires_grad=True)
+        valid = torch.tensor([[True, False, True]])
+        probabilities = router_probabilities(
+            event_alpha, eligible, valid, MethodConfig()
+        )
+        self.assertEqual(probabilities[0, 2].item(), 0.0)
+        probabilities[..., 1:].sum().backward()
+        torch.testing.assert_close(
+            event_alpha.grad[~valid], torch.zeros_like(event_alpha.grad[~valid])
+        )
+        torch.testing.assert_close(
+            eligible.grad[~valid], torch.zeros_like(eligible.grad[~valid])
+        )
+
+
+class StructuralWindowTests(unittest.TestCase):
+    @staticmethod
+    def _ref(a, b, *, valid=True):
+        from icgs.contracts.method import SegmentRef
+
+        return SegmentRef("demo-a", a, b, "interaction", valid)
+
+    def test_shared_endpoint_partition_selects_exact_window(self):
+        from icgs.algorithms.planning.router import select_window_indices
+
+        interactions = (self._ref(0, 4), self._ref(4, 9), self._ref(9, 13))
+        actual = select_window_indices(
+            interactions[1],
+            interactions,
+            (6,),
+            MethodConfig(),
+            native_waypoint_count=10,
+        )
+        self.assertEqual(actual, (0, 1, 3, 4, 6, 7, 9, 10, 12, 13))
+
+    def test_window_consumes_p05_debounced_confirmation_indices(self):
+        from icgs.algorithms.planning.router import select_window_indices
+        from icgs.data.preprocessing.events import debounced_grip_boundaries
+
+        config = MethodConfig()
+        transitions = debounced_grip_boundaries(
+            [0, 1, 0, 1, 1, 1, 1, 1, 1, 1], config.event
+        )
+        self.assertEqual(transitions, (4,))
+        target = self._ref(0, 9)
+        self.assertEqual(
+            select_window_indices(
+                target,
+                (target,),
+                transitions,
+                config.router,
+                native_waypoint_count=5,
+            ),
+            (0, 1, 4, 8, 9),
+        )
+
+    def test_window_neighbors_are_bounded_at_partition_edges(self):
+        from icgs.algorithms.planning.router import select_window_indices
+
+        interactions = (self._ref(0, 4), self._ref(4, 9), self._ref(9, 13))
+        first = select_window_indices(
+            interactions[0], interactions, (), MethodConfig(), native_waypoint_count=6
+        )
+        last = select_window_indices(
+            interactions[-1], interactions, (), MethodConfig(), native_waypoint_count=6
+        )
+        self.assertEqual(first, (0, 1, 4, 5, 8, 9))
+        self.assertEqual(last, (4, 5, 8, 9, 12, 13))
+
+    def test_uniform_fill_rank_examples_lock_earlier_ties(self):
+        from icgs.algorithms.planning.router import select_window_indices
+
+        single = (self._ref(1, 9),)
+        self.assertEqual(
+            select_window_indices(
+                single[0], single, (3, 5, 7), MethodConfig(), native_waypoint_count=6
+            ),
+            (1, 3, 4, 5, 7, 9),
+        )
+        self.assertEqual(
+            select_window_indices(
+                single[0], single, (3, 5, 7), MethodConfig(), native_waypoint_count=8
+            ),
+            (1, 2, 3, 4, 5, 7, 8, 9),
+        )
+
+        wider = (self._ref(0, 14),)
+        self.assertEqual(
+            select_window_indices(
+                wider[0],
+                wider,
+                (2, 4, 6, 8, 10, 12),
+                MethodConfig(),
+                native_waypoint_count=12,
+            ),
+            (0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14),
+        )
+
+    def test_valid_but_impossible_windows_return_none(self):
+        from icgs.algorithms.planning.router import select_window_indices
+
+        target = self._ref(0, 9)
+        self.assertIsNone(
+            select_window_indices(
+                target,
+                (target,),
+                (1, 2, 3, 4, 5),
+                MethodConfig(),
+                native_waypoint_count=4,
+            )
+        )
+        self.assertIsNone(
+            select_window_indices(
+                target,
+                (target,),
+                (),
+                MethodConfig(),
+                native_waypoint_count=11,
+            )
+        )
+
+    def test_window_target_must_be_structurally_eligible(self):
+        from icgs.algorithms.planning.router import select_window_indices
+
+        target = self._ref(0, 9, valid=False)
+        with self.assertRaisesRegex(ValueError, "structurally eligible"):
+            select_window_indices(
+                target, (target,), (), MethodConfig(), native_waypoint_count=5
+            )
+
+    def test_router_and_window_selection_do_not_mutate_inputs(self):
+        from icgs.algorithms.planning.router import (
+            router_probabilities,
+            select_window_indices,
+        )
+
+        event_alpha = torch.tensor([[0.4, 0.6]])
+        eligible = torch.tensor([[0.7, 0.8]])
+        native_window_valid = torch.tensor([[True, False]])
+        original_tensors = tuple(
+            value.clone() for value in (event_alpha, eligible, native_window_valid)
+        )
+        router_probabilities(
+            event_alpha, eligible, native_window_valid, MethodConfig()
+        )
+        for actual, original in zip(
+            (event_alpha, eligible, native_window_valid), original_tensors
+        ):
+            torch.testing.assert_close(actual, original)
+
+        target = self._ref(0, 9)
+        interactions = (target,)
+        transitions = [4]
+        original_interactions = tuple(interactions)
+        original_transitions = list(transitions)
+        select_window_indices(
+            target,
+            interactions,
+            transitions,
+            MethodConfig(),
+            native_waypoint_count=5,
+        )
+        self.assertEqual(interactions, original_interactions)
+        self.assertEqual(transitions, original_transitions)
+
+    def test_router_module_has_narrow_dependency_and_api_surface(self):
+        import icgs.algorithms.planning.router as router_module
+        from icgs.algorithms.planning.router import (
+            router_probabilities,
+            select_window_indices,
+        )
+
+        self.assertEqual(
+            tuple(inspect.signature(router_probabilities).parameters),
+            ("event_alpha", "eligible", "native_window_valid", "config"),
+        )
+        self.assertEqual(
+            tuple(inspect.signature(select_window_indices).parameters),
+            (
+                "target",
+                "demo_interactions",
+                "grip_transition_indices",
+                "config",
+                "native_waypoint_count",
+            ),
+        )
+        self.assertEqual(
+            inspect.signature(select_window_indices).parameters[
+                "native_waypoint_count"
+            ].kind,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+        tree = ast.parse(inspect.getsource(router_module))
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module is not None:
+                imported.add(node.module)
+            elif isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+        self.assertLessEqual(
+            imported,
+            {
+                "__future__",
+                "collections.abc",
+                "math",
+                "numbers",
+                "torch",
+                "icgs.configuration.method",
+                "icgs.contracts.method",
+            },
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
