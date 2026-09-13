@@ -267,4 +267,29 @@ def validate_method_manifest(
     return expected
 
 
-__all__ = ["EXCLUDED_REFERENCE_FIELDS", "REFERENCE_FIELDS", "reference_fingerprint", "validate_method_manifest"]
+def validate_resume(
+    saved: Mapping[str, Any],
+    requested: Mapping[str, Any],
+) -> None:
+    """Validate resume checkpoint manifest against requested run parameters."""
+    if not isinstance(saved, Mapping) or not isinstance(requested, Mapping):
+        raise ValueError("resume manifest must be a mapping")
+    for key in ("schema_version", "stage", "reference_id", "dataset_id", "config_id", "total_updates", "selected_seed"):
+        if key not in saved:
+            raise ValueError(f"saved resume manifest missing required key: {key!r}")
+        if key not in requested:
+            raise ValueError(f"requested resume manifest missing required key: {key!r}")
+        if saved[key] != requested[key]:
+            raise ValueError(
+                f"incompatible resume manifest: {key} mismatch ({saved[key]!r} != {requested[key]!r})"
+            )
+
+
+
+__all__ = [
+    "EXCLUDED_REFERENCE_FIELDS",
+    "REFERENCE_FIELDS",
+    "reference_fingerprint",
+    "validate_method_manifest",
+    "validate_resume",
+]

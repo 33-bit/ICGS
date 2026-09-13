@@ -338,4 +338,65 @@ def rollout_loss(
     return total
 
 
-__all__ = ["bootstrap_mask", "physical_loss", "rollout_loss"]
+def masked_normalized_chamfer_distance(
+    predicted_points: Tensor,
+    target_points: Tensor,
+    predicted_valid: Tensor,
+    target_valid: Tensor,
+    *,
+    config: MethodConfig,
+) -> Tensor:
+    """Compute masked normalized symmetric Chamfer distance between point sets."""
+
+    _require_config(config)
+    if not torch.is_tensor(predicted_points) or not torch.is_tensor(target_points):
+        raise TypeError("predicted_points and target_points must be tensors")
+    if not torch.is_tensor(predicted_valid) or not torch.is_tensor(target_valid):
+        raise TypeError("predicted_valid and target_valid must be tensors")
+    if predicted_valid.dtype != torch.bool or target_valid.dtype != torch.bool:
+        raise ValueError("validity masks must be boolean")
+
+    if predicted_points.ndim == 2:
+        predicted_points = predicted_points.unsqueeze(0)
+    if target_points.ndim == 2:
+        target_points = target_points.unsqueeze(0)
+    if predicted_valid.ndim == 1:
+        predicted_valid = predicted_valid.unsqueeze(0)
+    if target_valid.ndim == 1:
+        target_valid = target_valid.unsqueeze(0)
+
+    if predicted_points.ndim != 3 or predicted_points.shape[-1] != 3:
+        raise ValueError("predicted_points must have shape [B, N, 3] or [N, 3]")
+    if target_points.ndim != 3 or target_points.shape[-1] != 3:
+        raise ValueError("target_points must have shape [B, M, 3] or [M, 3]")
+    if predicted_points.shape[:2] != predicted_valid.shape:
+        raise ValueError("predicted_points and predicted_valid shapes must match")
+    if target_points.shape[:2] != target_valid.shape:
+        raise ValueError("target_points and target_valid shapes must match")
+    if predicted_points.shape[0] != target_points.shape[0]:
+        raise ValueError("batch size mismatch between predicted and target points")
+
+    batch = predicted_points.shape[0]
+    cloud_scale = config.losses.cloud_scale_m ** 2
+    losses = []
+    for index in range(batch):
+        pred = predicted_points[index][predicted_valid[index]]
+        tgt = target_points[index][target_valid[index]]
+        if pred.numel() == 0 or tgt.numel() == 0:
+            raise ValueError("valid point clouds require at least one valid point")
+        if not bool(torch.isfinite(pred).all().item()) or not bool(torch.isfinite(tgt).all().item()):
+            raise ValueError("point clouds must contain only finite coordinates")
+        distances = (pred[:, None, :] - tgt[None, :, :]).square().sum(dim=-1)
+        directed_pred = distances.min(dim=1).values.mean()
+        directed_tgt = distances.min(dim=0).values.mean()
+        chamfer = directed_pred + directed_tgt
+        losses.append(chamfer / cloud_scale)
+    return torch.stack(losses).mean()
+
+
+__all__ = [
+    "bootstrap_mask",
+    "masked_normalized_chamfer_distance",
+    "physical_loss",
+    "rollout_loss",
+]

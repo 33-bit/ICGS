@@ -665,6 +665,38 @@ class WorldModelTests(unittest.TestCase):
         self.assertTrue(all(parameter.grad is None for parameter in encoder.parameters()))
         self.assertTrue(all(parameter.grad is None for parameter in decoder.parameters()))
 
+    def test_masked_normalized_chamfer_distance_permutation_mask_scale(self):
+        from icgs.algorithms.objectives.physical import masked_normalized_chamfer_distance
+        from icgs.configuration.method import MethodConfig
+
+        config = MethodConfig()
+        scale_m = config.losses.cloud_scale_m
+        pred = torch.tensor([[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [99.0, 99.0, 99.0]]], dtype=torch.float32)
+        target = torch.tensor([[[0.1, 0.0, 0.0], [0.9, 0.0, 0.0], [88.0, 88.0, 88.0]]], dtype=torch.float32)
+        pred_valid = torch.tensor([[True, True, False]], dtype=torch.bool)
+        target_valid = torch.tensor([[True, True, False]], dtype=torch.bool)
+
+        loss = masked_normalized_chamfer_distance(pred, target, pred_valid, target_valid, config=config)
+        self.assertTrue(torch.isfinite(loss).item())
+        self.assertGreater(float(loss.item()), 0.0)
+
+        # Permutation invariance on valid points
+        pred_perm = torch.tensor([[[1.0, 0.0, 0.0], [0.0, 0.0, 0.0], [99.0, 99.0, 99.0]]], dtype=torch.float32)
+        target_perm = torch.tensor([[[0.9, 0.0, 0.0], [0.1, 0.0, 0.0], [88.0, 88.0, 88.0]]], dtype=torch.float32)
+        loss_perm = masked_normalized_chamfer_distance(pred_perm, target_perm, pred_valid, target_valid, config=config)
+        torch.testing.assert_close(loss, loss_perm)
+
+        # Mask invariance: invalid point values can be NaNs or arbitrarily different
+        pred_masked = pred.clone()
+        pred_masked[0, 2] = float("nan")
+        loss_masked = masked_normalized_chamfer_distance(pred_masked, target, pred_valid, target_valid, config=config)
+        torch.testing.assert_close(loss, loss_masked)
+
+        # Scale test: double cloud_scale_m -> loss drops by factor of 4
+        config_scaled = MethodConfig.from_dict({"losses": {"cloud_scale_m": scale_m * 2.0}})
+        loss_scaled = masked_normalized_chamfer_distance(pred, target, pred_valid, target_valid, config=config_scaled)
+        torch.testing.assert_close(loss / 4.0, loss_scaled)
+
 
 def _executed_transition(points, pose, grip, *, boundary):
     from icgs.contracts.method import ExecutedTransition, TimedCommand, TimedObservation
