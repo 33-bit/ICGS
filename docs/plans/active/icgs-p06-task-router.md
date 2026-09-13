@@ -13,9 +13,10 @@
 ## Status, authority and prerequisites
 
 Status: **ACTIVE — Task 1A tensor tracker, Task 1B owned TaskState, Task 1C
-masked objectives and Task 2 deterministic routing/window selection COMPLETE;
-P06 remains PARTIAL because native context materialization, sessions, seeded
-sampling and reference calls are NOT IMPLEMENTED**. This
+masked objectives, Task 2 deterministic routing/window selection and Task 3A
+route RNG protocol COMPLETE; P06 remains PARTIAL because Task 3B exact-index
+native context materialization/session ownership and Task 3C routed reference
+calls are NOT IMPLEMENTED**. This
 document is a category C component of the approved research migration; it does not
 authorize simulator or training workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
@@ -67,14 +68,18 @@ evidence; this addendum does not certify that the component consumes every new f
 - Create: `src/icgs/algorithms/planning/router.py` — window selection and route RNG.
 - Create: `src/icgs/algorithms/objectives/task.py`; Test: `tests/test_task_router.py`.
 
-Implemented/planned capability vocabulary (Task 3 surfaces remain unavailable):
+Implemented/planned capability vocabulary (Task 3B/3C surfaces remain unavailable):
 
 ```python
 track_task(previous: TaskState | None, state: PhysicalState, events: EventMemory) -> TaskState
-sample_prior(observation, task: TaskState, context: MethodContext, *, seed: int) -> Candidate
 router_probabilities(event_alpha, eligible, native_window_valid, config) -> Tensor
 select_window_indices(target, demo_interactions, grip_transition_indices, config,
                       *, native_waypoint_count) -> tuple[int, ...] | None
+split_route_seed(seed: int) -> tuple[int, int]  # route seed, diffusion seed
+draw_route(probabilities: Tensor, *, route_seed: int) -> int
+
+# Planned and unavailable until Task 3C:
+sample_prior(observation, task: TaskState, context: MethodContext, *, seed: int) -> Candidate
 ```
 
 TaskState r[B,W],alpha[B,Lc+1] including null,rho/nu/eligible[B,Lc],boundary/context/tracker lineage. Nonmonotonic recovery is legal. Reference pi_ref is exactly one routed sample plus r2 execution, with no V,H-conditioned choice or learned stop.
@@ -360,43 +365,76 @@ Invalid windows fall back through the mixture; invalid full context aborts setup
 
 Task 2 completion wording: **Task 2 deterministic routing math and structural
 window selection — COMPLETE; native `PreparedContext` materialization, D1/D2
-sessions, seed splitting, frozen-IP calls, candidate/audit construction and
-end-to-end final-availability derivation — deferred.** P06 remains PARTIAL.
+sessions, frozen-IP calls, candidate/audit construction and end-to-end
+final-availability derivation — deferred.** Deterministic route RNG belongs to
+Task 3A rather than Task 2. P06 remains PARTIAL.
 
-### Task 3: Reference sessions, seeds and immutable fingerprint
+### Task 3A: Deterministic route RNG protocol
 
-**Files:** Complete router and `src/icgs/state/task.py`.
+**Status:** COMPLETE. This task contains seed splitting and a local categorical
+route draw only. It does not materialize native contexts or call a policy.
+
+**Files:** Extend `src/icgs/algorithms/planning/router.py`.
 **Test owner:** `tests/test_task_router.py`.
-**Consumes / produces:** Produces `split_route_seed(seed)` returning route/diffusion seeds; sample_prior consumes native predict/prepare capabilities.
+**Consumes / produces:** `split_route_seed(seed)` returns the exact route and
+diffusion child integers produced by `SeedSequence(seed).spawn(2)`.
+`draw_route(probabilities, *, route_seed)` consumes one non-batched
+`[full, window_0, ...]` distribution and returns one route index under protocol
+`pcg64-v1`.
 
-- [ ] **Step 1 — RED:** Add the following assertion body to a named
-  `unittest.TestCase` method in the test owner, with the shown imports.
+The seed input is a nonnegative integer with booleans rejected. Child streams are
+not post-processed to force pairwise inequality: the standard `SeedSequence`
+outputs are authoritative. `draw_route` requires a nonempty one-dimensional
+floating tensor with finite nonnegative entries and sum one within the same
+dtype-derived numerical guard used for task probability state. Invalid input is
+rejected outside that guard. Accepted near-unit distributions are canonicalized
+on a float64 copy for categorical sampling; their relative and zero masses remain
+unchanged and the caller's tensor is never mutated.
 
-```python
-from icgs.algorithms.planning.router import split_route_seed
-route, diffusion = split_route_seed(17)
-self.assertNotEqual(route, diffusion)
-self.assertEqual((route, diffusion), split_route_seed(17))
-```
+Categorical sampling uses a local
+`numpy.random.Generator(numpy.random.PCG64(route_seed))`. It computes the CDF on
+a detached, canonicalized CPU float64 copy and sets only `cdf[-1] = 1.0` after
+validation and canonicalization so roundoff cannot produce an out-of-range index.
+`searchsorted(..., side="right")` skips zero-mass entries, including entries at
+an exact CDF boundary. Neither success nor validation failure mutates global
+Python, NumPy or Torch RNG state.
+Changing PCG64 or categorical boundary semantics requires a new behavior-affecting
+route RNG protocol ID and, once Task 3C owns reference integration, new reference
+lineage.
 
-- [ ] **Step 2 — Verify RED:** Run `python3 -B -m unittest discover -s tests -p 'test_task_router.py' -v`.
-  Expect the new test to fail because its new implementation is absent or violates
-  the stated assertion; record that failure. An unrelated import failure is not RED proof.
-- [ ] **Step 3 — GREEN:** Implement the boundary using this algorithm/code sketch.
+- [x] **Step 1 — RED:** Add focused seed, categorical, malformed-input,
+  zero-mass, global-RNG and dependency-boundary fixtures.
+- [x] **Step 2 — Verify RED:** Run `.venv/bin/python -B -m unittest discover -s
+  tests -p 'test_task_router.py' -v`. Existing 48 Task 1/2 tests must remain
+  green; every Task 3A failure must name only the absent planned surface.
+- [x] **Step 3 — GREEN:** Implement only `ROUTE_RNG_PROTOCOL`,
+  `split_route_seed` and `draw_route`; do not add session/context/candidate APIs.
+- [x] **Step 4 — Verify GREEN:** Repeat the focused suite and record exact
+  selected/executed/skipped counts, then run related regressions and L0.
+- [x] **Step 5 — Review:** Inspect source/test diff and update evidence. Make a
+  focused Task 3A commit only with explicit authorization.
 
-```python
-children = np.random.SeedSequence(seed).spawn(2)
-route_seed, diffusion_seed = [int(c.generate_state(1)[0]) for c in children]
-# Draw route only with route_seed; execute one native scoped-seed call with diffusion_seed.
-# Persist chosen full/window ID, both seeds, raw candidate and native artifact IDs.
-```
+Task 3A completion wording: **Task 3A deterministic root-seed splitting and local
+categorical route draw — COMPLETE; exact-index native context preparation, D=1/D=2
+ownership, routed native inference and candidate provenance — deferred.** P06
+remains PARTIAL.
 
-Independently construct D1 and D2 native sessions from identical frozen weights once per method; use correctly owned PreparedContexts, no branch-time loads or concurrent mutable scratch. Preserve native RNG draw order and global restoration even on failure. Freeze physical/event/task path, calibration and cadence before C; changing any reference field invalidates outcomes.
+### Task 3B/3C: Deferred native contexts and routed reference calls
 
-- [ ] **Step 4 — Verify GREEN:** Repeat `python3 -B -m unittest discover -s tests -p 'test_task_router.py' -v`.
-  Expect every selected assertion to execute and pass; record selected/executed/skipped counts.
-- [ ] **Step 5 — Review:** Inspect the exact source/test diff and update this plan's
-  evidence. At authorized execution time, make a focused commit only after that review.
+Task 3B must first resolve exact-index native preparation and the separate RNG/
+provenance owner for stochastic point sampling. It must not pass Task 2's selected
+raw subsequence through `prepare_context(..., prepared=False)`, because native
+`sample_to_cond_demo` would select waypoints again. Each non-`None` window must be
+bound to the D=1 session owner, while full context must be bound to the session
+matching its one/two-demo count.
+
+Task 3C then validates B=1 task/context lineage, draws exactly one route, resolves
+exactly one owned context/session and performs exactly one native proposal under
+the diffusion seed. Failure after route choice does not retry another route.
+Route/window/reference provenance belongs in an immutable wrapper around generic
+`Candidate`; generic candidate semantics are not expanded silently. These tasks
+remain blocked from RED until their context-preparation RNG and wrapper contracts
+are explicitly approved.
 
 ## Acceptance, resource limits and evidence
 
@@ -505,6 +543,25 @@ phase if an FG fails and request a scoped protocol decision.
   command — **PASS**, 48/48 selected/executed/passed with 0
   failures/errors/skips. `probability_epsilon > 0` remains deliberate and now
   test-locked because central `MethodConfig` already requires it.
+- Task 3A RED: the focused command selected/executed 54 tests — **FAIL as
+  expected**: all 48 existing Task 1/2 tests passed and all 6 new Task 3A tests
+  raised only import errors for the absent `ROUTE_RNG_PROTOCOL`, `draw_route`
+  and `split_route_seed` surface; 0 skips.
+- Task 3A initial GREEN: the same focused command after implementation — **PASS**,
+  54/54 selected/executed/passed with 0 failures/errors/skips. Coverage includes
+  exact `SeedSequence.spawn(2)` child values, deterministic local PCG64 draws,
+  exact-CDF-boundary and zero-mass behavior, malformed distributions and seeds,
+  input immutability, global Python/NumPy/Torch RNG preservation on success and
+  failure, and the no-native-context/session/policy dependency boundary.
+- Task 3A pre-commit correctness review added an accepted-near-unit distribution
+  fixture. Its targeted RED run selected/executed 7 Task 3A tests: 6 passed and
+  the new test failed as intended because an undersummed distribution's closing
+  residual selected a zero-mass final route (`actual=2`, `expected=1`). After
+  canonicalizing the already-validated distribution on a float64 copy, the final
+  focused command — **PASS**, 55/55 selected/executed/passed with 0
+  failures/errors/skips. The same fixture also covers a slightly oversummed
+  distribution so its CDF remains monotonic, and the seed API test now locks the
+  second child as the diffusion seed rather than context-preparation RNG.
 - One proposed `memory_slots=True` negative fixture failed inside the existing
   typed `TrackerConfig` constructor before reaching TaskTracker. It was removed as
   duplicate schema coverage and was not counted as Task 1A RED evidence.
@@ -525,6 +582,10 @@ phase if an FG fails and request a scoped protocol decision.
   sibling `test_composition` import was outside that invocation's module path;
   rerunning that owner through canonical discovery passed 6/6. This collection
   error is not counted as runtime regression evidence.
+- Task 3A related regressions reran the same canonical owners: the combined
+  episode/world-model/event-memory/physical-memory/config/contracts/architecture
+  invocation passed 131/131, and canonical-discovery `test_policy.py` passed
+  6/6; 137/137 related assertions passed with 0 skips.
 - A noncanonical positional unittest invocation executed the first 90 related
   assertions successfully, then failed to collect `test_policy.py` because its
   sibling `test_composition` import was not on the discovery path. The canonical
@@ -538,6 +599,9 @@ phase if an FG fails and request a scoped protocol decision.
 - Task 2 `.venv/bin/python -B -m py_compile
   src/icgs/algorithms/planning/router.py tests/test_task_router.py`, `git diff
   --check`, and the changed-file trailing-whitespace scan — **PASS**.
+- Task 3A `.venv/bin/python -B -m py_compile
+  src/icgs/algorithms/planning/router.py tests/test_task_router.py`, `git diff
+  --check`, and the changed-file trailing-whitespace scan — **PASS**.
 - L0: `.venv/bin/python -B scripts/validate_fast.py` and `.venv/bin/python -B -S
   scripts/validate_fast.py` — **FAIL** overall with no new failure versus `273b7b3`.
   Both variants passed Python syntax, static harness boundary, and 19/19 harness
@@ -547,17 +611,23 @@ phase if an FG fails and request a scoped protocol decision.
   five pre-existing missing evidence-log targets. Both passed Python syntax,
   static harness boundary and 19/19 harness self-tests with 0 skips; no new L0
   failure was introduced relative to `bc019c9`.
+- Task 3A L0 rerun: both commands remain **FAIL** overall with exactly the same
+  five pre-existing missing evidence-log targets. Both passed Python syntax,
+  static harness boundary and 19/19 harness self-tests with 0 skips; no new L0
+  failure was introduced relative to Task 2 commit `1375865`.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, simulator, preprocessing, collection and training: **NOT RUN** — separate
   resource authorization required.
-- Remaining risk: Tasks 1A/1B/1C/2 have primarily synthetic CPU/float32 evidence;
-  Task 2 additionally has one CPU-FP16 subnormal normalization regression. In
-  particular, the dtype-derived TaskState alpha and Task 1C alignment-target
-  normalization tolerances have not been validated for float16/bfloat16. Strict
-  validation also uses host-reading `.item()` checks that may synchronize each GPU
-  batch; before real Stage B training, decide from measurement whether those checks
-  remain on the hot path or move partly to dataset/debug validation. P02 task-view
-  tensorization, Stage B training, GPU/mixed-precision behavior, context replay
-  orchestration, native window materialization/final-availability integration,
-  routed policy execution, native sessions and measured reference support remain
+- Remaining risk: Tasks 1A/1B/1C/2/3A have primarily synthetic CPU evidence;
+  Task 2 additionally has one CPU-FP16 subnormal normalization regression and
+  Task 3A exercises float32/float64 categorical inputs. In particular, the
+  dtype-derived TaskState alpha, Task 1C alignment-target and Task 3A route-sum
+  tolerances have not been validated broadly for float16/bfloat16. Strict
+  validation also uses host-reading `.item()` checks that may synchronize each
+  GPU batch; before real Stage B training, decide from measurement whether those
+  checks remain on the hot path or move partly to dataset/debug validation. P02
+  task-view tensorization, Stage B training, GPU/mixed-precision behavior,
+  context replay orchestration, exact-index native window materialization and
+  its point-sampling RNG ownership, final-availability integration, routed
+  policy execution, native sessions and measured reference support remain
   unverified.

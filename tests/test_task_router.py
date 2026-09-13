@@ -1,8 +1,10 @@
 import ast
 import inspect
+import random
 import unittest
 from dataclasses import replace
 
+import numpy as np
 import torch
 
 from icgs.configuration.method import MethodConfig
@@ -1370,6 +1372,147 @@ class RouterNumericalTests(unittest.TestCase):
         )
 
 
+class RouteRngProtocolTests(unittest.TestCase):
+    @staticmethod
+    def _assert_numpy_state_equal(left, right):
+        if left[0] != right[0] or left[2:] != right[2:]:
+            raise AssertionError("NumPy global RNG metadata changed")
+        np.testing.assert_array_equal(left[1], right[1])
+
+    def test_split_route_seed_matches_exact_seed_sequence_children(self):
+        from icgs.algorithms.planning.router import split_route_seed
+
+        self.assertIn("route and diffusion seeds", inspect.getdoc(split_route_seed))
+        expected = tuple(
+            int(child.generate_state(1)[0])
+            for child in np.random.SeedSequence(17).spawn(2)
+        )
+        self.assertEqual(expected, (3302413169, 2035845825))
+        self.assertEqual(split_route_seed(17), expected)
+        self.assertEqual(split_route_seed(17), split_route_seed(17))
+        self.assertNotEqual(*split_route_seed(17))
+
+    def test_route_draw_is_deterministic_and_never_selects_zero_mass(self):
+        from icgs.algorithms.planning.router import draw_route
+
+        self.assertEqual(draw_route(torch.tensor([0.0, 1.0]), route_seed=7), 1)
+        draws = tuple(
+            draw_route(torch.tensor([0.5, 0.0, 0.5]), route_seed=seed)
+            for seed in range(64)
+        )
+        self.assertTrue(set(draws).issubset({0, 2}))
+        self.assertEqual(
+            draw_route(torch.tensor([0.25, 0.75]), route_seed=29),
+            draw_route(torch.tensor([0.25, 0.75]), route_seed=29),
+        )
+
+        boundary_draw = np.random.Generator(np.random.PCG64(123)).random()
+        boundary_probabilities = torch.tensor(
+            [boundary_draw, 0.0, 1.0 - boundary_draw], dtype=torch.float64
+        )
+        self.assertEqual(draw_route(boundary_probabilities, route_seed=123), 2)
+
+    def test_route_draw_canonicalizes_accepted_near_unit_mass(self):
+        from icgs.algorithms.planning.router import draw_route
+
+        cases = (
+            (torch.tensor([0.5, 0.4999982, 0.0]), 339728),
+            (torch.tensor([0.5, 0.5000005, 0.0]), 41),
+        )
+        for probabilities, route_seed in cases:
+            with self.subTest(probabilities=probabilities, route_seed=route_seed):
+                values = probabilities.to(dtype=torch.float64).numpy().copy()
+                values /= values.sum(dtype=np.float64)
+                cumulative = np.cumsum(values, dtype=np.float64)
+                cumulative[-1] = 1.0
+                draw = np.random.Generator(np.random.PCG64(route_seed)).random()
+                expected = int(np.searchsorted(cumulative, draw, side="right"))
+
+                actual = draw_route(probabilities, route_seed=route_seed)
+                self.assertEqual(actual, expected)
+                self.assertNotEqual(actual, 2)
+
+    def test_route_draw_rejects_distribution_outside_tolerance(self):
+        from icgs.algorithms.planning.router import draw_route
+
+        cases = (
+            (torch.tensor(1.0), "one-dimensional"),
+            (torch.ones(1, 2), "one-dimensional"),
+            (torch.empty(0), "nonempty"),
+            (torch.tensor([0, 1]), "floating"),
+            (torch.tensor([float("nan"), 1.0]), "finite"),
+            (torch.tensor([float("inf"), 0.0]), "finite"),
+            (torch.tensor([-0.1, 1.1]), "nonnegative"),
+            (torch.tensor([0.4, 0.5]), "sum to one"),
+            (torch.tensor([0.6, 0.6]), "sum to one"),
+        )
+        for probabilities, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex((TypeError, ValueError), message):
+                    draw_route(probabilities, route_seed=11)
+
+    def test_route_seed_validation_rejects_bool_negative_and_noninteger(self):
+        from icgs.algorithms.planning.router import draw_route, split_route_seed
+
+        for invalid in (True, -1, 1.5, None):
+            with self.subTest(invalid=invalid):
+                with self.assertRaisesRegex((TypeError, ValueError), "nonnegative integer"):
+                    split_route_seed(invalid)
+                with self.assertRaisesRegex((TypeError, ValueError), "nonnegative integer"):
+                    draw_route(torch.tensor([1.0]), route_seed=invalid)
+
+    def test_route_rng_success_and_failure_preserve_global_rng_and_input(self):
+        from icgs.algorithms.planning.router import draw_route, split_route_seed
+
+        random.seed(101)
+        np.random.seed(202)
+        torch.manual_seed(303)
+        python_before = random.getstate()
+        numpy_before = np.random.get_state()
+        torch_before = torch.get_rng_state().clone()
+        probabilities = torch.tensor([0.2, 0.3, 0.5])
+        probabilities_before = probabilities.clone()
+
+        split_route_seed(31)
+        draw_route(probabilities, route_seed=37)
+        with self.assertRaisesRegex(ValueError, "sum to one"):
+            draw_route(torch.tensor([0.2, 0.2]), route_seed=41)
+
+        self.assertEqual(random.getstate(), python_before)
+        self._assert_numpy_state_equal(np.random.get_state(), numpy_before)
+        self.assertTrue(torch.equal(torch.get_rng_state(), torch_before))
+        torch.testing.assert_close(probabilities, probabilities_before)
+
+    def test_route_rng_protocol_and_dependency_boundary(self):
+        import icgs.algorithms.planning.router as router_module
+        from icgs.algorithms.planning.router import (
+            ROUTE_RNG_PROTOCOL,
+            draw_route,
+            split_route_seed,
+        )
+
+        self.assertEqual(ROUTE_RNG_PROTOCOL, "pcg64-v1")
+        self.assertEqual(tuple(inspect.signature(split_route_seed).parameters), ("seed",))
+        self.assertEqual(
+            tuple(inspect.signature(draw_route).parameters),
+            ("probabilities", "route_seed"),
+        )
+        self.assertEqual(
+            inspect.signature(draw_route).parameters["route_seed"].kind,
+            inspect.Parameter.KEYWORD_ONLY,
+        )
+        source = inspect.getsource(router_module)
+        for forbidden in (
+            "PreparedContext",
+            "InstantPolicy",
+            "MethodContext",
+            "Candidate",
+            "composition",
+            "state.randomness",
+        ):
+            self.assertNotIn(forbidden, source)
+
+
 class StructuralWindowTests(unittest.TestCase):
     @staticmethod
     def _ref(a, b, *, valid=True):
@@ -1561,6 +1704,7 @@ class StructuralWindowTests(unittest.TestCase):
                 "collections.abc",
                 "math",
                 "numbers",
+                "numpy",
                 "torch",
                 "icgs.configuration.method",
                 "icgs.contracts.method",
