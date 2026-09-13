@@ -1,8 +1,8 @@
 """Pure P06 routing arithmetic and structural native-window selection.
 
-This module does not construct native contexts, own sessions, split seeds, or
-call a policy.  Final native-window availability is injected by its state owner;
-debounced gripper-transition indices are injected by P05 preprocessing.
+This module does not construct native contexts, own sessions, or call a policy.
+Final native-window availability is injected by its state owner; debounced
+gripper-transition indices are injected by P05 preprocessing.
 """
 
 from __future__ import annotations
@@ -11,11 +11,76 @@ from collections.abc import Sequence
 from math import isfinite
 from numbers import Integral, Real
 
+import numpy as np
 import torch
 from torch import Tensor
 
 from icgs.configuration.method import MethodConfig, RouterConfig
 from icgs.contracts.method import SegmentRef
+
+
+ROUTE_RNG_PROTOCOL = "pcg64-v1"
+
+
+def _nonnegative_seed(value: object, name: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError(f"{name} must be a nonnegative integer")
+    seed = int(value)
+    if seed < 0:
+        raise ValueError(f"{name} must be a nonnegative integer")
+    return seed
+
+
+def split_route_seed(seed: int) -> tuple[int, int]:
+    """Derive route and diffusion seeds from one root seed."""
+
+    root_seed = _nonnegative_seed(seed, "seed")
+    route_child, diffusion_child = np.random.SeedSequence(root_seed).spawn(2)
+    return (
+        int(route_child.generate_state(1)[0]),
+        int(diffusion_child.generate_state(1)[0]),
+    )
+
+
+def draw_route(probabilities: Tensor, *, route_seed: int) -> int:
+    """Draw one categorical route using the versioned local RNG protocol."""
+
+    seed = _nonnegative_seed(route_seed, "route_seed")
+    if not torch.is_tensor(probabilities):
+        raise TypeError("probabilities must be a tensor")
+    if probabilities.ndim != 1:
+        raise ValueError("probabilities must be one-dimensional")
+    if probabilities.numel() == 0:
+        raise ValueError("probabilities must be nonempty")
+    if not probabilities.is_floating_point():
+        raise TypeError("probabilities must use a floating dtype")
+    if not bool(torch.isfinite(probabilities).all().item()):
+        raise ValueError("probabilities must be finite")
+    if bool((probabilities < 0).any().item()):
+        raise ValueError("probabilities must be nonnegative")
+
+    tolerance = 8.0 * torch.finfo(probabilities.dtype).eps
+    total = probabilities.sum()
+    if not bool(
+        torch.isclose(
+            total,
+            torch.ones((), dtype=total.dtype, device=total.device),
+            rtol=tolerance,
+            atol=tolerance,
+        ).item()
+    ):
+        raise ValueError("probabilities must sum to one")
+
+    values = (
+        probabilities.detach().to(device="cpu", dtype=torch.float64).numpy().copy()
+    )
+    values /= values.sum(dtype=np.float64)
+    cumulative = np.cumsum(values, dtype=np.float64)
+    # Close only the validated, canonicalized distribution's numerical endpoint.
+    cumulative[-1] = 1.0
+    generator = np.random.Generator(np.random.PCG64(seed))
+    draw = float(generator.random())
+    return int(np.searchsorted(cumulative, draw, side="right"))
 
 
 def _router_config(config: RouterConfig | MethodConfig) -> RouterConfig:
@@ -241,4 +306,10 @@ def select_window_indices(
     return tuple(sorted((*mandatory, *fill)))
 
 
-__all__ = ["router_probabilities", "select_window_indices"]
+__all__ = [
+    "ROUTE_RNG_PROTOCOL",
+    "draw_route",
+    "router_probabilities",
+    "select_window_indices",
+    "split_route_seed",
+]
