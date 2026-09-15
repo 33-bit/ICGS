@@ -12,11 +12,12 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — Tasks 1–2 in-memory boundaries and the Task 3 deterministic
-foundation are implemented; versioned storage/views and runtime collection remain
-NOT IMPLEMENTED**. This document is a category C component of the approved
-research migration; its gates still do not authorize simulator collection.
-The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
+Status: **ACTIVE — Tasks 1–2 in-memory boundaries, Task 3 deterministic
+foundation, and the in-memory bounded attempt collector are implemented;
+versioned storage/views and physical simulator collection remain NOT IMPLEMENTED**.
+This document is a category C component of the approved research migration; its
+gates still do not authorize simulator collection. The
+[master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
 
 Prerequisites: P00–P01 contracts; FG assets/calibration and split manifest approval before collection.
@@ -242,9 +243,10 @@ local substitute threshold.
   changed. No commit was made.
 
 Task 3 status: **PARTIAL** — deterministic accounting/catalog/annotation/monitor
-foundations are implemented. `TimedEnvironment` integration, the bounded attempt
-collector, simulator execution, concrete assets/seeds/tolerances, collection, and
-all G2-dependent bindings remain deferred.
+foundations and the in-memory bounded attempt collector (`collect_attempt`) are
+implemented. Concrete simulator execution, concrete assets/seeds/tolerances,
+dataset collection workloads, and G1/G2 physical feasibility gates remain
+deferred/unauthorized.
 
 ## Acceptance, resource limits and evidence
 
@@ -273,54 +275,121 @@ phase if an FG fails and request a scoped protocol decision.
 
 ## Execution evidence
 
-- Scope audit: P00 timed records and protocols exist. P01's concrete timed
-  environment, fixed-interval materializer, executed-transition producer, and
-  replay provider do not. Task 3 implements only deterministic accounting,
-  catalog, annotation, and external-monitor boundaries; it does not collect data.
-- Correctness RED: supported installed Python 3.12 ran the targeted suite after
+- Historical scope audit (pre-P01 implementation): P00 timed records and protocols
+  existed while P01's runtime stepping and materializer boundaries were still in
+  development. Task 3 implemented deterministic accounting, catalog, annotation,
+  and external-monitor boundaries without simulator collection.
+- Current P01 dependency status (2026-09-15): Runtime stepping and materialization
+  seams are implemented: `src/icgs/execution/timed.py` provides `materialize_prefix`
+  and grip grouping; `src/icgs/environments/rlbench/timed.py` provides the injected
+  `TimedRLBenchAdapter` reset/advance/close stepping boundary; and
+  `src/icgs/environments/rlbench/replay.py` provides replay report validation.
+  Engine restoration (P08), empirical G1/G2 physical certification, and
+  durable/physical collector integration remain incomplete.
+- Historical correctness RED: supported installed Python 3.12 ran the targeted suite after
   mismatch tests were added and before correspondence validation. **FAIL**, 6
   executed, 1 failure, 0 skips: a changed online point cloud was accepted despite
   disagreeing with its transition observation.
-- Correctness GREEN: supported installed Python 3.12 ran the targeted suite after
+- Historical correctness GREEN: supported installed Python 3.12 ran the targeted suite after
   the online/transition fix. **PASS**, 6 executed, 6 passed, 0 failures/errors/skips.
   This validates
   only the in-memory helper boundary, not archive storage or view construction.
-- Shared-boundary metadata RED: supported installed Python 3.12 ran the targeted
+- Historical shared-boundary metadata RED: supported installed Python 3.12 ran the targeted
   suite after adding simulator-time, wall-time, and sensor-profile mismatches and
   before their validator. **FAIL**, 7 executed, 3 failures, 0 skips; all three
   inconsistent shared boundaries were accepted.
-- Shared-boundary metadata GREEN: the same supported suite after the exact metadata
+- Historical shared-boundary metadata GREEN: the same supported suite after the exact metadata
   checks. **PASS**, 7 executed, 7 passed, 0 failures/errors/skips.
-- Supported targeted command: `PATH=/home/hunganh/miniconda3/envs/a0_py312/bin:$PATH
+- Historical supported targeted command: `PATH=/home/hunganh/miniconda3/envs/a0_py312/bin:$PATH
   python3 -B -m unittest discover -s tests -p 'test_episode_data.py' -v` — **PASS**,
-  13 executed, 13 passed, 0 failures/errors/skips. The host-default `python3` is
+  13 executed, 13 passed, 0 failures/errors/skips. The host-default `python3` was
   Python 3.13.12 and unsupported; no `PYTHONPATH` diagnostic is counted as
   acceptance evidence. Task 3 RED in the same environment was **FAIL**, 13
   executed with 6 expected missing-module errors and 0 skips before its source
   files existed.
-- Task 3 label/status refinement used the repository `.venv/bin/python`, CPython
+- Historical Task 3 label/status refinement used the repository `.venv/bin/python`, CPython
   3.10.20, after an editable no-dependency install of the current checkout. RED
   was **FAIL**, 13 executed with exactly 2 assertion failures: noncanonical padded
   status was accepted and unidentifiable postcondition masked an independently
   observable eligibility label. GREEN was **PASS**, 13 executed, 13 passed, 0
   failures/errors/skips. The same environment passed `test_architecture.py` 3/3
   and `compileall` for the new collection/evaluation modules.
-- L0: `PATH=/home/hunganh/miniconda3/envs/a0_py312/bin:$PATH python3 -B
+- Historical Linux L0: `PATH=/home/hunganh/miniconda3/envs/a0_py312/bin:$PATH python3 -B
   scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py` — **FAIL**
   overall. Both variants passed Python syntax, static harness boundary, and 19
   harness tests with zero skips. Five pre-existing missing evidence-log links under
-  `docs/experiments/vv19-validation` still fail local-link validation; no unrelated
-  link was changed. Repeating both commands through `.venv/bin/python` produced
-  the same result.
-- Supported installed L2/C1–C5, L3/L4, collection and training: **NOT RUN**. No
-  simulator, training, download, preprocessing job, GPU workload, or robot motion
-  was launched.
-- Remaining protocol blockers: (1) manifest/NPZ shard key, offset, checksum and
-  publication/quarantine contract; (2) `EpisodeView`/view payload and unique-ID,
-  query/context, and mask rules; (3) root/parent/descendant lineage representation;
-  (4) P01 timing/replay runtime and FG assets/calibration before collection;
-  (5) Task 3 bounded `TimedEnvironment` collector and concrete G2 predicate
-  bindings.
+  `docs/experiments/vv19-validation` failed local-link validation; repeating both
+  commands through `.venv/bin/python` reproduced the exact same failure.
+- Manager baseline evidence (2026-09-15, macOS 15.7.2 arm64):
+  - `.venv/bin/python -B -m unittest discover -s tests -p 'test_episode_data.py' -v`:
+    **PASS**, 13 selected/executed/passed, 0 skips. CPython 3.11.15, NumPy 1.26.4;
+    installed `icgs` resolves to this checkout's `src/icgs`.
+  - `python3 -B scripts/validate_fast.py`: **PASS with two pre-existing warnings**, syntax/links/boundaries and
+    19/19 harness tests, no skips; CPython 3.14.4 (L0 only).
+  - `python3 -B -S scripts/validate_fast.py`: **PASS with two pre-existing warnings**, same checks/counts;
+    CPython 3.14.4 (L0 only).
+  - Both L0 variants emit unrelated invalid-escape `SyntaxWarning`s in
+    `tests/test_task_router.py` (pre-existing; no change authorized there).
+  - Full L1 / L2 C1–C5 / L3 / L4: **NOT RUN**; preflight uses only bounded synthetic
+    P02 tests and stdlib L0. No simulator, training, downloads, preprocessing,
+    GPU or robot workloads.
+- Task 3 in-memory bounded attempt collector: `src/icgs/data/collection/attempts.py`
+  implements `collect_attempt`, `AttemptResult`, and `AttemptExecutionError`.
+  - API: `collect_attempt(environment, commands, *, config: MethodConfig | CollectionConfig, monitor=None, seed=None, clock=time.monotonic) -> AttemptResult`.
+  - Semantics: Single reset with caller seed; sequential execution of supplied
+    materialized `TimedCommand`s bounded by `config.collection.max_episode_intervals`
+    without eager iterator overconsumption; requires explicit typed `MethodConfig` or
+    `CollectionConfig`; halts on command exhaustion (`completed`) or resource limits
+    (`timeout`); physical terminal classification is omitted and deferred until an
+    approved specification exists; inter-step wall-limit evaluation via injected `clock`;
+    full causal correspondence verification across boundary index, simulator/wall
+    timestamps, sensor profile, grip, points, pose, and submitted vs recorded command;
+    consolidated single-path lifecycle management guarantees `environment.close()` is called
+    exactly once after ownership begins; operational failures in iterator, clock,
+    stepping, or annotation retain executed transitions, detached annotation snapshots,
+    and any returned-but-invalid transition as `rejected_transition` on
+    `AttemptExecutionError` without suppressing primary cause or cleanup diagnostics;
+    `AttemptResult` is a frozen outer record containing detached mutable annotation snapshots;
+    `annotations[i]` corresponds to `transitions[i]` for the recorded successful prefix,
+    is empty when no monitor is provided, and is shorter than `transitions` if annotation fails.
+  - Limitations: Bounded in-memory execution only; no disk/JSON IO; no outer quotas;
+    terminal classification is omitted; does not launch simulator or certify G1/G2 physical feasibility.
+- Targeted P02 test execution (2026-09-15, macOS 15.7.2 arm64):
+  - `.venv/bin/python -B -m unittest discover -s tests -p 'test_episode_data.py' -v`:
+    Fix Round 2 regression suite **PASS**, 25 selected, 25 executed, 25 passed,
+    0 failures/errors/skips (0.219s). Covered initial clock, iterator creation, reset,
+    and stream `next()` failures with exactly-once close, 11 parameterized boundary/timestamp/sensor/observation/command
+    mismatches retaining rejected transitions, and annotation prefix / detachment semantics.
+    CPython 3.11.15, NumPy 1.26.4; installed `icgs` resolves to this checkout's `src/icgs`.
+  - `.venv/bin/python -B -m unittest discover -s tests -p 'test_architecture.py' -v`:
+    **PASS**, 3 executed, 3 passed, 0 failures/errors/skips (0.179s).
+  - `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`:
+    **PASS with two pre-existing warnings**, 19/19 harness tests OK (0.524s, 0.528s).
+- Audit and manager validation note (2026-09-15, macOS arm64):
+  Gemini 3.8 Flash High implementer, GPT 5.6 Sol Medium reviewer. All five runtime
+  findings resolved; documentation and regression follow-through accepted. Manager
+  independently verified PASS: 25/25 P02, 3/3 architecture, and both L0 variants 19/19
+  zero skips (two existing SyntaxWarnings on host 3.14.4; supported P02 CPython 3.11.15).
+  Full L1/C1–C5/L3/L4 NOT RUN; no physical workloads. P02 remains ACTIVE/PARTIAL with
+  named persistence, dataset view, lineage closure, and full-runner gaps.
+- Remaining protocol blockers:
+  1. Archive persistence protocol: concrete manifest JSON schema, NPZ shard array
+     keys, ragged cloud offset indexing, content hash/checksum format, atomic
+     publication directory tree, and quarantine directory/manifest layout.
+  2. Dataset view contract: durable payload, unique transition/sample ID mapping,
+     query/context independence representation, and view-specific mask semantics
+     for geom/dyn/task/terminal/value/pair/calib/audit views (and `EpisodeView`
+     representation).
+  3. Lineage closure: representation of root/parent lineage and ancestry closure
+     for descendant-aware mesh-family and augmentation split validation (literal
+     `lineage_id` split isolation is implemented).
+  4. Durable episode/attempt linkage: mapping in-memory attempt results to
+     persisted `icgs_episode_v1` manifests and quarantine records (blocked on
+     archive persistence protocol, item 1).
+  5. G1/G2 physical feasibility and workload authorization: concrete asset/seed
+     catalog bindings, measured force/penetration observability and predicate
+     tolerances, and physical simulator execution permissions (still blocked
+     under repository research policy).
 
 ## Observability integration addendum — 2026-09-09
 
