@@ -1884,5 +1884,834 @@ class ReferenceSessionFactoryTests(unittest.TestCase):
             self._assert_factory_dependency_boundary(violating_surface)
 
 
+class MethodContextBuilderTests(unittest.TestCase):
+    _PUBLISHED_PROFILE = "instant_policy_published_vv19_119fa871"
+
+    @classmethod
+    def _demo(cls, content_hash, *, grips=(0, 0, 1, 1, 1)):
+        source = NativeDemoMaterializationTests._demo(grips=grips)
+        return TimedDemoInput(source.transitions, content_hash)
+
+    @classmethod
+    def _events(cls, demos, *, mixed=False, gap=False, batch=1):
+        from icgs.contracts.method import SegmentRef
+        from icgs.models.encoders.event import EventEncoding
+        from icgs.state.method_context import build_event_memory
+
+        refs = []
+        for demo in demos:
+            content_hash = demo.demo_content_hash
+            refs.append(SegmentRef(content_hash, 0, 0, "start", False))
+            if mixed:
+                refs.extend(
+                    (
+                        SegmentRef(content_hash, 0, 1, "interaction", True),
+                        SegmentRef(content_hash, 1, 3, "interaction", True),
+                        SegmentRef(content_hash, 3, 4, "interaction", False),
+                    )
+                )
+            else:
+                second_start = 3 if gap else 2
+                refs.extend(
+                    (
+                        SegmentRef(content_hash, 0, 2, "interaction", True),
+                        SegmentRef(
+                            content_hash,
+                            second_start,
+                            4,
+                            "interaction",
+                            True,
+                        ),
+                    )
+                )
+            refs.append(SegmentRef(content_hash, 4, 4, "end", False))
+        row_refs = tuple((*refs, None))
+        row_valid = tuple((*([True] * len(refs)), False))
+        valid = torch.tensor([row_valid] * batch, dtype=torch.bool)
+        encoding = EventEncoding(
+            torch.zeros(batch, len(row_refs), 256),
+            valid,
+        )
+        hashes = tuple(demo.demo_content_hash for demo in demos)
+        return build_event_memory(
+            encoding,
+            tuple(row_refs for _ in range(batch)),
+            tuple(hashes for _ in range(batch)),
+            "encoder-fixture",
+            "segmentation-fixture",
+        )
+
+    @classmethod
+    def _sessions(cls):
+        from icgs.policies.reference import ReferenceSessions
+
+        values = ReferenceSessionsValidationTests._values()
+        d1_config = dataclasses.replace(
+            values["d1_config"],
+            graph=dataclasses.replace(
+                values["d1_config"].graph,
+                traj_horizon=2,
+            ),
+        )
+        d2_config = dataclasses.replace(
+            d1_config,
+            graph=dataclasses.replace(d1_config.graph, num_demos=2),
+        )
+        values.update(
+            d1=ReferenceSessionsValidationTests._policy(d1_config),
+            d2=ReferenceSessionsValidationTests._policy(d2_config),
+            d1_config=d1_config,
+            d2_config=d2_config,
+            native_point_count=3,
+        )
+        return ReferenceSessions(**values)
+
+    @classmethod
+    def _config(cls):
+        from icgs.configuration.method import MethodConfig
+
+        return dataclasses.replace(
+            MethodConfig(),
+            native_profile=cls._PUBLISHED_PROFILE,
+        )
+
+    @staticmethod
+    def _prepared(owner, source_id):
+        from icgs.state.context_cache import PreparedContext
+
+        return PreparedContext([], owner, source_id=source_id)
+
+    @staticmethod
+    def _native_demo(name):
+        return {"native-demo": name}
+
+    def _assert_builder_dependency_boundary(self, surface):
+        source = textwrap.dedent(inspect.getsource(surface))
+        tree = ast.parse(source)
+        referenced = {
+            node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
+        }
+        referenced.update(
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+        )
+        forbidden = {
+            "segment_demo",
+            "predict",
+            "predict_batch",
+            "draw_route",
+            "router_probabilities",
+            "Candidate",
+            "ReferenceProposal",
+            "resolve_native_profile",
+            "load_published_policy",
+            "build_reference_sessions",
+            "sha256_file",
+        }
+        artifact_imports = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                artifact_imports.extend(
+                    alias.name
+                    for alias in node.names
+                    if alias.name == "icgs.artifacts"
+                    or alias.name.startswith("icgs.artifacts.")
+                )
+            elif (
+                isinstance(node, ast.ImportFrom)
+                and node.module is not None
+                and (
+                    node.module == "icgs.artifacts"
+                    or node.module.startswith("icgs.artifacts.")
+                )
+            ):
+                artifact_imports.append(node.module)
+        artifact_imports.sort()
+        found = sorted(forbidden & referenced)
+        if found or artifact_imports or "torch.load" in source:
+            self.fail(
+                f"Task 3B.3 surface {surface.__name__} must assemble existing "
+                "contexts without re-segmentation, routing, inference, artifact "
+                f"IO or session construction; forbidden identifiers: {found}; "
+                f"forbidden artifact imports: {artifact_imports}"
+            )
+
+    def test_builder_rejects_preflight_mismatch_before_planning_or_materialization(self):
+        from icgs.configuration.method import MethodConfig
+        from icgs.policies import reference
+        from icgs.policies.reference import build_method_context
+
+        sessions = self._sessions()
+        demo_a = self._demo("demo-a")
+        demo_b = self._demo("demo-b")
+        events_a = self._events((demo_a,))
+        events_ab = self._events((demo_a, demo_b))
+        events_ba = self._events((demo_b, demo_a))
+        events_batch_two = self._events((demo_a,), batch=2)
+        config = self._config()
+        cases = (
+            ([demo_a], events_a, sessions, config, sessions.reference_id, "tuple"),
+            ((), events_a, sessions, config, sessions.reference_id, "one or two|D"),
+            (
+                (demo_a, demo_b, demo_a),
+                events_a,
+                sessions,
+                config,
+                sessions.reference_id,
+                "one or two|D",
+            ),
+            (
+                (object(),),
+                events_a,
+                sessions,
+                config,
+                sessions.reference_id,
+                "TimedDemoInput",
+            ),
+            ((demo_a,), object(), sessions, config, sessions.reference_id, "EventMemory"),
+            ((demo_a,), events_batch_two, sessions, config, sessions.reference_id, "B=1|batch"),
+            ((demo_a,), events_a, object(), config, sessions.reference_id, "ReferenceSessions"),
+            ((demo_a,), events_a, sessions, object(), sessions.reference_id, "MethodConfig"),
+            ((demo_a,), events_a, sessions, config, "other-reference", "reference_id"),
+            (
+                (demo_a,),
+                events_a,
+                sessions,
+                MethodConfig(),
+                sessions.reference_id,
+                "native_profile|profile",
+            ),
+            (
+                (demo_a, demo_b),
+                events_ba,
+                sessions,
+                config,
+                sessions.reference_id,
+                "hash|order",
+            ),
+        )
+        collaborators = (
+            "split_context_seeds",
+            "debounced_grip_boundaries",
+            "select_window_indices",
+            "materialize_full_native_demo",
+            "materialize_indexed_native_demo",
+        )
+        with ExitStack() as stack:
+            spies = tuple(
+                stack.enter_context(
+                    mock.patch.object(
+                        reference,
+                        name,
+                        side_effect=AssertionError(
+                            f"{name} ran before builder preflight validation"
+                        ),
+                    )
+                )
+                for name in collaborators
+            )
+            for raw_demos, events, owner, resolved, reference_id, message in cases:
+                with self.subTest(message=message):
+                    with self.assertRaisesRegex((TypeError, ValueError), message):
+                        build_method_context(
+                            raw_demos,
+                            events,
+                            owner,
+                            context_seed=17,
+                            reference_id=reference_id,
+                            config=resolved,
+                        )
+        self.assertTrue(all(spy.call_count == 0 for spy in spies))
+        self.assertEqual(events_ab.raw_hashes[0], ("demo-a", "demo-b"))
+
+        length = events_a.tokens.shape[1]
+        seed_cardinality_cases = (
+            (((), tuple(range(length))), "full_demo_seeds|demo"),
+            (((101,), tuple(range(length - 1))), "window_slot_seeds|event|L"),
+        )
+        for seed_plan, message in seed_cardinality_cases:
+            with self.subTest(seed_cardinality=message), mock.patch.object(
+                reference,
+                "split_context_seeds",
+                return_value=seed_plan,
+            ), mock.patch.object(
+                reference,
+                "debounced_grip_boundaries",
+                return_value=(),
+            ), mock.patch.object(
+                reference,
+                "select_window_indices",
+                return_value=None,
+            ), mock.patch.object(
+                reference,
+                "materialize_full_native_demo",
+                side_effect=AssertionError(
+                    "full materialization ran before seed cardinality validation"
+                ),
+            ) as materialize, mock.patch.object(
+                sessions.d1,
+                "prepare_context",
+                side_effect=AssertionError(
+                    "prepare ran before seed cardinality validation"
+                ),
+            ) as prepare:
+                with self.assertRaisesRegex(ValueError, message):
+                    build_method_context(
+                        (demo_a,),
+                        events_a,
+                        sessions,
+                        context_seed=17,
+                        reference_id=sessions.reference_id,
+                        config=config,
+                    )
+                materialize.assert_not_called()
+                prepare.assert_not_called()
+
+    def test_malformed_event_partition_fails_before_first_materialization(self):
+        from icgs.policies import reference
+        from icgs.policies.reference import build_method_context
+
+        sessions = self._sessions()
+        demo = self._demo("demo-a")
+        events = self._events((demo,), gap=True)
+        with mock.patch.object(
+            reference,
+            "materialize_full_native_demo",
+            side_effect=AssertionError("full materialization ran before planning"),
+        ) as full_materializer, mock.patch.object(
+            reference,
+            "materialize_indexed_native_demo",
+            side_effect=AssertionError("window materialization ran before planning"),
+        ) as window_materializer, mock.patch.object(
+            sessions.d1,
+            "prepare_context",
+            side_effect=AssertionError("D1 prepare ran before planning"),
+        ) as d1_prepare, mock.patch.object(
+            sessions.d2,
+            "prepare_context",
+            side_effect=AssertionError("D2 prepare ran before planning"),
+        ) as d2_prepare:
+            with self.assertRaisesRegex(ValueError, "partition|contiguous"):
+                build_method_context(
+                    (demo,),
+                    events,
+                    sessions,
+                    context_seed=17,
+                    reference_id=sessions.reference_id,
+                    config=self._config(),
+                )
+        for collaborator in (
+            full_materializer,
+            window_materializer,
+            d1_prepare,
+            d2_prepare,
+        ):
+            collaborator.assert_not_called()
+
+    def test_one_demo_full_context_uses_d1_and_exact_provenance(self):
+        from icgs.policies import reference
+        from icgs.policies.reference import build_method_context
+
+        sessions = self._sessions()
+        demo = self._demo("demo-a")
+        raw_demos = (demo,)
+        events = self._events(raw_demos)
+        config = self._config()
+        full_native = self._native_demo("full-a")
+        full = self._prepared(sessions.d1.context_owner, "full-context")
+        full_seed = 101
+        window_seeds = tuple(range(201, 201 + events.tokens.shape[1]))
+
+        with mock.patch.object(
+            reference,
+            "split_context_seeds",
+            return_value=((full_seed,), window_seeds),
+        ) as split, mock.patch.object(
+            reference,
+            "select_window_indices",
+            return_value=None,
+        ), mock.patch.object(
+            reference,
+            "materialize_full_native_demo",
+            return_value=full_native,
+        ) as materialize, mock.patch.object(
+            sessions.d1,
+            "prepare_context",
+            return_value=full,
+        ) as prepare, mock.patch.object(
+            sessions.d1,
+            "validate_context",
+        ) as validate, mock.patch.object(
+            sessions.d2,
+            "prepare_context",
+            side_effect=AssertionError("D2 must not prepare a one-demo full context"),
+        ):
+            context, record = build_method_context(
+                raw_demos,
+                events,
+                sessions,
+                context_seed=17,
+                reference_id=sessions.reference_id,
+                config=config,
+            )
+
+        split.assert_called_once_with(
+            17,
+            demo_count=1,
+            event_count=events.tokens.shape[1],
+        )
+        materialize.assert_called_once_with(
+            demo,
+            point_seed=full_seed,
+            native_waypoint_count=sessions.d1.graph_config.traj_horizon,
+            native_point_count=sessions.native_point_count,
+        )
+        prepared_demos = prepare.call_args.args[0]
+        self.assertEqual(tuple(prepared_demos), (full_native,))
+        self.assertEqual(prepare.call_args.kwargs, {"prepared": True})
+        validate.assert_called_once_with(full)
+        self.assertIs(context.raw_demos, raw_demos)
+        self.assertIs(context.events, events)
+        self.assertIs(context.native_full, full)
+        self.assertTrue(all(window is None for window in context.native_windows))
+        self.assertEqual(record.context_seed, 17)
+        self.assertEqual(record.full_demo_seeds, (full_seed,))
+        self.assertEqual(record.window_slot_seeds, window_seeds)
+        self.assertEqual(record.full_context_id, full.source_id)
+        self.assertEqual(record.window_context_ids, (None,) * len(window_seeds))
+
+    def test_two_demo_full_context_uses_d2_with_d1_canonical_waypoint_count(self):
+        from icgs.policies import reference
+        from icgs.policies.reference import build_method_context
+
+        sessions = self._sessions()
+        raw_demos = (self._demo("demo-a"), self._demo("demo-b"))
+        events = self._events(raw_demos)
+        full_seeds = (101, 102)
+        window_seeds = tuple(range(301, 301 + events.tokens.shape[1]))
+        native_demos = (
+            self._native_demo("full-a"),
+            self._native_demo("full-b"),
+        )
+        full = self._prepared(sessions.d2.context_owner, "full-d2")
+        order = []
+        native_demo_iterator = iter(native_demos)
+
+        def select(target, interactions, *args, **kwargs):
+            order.append(f"select:{target.demo_content_hash}:{target.a}")
+            expected = tuple(
+                reference_ref
+                for reference_ref in events.refs[0]
+                if reference_ref is not None
+                and reference_ref.kind == "interaction"
+                and reference_ref.demo_content_hash == target.demo_content_hash
+            )
+            self.assertEqual(interactions, expected)
+            return None
+
+        def materialize_full(*args, **kwargs):
+            order.append("materialize-full")
+            return next(native_demo_iterator)
+
+        with mock.patch.object(
+            reference,
+            "split_context_seeds",
+            return_value=(full_seeds, window_seeds),
+        ), mock.patch.object(
+            reference,
+            "select_window_indices",
+            side_effect=select,
+        ) as select_spy, mock.patch.object(
+            reference,
+            "materialize_full_native_demo",
+            side_effect=materialize_full,
+        ) as materialize, mock.patch.object(
+            sessions.d2,
+            "prepare_context",
+            return_value=full,
+        ) as prepare, mock.patch.object(
+            sessions.d2,
+            "validate_context",
+        ) as validate, mock.patch.object(
+            sessions.d1,
+            "prepare_context",
+            side_effect=AssertionError("D1 must not prepare a D2 full context"),
+        ):
+            context, record = build_method_context(
+                raw_demos,
+                events,
+                sessions,
+                context_seed=19,
+                reference_id=sessions.reference_id,
+                config=self._config(),
+            )
+
+        first_materialization = order.index("materialize-full")
+        self.assertEqual(first_materialization, 4)
+        self.assertTrue(
+            all(item.startswith("select:") for item in order[:first_materialization])
+        )
+        self.assertEqual(select_spy.call_count, 4)
+        self.assertEqual(
+            materialize.call_args_list,
+            [
+                mock.call(
+                    demo,
+                    point_seed=seed,
+                    native_waypoint_count=sessions.d1.graph_config.traj_horizon,
+                    native_point_count=sessions.native_point_count,
+                )
+                for demo, seed in zip(raw_demos, full_seeds)
+            ],
+        )
+        self.assertEqual(tuple(prepare.call_args.args[0]), native_demos)
+        self.assertEqual(prepare.call_args.kwargs, {"prepared": True})
+        validate.assert_called_once_with(full)
+        self.assertIs(context.native_full, full)
+        self.assertIs(context.raw_demos, raw_demos)
+        self.assertEqual(record.full_demo_seeds, full_seeds)
+        self.assertEqual(record.full_context_id, full.source_id)
+
+    def test_mixed_windows_are_preplanned_slot_aligned_and_owned_by_d1(self):
+        from icgs.policies import reference
+        from icgs.policies.reference import build_method_context
+
+        sessions = self._sessions()
+        demo = self._demo("demo-a")
+        raw_demos = (demo,)
+        events = self._events(raw_demos, mixed=True)
+        config = self._config()
+        length = events.tokens.shape[1]
+        full_seed = 101
+        window_seeds = tuple(range(401, 401 + length))
+        full_native = self._native_demo("full")
+        window_native = self._native_demo("window")
+        full = self._prepared(sessions.d1.context_owner, "full-context")
+        window = self._prepared(sessions.d1.context_owner, "window-context")
+        order = []
+
+        def debounce(grips, resolved):
+            order.append("debounce")
+            self.assertEqual(tuple(grips), (0.0, 0.0, 1.0, 1.0, 1.0))
+            self.assertIn(resolved, (config, config.event))
+            return (2,)
+
+        def select(target, interactions, grip_indices, resolved, **kwargs):
+            order.append(f"select:{target.a}-{target.b}")
+            self.assertEqual(
+                interactions,
+                tuple(
+                    reference_ref
+                    for reference_ref in events.refs[0]
+                    if reference_ref is not None
+                    and reference_ref.kind == "interaction"
+                ),
+            )
+            self.assertEqual(grip_indices, (2,))
+            self.assertIn(resolved, (config, config.router))
+            self.assertEqual(
+                kwargs,
+                {
+                    "native_waypoint_count": sessions.d1.graph_config.traj_horizon
+                },
+            )
+            return (0, 4) if target.a == 0 else None
+
+        def materialize_full(*args, **kwargs):
+            order.append("materialize-full")
+            return full_native
+
+        with mock.patch.object(
+            reference,
+            "split_context_seeds",
+            return_value=((full_seed,), window_seeds),
+        ), mock.patch.object(
+            reference,
+            "debounced_grip_boundaries",
+            side_effect=debounce,
+        ) as debounce_spy, mock.patch.object(
+            reference,
+            "select_window_indices",
+            side_effect=select,
+        ) as select_spy, mock.patch.object(
+            reference,
+            "materialize_full_native_demo",
+            side_effect=materialize_full,
+        ), mock.patch.object(
+            reference,
+            "materialize_indexed_native_demo",
+            return_value=window_native,
+        ) as window_materializer, mock.patch.object(
+            sessions.d1,
+            "prepare_context",
+            side_effect=(full, window),
+        ) as prepare, mock.patch.object(
+            sessions.d1,
+            "validate_context",
+        ) as validate:
+            points_before = tuple(
+                observation.points.copy()
+                for observation in NativeDemoMaterializationTests._measured_observations(
+                    demo
+                )
+            )
+            context, record = build_method_context(
+                raw_demos,
+                events,
+                sessions,
+                context_seed=23,
+                reference_id=sessions.reference_id,
+                config=config,
+            )
+
+        self.assertEqual(order[:3], ["debounce", "select:0-1", "select:1-3"])
+        self.assertEqual(order[3], "materialize-full")
+        debounce_spy.assert_called_once()
+        self.assertEqual(select_spy.call_count, 2)
+        window_materializer.assert_called_once_with(
+            demo,
+            (0, 4),
+            point_seed=window_seeds[1],
+            native_waypoint_count=sessions.d1.graph_config.traj_horizon,
+            native_point_count=sessions.native_point_count,
+        )
+        self.assertEqual(prepare.call_count, 2)
+        self.assertEqual(tuple(prepare.call_args_list[0].args[0]), (full_native,))
+        self.assertEqual(tuple(prepare.call_args_list[1].args[0]), (window_native,))
+        self.assertEqual(
+            [item.kwargs for item in prepare.call_args_list],
+            [{"prepared": True}, {"prepared": True}],
+        )
+        self.assertEqual(validate.call_args_list, [mock.call(full), mock.call(window)])
+        self.assertIs(context.raw_demos, raw_demos)
+        self.assertIs(context.events, events)
+        self.assertIs(context.native_full, full)
+        expected_windows = (None, window, None, None, None, None)
+        self.assertEqual(context.native_windows, expected_windows)
+        self.assertEqual(
+            record.window_context_ids,
+            (None, window.source_id, None, None, None, None),
+        )
+        self.assertEqual(record.window_slot_seeds, window_seeds)
+        torch.testing.assert_close(
+            context.native_window_valid,
+            torch.tensor([[False, True, False, False, False, False]]),
+        )
+        self.assertIs(context.native_windows[1], window)
+        for observation, before in zip(
+            NativeDemoMaterializationTests._measured_observations(demo),
+            points_before,
+        ):
+            np.testing.assert_array_equal(observation.points, before)
+
+    def test_collaborator_failures_and_wrong_owners_propagate(self):
+        from icgs.policies import reference
+        from icgs.policies.reference import build_method_context
+
+        sessions = self._sessions()
+        demo = self._demo("demo-a")
+        raw_demos = (demo,)
+        events = self._events(raw_demos)
+        config = self._config()
+        full_native = self._native_demo("full")
+        length = events.tokens.shape[1]
+        seeds = ((101,), tuple(range(501, 501 + length)))
+
+        with mock.patch.object(
+            reference,
+            "split_context_seeds",
+            return_value=seeds,
+        ), mock.patch.object(
+            reference,
+            "select_window_indices",
+            return_value=None,
+        ), mock.patch.object(
+            reference,
+            "materialize_full_native_demo",
+            side_effect=RuntimeError("injected full materializer failure"),
+        ), mock.patch.object(
+            sessions.d1,
+            "prepare_context",
+        ) as prepare:
+            with self.assertRaisesRegex(RuntimeError, "full materializer"):
+                build_method_context(
+                    raw_demos,
+                    events,
+                    sessions,
+                    context_seed=29,
+                    reference_id=sessions.reference_id,
+                    config=config,
+                )
+            prepare.assert_not_called()
+
+        with mock.patch.object(
+            reference,
+            "split_context_seeds",
+            return_value=seeds,
+        ), mock.patch.object(
+            reference,
+            "select_window_indices",
+            return_value=None,
+        ), mock.patch.object(
+            reference,
+            "materialize_full_native_demo",
+            return_value=full_native,
+        ), mock.patch.object(
+            sessions.d1,
+            "prepare_context",
+            side_effect=RuntimeError("injected full prepare failure"),
+        ), mock.patch.object(sessions.d1, "validate_context") as validate:
+            with self.assertRaisesRegex(RuntimeError, "full prepare"):
+                build_method_context(
+                    raw_demos,
+                    events,
+                    sessions,
+                    context_seed=30,
+                    reference_id=sessions.reference_id,
+                    config=config,
+                )
+            validate.assert_not_called()
+
+        wrong_owner = self._prepared(object(), "wrong-owner")
+        with mock.patch.object(
+            reference,
+            "split_context_seeds",
+            return_value=seeds,
+        ), mock.patch.object(
+            reference,
+            "select_window_indices",
+            return_value=None,
+        ), mock.patch.object(
+            reference,
+            "materialize_full_native_demo",
+            return_value=full_native,
+        ), mock.patch.object(
+            sessions.d1,
+            "prepare_context",
+            return_value=wrong_owner,
+        ), mock.patch.object(
+            sessions.d1,
+            "validate_context",
+            side_effect=ValueError("context belongs to another policy"),
+        ) as validate:
+            with self.assertRaisesRegex(ValueError, "belongs to another policy"):
+                build_method_context(
+                    raw_demos,
+                    events,
+                    sessions,
+                    context_seed=31,
+                    reference_id=sessions.reference_id,
+                    config=config,
+                )
+            validate.assert_called_once_with(wrong_owner)
+
+    def test_window_materialize_prepare_and_validate_failures_propagate(self):
+        from icgs.policies import reference
+        from icgs.policies.reference import build_method_context
+
+        sessions = self._sessions()
+        demo = self._demo("demo-a")
+        raw_demos = (demo,)
+        events = self._events(raw_demos)
+        config = self._config()
+        length = events.tokens.shape[1]
+        seeds = ((101,), tuple(range(601, 601 + length)))
+        full_native = self._native_demo("full")
+        window_native = self._native_demo("window")
+
+        for stage in ("materialize", "prepare", "validate"):
+            with self.subTest(stage=stage):
+                full = self._prepared(
+                    sessions.d1.context_owner,
+                    f"full-{stage}",
+                )
+                window_owner = (
+                    object()
+                    if stage == "validate"
+                    else sessions.d1.context_owner
+                )
+                window = self._prepared(window_owner, f"window-{stage}")
+                prepare_count = 0
+
+                def materialize_window(*args, **kwargs):
+                    if stage == "materialize":
+                        raise RuntimeError("injected window materialize failure")
+                    return window_native
+
+                def prepare_context(demos, *, prepared):
+                    nonlocal prepare_count
+                    prepare_count += 1
+                    if prepare_count == 1:
+                        return full
+                    if stage == "prepare":
+                        raise RuntimeError("injected window prepare failure")
+                    return window
+
+                def validate_context(context):
+                    if context is window and stage == "validate":
+                        raise ValueError("context belongs to another policy")
+
+                expected = {
+                    "materialize": "window materialize",
+                    "prepare": "window prepare",
+                    "validate": "belongs to another policy",
+                }[stage]
+                with mock.patch.object(
+                    reference,
+                    "split_context_seeds",
+                    return_value=seeds,
+                ), mock.patch.object(
+                    reference,
+                    "select_window_indices",
+                    side_effect=((0, 4), None),
+                ), mock.patch.object(
+                    reference,
+                    "materialize_full_native_demo",
+                    return_value=full_native,
+                ), mock.patch.object(
+                    reference,
+                    "materialize_indexed_native_demo",
+                    side_effect=materialize_window,
+                ), mock.patch.object(
+                    sessions.d1,
+                    "prepare_context",
+                    side_effect=prepare_context,
+                ), mock.patch.object(
+                    sessions.d1,
+                    "validate_context",
+                    side_effect=validate_context,
+                ):
+                    with self.assertRaisesRegex(
+                        (RuntimeError, ValueError),
+                        expected,
+                    ):
+                        build_method_context(
+                            raw_demos,
+                            events,
+                            sessions,
+                            context_seed=37,
+                            reference_id=sessions.reference_id,
+                            config=config,
+                        )
+
+    def test_builder_function_scoped_dependency_guard(self):
+        from icgs.policies.reference import build_method_context
+
+        self._assert_builder_dependency_boundary(build_method_context)
+
+        def violating_surface():
+            import icgs.artifacts.checkpoints as checkpoints
+            from icgs.artifacts.published import resolve_native_profile
+
+            return segment_demo, torch.load, resolve_native_profile, checkpoints
+
+        with self.assertRaisesRegex(
+            AssertionError,
+            "violating_surface.*resolve_native_profile.*segment_demo",
+        ):
+            self._assert_builder_dependency_boundary(violating_surface)
+
+
 if __name__ == "__main__":
     unittest.main()

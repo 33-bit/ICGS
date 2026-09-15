@@ -17,9 +17,9 @@ masked objectives, Task 2 deterministic routing/window selection, Task 3A route
 RNG protocol and Task 3B.0 context-preparation RNG/provenance foundation
 and Task 3B.1 exact-index/full-demo materialization COMPLETE; P06 remains PARTIAL
 because Task 3B.2a injected-session validation and Task 3B.2b authoritative
-profile/outer D1-D2 construction are COMPLETE under synthetic L1, while Task
-3B.3 session/context ownership and Task 3C routed reference calls are NOT
-IMPLEMENTED**. This
+profile/outer D1-D2 construction are COMPLETE under synthetic L1; Task 3B.3 has
+an accepted RED contract but no runtime implementation, while Task 3C routed
+reference calls are NOT IMPLEMENTED**. This
 document is a category C component of the approved research migration; it does not
 authorize simulator or training workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
@@ -452,9 +452,9 @@ remains PARTIAL.
 
 **Status:** ACTIVE — Task 3B.0 and Task 3B.1 exact-index/full-demo materializers
 and Task 3B.2a injected-session validation plus Task 3B.2b authoritative
-profile/outer construction COMPLETE under synthetic L1; Task 3B.3 NOT STARTED.
-Task 3B constructs contexts only; it does not choose a route or call native
-inference.
+profile/outer construction COMPLETE under synthetic L1; Task 3B.3 RED COMPLETE
+and runtime NOT IMPLEMENTED. Task 3B constructs contexts only; it does not choose
+a route or call native inference.
 
 **Files:** Create `src/icgs/policies/reference.py`; extend
 `src/icgs/composition.py` only for outer D1/D2 construction/loading. Do not add
@@ -830,15 +830,55 @@ full context or fails setup, attempts only structurally eligible interaction
 windows, and stores `None` for a valid-but-unmaterializable window. It delegates
 final availability exclusively to `MethodContext.native_window_valid`; it does
 not add another mask or treat structural eligibility as native feasibility.
+The success path requires an explicitly resolved `MethodConfig` whose
+`native_profile` exactly equals `sessions.native_profile`. The primary config's
+default original profile therefore fails against published-vv19 sessions; it is
+never silently aliased. `reference_id` must likewise equal
+`sessions.reference_id`.
+
+All input-only/builder-owned preflight validation and structural window planning
+finish before the first materialization. The builder derives complete per-demo
+interaction partitions exclusively from `EventMemory.refs`, derives measured
+grip-transition indices through P05 `debounced_grip_boundaries()` and calls
+`select_window_indices()` for every valid structurally eligible interaction slot.
+It never calls `segment_demo()` or establishes another segmentation authority.
+Only a `None` result from `select_window_indices()` becomes an unavailable native
+window. Materializer, `prepare_context()` and `validate_context()` exceptions
+propagate; output-dependent validation occurs immediately after its collaborator
+returns.
+
+One-demo full context uses D1 and two-demo full context uses D2; every event window
+uses D1. `sessions.d1.graph_config.traj_horizon` is the one canonical
+`native_waypoint_count` for all full demos and windows, including D=2. D2 is
+already validated to differ only by `graph.num_demos`, so its horizon cannot
+become a second authority. Native point count always comes from
+`sessions.native_point_count`, never `MethodConfig.geometry.num_points`.
+
+The builder calls `prepare_context(..., prepared=True)` and then the selected
+policy's `validate_context()` for the full context and each feasible window.
+Tests constrain ordered prepared content/count rather than requiring the caller's
+sequence container to be a list or tuple. `MethodContext` preserves the exact
+returned `PreparedContext` objects plus `raw_demos`/`events` identity and does not
+mutate caller inputs; native `prepare_context()` remains allowed to copy/freeze
+demo-array backing.
 Before context assembly it validates
 `len(record.full_demo_seeds) == len(raw_demos)` and both
 `len(record.window_slot_seeds)` and `len(record.window_context_ids)` against the
 EventMemory slot count. These are builder-owned cross-object checks, not intrinsic
 `ContextPreparationRecord` validation.
 
-- [ ] **Step 1 — RED:** Cover one/two-demo full contexts, mixed available/absent
-  windows, exact event-slot alignment, raw-hash order, owner mismatch, full-context
-  failure and derived final validity.
+- [x] **Step 1 — RED:** Cover published-profile override/default-profile mismatch,
+  one/two-demo full contexts using the canonical D1 waypoint count, preflight and
+  structural-planning-before-side-effect ordering, EventMemory-owned partitions,
+  measured P05 grip debounce, mixed available/absent start/end/padding/ineligible
+  slots, exact event-slot/seed/source-ID alignment, raw-hash order, owner mismatch,
+  propagated collaborator failures, caller immutability and derived final validity.
+  Add a function-scoped AST guard that allows the planning/materialization/context
+  owners but forbids `segment_demo`, route/candidate/inference identifiers and
+  concrete artifact/session-construction IO identifiers/imports.
+- [x] **Step 1a — Verify RED:** Keep all 37 accepted reference-policy tests green;
+  every new test must fail only because `build_method_context` is absent, with no
+  runtime edits or skips.
 - [ ] **Step 2 — GREEN:** Assemble existing `MethodContext` plus the external
   immutable preparation record; do not extend online task/context tensors.
 - [ ] **Step 3 — Verify:** Focused and EventMemory/MethodContext regressions.
@@ -1323,6 +1363,22 @@ phase if an FG fails and request a scoped protocol decision.
   `test_loading.py` **PASS** 2/2, `test_policy.py` **PASS** 6/6,
   `test_cli.py` **PASS** 7/7 and `test_architecture.py` **PASS** 3/3, totalling
   41/41 with 0 skips. Direct `py_compile` and `git diff --check` both **PASS**.
+- Task 3B.3 RED: `test_reference_policy.py` selected/executed 45 methods —
+  **FAIL as expected**. All 37 accepted Task 3B.0–3B.2 tests passed; the eight new
+  `MethodContextBuilderTests` methods each produced only the intended ImportError
+  for the absent `build_method_context`, with 0 skips. Fixtures lock exact raw-demo
+  element types and D/L seed cardinality before side effects, all structural
+  planning before materialization, complete EventMemory-owned same-demo partitions
+  for both D=1 and D=2, and every D=2 selector call before the first full-demo
+  materialization. They also lock measured P05 grip debounce, D1 as the sole
+  waypoint-count authority, D1/D2 full-context ownership, mixed slot availability,
+  exact seed/source-ID provenance, returned-context identity, caller immutability
+  and full/window materializer/prepare/validation failure propagation. The
+  function-scoped allowed/forbidden guard is defined but cannot execute until
+  GREEN; it covers both plain `import` and `from ... import` artifact dependencies,
+  names concrete identifiers, and does not claim dynamic or transitive dependency
+  detection. No runtime file changed.
+- Task 3B.3 RED direct `.venv` `py_compile` and `git diff --check` both **PASS**.
 - One proposed `memory_slots=True` negative fixture failed inside the existing
   typed `TrackerConfig` constructor before reaching TaskTracker. It was removed as
   duplicate schema coverage and was not counted as Task 1A RED evidence.
@@ -1400,6 +1456,10 @@ phase if an FG fails and request a scoped protocol decision.
   same five pre-existing missing evidence-log targets. Both pass Python syntax,
   the static harness boundary and 19/19 harness self-tests with 0 skips; no new
   L0 regression was introduced by the Task 3B.2b runtime/profile/plan changes.
+- Task 3B.3 RED L0 rerun: both commands remain **FAIL** overall only for the same
+  five pre-existing missing evidence-log targets. Both pass Python syntax, the
+  static harness boundary and 19/19 harness self-tests with 0 skips; no new L0
+  regression was introduced by the Task 3B.3 test/contracts/plan-only changes.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, simulator, preprocessing, collection and training: **NOT RUN** — separate
   resource authorization required.
