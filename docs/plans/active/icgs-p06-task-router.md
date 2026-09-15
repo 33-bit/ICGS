@@ -13,10 +13,11 @@
 ## Status, authority and prerequisites
 
 Status: **ACTIVE — Task 1A tensor tracker, Task 1B owned TaskState, Task 1C
-masked objectives, Task 2 deterministic routing/window selection and Task 3A
-route RNG protocol COMPLETE; P06 remains PARTIAL because Task 3B exact-index
-native context materialization/session ownership and Task 3C routed reference
-calls are NOT IMPLEMENTED**. This
+masked objectives, Task 2 deterministic routing/window selection, Task 3A route
+RNG protocol and Task 3B.0 context-preparation RNG/provenance foundation
+and Task 3B.1a exact-index materialization COMPLETE; P06 remains PARTIAL because
+Task 3B.1b full-context materialization, Task 3B.2/3B.3 session/context ownership
+and Task 3C routed reference calls are NOT IMPLEMENTED**. This
 document is a category C component of the approved research migration; it does not
 authorize simulator or training workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
@@ -78,7 +79,8 @@ evidence; this addendum does not certify that the component consumes every new f
 - New Task 3B/3C test owner: `tests/test_reference_policy.py`; keep pure arithmetic
   and dependency tests in `tests/test_task_router.py`.
 
-Implemented/planned capability vocabulary (Task 3B/3C surfaces remain unavailable):
+Implemented/planned capability vocabulary (Task 3B.1b–3B.3/3C surfaces remain
+unavailable):
 
 ```python
 track_task(previous: TaskState | None, state: PhysicalState, events: EventMemory) -> TaskState
@@ -87,6 +89,12 @@ select_window_indices(target, demo_interactions, grip_transition_indices, config
                       *, native_waypoint_count) -> tuple[int, ...] | None
 split_route_seed(seed: int) -> tuple[int, int]  # route seed, diffusion seed
 draw_route(probabilities: Tensor, *, route_seed: int) -> int
+split_context_seeds(context_seed: int, *, demo_count: int,
+                    event_count: int) -> tuple[tuple[int, ...], tuple[int, ...]]
+ContextPreparationRecord(...)  # immutable validated preparation provenance
+materialize_indexed_native_demo(demo, boundary_indices, *, point_seed,
+                                native_waypoint_count,
+                                native_point_count) -> Mapping[str, tuple]
 
 # Planned and unavailable until Task 3C; P10 treats proposals as opaque and the
 # P06-owned materializer unwraps proposal.candidate:
@@ -435,8 +443,9 @@ remains PARTIAL.
 
 ### Task 3B: Exact native contexts and separately owned D1/D2 sessions
 
-**Status:** PLANNED — contract frozen for RED. Task 3B constructs contexts only;
-it does not choose a route or call native inference.
+**Status:** ACTIVE — Task 3B.0 and Task 3B.1a exact-index materializer COMPLETE;
+Task 3B.1b full-context path and Task 3B.2–3B.3 NOT STARTED. Task 3B constructs
+contexts only; it does not choose a route or call native inference.
 
 **Files:** Create `src/icgs/policies/reference.py`; extend
 `src/icgs/composition.py` only for outer D1/D2 construction/loading. Do not add
@@ -500,23 +509,34 @@ class ContextPreparationRecord:
     window_context_ids: tuple[str | None, ...]
 ```
 
-The record exactly aligns `window_slot_seeds` and `window_context_ids` with all L
-EventMemory slots; `full_demo_seeds` has exactly D entries in raw-demo order.
-Seeds are nonnegative integers with booleans rejected, `rng_protocol` is exactly
-`seedsequence-native-choice-v1`, `full_context_id` is nonempty, and each optional
-window context ID corresponds to the same slot's materialization result. The
-record validates and preserves values without normalization. It is provenance
-outside online model state. Per-context seeds are not a second reference
-fingerprint; the protocol ID is part of the existing P00 reference payload.
+The record's intrinsic consistency requires `full_demo_seeds` to be nonempty and
+the two window tuples to have equal length. It intentionally carries neither D
+nor L: Task 3B.3 validates the full-demo count against `raw_demos` and both
+window-tuple lengths against the EventMemory slot count before assembly. All three
+collection fields require exact tuple inputs; lists are rejected rather than
+normalized. Every seed accepts a built-in `int` or NumPy integer, must be
+nonnegative, and rejects built-in or NumPy booleans. `rng_protocol` is exactly
+`seedsequence-native-choice-v1`; `full_context_id` is a nonempty string, and each
+window context ID is either `None` or a nonempty string corresponding to the same
+slot's materialization result. Identifier whitespace is used only to reject an
+all-whitespace value and is otherwise preserved exactly. The record validates
+and preserves values without normalization. It is provenance outside online
+model state. Per-context seeds are not a second reference fingerprint; the
+protocol ID is part of the existing P00 reference payload.
 
-- [ ] **Step 1 — RED:** Lock exact SeedSequence child values/order, reserved-slot
+- [x] **Step 1 — RED:** Lock exact SeedSequence child values/order, reserved-slot
   stability, validation, global-RNG restoration and route/diffusion-seed
   separation.
-- [ ] **Step 2 — GREEN:** Implement only the context seed plan and immutable
-  record validation using the existing scoped RNG boundary; no materialization,
-  route draw or native prediction.
-- [ ] **Step 3 — Verify:** Run the focused owner and RNG regressions with exact
+- [x] **Step 2 — GREEN:** Implement only the context seed plan and immutable
+  record validation; do not enter the scoped RNG boundary before materialization,
+  and add no materialization, route draw or native prediction.
+- [x] **Step 3 — Verify:** Run the focused owner and RNG regressions with exact
   counts and 0 hidden skips.
+
+Task 3B.0 completion wording: **Task 3B.0 deterministic context child-seed
+allocation and immutable preparation provenance — COMPLETE; Task 3B.1a
+exact-index native demo materialization is also complete, while Task 3B.1b–3B.3
+full-context/session construction remains NOT IMPLEMENTED.** P06 remains PARTIAL.
 
 #### Task 3B.1 — Exact-index native demonstration materialization
 
@@ -567,20 +587,31 @@ It never relies on `sample_to_cond_demo`'s default 2048. Thus full context uses
 native selection exactly once, while an event window uses the Task 2 indices
 exactly once.
 
-- [ ] **Step 1 — RED:** Add allowed exact-index/full-context fixtures plus
+- [x] **Step 1a — Exact-index RED:** Add allowed exact-index fixtures plus
   duplicate, unordered, bool, out-of-range, wrong-count, command-access and
   mutation negatives. Include indices that native `extract_waypoints` would not
   choose and assert the exact poses/grips survive. Same point seed must reproduce
   identical prepared content; changing only point seed may change sampled points
   but never indices/poses/grips. Exercise global RNG restoration after successful
   materialization and an injected preprocessing failure.
-- [ ] **Step 2 — Verify RED:** Run only the new test owner. Existing router tests
-  must remain green; each new failure must name the absent materializer surface.
-- [ ] **Step 3 — GREEN:** Implement the additive bridge using Task 3B.0's existing
-  scoped RNG owner without changing native preprocessing defaults or public
-  InstantPolicy behavior.
-- [ ] **Step 4 — Verify GREEN:** Run the focused owner, router/event/policy
-  regressions, `py_compile`, diff/whitespace checks and both L0 variants.
+- [x] **Step 2a — Verify exact-index RED:** Run only the new test owner. Existing
+  router tests must remain green; each new failure must name the absent materializer
+  surface.
+- [x] **Step 3a — Exact-index GREEN:** Implement the additive bridge using Task
+  3B.0's existing scoped RNG owner without changing native preprocessing defaults
+  or public InstantPolicy behavior.
+- [x] **Step 4a — Verify exact-index GREEN:** Run the focused owner and
+  router/event/policy regressions, `py_compile`, diff/whitespace checks and both
+  L0 variants.
+- [ ] **Step 1b — Full-context RED:** Lock explicit `native_point_count`, native
+  waypoint selection exactly once, raw-demo order and per-demo seed ownership for
+  the separate full-context preparation path only after Step 4a is green.
+- [ ] **Step 2b — Verify full-context RED:** Run the focused owner and require all
+  exact-index tests to remain green while only the new full-context surface fails.
+- [ ] **Step 3b — Full-context GREEN:** Implement only the full-context raw-demo
+  conversion and native selection path; do not start session/context assembly.
+- [ ] **Step 4b — Verify full-context GREEN:** Run the focused owner plus native
+  preprocessing/policy regressions and both L0 variants before Task 3B.2.
 
 #### Task 3B.2 — D1/D2 session ownership
 
@@ -646,6 +677,11 @@ full context or fails setup, attempts only structurally eligible interaction
 windows, and stores `None` for a valid-but-unmaterializable window. It delegates
 final availability exclusively to `MethodContext.native_window_valid`; it does
 not add another mask or treat structural eligibility as native feasibility.
+Before context assembly it validates
+`len(record.full_demo_seeds) == len(raw_demos)` and both
+`len(record.window_slot_seeds)` and `len(record.window_context_ids)` against the
+EventMemory slot count. These are builder-owned cross-object checks, not intrinsic
+`ContextPreparationRecord` validation.
 
 - [ ] **Step 1 — RED:** Cover one/two-demo full contexts, mixed available/absent
   windows, exact event-slot alignment, raw-hash order, owner mismatch, full-context
@@ -965,6 +1001,73 @@ phase if an FG fails and request a scoped protocol decision.
   failures/errors/skips. The same fixture also covers a slightly oversummed
   distribution so its CDF remains monotonic, and the seed API test now locks the
   second child as the diffusion seed rather than context-preparation RNG.
+- 2026-09-15 Task 3B.0 RED: `.venv/bin/python -B -m unittest discover -s tests
+  -p 'test_reference_policy.py' -v` selected/executed 9 top-level tests — **FAIL
+  as expected**. All 9 failed only because `icgs.policies.reference` was absent;
+  parameterized subtests expanded this to 29 missing-module error records, with
+  0 skips. The pre-GREEN `test_task_router.py` regression remained **PASS**
+  55/55 with 0 skips.
+- Task 3B.0 initial GREEN selected/executed 9 tests: 8 passed and one test-harness
+  assertion incorrectly rejected `None` in optional `window_context_ids`.
+  Correcting that fixture to retain the specified optional-ID behavior required
+  no runtime change. The final focused command and direct `py_compile` both
+  **PASS**, 9/9 selected/executed/passed with 0 failures/errors/skips. Coverage
+  locks exact ordered `SeedSequence` children, all-slot reservation, builtin and
+  NumPy integer validation with boolean rejection, exact tuple inputs, frozen
+  non-normalizing provenance, exact protocol identity, identifier validity,
+  global Python/NumPy/Torch RNG preservation on success and malformed input, and
+  the Task 3B.0 static dependency boundary.
+- Task 3B.0 related regressions: `test_task_router.py` **PASS** 55/55; the
+  canonical episode/world-model/event-memory/physical-memory/config/contracts/
+  architecture owners **PASS** 132/132; and canonical-discovery `test_policy.py`
+  **PASS** 6/6. These related owners total 138/138 with 0 skips. The separate
+  RNG owner `test_inference_contract.py` executed 3 tests: 2 passed and the CUDA
+  RNG test was **SKIPPED** because CUDA is unavailable; the skip is not counted
+  as a pass.
+- Pre-3B.1 review scoped the Task 3B.0 dependency guard to the source/AST of
+  `split_context_seeds` and `ContextPreparationRecord`. Both real surfaces pass,
+  while an isolated fixture referencing `scoped_seed` fails with the intended
+  ownership diagnostic; the focused suite remains **PASS** 9/9 with 0 skips.
+  This direct static check does not claim complete detection of dynamic or
+  alias-obscured dependencies. The same review clarified that the record enforces
+  only intrinsic tuple consistency; Task 3B.3 owns D/L cross-object cardinality.
+- Task 3B.1 initial RED selected/executed 15 tests: all 9 Task 3B.0 tests passed
+  and all 6 new tests failed only at the absent materializer import. Review found
+  that the alternating-grip fixture's `(1,2)` indices were also selected by the
+  native extractor and that its command guard covered fields rather than
+  `transition.command` itself, so that run is retained but not accepted as final
+  RED proof.
+- Task 3B.1 refined RED: the focused reference-policy command selected/executed
+  16 tests — **FAIL as expected**. All 9 Task 3B.0 tests passed; all 7 exact-index
+  materialization tests errored only because
+  `materialize_indexed_native_demo` is absent, with 0 skips. A constant-grip
+  fixture directly proves native extraction returns `(0,4)` while the exact path
+  requires `(1,3)`, and a guarded `ExecutedTransition` rejects any access to
+  `transition.command`. Remaining fixtures lock measured pose/grip preservation,
+  validation before preprocessing, explicit waypoint/point counts, exact
+  sequential native point draws under one seed, input immutability, and Python/
+  NumPy/Torch RNG restoration on success and injected preprocessing failure. The
+  existing `test_task_router.py` owner remained **PASS** 55/55 with 0 skips. No
+  Task 3B.1 runtime surface was added. Both L0 variants remain **FAIL** overall
+  only for the same five pre-existing missing evidence-log links; Python syntax,
+  static harness boundary and 19/19 harness self-tests passed with 0 skips.
+- Task 3B.1a GREEN: the focused reference-policy command selected/executed/passed
+  16/16 tests with 0 failures/errors/skips: the accepted 9 Task 3B.0 tests plus 7
+  exact-index materializer tests. The implementation validates all inputs before
+  preprocessing, reads only measured boundary observations, preserves exact
+  selected poses/grips, delegates point selection to native `subsample_pcd`
+  inside the existing scoped RNG owner, and never calls `extract_waypoints` or
+  accesses `transition.command`. The first architecture regression exposed that
+  the ADR 0002 Open3D allowlist named only the older concrete InstantPolicy. The
+  guard was updated with an exact `icgs.policies.reference` entry, not a package
+  exemption; its negative fixture still treats an unapproved policy as pure.
+  `test_architecture.py` then passed 3/3.
+- Task 3B.1a related regressions: `test_task_router.py` **PASS** 55/55,
+  `test_event_memory.py` **PASS** 29/29 and `test_policy.py` **PASS** 6/6, all
+  with 0 skips. `test_inference_contract.py` executed 3 tests: 2 passed and its
+  CUDA RNG test was **SKIPPED** because CUDA is unavailable; that skip is not
+  counted as a pass. Direct `py_compile` of the changed runtime/test files and
+  `git diff --check` both **PASS**.
 - One proposed `memory_slots=True` negative fixture failed inside the existing
   typed `TrackerConfig` constructor before reaching TaskTracker. It was removed as
   duplicate schema coverage and was not counted as Task 1A RED evidence.
@@ -1018,10 +1121,19 @@ phase if an FG fails and request a scoped protocol decision.
   five pre-existing missing evidence-log targets. Both passed Python syntax,
   static harness boundary and 19/19 harness self-tests with 0 skips; no new L0
   failure was introduced relative to Task 2 commit `1375865`.
+- Task 3B.0 L0 rerun: both commands remain **FAIL** overall with exactly the same
+  five pre-existing missing evidence-log targets. Both passed Python syntax,
+  static harness boundary and 19/19 harness self-tests with 0 skips; no new L0
+  failure was introduced relative to Task 3A commit `9cca46e`.
+- Task 3B.1a L0 rerun: both commands remain **FAIL** overall only for those same
+  five pre-existing missing evidence-log targets. Both pass Python syntax, the
+  static harness boundary and 19/19 harness self-tests with 0 skips; the initial
+  Open3D-ownership regression was resolved before this final evidence run.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, simulator, preprocessing, collection and training: **NOT RUN** — separate
   resource authorization required.
-- Remaining risk: Tasks 1A/1B/1C/2/3A have primarily synthetic CPU evidence;
+- Remaining risk: Tasks 1A/1B/1C/2/3A/3B.0/3B.1a have primarily synthetic CPU
+  evidence;
   Task 2 additionally has one CPU-FP16 subnormal normalization regression and
   Task 3A exercises float32/float64 categorical inputs. In particular, the
   dtype-derived TaskState alpha, Task 1C alignment-target and Task 3A route-sum
@@ -1030,7 +1142,8 @@ phase if an FG fails and request a scoped protocol decision.
   GPU batch; before real Stage B training, decide from measurement whether those
   checks remain on the hot path or move partly to dataset/debug validation. P02
   task-view tensorization, Stage B training, GPU/mixed-precision behavior,
-  context replay orchestration, exact-index native window materialization and
-  its point-sampling RNG ownership, final-availability integration, routed
-  policy execution, native sessions and measured reference support remain
-  unverified.
+  context replay orchestration, full-context materialization,
+  final-availability integration, routed policy execution, native sessions and
+  measured reference support remain unverified. Task 3B.1a exercises native
+  point selection and RNG ownership with a synthetic outlier-filter fixture;
+  real Open3D outlier behavior and native context preparation remain NOT RUN.

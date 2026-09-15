@@ -1,8 +1,9 @@
 # Planned ICGS contracts
 
 Status: PR/AD target plus explicitly marked IDs. Runtime implementation now
-includes P05 `EventMemory`/`MethodContext`, P06 `TaskState`, and the active P10
-search modules with deterministic fixtures
+includes P05 `EventMemory`/`MethodContext`, P06 `TaskState` and its Task 3B.0
+`ContextPreparationRecord` RNG/provenance foundation, and the active P10 search
+modules with deterministic fixtures
 (`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`).
 For every other entry, consult its owning active plan rather than inferring runtime
 availability from this inventory. See the
@@ -66,7 +67,7 @@ tensors. Shared immutable content uses non-writeable owned backing.
 | `EventMemory` | `tokens [B,Lc,256]`, `valid [B,Lc]`, exactly aligned optional SegmentRefs `[B,Lc]`, ordered raw-demo hashes and per-batch demonstration-representation fingerprints, plus shared encoder/segmentation lineage | state |
 | `TaskState` | `r [B,W]`, `alpha [B,Lc+1]` (last null), rho/nu/eligible `[B,Lc]`, boundary, ordered context fingerprints and tracker lineage | state |
 | `MethodContext` | online-B=1 immutable raw demos + EventMemory + injected, separately owned native full/window PreparedContexts and derived native-window validity, reference ID; no task state | state |
-| `ContextPreparationRecord` | `context_seed`, ordered `full_demo_seeds`, slot-aligned `window_slot_seeds`, `rng_protocol`, `full_context_id`, slot-aligned optional `window_context_ids`; provenance outside online model state | policies/reference |
+| `ContextPreparationRecord` | nonnegative `context_seed`; nonempty exact-tuple raw-demo-ordered `full_demo_seeds`; equal-length exact-tuple `window_slot_seeds`/optional nonempty `window_context_ids`; exact protocol `seedsequence-native-choice-v1`; nonempty `full_context_id`; validated without normalization; Task 3B.3 checks D/L cardinality against raw demos/EventMemory; provenance outside online model state | policies/reference |
 | `ReferenceProposal` | generic Candidate plus reference ID, full/window route and event indices, route/diffusion seeds, selected native context ID and stable D1/D2 session ID | policies/reference |
 | `PhysicalPrediction` | next PhysicalState, grip logits `[B,1]`, head ID; contains no context/task output | contracts |
 | `TerminalProbabilities` | success/failure/continue `[B,3]`, finite nonnegative sum 1, event-temperature artifact ID | contracts |

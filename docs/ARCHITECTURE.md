@@ -30,7 +30,7 @@ training/evaluation → execution → policy + environment adapter
 | models/denoisers | Native graph denoiser with registered parameter names preserved |
 | algorithms/diffusion | Action codec, original schedule/objective/sampler in coherent files |
 | algorithms/planning | Belief node, budget/timing/fallback, MCTS, rerank, and shooting over capability protocol |
-| policies | InstantPolicy public observation/context → native action inference |
+| policies | Concrete native policy boundaries: InstantPolicy inference and P06 exact-index reference preprocessing |
 | execution | Rollout loop and root-relative → absolute command prefix |
 | environments/rlbench | Lazy simulator setup, tasks, observation/action conversion |
 | evaluation | Benchmark entry delegating the shared execution protocol |
@@ -43,6 +43,9 @@ training/evaluation → execution → policy + environment adapter
 
 Models never import policy, search, training, environment, CLI or checkpoint IO.
 Search/candidate algorithms use proposer capability, not concrete InstantPolicy.
+Open3D-backed native preprocessing is confined to the exact concrete policy
+owners `icgs.policies.instant_policy` and `icgs.policies.reference`; adding
+another policy does not implicitly grant that dependency.
 Runtime never imports old ip, instant_policy.so, docs, tests or root scripts.
 No sys.path/sys.modules aliases form part of the architecture.
 Observability is a library no-op by default and is attached only by outer CLI,

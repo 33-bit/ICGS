@@ -9,6 +9,12 @@ CORE = ('icgs.contracts', 'icgs.geometry', 'icgs.algorithms', 'icgs.policies', '
 FORBIDDEN = ('ip', 'instant_policy', 'rlbench', 'pyrep', 'wandb', 'lightning', 'pytorch_lightning', 'argparse',
              'icgs.training', 'icgs.evaluation', 'icgs.execution', 'icgs.cli',
              'icgs.artifacts', 'icgs.composition', 'icgs.environments')
+# ADR 0002 permits Open3D-backed preprocessing only at concrete policy owners.
+# Keep this allowlist exact so adding a policy does not silently broaden it.
+OPEN3D_POLICY_OWNERS = frozenset((
+    'icgs.policies.instant_policy',
+    'icgs.policies.reference',
+))
 
 
 def matches(module, prefixes):
@@ -56,6 +62,15 @@ def violations(graph, roots, forbidden):
     return result
 
 
+def pure_open3d_roots(roots):
+    return [
+        name
+        for name in roots
+        if name not in OPEN3D_POLICY_OWNERS
+        and not name.startswith('icgs.algorithms')
+    ]
+
+
 class ArchitectureTests(unittest.TestCase):
     def test_real_core_dependency_closure(self):
         graph = {}
@@ -69,7 +84,7 @@ class ArchitectureTests(unittest.TestCase):
         roots = [name for name in graph if matches(name, CORE)]
         self.assertGreater(len(roots), 10, 'missing core modules is not a passing scan')
         self.assertEqual(violations(graph, roots, FORBIDDEN), [], 'ADR 0002: move outer dependencies out of reusable core')
-        pure = [name for name in roots if name not in ('icgs.policies.instant_policy',) and not name.startswith('icgs.algorithms')]
+        pure = pure_open3d_roots(roots)
         self.assertEqual(violations(graph, pure, ('open3d',)), [])
 
     def test_guard_detects_indirect_and_initializer_violations(self):
@@ -79,6 +94,16 @@ class ArchitectureTests(unittest.TestCase):
         self.assertEqual(violations(graph, ['icgs.core'], ('wandb',)), [])
         graph['icgs.shared.util'] = {'rlbench.tasks'}
         self.assertTrue(violations(graph, ['icgs.core'], ('rlbench',)))
+
+        policy_roots = (
+            'icgs.policies.instant_policy',
+            'icgs.policies.reference',
+            'icgs.policies.unapproved',
+        )
+        self.assertEqual(
+            pure_open3d_roots(policy_roots),
+            ['icgs.policies.unapproved'],
+        )
 
     def test_relative_and_nested_import_resolution(self):
         targets = imports('from ..geometry import transform_pcd\ndef f():\n import rlbench.tasks\n', 'icgs.models.leaf')
