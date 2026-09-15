@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import hashlib
+import json
 
 import numpy as np
 
+from icgs.configuration.schema import ExperimentConfig
 from icgs.data.preprocessing.events import TimedDemoInput
 from icgs.data.preprocessing.native import sample_to_cond_demo, subsample_pcd
 from icgs.geometry.transforms import transform_pcd
+from icgs.policies.instant_policy import InstantPolicy
 from icgs.state.randomness import scoped_seed
 
 
@@ -47,6 +51,146 @@ def _exact_tuple(value: object, name: str) -> tuple:
 def _nonempty_identifier(value: object, name: str) -> None:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{name} must be a nonempty string")
+
+
+def _canonical_sha256(value: object, name: str) -> None:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ValueError(f"{name} must be a canonical lowercase SHA-256")
+
+
+def _reference_session_id(reference_id: str, role: str) -> str:
+    payload = {
+        "domain": "icgs.reference-session",
+        "schema": 1,
+        "reference_id": reference_id,
+        "role": role,
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_reference_policy(
+    policy: object,
+    config: ExperimentConfig,
+    *,
+    role: str,
+    checkpoint_sha256: str,
+) -> None:
+    if not isinstance(policy, InstantPolicy):
+        raise TypeError(f"{role} policy must be an InstantPolicy")
+    if policy.graph_config != config.graph:
+        raise ValueError(f"{role} graph config must match {role.lower()}_config.graph")
+    if policy.runtime != config.runtime:
+        raise ValueError(f"{role} runtime config must match {role.lower()}_config.runtime")
+    if getattr(policy.sampler, "config", None) != config.sampling:
+        raise ValueError(
+            f"{role} sampler config must match {role.lower()}_config.sampling"
+        )
+    if getattr(policy.sampler, "diffusion", None) != config.diffusion:
+        raise ValueError(
+            f"{role} sampler diffusion must match {role.lower()}_config.diffusion"
+        )
+    if getattr(policy.objective, "config", None) != config.diffusion:
+        raise ValueError(
+            f"{role} objective config must match {role.lower()}_config.diffusion"
+        )
+    network_codec = getattr(policy.network, "codec", None)
+    if (
+        network_codec is None
+        or getattr(policy.sampler, "codec", None) is not network_codec
+    ):
+        raise ValueError(f"{role} sampler codec must be the policy network codec")
+    if getattr(policy.objective, "codec", None) is not network_codec:
+        raise ValueError(f"{role} objective codec must be the policy network codec")
+    if getattr(policy, "artifact_sha256", None) != checkpoint_sha256:
+        raise ValueError(
+            f"{role} artifact checkpoint SHA-256 must match checkpoint_sha256"
+        )
+
+    sampler_scheduler = getattr(policy.sampler, "noise_scheduler", None)
+    objective_scheduler = getattr(policy.objective, "noise_scheduler", None)
+    if sampler_scheduler is None or sampler_scheduler is not objective_scheduler:
+        raise ValueError(
+            f"{role} sampler and objective must share the same noise scheduler"
+        )
+
+
+def _nested_owner(owner: object, path: str, *, role: str) -> object:
+    current = owner
+    for component in path.split("."):
+        if not hasattr(current, component):
+            raise ValueError(f"{role} policy must expose {path}")
+        current = getattr(current, component)
+    return current
+
+
+def _validate_distinct_policy_owners(d1: InstantPolicy, d2: InstantPolicy) -> None:
+    for path in (
+        "context_owner",
+        "network",
+        "network.graph",
+        "network.graph.graph",
+        "network.codec",
+        "sampler",
+        "sampler.noise_scheduler",
+        "objective",
+    ):
+        d1_owner = _nested_owner(d1, path, role="D1")
+        d2_owner = _nested_owner(d2, path, role="D2")
+        if d1_owner is d2_owner:
+            raise ValueError(
+                f"D1/D2 {path} objects must be distinct; cross-policy alias detected"
+            )
+
+
+def _tensor_storage_intervals(
+    network: object,
+) -> tuple[tuple[str, str, int, int], ...]:
+    tensors = (
+        (f"parameter {name}", tensor)
+        for name, tensor in network.named_parameters()
+    )
+    buffers = (
+        (f"buffer {name}", tensor)
+        for name, tensor in network.named_buffers()
+    )
+    intervals = []
+    for name, tensor in (*tensors, *buffers):
+        storage = tensor.untyped_storage()
+        if storage.nbytes() > 0:
+            start = storage.data_ptr()
+            intervals.append(
+                (name, str(tensor.device), start, start + storage.nbytes())
+            )
+    return tuple(intervals)
+
+
+def _validate_distinct_tensor_storage(
+    d1: InstantPolicy,
+    d2: InstantPolicy,
+) -> None:
+    d1_intervals = _tensor_storage_intervals(d1.network)
+    d2_intervals = _tensor_storage_intervals(d2.network)
+    for d1_name, d1_device, d1_start, d1_end in d1_intervals:
+        for d2_name, d2_device, d2_start, d2_end in d2_intervals:
+            overlaps = (
+                d1_device == d2_device
+                and max(d1_start, d2_start) < min(d1_end, d2_end)
+            )
+            if overlaps:
+                raise ValueError(
+                    "D1/D2 parameter or buffer storage must not overlap; "
+                    f"cross-policy alias detected between {d1_name} and {d2_name}"
+                )
 
 
 def split_context_seeds(
@@ -189,6 +333,76 @@ def materialize_full_native_demo(
 
 
 @dataclass(frozen=True)
+class ReferenceSessions:
+    """Validated ownership record for separately constructed D1/D2 policies."""
+
+    d1: InstantPolicy
+    d2: InstantPolicy
+    d1_config: ExperimentConfig
+    d2_config: ExperimentConfig
+    reference_id: str
+    native_profile: str
+    checkpoint_sha256: str
+    native_point_count: int
+    d1_session_id: str
+    d2_session_id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.d1, InstantPolicy):
+            raise TypeError("D1 policy must be an InstantPolicy")
+        if not isinstance(self.d2, InstantPolicy):
+            raise TypeError("D2 policy must be an InstantPolicy")
+        if self.d1 is self.d2:
+            raise ValueError("D1/D2 policies must be distinct; policy alias detected")
+        if not isinstance(self.d1_config, ExperimentConfig):
+            raise TypeError("d1_config must be an ExperimentConfig")
+        if not isinstance(self.d2_config, ExperimentConfig):
+            raise TypeError("d2_config must be an ExperimentConfig")
+
+        _nonempty_identifier(self.reference_id, "reference_id")
+        _nonempty_identifier(self.native_profile, "native_profile")
+        _canonical_sha256(self.checkpoint_sha256, "checkpoint_sha256")
+        _positive_integer(self.native_point_count, "native_point_count")
+
+        if self.d1_config.graph.num_demos != 1:
+            raise ValueError("D1 graph num_demos must equal 1")
+        expected_d2 = replace(
+            self.d1_config,
+            graph=replace(self.d1_config.graph, num_demos=2),
+        )
+        if self.d2_config != expected_d2:
+            raise ValueError(
+                "D2 config must differ from D1 config only by graph num_demos=2"
+            )
+
+        _validate_reference_policy(
+            self.d1,
+            self.d1_config,
+            role="D1",
+            checkpoint_sha256=self.checkpoint_sha256,
+        )
+        _validate_reference_policy(
+            self.d2,
+            self.d2_config,
+            role="D2",
+            checkpoint_sha256=self.checkpoint_sha256,
+        )
+        _validate_distinct_policy_owners(self.d1, self.d2)
+        _validate_distinct_tensor_storage(self.d1, self.d2)
+
+        for role, session_id in (
+            ("d1", self.d1_session_id),
+            ("d2", self.d2_session_id),
+        ):
+            expected_session_id = _reference_session_id(self.reference_id, role)
+            if session_id != expected_session_id:
+                raise ValueError(
+                    f"{role}_session_id must equal the canonical {role.upper()} "
+                    "reference-session identifier"
+                )
+
+
+@dataclass(frozen=True)
 class ContextPreparationRecord:
     """Immutable provenance for one prepared reference context."""
 
@@ -236,6 +450,7 @@ class ContextPreparationRecord:
 __all__ = (
     "CONTEXT_RNG_PROTOCOL",
     "ContextPreparationRecord",
+    "ReferenceSessions",
     "materialize_full_native_demo",
     "materialize_indexed_native_demo",
     "split_context_seeds",

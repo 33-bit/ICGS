@@ -1,9 +1,12 @@
 import ast
 import dataclasses
+import hashlib
 import inspect
+import json
 import random
 import textwrap
 import unittest
+from types import SimpleNamespace
 from unittest import mock
 
 import numpy as np
@@ -951,6 +954,498 @@ class NativeDemoMaterializationTests(unittest.TestCase):
             "violating_surface.*materialize_indexed_native_demo.*Task 3B.2-3C",
         ):
             self._assert_task_3b1b_dependency_boundary(violating_surface)
+
+
+class ReferenceSessionsValidationTests(unittest.TestCase):
+    _FORBIDDEN_SESSION_DEPENDENCIES = frozenset(
+        {
+            "PreparedContext",
+            "MethodContext",
+            "build_method_context",
+            "prepare_context",
+            "predict",
+            "load_policy",
+            "load_published_policy",
+            "resolve_native_profile",
+            "artifacts",
+            "composition",
+            "open",
+        }
+    )
+    _CHECKPOINT = "a" * 64
+    _REFERENCE_ID = "b" * 64
+    _NATIVE_PROFILE = "instant_policy_published_vv19_119fa871"
+
+    class _Network(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.weight = torch.nn.Parameter(torch.ones(2))
+            self.register_buffer("scratch_buffer", torch.zeros(2))
+            self.graph = SimpleNamespace(graph=object())
+            self.codec = object()
+
+    @staticmethod
+    def _session_id(reference_id, role):
+        payload = {
+            "domain": "icgs.reference-session",
+            "schema": 1,
+            "reference_id": reference_id,
+            "role": role,
+        }
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        return hashlib.sha256(encoded).hexdigest()
+
+    @staticmethod
+    def _configs():
+        from icgs.configuration.defaults import instant_policy_original
+
+        base = instant_policy_original()
+        d1 = dataclasses.replace(
+            base,
+            graph=dataclasses.replace(base.graph, num_demos=1),
+            runtime=dataclasses.replace(base.runtime, device="cpu"),
+        )
+        d2 = dataclasses.replace(
+            d1,
+            graph=dataclasses.replace(d1.graph, num_demos=2),
+        )
+        return d1, d2
+
+    @classmethod
+    def _policy(cls, config, *, checksum=None):
+        from icgs.policies.instant_policy import InstantPolicy
+
+        scheduler = object()
+        network = cls._Network()
+        sampler = SimpleNamespace(
+            config=config.sampling,
+            diffusion=config.diffusion,
+            codec=network.codec,
+            noise_scheduler=scheduler,
+        )
+        objective = SimpleNamespace(
+            config=config.diffusion,
+            codec=network.codec,
+            noise_scheduler=scheduler,
+        )
+        policy = InstantPolicy(
+            network,
+            sampler,
+            objective,
+            config.graph,
+            config.runtime,
+        )
+        policy.artifact_sha256 = checksum or cls._CHECKPOINT
+        return policy
+
+    @classmethod
+    def _values(cls):
+        d1_config, d2_config = cls._configs()
+        return {
+            "d1": cls._policy(d1_config),
+            "d2": cls._policy(d2_config),
+            "d1_config": d1_config,
+            "d2_config": d2_config,
+            "reference_id": cls._REFERENCE_ID,
+            "native_profile": cls._NATIVE_PROFILE,
+            "checkpoint_sha256": cls._CHECKPOINT,
+            "native_point_count": 2048,
+            "d1_session_id": cls._session_id(cls._REFERENCE_ID, "d1"),
+            "d2_session_id": cls._session_id(cls._REFERENCE_ID, "d2"),
+        }
+
+    def _assert_session_dependency_boundary(self, surface):
+        source = textwrap.dedent(inspect.getsource(surface))
+        tree = ast.parse(source)
+        referenced = {
+            node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
+        }
+        referenced.update(
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+        )
+        found = sorted(
+            dependency
+            for dependency in self._FORBIDDEN_SESSION_DEPENDENCIES
+            if dependency in referenced or dependency in source
+        )
+        if found:
+            self.fail(
+                f"Task 3B.2a surface {surface.__name__} must remain "
+                f"validation-only and not reference IO/context/inference "
+                f"dependencies: {found}; move them to Task 3B.2b/3B.3/3C"
+            )
+
+    def test_reference_sessions_is_frozen_canonical_and_nonmutating(self):
+        from icgs.policies.reference import ReferenceSessions
+
+        values = self._values()
+        ownership = {}
+        parameters = {}
+        buffers = {}
+        for role in ("d1", "d2"):
+            policy = values[role]
+            ownership[role] = (
+                policy.context_owner,
+                policy.network,
+                policy.network.graph,
+                policy.network.graph.graph,
+                policy.network.codec,
+                policy.sampler,
+                policy.sampler.codec,
+                policy.sampler.noise_scheduler,
+                policy.objective,
+                policy.objective.codec,
+                policy.objective.noise_scheduler,
+                policy.graph_config,
+                policy.runtime,
+            )
+            parameters[role] = tuple(
+                (name, id(parameter), parameter.detach().clone())
+                for name, parameter in policy.network.named_parameters()
+            )
+            buffers[role] = tuple(
+                (name, id(buffer), buffer.detach().clone())
+                for name, buffer in policy.network.named_buffers()
+            )
+        sessions = ReferenceSessions(**values)
+
+        self.assertEqual(
+            tuple(ReferenceSessions.__dataclass_fields__),
+            (
+                "d1",
+                "d2",
+                "d1_config",
+                "d2_config",
+                "reference_id",
+                "native_profile",
+                "checkpoint_sha256",
+                "native_point_count",
+                "d1_session_id",
+                "d2_session_id",
+            ),
+        )
+        self.assertIs(sessions.d1, values["d1"])
+        self.assertIs(sessions.d2, values["d2"])
+        self.assertIs(sessions.d1_config, values["d1_config"])
+        self.assertIs(sessions.d2_config, values["d2_config"])
+        for role in ("d1", "d2"):
+            policy = getattr(sessions, role)
+            self.assertEqual(
+                tuple(
+                    id(owner)
+                    for owner in (
+                        policy.context_owner,
+                        policy.network,
+                        policy.network.graph,
+                        policy.network.graph.graph,
+                        policy.network.codec,
+                        policy.sampler,
+                        policy.sampler.codec,
+                        policy.sampler.noise_scheduler,
+                        policy.objective,
+                        policy.objective.codec,
+                        policy.objective.noise_scheduler,
+                        policy.graph_config,
+                        policy.runtime,
+                    )
+                ),
+                tuple(id(owner) for owner in ownership[role]),
+            )
+            self.assertIs(
+                policy.sampler.noise_scheduler,
+                policy.objective.noise_scheduler,
+            )
+            actual_parameters = tuple(policy.network.named_parameters())
+            self.assertEqual(
+                tuple(name for name, _, _ in parameters[role]),
+                tuple(name for name, _ in actual_parameters),
+            )
+            for (name, identity, expected), (actual_name, actual) in zip(
+                parameters[role], actual_parameters
+            ):
+                self.assertEqual(actual_name, name)
+                self.assertEqual(id(actual), identity)
+                torch.testing.assert_close(actual, expected)
+            actual_buffers = tuple(policy.network.named_buffers())
+            self.assertEqual(
+                tuple(name for name, _, _ in buffers[role]),
+                tuple(name for name, _ in actual_buffers),
+            )
+            for (name, identity, expected), (actual_name, actual) in zip(
+                buffers[role], actual_buffers
+            ):
+                self.assertEqual(actual_name, name)
+                self.assertEqual(id(actual), identity)
+                torch.testing.assert_close(actual, expected)
+        with self.assertRaises(dataclasses.FrozenInstanceError):
+            sessions.native_point_count = 1024
+
+    def test_reference_sessions_requires_canonical_configs_and_policy_correspondence(self):
+        from icgs.policies.reference import ReferenceSessions
+
+        cases = []
+
+        values = self._values()
+        wrong_d1 = dataclasses.replace(
+            values["d1_config"],
+            graph=dataclasses.replace(values["d1_config"].graph, num_demos=2),
+        )
+        values["d1_config"] = wrong_d1
+        values["d1"] = self._policy(wrong_d1)
+        cases.append((values, "D1|num_demos"))
+
+        values = self._values()
+        wrong_d2 = dataclasses.replace(
+            values["d2_config"],
+            sampling=dataclasses.replace(values["d2_config"].sampling, steps=3),
+        )
+        values["d2_config"] = wrong_d2
+        values["d2"] = self._policy(wrong_d2)
+        cases.append((values, "differ|config|num_demos"))
+
+        for role in ("d1", "d2"):
+            config_name = f"{role}_config"
+
+            values = self._values()
+            config = values[config_name]
+            values[role].graph_config = dataclasses.replace(
+                config.graph,
+                traj_horizon=config.graph.traj_horizon + 1,
+            )
+            cases.append((values, "graph.*config"))
+
+            values = self._values()
+            config = values[config_name]
+            values[role].runtime = dataclasses.replace(
+                config.runtime,
+                cache_context=not config.runtime.cache_context,
+            )
+            cases.append((values, "runtime.*config"))
+
+            values = self._values()
+            config = values[config_name]
+            values[role].sampler.config = dataclasses.replace(
+                config.sampling,
+                steps=config.sampling.steps + 1,
+            )
+            cases.append((values, "sampler.*config"))
+
+            values = self._values()
+            config = values[config_name]
+            values[role].sampler.diffusion = dataclasses.replace(
+                config.diffusion,
+                train_steps=config.diffusion.train_steps + 1,
+            )
+            cases.append((values, "sampler.*diffusion"))
+
+            values = self._values()
+            config = values[config_name]
+            values[role].objective.config = dataclasses.replace(
+                config.diffusion,
+                train_steps=config.diffusion.train_steps + 1,
+            )
+            cases.append((values, "objective.*config"))
+
+            other_role = "d2" if role == "d1" else "d1"
+            for collaborator_name in ("sampler", "objective"):
+                values = self._values()
+                collaborator = getattr(values[role], collaborator_name)
+                collaborator.codec = values[other_role].network.codec
+                cases.append((values, f"{collaborator_name}.*codec|codec"))
+
+        values = self._values()
+        values["d2"].artifact_sha256 = "c" * 64
+        cases.append((values, "artifact|checkpoint"))
+
+        for values, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex((TypeError, ValueError), message):
+                    ReferenceSessions(**values)
+
+    def test_reference_sessions_validates_canonical_lineage_and_point_count(self):
+        from icgs.policies.reference import ReferenceSessions
+
+        cases = (
+            ("reference_id", "", "reference_id"),
+            ("reference_id", "   ", "reference_id"),
+            ("native_profile", "", "native_profile"),
+            ("native_profile", None, "native_profile"),
+            ("checkpoint_sha256", "A" * 64, "checkpoint.*canonical|SHA"),
+            ("checkpoint_sha256", "abc", "checkpoint.*SHA"),
+            ("native_point_count", 0, "native_point_count.*positive"),
+            ("native_point_count", -1, "native_point_count.*positive"),
+            ("native_point_count", 1.5, "native_point_count.*positive"),
+            ("native_point_count", None, "native_point_count.*positive"),
+            ("native_point_count", True, "native_point_count.*positive"),
+            ("native_point_count", np.bool_(True), "native_point_count.*positive"),
+            ("d1_session_id", "c" * 64, "d1_session_id|canonical"),
+            ("d2_session_id", "c" * 64, "d2_session_id|canonical"),
+        )
+        for field, value, message in cases:
+            values = self._values()
+            values[field] = value
+            with self.subTest(field=field, value=value):
+                with self.assertRaisesRegex((TypeError, ValueError), message):
+                    ReferenceSessions(**values)
+
+    def test_reference_sessions_rejects_cross_policy_mutable_owner_aliases(self):
+        from icgs.policies.reference import ReferenceSessions
+
+        def share_d1_scheduler(values):
+            scheduler = values["d1"].sampler.noise_scheduler
+            values["d2"].sampler.noise_scheduler = scheduler
+            values["d2"].objective.noise_scheduler = scheduler
+
+        def share_d1_sampler(values):
+            values["d2"].sampler = values["d1"].sampler
+            values["d2"].objective.noise_scheduler = (
+                values["d1"].sampler.noise_scheduler
+            )
+
+        def share_d1_objective(values):
+            values["d2"].objective = values["d1"].objective
+            values["d2"].sampler.noise_scheduler = (
+                values["d1"].objective.noise_scheduler
+            )
+
+        def share_d1_network(values):
+            values["d2"].network = values["d1"].network
+            values["d2"].sampler.codec = values["d1"].network.codec
+            values["d2"].objective.codec = values["d1"].network.codec
+
+        def share_d1_network_codec(values):
+            codec = values["d1"].network.codec
+            values["d2"].network.codec = codec
+            values["d2"].sampler.codec = codec
+            values["d2"].objective.codec = codec
+
+        mutations = (
+            (
+                "policy",
+                lambda values: values.update(d2=values["d1"]),
+                "alias|distinct",
+            ),
+            (
+                "context_owner",
+                lambda values: setattr(
+                    values["d2"], "context_owner", values["d1"].context_owner
+                ),
+                "alias|distinct",
+            ),
+            (
+                "network",
+                share_d1_network,
+                "alias|distinct",
+            ),
+            (
+                "network.graph",
+                lambda values: setattr(
+                    values["d2"].network,
+                    "graph",
+                    values["d1"].network.graph,
+                ),
+                "alias|distinct",
+            ),
+            (
+                "network.graph.graph",
+                lambda values: setattr(
+                    values["d2"].network.graph,
+                    "graph",
+                    values["d1"].network.graph.graph,
+                ),
+                "alias|distinct",
+            ),
+            (
+                "network.codec",
+                share_d1_network_codec,
+                "alias|distinct",
+            ),
+            (
+                "sampler",
+                share_d1_sampler,
+                "sampler.*codec|codec",
+            ),
+            (
+                "scheduler",
+                share_d1_scheduler,
+                "alias|distinct",
+            ),
+            (
+                "objective",
+                share_d1_objective,
+                "objective.*codec|codec",
+            ),
+        )
+        for name, mutate, message in mutations:
+            values = self._values()
+            mutate(values)
+            with self.subTest(owner=name):
+                with self.assertRaisesRegex(ValueError, message):
+                    ReferenceSessions(**values)
+
+        for role in ("d1", "d2"):
+            values = self._values()
+            values[role].objective.noise_scheduler = object()
+            with self.subTest(owner=f"{role}.internal_scheduler"):
+                with self.assertRaisesRegex(ValueError, "scheduler|share|same"):
+                    ReferenceSessions(**values)
+
+    def test_reference_sessions_rejects_cross_policy_parameter_and_buffer_storage(self):
+        from icgs.policies.reference import ReferenceSessions
+
+        values = self._values()
+        values["d2"].network.weight = torch.nn.Parameter(
+            values["d1"].network.weight
+        )
+        with self.assertRaisesRegex(ValueError, "parameter|storage|alias"):
+            ReferenceSessions(**values)
+
+        values = self._values()
+        values["d2"].network.scratch_buffer = values["d1"].network.scratch_buffer
+        with self.assertRaisesRegex(ValueError, "buffer|storage|alias"):
+            ReferenceSessions(**values)
+
+        disjoint_backing = np.arange(4, dtype=np.float32)
+        values = self._values()
+        values["d1"].network.weight = torch.nn.Parameter(
+            torch.from_numpy(disjoint_backing[:2])
+        )
+        values["d2"].network.weight = torch.nn.Parameter(
+            torch.from_numpy(disjoint_backing[2:])
+        )
+        ReferenceSessions(**values)
+
+        overlapping_backing = np.arange(6, dtype=np.float32)
+        values = self._values()
+        values["d1"].network.weight = torch.nn.Parameter(
+            torch.from_numpy(overlapping_backing[:4])
+        )
+        values["d2"].network.weight = torch.nn.Parameter(
+            torch.from_numpy(overlapping_backing[2:])
+        )
+        with self.assertRaisesRegex(ValueError, "parameter|storage|overlap|alias"):
+            ReferenceSessions(**values)
+
+    def test_reference_sessions_has_validation_only_scoped_dependency_guard(self):
+        from icgs.policies.reference import ReferenceSessions
+
+        self._assert_session_dependency_boundary(ReferenceSessions)
+
+        def violating_surface():
+            return load_published_policy
+
+        with self.assertRaisesRegex(
+            AssertionError,
+            "violating_surface.*load_published_policy.*Task 3B.2b",
+        ):
+            self._assert_session_dependency_boundary(violating_surface)
 
 
 if __name__ == "__main__":

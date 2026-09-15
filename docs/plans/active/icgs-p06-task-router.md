@@ -16,8 +16,9 @@ Status: **ACTIVE — Task 1A tensor tracker, Task 1B owned TaskState, Task 1C
 masked objectives, Task 2 deterministic routing/window selection, Task 3A route
 RNG protocol and Task 3B.0 context-preparation RNG/provenance foundation
 and Task 3B.1 exact-index/full-demo materialization COMPLETE; P06 remains PARTIAL
-because Task 3B.2/3B.3 session/context ownership and Task 3C routed reference
-calls are NOT IMPLEMENTED**. This
+because Task 3B.2a injected-session validation is COMPLETE, while Task 3B.2b,
+Task 3B.3 session/context ownership and Task 3C routed reference calls are NOT
+IMPLEMENTED**. This
 document is a category C component of the approved research migration; it does not
 authorize simulator or training workloads.
 The [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
@@ -79,8 +80,8 @@ evidence; this addendum does not certify that the component consumes every new f
 - New Task 3B/3C test owner: `tests/test_reference_policy.py`; keep pure arithmetic
   and dependency tests in `tests/test_task_router.py`.
 
-Implemented/planned capability vocabulary (Task 3B.2–3B.3/3C surfaces remain
-unavailable):
+Implemented/planned capability vocabulary (Task 3B.2a record is available;
+Task 3B.2b–3B.3/3C surfaces remain unavailable):
 
 ```python
 track_task(previous: TaskState | None, state: PhysicalState, events: EventMemory) -> TaskState
@@ -97,6 +98,7 @@ materialize_indexed_native_demo(demo, boundary_indices, *, point_seed,
                                 native_point_count) -> Mapping[str, tuple]
 materialize_full_native_demo(demo, *, point_seed, native_waypoint_count,
                              native_point_count) -> Mapping[str, tuple]
+ReferenceSessions(...)  # frozen validation-only D1/D2 ownership record
 
 # Planned and unavailable until Task 3C; P10 treats proposals as opaque and the
 # P06-owned materializer unwraps proposal.candidate:
@@ -446,8 +448,9 @@ remains PARTIAL.
 ### Task 3B: Exact native contexts and separately owned D1/D2 sessions
 
 **Status:** ACTIVE — Task 3B.0 and Task 3B.1 exact-index/full-demo materializers
-COMPLETE; Task 3B.2–3B.3 NOT STARTED. Task 3B constructs contexts only; it does
-not choose a route or call native inference.
+and Task 3B.2a injected-session validation COMPLETE; Task 3B.2b and Task 3B.3
+NOT STARTED. Task 3B constructs contexts only; it does not choose a route or
+call native inference.
 
 **Files:** Create `src/icgs/policies/reference.py`; extend
 `src/icgs/composition.py` only for outer D1/D2 construction/loading. Do not add
@@ -654,34 +657,128 @@ concurrently.
 class ReferenceSessions:
     d1: InstantPolicy
     d2: InstantPolicy
+    d1_config: ExperimentConfig
+    d2_config: ExperimentConfig
     reference_id: str
+    native_profile: str
     checkpoint_sha256: str
     native_point_count: int
     d1_session_id: str
     d2_session_id: str
 ```
 
-Session IDs are stable lineage identifiers derived at the outer artifact/
-composition boundary, never Python object IDs. `ReferenceSessions` validates but
-does not normalize these identifiers or reconstruct either policy. The outer
-native-profile/artifact factory must supply `native_point_count` explicitly from
-pinned profile metadata; session validation rejects a mismatch with the canonical
-reference payload and never reads `MethodConfig.geometry.num_points` as a proxy.
+`d1_config.graph.num_demos` is exactly 1. The canonical comparison is:
 
-Every window `PreparedContext.owner` is exactly D1's owner. A one-demo full
-context belongs to D1; a two-demo full context belongs to D2. Contexts may share
-immutable checkpoint weights only through the explicitly tested construction
-adapter; `PreparedContext` objects and their mutable embeddings/positions never
-alias. Runtime code must not mutate either native graph configuration to change D.
+```python
+expected_d2 = replace(
+    d1_config,
+    graph=replace(d1_config.graph, num_demos=2),
+)
+```
 
-- [ ] **Step 1 — RED:** Add fake-session tests for checksum/profile equivalence,
-  D-only config difference, distinct owner/scratch, one-time construction,
-  correct full/window placement, cross-owner rejection, alias rejection and no
-  graph-config mutation.
-- [ ] **Step 2 — GREEN:** Implement validation/ownership around injected sessions
-  and the outer composition factory; do not load within `policies/reference.py`.
-- [ ] **Step 3 — Verify:** Run focused tests and existing strict context/policy/
-  checkpoint regressions. Real shared-checksum D1/D2 evidence remains G4/L2.
+and `d2_config == expected_d2`; no allowlist loop silently omits a section.
+Each policy must agree with its config through `graph_config`, `runtime`,
+`sampler.config == config.sampling`, `sampler.diffusion == config.diffusion` and
+`objective.config == config.diffusion`. Its sampler and objective must both use
+that policy's exact `network.codec`. Both verified `policy.artifact_sha256` values
+equal the record's canonical lowercase SHA-256.
+
+Across D1/D2, policy, `context_owner`, network, `network.graph`,
+`network.graph.graph`, `network.codec`, sampler, sampler `noise_scheduler` and
+objective objects are distinct. Cross-policy parameter or registered-buffer
+storage aliasing is rejected for the independently constructed default: any
+positive-byte storage intervals on the same device must not overlap; adjacent
+non-overlapping intervals and zero-byte storage are allowed. Within one policy,
+sampler and objective deliberately share that policy's scheduler; this is native
+behavior and is allowed. Frozen-weight sharing remains a future optimization
+requiring an explicit adapter and separate equivalence tests.
+`ReferenceSessions(...)` snapshots already constructed objects only for
+validation and never mutates graph config or scratch, performs IO, prepares a
+context or calls inference.
+
+Session IDs are canonical lineage identifiers derived by composition, never
+caller-chosen labels or Python object IDs. For role `"d1"` or `"d2"`:
+
+```python
+payload = {
+    "domain": "icgs.reference-session",
+    "schema": 1,
+    "reference_id": reference_id,
+    "role": role,
+}
+encoded = json.dumps(
+    payload,
+    sort_keys=True,
+    separators=(",", ":"),
+    allow_nan=False,
+).encode("utf-8")
+session_id = hashlib.sha256(encoded).hexdigest()
+```
+
+`build_reference_sessions()` does not accept session IDs; it derives them and
+passes them to `ReferenceSessions`, whose constructor validates and preserves its
+intrinsic scalar/config/session ownership without reconstructing a policy.
+
+The authoritative versioned native artifact profile adds exact metadata:
+
+```json
+{
+  "schema_version": 1,
+  "profile_id": "instant_policy_published_vv19_119fa871",
+  "artifact_sha256": "...",
+  "preprocessing": {
+    "native_point_count": 2048
+  }
+}
+```
+
+`resolve_native_profile(native_profile)` is the single artifact owner for this
+metadata and for D1/D2 config derivation. `load_published_policy()` consumes that
+same resolver instead of independently reconstructing another config. The first
+real adapter supported by Task 3B.2b is published vv19. Primary MethodConfig
+currently names `instant-policy-original-65dc94e`; it is not silently aliased to
+published vv19. Supporting it requires its own versioned metadata owner. P00's
+later canonical payload validation checks its `native_point_count` against the
+resolved profile and `ReferenceSessions`; `MethodConfig.geometry.num_points` is
+never used as a proxy.
+
+Task 3B.2 owns sessions only. Every `PreparedContext` placement, full/window
+policy-owner check, context alias check and `native_window_valid` consequence
+remains Task 3B.3 ownership.
+
+##### Task 3B.2a — Injected session validation
+
+- [x] **Step 1a — RED:** Add fake-session tests for canonical D1/D2 config
+  comparison, symmetric D1/D2 policy/config/checksum correspondence, intrinsic
+  identifier/positive-integer count validation, per-policy sampler/objective
+  scheduler sharing, exact cross-policy mutable-owner/scheduler/codec/tensor-
+  storage non-aliasing and constructor non-mutation across ownership identities
+  plus parameter/buffer contents. Add allowed and forbidden class/function-scoped
+  dependency fixtures; do not scan all of `reference.py`.
+- [x] **Step 2a — Verify RED:** Require every existing reference-policy test to
+  remain green and every new test to fail only at the absent `ReferenceSessions`
+  surface.
+- [x] **Step 3a — GREEN:** Implement only the frozen validation record in
+  `policies/reference.py`; do not add profile resolution, loading, context
+  preparation or inference.
+- [x] **Step 4a — Verify GREEN:** Run the focused owner, policy/config/architecture
+  regressions, direct syntax/diff checks and both L0 variants.
+
+##### Task 3B.2b — Authoritative profile and outer construction
+
+- [ ] **Step 1b — RED:** Lock exact profile JSON schema/ID/point count, unknown
+  profile rejection, shared config resolution, canonical session-ID bytes,
+  exactly two loads with D=1 then D=2, no partial record after load failure and
+  no further loads when the returned session record is reused.
+- [ ] **Step 2b — Verify RED:** Keep 3B.2a green; new failures must identify only
+  the absent resolver/factory or missing profile metadata.
+- [ ] **Step 3b — GREEN:** Implement the resolver in `artifacts/published.py`, make
+  `load_published_policy()` consume it, and implement outer
+  `build_reference_sessions()` in `composition.py`. `reference.py` performs no
+  artifact IO.
+- [ ] **Step 4b — Verify GREEN:** Run focused, configuration, composition,
+  checkpoint, loading and policy owners plus L0. Real shared-checksum D1/D2
+  loading/inference and resident-memory evidence remain G4/L2.
 
 #### Task 3B.3 — MethodContext assembly
 
@@ -1111,6 +1208,46 @@ phase if an FG fails and request a scoped protocol decision.
   `test_inference_contract.py` selected 3 tests: 2 passed and the CUDA RNG test
   was **SKIPPED** because CUDA is unavailable; it is not counted as a pass.
   Direct `py_compile` and `git diff --check` both **PASS**.
+- Task 3B.2a RED: the focused reference-policy command selected/executed 30
+  tests — **FAIL as expected**. All 24 accepted Task 3B.0/3B.1 tests passed and
+  all 6 injected-session validation tests errored only because
+  `ReferenceSessions` is absent, with 0 skips. The RED surface locks the frozen
+  field layout, exact D1/D2 config derivation, symmetric policy/config/checkpoint
+  correspondence, canonical lineage/session IDs, full positive-integer native
+  point-count negatives, per-policy scheduler sharing, constructor non-mutation,
+  and cross-policy mutable-owner plus parameter/buffer-storage non-aliasing. Its
+  class-scoped positive and isolated negative source/AST fixtures define the
+  validation-only dependency check but cannot execute until the import exists;
+  GREEN must exercise both before the guard is claimed as passing, and even then
+  it will not detect dynamic or alias-obscured dependencies. Existing
+  `test_policy.py` and `test_architecture.py` regressions remained **PASS** 6/6
+  and 3/3 respectively, with 0 skips. Direct `py_compile` and `git diff --check`
+  both **PASS**. No Task 3B.2 runtime surface was added.
+- Task 3B.2a initial GREEN selected/executed 30 tests: 28 passed and two isolated
+  cross-policy sampler/objective alias subtests failed because those fixtures also
+  broke the earlier within-policy scheduler-sharing invariant. Refining each
+  negative fixture to preserve its authorized internal sharing required no
+  runtime change. The final focused command **PASS** 30/30 with 0 failures,
+  errors or skips. `ReferenceSessions` is frozen and validation-only; it preserves
+  injected objects, validates exact D1/D2 config and policy correspondence,
+  canonical checkpoint/session lineage, positive native point count, internal
+  scheduler ownership, cross-policy mutable owners and parameter/buffer storage.
+  The class-scoped dependency guard's allowed surface and isolated forbidden
+  `load_published_policy` fixture both executed with the intended result; it does
+  not claim detection of dynamic, transitive or alias-obscured dependencies.
+- Task 3B.2a pre-commit hardening RED kept 30 test methods and produced five
+  intended assertion failures: four symmetric D1/D2 sampler/objective codec
+  correspondence subcases and one offset, positive-byte storage-overlap case.
+  An adjacent non-overlapping pair over the same NumPy backing remained accepted.
+  GREEN now requires each collaborator to use its policy network's exact codec
+  and compares cross-policy storage address intervals on the same device; the
+  final focused command returned to **PASS** 30/30 with 0 failures/errors/skips.
+- Task 3B.2a related regressions: `test_policy.py` **PASS** 6/6,
+  `test_architecture.py` **PASS** 3/3, `test_config.py` **PASS** 5/5 and
+  `test_v5_config.py` **PASS** 4/4, totalling 18/18 with 0 skips. Direct
+  `py_compile` and `git diff --check` both **PASS**. Profile resolution, artifact
+  loading, outer session construction, context preparation and inference remain
+  absent from this Task 3B.2a runtime change.
 - One proposed `memory_slots=True` negative fixture failed inside the existing
   typed `TrackerConfig` constructor before reaching TaskTracker. It was removed as
   duplicate schema coverage and was not counted as Task 1A RED evidence.
@@ -1176,6 +1313,10 @@ phase if an FG fails and request a scoped protocol decision.
   five pre-existing missing evidence-log targets. Both pass Python syntax, the
   static harness boundary and 19/19 harness self-tests with 0 skips; no new L0
   regression was introduced.
+- Task 3B.2a final L0 rerun: both commands remain **FAIL** overall only for those
+  same five pre-existing missing evidence-log targets. Both pass Python syntax,
+  the static harness boundary and 19/19 harness self-tests with 0 skips; no new
+  L0 regression was introduced by the Task 3B.2a runtime/test/plan changes.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, simulator, preprocessing, collection and training: **NOT RUN** — separate
   resource authorization required.
