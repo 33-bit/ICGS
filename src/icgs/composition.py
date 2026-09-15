@@ -1,5 +1,7 @@
 """Explicit construction and artifact boundary shared by all entry points."""
 from dataclasses import dataclass, field
+import hashlib
+import json
 from types import MappingProxyType
 from typing import Mapping, Callable
 
@@ -144,3 +146,61 @@ def load_policy(directory='./checkpoints', model_name='model.pt', *, mode='eval'
     if compile_models:
         policy.network.compile_models()
     return policy
+
+
+def _reference_session_id(reference_id, role):
+    payload = {
+        "domain": "icgs.reference-session",
+        "schema": 1,
+        "reference_id": reference_id,
+        "role": role,
+    }
+    encoded = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def build_reference_sessions(
+    checkpoint,
+    *,
+    reference_id,
+    native_profile,
+    device,
+):
+    """Load distinct D1/D2 policies and validate their canonical lineage."""
+
+    from icgs.artifacts.published import (
+        load_published_policy,
+        resolve_native_profile,
+    )
+    from icgs.policies.reference import ReferenceSessions
+
+    profile = resolve_native_profile(native_profile)
+    d1_config = profile.config_for(num_demos=1, device=device)
+    d2_config = profile.config_for(num_demos=2, device=device)
+    d1 = load_published_policy(
+        checkpoint,
+        native_profile=native_profile,
+        config=d1_config,
+    )
+    d2 = load_published_policy(
+        checkpoint,
+        native_profile=native_profile,
+        config=d2_config,
+    )
+    return ReferenceSessions(
+        d1=d1,
+        d2=d2,
+        d1_config=d1_config,
+        d2_config=d2_config,
+        reference_id=reference_id,
+        native_profile=profile.profile_id,
+        checkpoint_sha256=profile.artifact_sha256,
+        native_point_count=profile.native_point_count,
+        d1_session_id=_reference_session_id(reference_id, "d1"),
+        d2_session_id=_reference_session_id(reference_id, "d2"),
+    )

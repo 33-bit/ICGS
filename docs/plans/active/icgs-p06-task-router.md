@@ -16,8 +16,9 @@ Status: **ACTIVE — Task 1A tensor tracker, Task 1B owned TaskState, Task 1C
 masked objectives, Task 2 deterministic routing/window selection, Task 3A route
 RNG protocol and Task 3B.0 context-preparation RNG/provenance foundation
 and Task 3B.1 exact-index/full-demo materialization COMPLETE; P06 remains PARTIAL
-because Task 3B.2a injected-session validation is COMPLETE, while Task 3B.2b,
-Task 3B.3 session/context ownership and Task 3C routed reference calls are NOT
+because Task 3B.2a injected-session validation and Task 3B.2b authoritative
+profile/outer D1-D2 construction are COMPLETE under synthetic L1, while Task
+3B.3 session/context ownership and Task 3C routed reference calls are NOT
 IMPLEMENTED**. This
 document is a category C component of the approved research migration; it does not
 authorize simulator or training workloads.
@@ -80,8 +81,8 @@ evidence; this addendum does not certify that the component consumes every new f
 - New Task 3B/3C test owner: `tests/test_reference_policy.py`; keep pure arithmetic
   and dependency tests in `tests/test_task_router.py`.
 
-Implemented/planned capability vocabulary (Task 3B.2a record is available;
-Task 3B.2b–3B.3/3C surfaces remain unavailable):
+Implemented/planned capability vocabulary (Task 3B.2b profile/session factory is
+available; Task 3B.3/3C surfaces remain unavailable):
 
 ```python
 track_task(previous: TaskState | None, state: PhysicalState, events: EventMemory) -> TaskState
@@ -99,6 +100,8 @@ materialize_indexed_native_demo(demo, boundary_indices, *, point_seed,
 materialize_full_native_demo(demo, *, point_seed, native_waypoint_count,
                              native_point_count) -> Mapping[str, tuple]
 ReferenceSessions(...)  # frozen validation-only D1/D2 ownership record
+resolve_native_profile(profile_id)  # exact published profile; no aliases
+build_reference_sessions(checkpoint, *, reference_id, native_profile, device)
 
 # Planned and unavailable until Task 3C; P10 treats proposals as opaque and the
 # P06-owned materializer unwraps proposal.candidate:
@@ -448,9 +451,10 @@ remains PARTIAL.
 ### Task 3B: Exact native contexts and separately owned D1/D2 sessions
 
 **Status:** ACTIVE — Task 3B.0 and Task 3B.1 exact-index/full-demo materializers
-and Task 3B.2a injected-session validation COMPLETE; Task 3B.2b and Task 3B.3
-NOT STARTED. Task 3B constructs contexts only; it does not choose a route or
-call native inference.
+and Task 3B.2a injected-session validation plus Task 3B.2b authoritative
+profile/outer construction COMPLETE under synthetic L1; Task 3B.3 NOT STARTED.
+Task 3B constructs contexts only; it does not choose a route or call native
+inference.
 
 **Files:** Create `src/icgs/policies/reference.py`; extend
 `src/icgs/composition.py` only for outer D1/D2 construction/loading. Do not add
@@ -539,9 +543,10 @@ protocol ID is part of the existing P00 reference payload.
   counts and 0 hidden skips.
 
 Task 3B.0 completion wording: **Task 3B.0 deterministic context child-seed
-allocation and immutable preparation provenance — COMPLETE; Task 3B.1 exact-index
-and full-demo native materialization is also complete, while Task 3B.2–3B.3
-session/context construction remains NOT IMPLEMENTED.** P06 remains PARTIAL.
+allocation and immutable preparation provenance — COMPLETE; Task 3B.1 native
+materialization and Task 3B.2 D1/D2 session ownership are also COMPLETE under
+synthetic L1, while Task 3B.3 MethodContext assembly remains NOT IMPLEMENTED.**
+P06 remains PARTIAL.
 
 #### Task 3B.1 — Exact-index native demonstration materialization
 
@@ -742,6 +747,29 @@ later canonical payload validation checks its `native_point_count` against the
 resolved profile and `ReferenceSessions`; `MethodConfig.geometry.num_points` is
 never used as a proxy.
 
+The resolver's concrete return class is not contractual. Its required capability
+surface exposes `profile_id`, `artifact_sha256`, `native_point_count` and
+`config_for(*, num_demos, device)`. For the outer factory path,
+`load_published_policy()` accepts the exact resolved `config=` plus the explicit
+`native_profile`; existing published convenience arguments remain compatible.
+Composition owns:
+
+```python
+build_reference_sessions(
+    checkpoint,
+    *,
+    reference_id: str,
+    native_profile: str,
+    device: str,
+) -> ReferenceSessions
+```
+
+It resolves once, requests D1 then D2 configs, loads two distinct policies in
+that order, derives both canonical session IDs and constructs the validation
+record only after both loads succeed. Reading or passing around that returned
+record performs no further load. This does not require caching or idempotence when
+`build_reference_sessions()` itself is called again.
+
 Task 3B.2 owns sessions only. Every `PreparedContext` placement, full/window
 policy-owner check, context alias check and `native_window_valid` consequence
 remains Task 3B.3 ownership.
@@ -766,17 +794,20 @@ remains Task 3B.3 ownership.
 
 ##### Task 3B.2b — Authoritative profile and outer construction
 
-- [ ] **Step 1b — RED:** Lock exact profile JSON schema/ID/point count, unknown
-  profile rejection, shared config resolution, canonical session-ID bytes,
-  exactly two loads with D=1 then D=2, no partial record after load failure and
-  no further loads when the returned session record is reused.
-- [ ] **Step 2b — Verify RED:** Keep 3B.2a green; new failures must identify only
+- [x] **Step 1b — RED:** Lock profile JSON schema/ID and authoritative positive
+  `preprocessing.native_point_count` without forbidding additional preprocessing
+  metadata; unknown and original profile IDs must reach the resolver unchanged
+  and be rejected before checkpoint/model IO. Lock shared config resolution,
+  canonical session-ID bytes, exact profile metadata propagation, exactly two
+  loads with D=1 then D=2, construction only after both loads succeed and no
+  further loads when the returned session record is reused.
+- [x] **Step 2b — Verify RED:** Keep 3B.2a green; new failures must identify only
   the absent resolver/factory or missing profile metadata.
-- [ ] **Step 3b — GREEN:** Implement the resolver in `artifacts/published.py`, make
+- [x] **Step 3b — GREEN:** Implement the resolver in `artifacts/published.py`, make
   `load_published_policy()` consume it, and implement outer
   `build_reference_sessions()` in `composition.py`. `reference.py` performs no
   artifact IO.
-- [ ] **Step 4b — Verify GREEN:** Run focused, configuration, composition,
+- [x] **Step 4b — Verify GREEN:** Run focused, configuration, composition,
   checkpoint, loading and policy owners plus L0. Real shared-checksum D1/D2
   loading/inference and resident-memory evidence remain G4/L2.
 
@@ -1248,6 +1279,50 @@ phase if an FG fails and request a scoped protocol decision.
   `py_compile` and `git diff --check` both **PASS**. Profile resolution, artifact
   loading, outer session construction, context preparation and inference remain
   absent from this Task 3B.2a runtime change.
+- Task 3B.2b RED: the focused reference-policy command selected/executed 37
+  tests — **FAIL as expected**. All 30 accepted Task 3B.0–3B.2a tests passed;
+  the seven new methods produced two intended assertion failures for missing
+  profile metadata and loader delegation plus six expected error records across
+  five methods for the absent loader API, resolver and factory surfaces, with 0
+  skips. The loader-level unknown/original-profile subcases both fail at the
+  absent `native_profile` argument before checkpoint/model IO. Fixtures lock
+  exact published profile identity and point count while permitting additional
+  preprocessing metadata, unchanged unknown/original profile IDs at the resolver,
+  exact D1/D2 resolved configs, function-scoped loader/factory boundaries,
+  canonical session IDs, exact profile metadata propagation, two distinct
+  D1-then-D2 loads with exact config objects, construction only after both loads,
+  policy/config non-mutation and no load triggered by reading the returned record.
+  Factory collaborator and constructor spies patch both authoritative modules and
+  any existing consumer aliases, so the RED contract does not prescribe import
+  syntax. The tests do not require a second builder call to be cached. Static and
+  runtime negative fixtures that need the missing imports are defined but cannot
+  all execute until GREEN; GREEN must exercise them before claiming the guards
+  pass.
+- Task 3B.2b RED related regressions: `test_v5_config.py` **PASS** 4/4,
+  `test_composition.py` **PASS** 6/6, `test_loading.py` **PASS** 2/2 and
+  `test_policy.py` **PASS** 6/6, totalling 18/18 with 0 skips. Direct
+  `py_compile` and `git diff --check` both **PASS**. No profile, resolver, loader
+  or composition runtime was changed in this RED phase. An initial combined
+  module-path unittest invocation was not a valid repository test entry point:
+  the latter two modules could not resolve their discovery-style sibling import.
+  It was replaced by the four canonical per-file discovery commands above; this
+  invocation error is not counted as a regression result.
+- Task 3B.2b GREEN: `test_reference_policy.py` **PASS** 37/37 with 0
+  failures/errors/skips. The packaged vv19 profile now owns its exact ID and
+  positive native point count; the resolver rejects unknown/original IDs without
+  aliases, and the published loader resolves before checkpoint/model IO while
+  passing the exact injected config object to `build_policy()` without
+  loader-side reconstruction. The outer factory resolves once, derives D1 then
+  D2 configs, performs exactly two distinct loads, derives canonical session IDs
+  and constructs `ReferenceSessions` only after both loads succeed.
+  Function-scoped allowed/forbidden guards and both loader pre-IO rejection
+  subcases executed successfully. These synthetic collaborators prove ordering,
+  lineage and ownership contracts, not real model loading or fidelity.
+- Task 3B.2b GREEN related regressions: `test_v5_config.py` **PASS** 4/4,
+  `test_composition.py` **PASS** 6/6, `test_checkpoints.py` **PASS** 13/13,
+  `test_loading.py` **PASS** 2/2, `test_policy.py` **PASS** 6/6,
+  `test_cli.py` **PASS** 7/7 and `test_architecture.py` **PASS** 3/3, totalling
+  41/41 with 0 skips. Direct `py_compile` and `git diff --check` both **PASS**.
 - One proposed `memory_slots=True` negative fixture failed inside the existing
   typed `TrackerConfig` constructor before reaching TaskTracker. It was removed as
   duplicate schema coverage and was not counted as Task 1A RED evidence.
@@ -1317,6 +1392,14 @@ phase if an FG fails and request a scoped protocol decision.
   same five pre-existing missing evidence-log targets. Both pass Python syntax,
   the static harness boundary and 19/19 harness self-tests with 0 skips; no new
   L0 regression was introduced by the Task 3B.2a runtime/test/plan changes.
+- Task 3B.2b RED L0 rerun: both commands remain **FAIL** overall only for the
+  same five pre-existing missing evidence-log targets. Both pass Python syntax,
+  the static harness boundary and 19/19 harness self-tests with 0 skips; no new
+  L0 regression was introduced by the Task 3B.2b test/plan-only changes.
+- Task 3B.2b GREEN L0 rerun: both commands remain **FAIL** overall only for the
+  same five pre-existing missing evidence-log targets. Both pass Python syntax,
+  the static harness boundary and 19/19 harness self-tests with 0 skips; no new
+  L0 regression was introduced by the Task 3B.2b runtime/profile/plan changes.
 - L2/C1–C5: **NOT RUN** by this plan — preserve mandatory integration acceptance.
 - L3/L4, simulator, preprocessing, collection and training: **NOT RUN** — separate
   resource authorization required.
@@ -1331,7 +1414,8 @@ phase if an FG fails and request a scoped protocol decision.
   checks remain on the hot path or move partly to dataset/debug validation. P02
   task-view tensorization, Stage B training, GPU/mixed-precision behavior,
   context replay orchestration, final-availability integration, routed policy
-  execution, native sessions and measured reference support remain unverified.
+  execution, real shared-checksum native sessions and measured reference support
+  remain unverified.
   Task 3B.1 materializers exercise native point selection and RNG ownership with
   synthetic outlier-filter fixtures; the native Open3D primitives pass their
   independent L1 owner, but full materializer-to-PreparedContext integration

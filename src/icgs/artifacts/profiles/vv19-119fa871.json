@@ -1,6 +1,10 @@
 {
   "schema_version": 1,
+  "profile_id": "instant_policy_published_vv19_119fa871",
   "artifact_sha256": "119fa871091c7082b98d8a795dd80eca38295c4b7ab454e1f88549194bd4a4a5",
+  "preprocessing": {
+    "native_point_count": 2048
+  },
   "source_revision": "72281736672a555e9c9834eb15c225e2f1baaf93",
   "configuration_source": "public config/normalizer/scheduler inspected after strict reference load on Colab T4, Python3.10/torch2.2.0+cu118",
   "legacy_config": {

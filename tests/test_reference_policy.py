@@ -1,8 +1,10 @@
 import ast
+from contextlib import contextmanager, ExitStack
 import dataclasses
 import hashlib
 import inspect
 import json
+from pathlib import Path
 import random
 import textwrap
 import unittest
@@ -1446,6 +1448,440 @@ class ReferenceSessionsValidationTests(unittest.TestCase):
             "violating_surface.*load_published_policy.*Task 3B.2b",
         ):
             self._assert_session_dependency_boundary(violating_surface)
+
+
+class ReferenceSessionFactoryTests(unittest.TestCase):
+    _PROFILE_ID = "instant_policy_published_vv19_119fa871"
+    _ORIGINAL_PROFILE_ID = "instant-policy-original-65dc94e"
+    _CHECKPOINT = (
+        "119fa871091c7082b98d8a795dd80eca38295c4b7ab454e1f88549194bd4a4a5"
+    )
+    _REFERENCE_ID = "reference-fixture-v1"
+
+    @staticmethod
+    def _profile_path():
+        return (
+            Path(__file__).resolve().parent.parent
+            / "src/icgs/artifacts/profiles/vv19-119fa871.json"
+        )
+
+    @staticmethod
+    def _resolved_profile(d1_config, d2_config):
+        def config_for(*, num_demos, device):
+            if device != "cpu":
+                raise AssertionError("fixture expected the injected CPU device")
+            if num_demos == 1:
+                return d1_config
+            if num_demos == 2:
+                return d2_config
+            raise AssertionError("fixture expected only D1/D2 config requests")
+
+        return SimpleNamespace(
+            profile_id=ReferenceSessionFactoryTests._PROFILE_ID,
+            artifact_sha256=ReferenceSessionFactoryTests._CHECKPOINT,
+            native_point_count=2048,
+            config_for=mock.Mock(side_effect=config_for),
+        )
+
+    @staticmethod
+    def _factory_configs():
+        d1_config, d2_config = ReferenceSessionsValidationTests._configs()
+        return d1_config, d2_config
+
+    @staticmethod
+    def _policy(config):
+        return ReferenceSessionsValidationTests._policy(
+            config,
+            checksum=ReferenceSessionFactoryTests._CHECKPOINT,
+        )
+
+    def _assert_loader_profile_boundary(self, surface):
+        source = textwrap.dedent(inspect.getsource(surface))
+        tree = ast.parse(source)
+        referenced = {
+            node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
+        }
+        referenced.update(
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+        )
+        forbidden = {
+            "files",
+            "read_text",
+            "json",
+            "from_legacy",
+            "replace",
+            "published_config",
+        }
+        found = sorted(forbidden & referenced)
+        if found or "resolve_native_profile" not in referenced:
+            self.fail(
+                f"{surface.__name__} must delegate profile/config authority to "
+                "resolve_native_profile and must not read or reconstruct it; "
+                f"forbidden references: {found}"
+            )
+
+    def _assert_factory_dependency_boundary(self, surface):
+        source = textwrap.dedent(inspect.getsource(surface))
+        tree = ast.parse(source)
+        referenced = {
+            node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
+        }
+        referenced.update(
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+        )
+        required = {
+            "resolve_native_profile",
+            "load_published_policy",
+            "ReferenceSessions",
+        }
+        forbidden = {
+            "PreparedContext",
+            "MethodContext",
+            "prepare_context",
+            "predict",
+            "materialize_indexed_native_demo",
+            "materialize_full_native_demo",
+        }
+        missing = sorted(required - referenced)
+        found = sorted(forbidden & referenced)
+        if missing or found:
+            self.fail(
+                f"{surface.__name__} must remain a Task 3B.2b outer session "
+                f"factory; missing owners: {missing}; forbidden 3B.3/3C "
+                f"references: {found}"
+            )
+
+    @contextmanager
+    def _patched_factory_collaborators(self, *, profile, loader_side_effect):
+        """Patch either supported import style without making syntax contractual."""
+        from icgs import composition
+        from icgs.artifacts import published
+
+        resolver = mock.Mock(return_value=profile)
+        loader = mock.Mock(side_effect=loader_side_effect)
+        with ExitStack() as stack:
+            stack.enter_context(
+                mock.patch.object(
+                    published,
+                    "resolve_native_profile",
+                    resolver,
+                    create=True,
+                )
+            )
+            stack.enter_context(
+                mock.patch.object(published, "load_published_policy", loader)
+            )
+            if hasattr(composition, "resolve_native_profile"):
+                stack.enter_context(
+                    mock.patch.object(
+                        composition,
+                        "resolve_native_profile",
+                        resolver,
+                    )
+                )
+            if hasattr(composition, "load_published_policy"):
+                stack.enter_context(
+                    mock.patch.object(
+                        composition,
+                        "load_published_policy",
+                        loader,
+                    )
+                )
+            yield resolver, loader
+
+    @contextmanager
+    def _patched_sessions_constructor(self, *, side_effect):
+        """Intercept construction for local-import and module-alias factories."""
+        from icgs import composition
+        from icgs.policies import reference
+
+        constructor = mock.Mock(side_effect=side_effect)
+        with ExitStack() as stack:
+            stack.enter_context(
+                mock.patch.object(reference, "ReferenceSessions", constructor)
+            )
+            if hasattr(composition, "ReferenceSessions"):
+                stack.enter_context(
+                    mock.patch.object(
+                        composition,
+                        "ReferenceSessions",
+                        constructor,
+                    )
+                )
+            yield constructor
+
+    def test_published_profile_json_has_authoritative_identity_and_point_count(self):
+        payload = json.loads(self._profile_path().read_text())
+
+        self.assertEqual(payload["schema_version"], 1)
+        self.assertIn("profile_id", payload, "published profile needs profile_id")
+        self.assertEqual(payload["profile_id"], self._PROFILE_ID)
+        self.assertEqual(payload["artifact_sha256"], self._CHECKPOINT)
+        self.assertIn(
+            "preprocessing",
+            payload,
+            "published profile needs authoritative preprocessing metadata",
+        )
+        preprocessing = payload["preprocessing"]
+        self.assertIn("native_point_count", preprocessing)
+        self.assertIs(type(preprocessing["native_point_count"]), int)
+        self.assertGreater(preprocessing["native_point_count"], 0)
+        self.assertEqual(preprocessing["native_point_count"], 2048)
+
+    def test_resolver_rejects_unknown_profiles_and_derives_exact_configs(self):
+        from icgs.artifacts.published import resolve_native_profile
+
+        profile = resolve_native_profile(self._PROFILE_ID)
+        self.assertEqual(profile.profile_id, self._PROFILE_ID)
+        self.assertEqual(profile.artifact_sha256, self._CHECKPOINT)
+        self.assertEqual(profile.native_point_count, 2048)
+
+        d1_config = profile.config_for(num_demos=1, device="cpu")
+        d2_config = profile.config_for(num_demos=2, device="cpu")
+        self.assertEqual(d1_config.graph.num_demos, 1)
+        self.assertEqual(
+            d2_config,
+            dataclasses.replace(
+                d1_config,
+                graph=dataclasses.replace(d1_config.graph, num_demos=2),
+            ),
+        )
+        for unknown in ("unknown-native-profile", self._ORIGINAL_PROFILE_ID):
+            with self.subTest(native_profile=unknown):
+                with self.assertRaisesRegex(ValueError, "unknown.*profile"):
+                    resolve_native_profile(unknown)
+
+    def test_published_loader_delegates_profile_and_config_authority(self):
+        from icgs.artifacts import published
+
+        self._assert_loader_profile_boundary(published.load_published_policy)
+
+        def violating_surface():
+            return published_config
+
+        with self.assertRaisesRegex(
+            AssertionError,
+            "violating_surface.*resolve_native_profile.*published_config",
+        ):
+            self._assert_loader_profile_boundary(violating_surface)
+
+        profile = published.resolve_native_profile(self._PROFILE_ID)
+        config = profile.config_for(num_demos=1, device="cpu")
+        policy = self._policy(config)
+        with mock.patch.object(
+            published,
+            "resolve_native_profile",
+            wraps=published.resolve_native_profile,
+        ) as resolver_spy, mock.patch.object(
+            published,
+            "sha256_file",
+            return_value=self._CHECKPOINT,
+        ), mock.patch(
+            "torch.load",
+            return_value={"state_dict": {}},
+        ), mock.patch(
+            "icgs.composition.build_policy",
+            return_value=policy,
+        ) as build_spy, mock.patch(
+            "icgs.artifacts.checkpoints.load_state_dict_compatible",
+            return_value="strict-report",
+        ):
+            loaded = published.load_published_policy(
+                "/missing/model.pt",
+                native_profile=self._PROFILE_ID,
+                config=config,
+            )
+
+        resolver_spy.assert_called_once_with(self._PROFILE_ID)
+        build_spy.assert_called_once_with(config)
+        self.assertIs(loaded, policy)
+        self.assertEqual(loaded.artifact_sha256, self._CHECKPOINT)
+
+    def test_loader_rejects_unknown_profile_before_checkpoint_or_model_io(self):
+        from icgs.artifacts import published
+
+        for profile_id in ("unknown-native-profile", self._ORIGINAL_PROFILE_ID):
+            resolver = mock.Mock(
+                side_effect=ValueError(f"unknown native profile: {profile_id!r}")
+            )
+            with self.subTest(native_profile=profile_id), mock.patch.object(
+                published,
+                "resolve_native_profile",
+                resolver,
+                create=True,
+            ), mock.patch.object(
+                published,
+                "sha256_file",
+                side_effect=AssertionError("checkpoint IO occurred"),
+            ), mock.patch(
+                "torch.load",
+                side_effect=AssertionError("model IO occurred"),
+            ):
+                with self.assertRaisesRegex(ValueError, "unknown.*profile"):
+                    published.load_published_policy(
+                        "/missing/model.pt",
+                        native_profile=profile_id,
+                        device="cpu",
+                    )
+                resolver.assert_called_once_with(profile_id)
+
+    def test_builder_loads_exact_d1_then_d2_and_record_reuse_does_not_reload(self):
+        from icgs.composition import build_reference_sessions
+        from icgs.policies.reference import ReferenceSessions
+
+        d1_config, d2_config = self._factory_configs()
+        profile = self._resolved_profile(d1_config, d2_config)
+        policies = (self._policy(d1_config), self._policy(d2_config))
+        order = []
+
+        def load_policy(checkpoint, *, native_profile, config):
+            order.append(f"load:d{config.graph.num_demos}")
+            return policies[config.graph.num_demos - 1]
+
+        def construct_sessions(*args, **kwargs):
+            order.append("construct")
+            return ReferenceSessions(*args, **kwargs)
+
+        policy_state = tuple(
+            (
+                policy.graph_config,
+                policy.runtime,
+                policy.context_owner,
+                policy.network,
+                policy.network.graph.graph,
+            )
+            for policy in policies
+        )
+
+        with self._patched_factory_collaborators(
+            profile=profile,
+            loader_side_effect=load_policy,
+        ) as (resolver, loader), self._patched_sessions_constructor(
+            side_effect=construct_sessions,
+        ) as constructor:
+            sessions = build_reference_sessions(
+                "/checkpoint/model.pt",
+                reference_id=self._REFERENCE_ID,
+                native_profile=self._PROFILE_ID,
+                device="cpu",
+            )
+            self.assertIsNot(sessions.d1, sessions.d2)
+            self.assertIs(sessions.d1, policies[0])
+            self.assertIs(sessions.d2, policies[1])
+
+            for policy, expected in zip(policies, policy_state):
+                self.assertEqual(policy.graph_config, expected[0])
+                self.assertEqual(policy.runtime, expected[1])
+                self.assertIs(policy.context_owner, expected[2])
+                self.assertIs(policy.network, expected[3])
+                self.assertIs(policy.network.graph.graph, expected[4])
+            self.assertIs(sessions.d1_config, d1_config)
+            self.assertIs(sessions.d2_config, d2_config)
+            self.assertEqual(sessions.reference_id, self._REFERENCE_ID)
+            self.assertEqual(sessions.native_profile, profile.profile_id)
+            self.assertEqual(
+                sessions.checkpoint_sha256,
+                profile.artifact_sha256,
+            )
+            self.assertEqual(
+                sessions.native_point_count,
+                profile.native_point_count,
+            )
+            self.assertEqual(
+                sessions.d1_session_id,
+                ReferenceSessionsValidationTests._session_id(
+                    self._REFERENCE_ID,
+                    "d1",
+                ),
+            )
+            self.assertEqual(
+                sessions.d2_session_id,
+                ReferenceSessionsValidationTests._session_id(
+                    self._REFERENCE_ID,
+                    "d2",
+                ),
+            )
+
+            self.assertIs(sessions.d1, policies[0])
+            self.assertIs(sessions.d2, policies[1])
+
+        self.assertEqual(order, ["load:d1", "load:d2", "construct"])
+        constructor.assert_called_once()
+        resolver.assert_called_once_with(self._PROFILE_ID)
+        self.assertEqual(
+            profile.config_for.call_args_list,
+            [
+                mock.call(num_demos=1, device="cpu"),
+                mock.call(num_demos=2, device="cpu"),
+            ],
+        )
+        self.assertEqual(
+            loader.call_args_list,
+            [
+                mock.call(
+                    "/checkpoint/model.pt",
+                    native_profile=self._PROFILE_ID,
+                    config=d1_config,
+                ),
+                mock.call(
+                    "/checkpoint/model.pt",
+                    native_profile=self._PROFILE_ID,
+                    config=d2_config,
+                ),
+            ],
+        )
+
+    def test_builder_second_load_failure_does_not_return_partial_record(self):
+        from icgs.composition import build_reference_sessions
+        from icgs.policies.reference import ReferenceSessions
+
+        d1_config, d2_config = self._factory_configs()
+        profile = self._resolved_profile(d1_config, d2_config)
+        d1_policy = self._policy(d1_config)
+
+        def load_policy(checkpoint, *, native_profile, config):
+            if config.graph.num_demos == 1:
+                return d1_policy
+            raise RuntimeError("injected D2 load failure")
+
+        with self._patched_factory_collaborators(
+            profile=profile,
+            loader_side_effect=load_policy,
+        ) as (_, loader), self._patched_sessions_constructor(
+            side_effect=ReferenceSessions,
+        ) as constructor:
+            with self.assertRaisesRegex(RuntimeError, "injected D2 load failure"):
+                build_reference_sessions(
+                    "/checkpoint/model.pt",
+                    reference_id=self._REFERENCE_ID,
+                    native_profile=self._PROFILE_ID,
+                    device="cpu",
+                )
+        self.assertEqual(loader.call_count, 2)
+        constructor.assert_not_called()
+        self.assertEqual(d1_policy.graph_config, d1_config.graph)
+        self.assertEqual(d1_policy.runtime, d1_config.runtime)
+
+    def test_builder_signature_and_dependency_boundary_remain_outer_only(self):
+        from icgs.composition import build_reference_sessions
+
+        parameters = inspect.signature(build_reference_sessions).parameters
+        self.assertNotIn("d1_session_id", parameters)
+        self.assertNotIn("d2_session_id", parameters)
+        self._assert_factory_dependency_boundary(build_reference_sessions)
+
+        def violating_surface():
+            return PreparedContext
+
+        with self.assertRaisesRegex(
+            AssertionError,
+            "violating_surface.*PreparedContext",
+        ):
+            self._assert_factory_dependency_boundary(violating_surface)
 
 
 if __name__ == "__main__":
