@@ -67,6 +67,16 @@ evidence; this addendum does not certify that the component consumes every new f
 - Create: `src/icgs/state/task.py` — TaskState and context replay validation.
 - Create: `src/icgs/algorithms/planning/router.py` — window selection and route RNG.
 - Create: `src/icgs/algorithms/objectives/task.py`; Test: `tests/test_task_router.py`.
+- Create for Task 3B/3C: `src/icgs/policies/reference.py` — exact-index
+  materialization orchestration, injected D1/D2 session ownership, MethodContext
+  assembly and routed reference proposals. This module may consume the pure
+  router, InstantPolicy capability and method state; `router.py` must not import
+  concrete policies, contexts or sessions.
+- Extend only at the outer construction boundary: `src/icgs/composition.py` builds
+  and loads D1/D2 policies once from the same frozen artifact. Extend
+  `src/icgs/artifacts/method.py` rather than creating another reference hash.
+- New Task 3B/3C test owner: `tests/test_reference_policy.py`; keep pure arithmetic
+  and dependency tests in `tests/test_task_router.py`.
 
 Implemented/planned capability vocabulary (Task 3B/3C surfaces remain unavailable):
 
@@ -78,8 +88,12 @@ select_window_indices(target, demo_interactions, grip_transition_indices, config
 split_route_seed(seed: int) -> tuple[int, int]  # route seed, diffusion seed
 draw_route(probabilities: Tensor, *, route_seed: int) -> int
 
-# Planned and unavailable until Task 3C:
-sample_prior(observation, task: TaskState, context: MethodContext, *, seed: int) -> Candidate
+# Planned and unavailable until Task 3C; P10 treats proposals as opaque and the
+# P06-owned materializer unwraps proposal.candidate:
+sample_prior(observation, task: TaskState, context: MethodContext,
+             *, seed: int) -> ReferenceProposal
+materialize_prefix(proposal: ReferenceProposal, *, h: int, r: int,
+                   duration_s: float) -> CommandPrefix
 ```
 
 TaskState r[B,W],alpha[B,Lc+1] including null,rho/nu/eligible[B,Lc],boundary/context/tracker lineage. Nonmonotonic recovery is legal. Reference pi_ref is exactly one routed sample plus r2 execution, with no V,H-conditioned choice or learned stop.
@@ -419,22 +433,396 @@ categorical route draw — COMPLETE; exact-index native context preparation, D=1
 ownership, routed native inference and candidate provenance — deferred.** P06
 remains PARTIAL.
 
-### Task 3B/3C: Deferred native contexts and routed reference calls
+### Task 3B: Exact native contexts and separately owned D1/D2 sessions
 
-Task 3B must first resolve exact-index native preparation and the separate RNG/
-provenance owner for stochastic point sampling. It must not pass Task 2's selected
-raw subsequence through `prepare_context(..., prepared=False)`, because native
-`sample_to_cond_demo` would select waypoints again. Each non-`None` window must be
-bound to the D=1 session owner, while full context must be bound to the session
-matching its one/two-demo count.
+**Status:** PLANNED — contract frozen for RED. Task 3B constructs contexts only;
+it does not choose a route or call native inference.
 
-Task 3C then validates B=1 task/context lineage, draws exactly one route, resolves
-exactly one owned context/session and performs exactly one native proposal under
-the diffusion seed. Failure after route choice does not retry another route.
-Route/window/reference provenance belongs in an immutable wrapper around generic
-`Candidate`; generic candidate semantics are not expanded silently. These tasks
-remain blocked from RED until their context-preparation RNG and wrapper contracts
-are explicitly approved.
+**Files:** Create `src/icgs/policies/reference.py`; extend
+`src/icgs/composition.py` only for outer D1/D2 construction/loading. Do not add
+context/session/policy imports to `router.py` and do not modify the behavior of
+the existing `sample_to_cond_demo()` or `InstantPolicy.prepare_context()` paths.
+**Test owner:** `tests/test_reference_policy.py`.
+
+#### Task 3B.0 — Context-preparation RNG foundation and provenance
+
+Context preparation has a separate lifecycle from action sampling:
+
+```python
+split_context_seeds(
+    context_seed: int,
+    *,
+    demo_count: int,
+    event_count: int,
+) -> tuple[tuple[int, ...], tuple[int, ...]]  # full-demo, window-slot seeds
+```
+
+```text
+context_seed
+    -> SeedSequence(context_seed)
+    -> full-demo seeds in raw-demo order
+    -> one reserved window seed for every EventMemory slot in slot order
+
+action_seed
+    -> split_route_seed(action_seed)
+    -> route_seed + diffusion_seed
+```
+
+Protocol `seedsequence-native-choice-v1` spawns `D+L` children in that fixed
+order. A seed is reserved for every event slot, including invalid or
+unmaterializable slots, so changing which windows succeed cannot shift later
+streams. Each returned integer is exactly
+`int(child.generate_state(1)[0])`; children are not post-processed or forced
+unequal. `context_seed` is a nonnegative integer; `demo_count` is positive and
+`event_count` is nonnegative, with booleans rejected for all three.
+
+Every native demo materialization uses the existing
+`icgs.state.randomness.scoped_seed(point_seed, device="cpu")` around all of that
+demo's sequential `subsample_pcd` calls. Do not implement another RNG scope.
+The existing scope restores Python/NumPy/Torch global RNG state on success or
+failure; construction remains serial because the native global NumPy path is not
+concurrency safe. No context seed or child may be replaced with an action route/
+diffusion seed.
+
+The outer episode/run owner supplies `context_seed` explicitly and persists it;
+P06 never invents a default. Its lifetime is one `MethodContext` materialization:
+cache reuse retains the same preparation record, while rebuilding a context
+requires an explicitly chosen seed and produces new context provenance.
+
+```python
+@dataclass(frozen=True)
+class ContextPreparationRecord:
+    context_seed: int
+    full_demo_seeds: tuple[int, ...]
+    window_slot_seeds: tuple[int, ...]
+    rng_protocol: str
+    full_context_id: str
+    window_context_ids: tuple[str | None, ...]
+```
+
+The record exactly aligns `window_slot_seeds` and `window_context_ids` with all L
+EventMemory slots; `full_demo_seeds` has exactly D entries in raw-demo order.
+Seeds are nonnegative integers with booleans rejected, `rng_protocol` is exactly
+`seedsequence-native-choice-v1`, `full_context_id` is nonempty, and each optional
+window context ID corresponds to the same slot's materialization result. The
+record validates and preserves values without normalization. It is provenance
+outside online model state. Per-context seeds are not a second reference
+fingerprint; the protocol ID is part of the existing P00 reference payload.
+
+- [ ] **Step 1 — RED:** Lock exact SeedSequence child values/order, reserved-slot
+  stability, validation, global-RNG restoration and route/diffusion-seed
+  separation.
+- [ ] **Step 2 — GREEN:** Implement only the context seed plan and immutable
+  record validation using the existing scoped RNG boundary; no materialization,
+  route draw or native prediction.
+- [ ] **Step 3 — Verify:** Run the focused owner and RNG regressions with exact
+  counts and 0 hidden skips.
+
+#### Task 3B.1 — Exact-index native demonstration materialization
+
+The additive materializer consumes measured raw-demo boundary observations and
+the exact tuple produced by `select_window_indices`:
+
+```python
+materialize_indexed_native_demo(
+    demo: TimedDemoInput,
+    boundary_indices: tuple[int, ...],
+    *,
+    point_seed: int,
+    native_waypoint_count: int,
+    native_point_count: int,
+) -> Mapping[str, tuple]  # obs, grips, T_w_es
+```
+
+`boundary_indices` is a nonempty tuple of sorted unique nonnegative integers,
+with booleans rejected, and every index addresses the `N+1` measured observations
+of the contiguous `TimedDemoInput`. `native_waypoint_count` and
+`native_point_count` are positive integers with booleans rejected, and
+`len(boundary_indices) == native_waypoint_count`. The caller passes
+`sessions.d1.graph_config.traj_horizon` explicitly; the helper does not import or
+inspect a session and never hard-codes 10.
+
+`native_point_count` is resolved by the outer native-profile/artifact factory,
+stored on `ReferenceSessions`, and must match the pinned reference payload's
+`preprocessing.native_point_count`. It is distinct from
+`MethodConfig.geometry.num_points` even when both currently equal 2048. There is
+no helper-local or Python-signature fallback. Inputs are validated but never
+normalized or mutated.
+
+For each selected boundary, reuse the existing native outlier filter,
+`subsample_pcd` point selection and world-to-end-effector transform on that
+measured observation inside the Task 3B.0
+`scoped_seed(point_seed, device="cpu")` boundary. Do not read `TimedCommand`,
+call `extract_waypoints`, insert or repeat a waypoint, or reinterpret
+`SegmentRef.a/b`. The returned native-shaped mapping is supplied to
+`InstantPolicy.prepare_context(..., prepared=True)` so the exact event-window
+indices are not selected a second time.
+
+Full contexts deliberately retain the native waypoint-selection algorithm. The
+Task 3B builder converts each raw measured demo to the native raw-demo mapping,
+calls existing `sample_to_cond_demo(raw_native_demo,
+session.graph_config.traj_horizon, num_points=sessions.native_point_count)` under
+its assigned point seed, and then uses `prepare_context(..., prepared=True)`.
+It never relies on `sample_to_cond_demo`'s default 2048. Thus full context uses
+native selection exactly once, while an event window uses the Task 2 indices
+exactly once.
+
+- [ ] **Step 1 — RED:** Add allowed exact-index/full-context fixtures plus
+  duplicate, unordered, bool, out-of-range, wrong-count, command-access and
+  mutation negatives. Include indices that native `extract_waypoints` would not
+  choose and assert the exact poses/grips survive. Same point seed must reproduce
+  identical prepared content; changing only point seed may change sampled points
+  but never indices/poses/grips. Exercise global RNG restoration after successful
+  materialization and an injected preprocessing failure.
+- [ ] **Step 2 — Verify RED:** Run only the new test owner. Existing router tests
+  must remain green; each new failure must name the absent materializer surface.
+- [ ] **Step 3 — GREEN:** Implement the additive bridge using Task 3B.0's existing
+  scoped RNG owner without changing native preprocessing defaults or public
+  InstantPolicy behavior.
+- [ ] **Step 4 — Verify GREEN:** Run the focused owner, router/event/policy
+  regressions, `py_compile`, diff/whitespace checks and both L0 variants.
+
+#### Task 3B.2 — D1/D2 session ownership
+
+`ReferenceSessions` receives two already constructed policies from the outer
+composition/artifact boundary. It does not read checkpoints itself. D1 and D2
+must have the same frozen IP checkpoint SHA256 and native profile except for
+`graph.num_demos`; they are separately constructed, have distinct
+`InstantPolicy.context_owner` objects and independent mutable graph/session
+scratch, and are loaded once per constructed reference runtime rather than per
+context, candidate or search branch. They execute sequentially, never
+concurrently.
+
+```python
+@dataclass(frozen=True)
+class ReferenceSessions:
+    d1: InstantPolicy
+    d2: InstantPolicy
+    reference_id: str
+    checkpoint_sha256: str
+    native_point_count: int
+    d1_session_id: str
+    d2_session_id: str
+```
+
+Session IDs are stable lineage identifiers derived at the outer artifact/
+composition boundary, never Python object IDs. `ReferenceSessions` validates but
+does not normalize these identifiers or reconstruct either policy. The outer
+native-profile/artifact factory must supply `native_point_count` explicitly from
+pinned profile metadata; session validation rejects a mismatch with the canonical
+reference payload and never reads `MethodConfig.geometry.num_points` as a proxy.
+
+Every window `PreparedContext.owner` is exactly D1's owner. A one-demo full
+context belongs to D1; a two-demo full context belongs to D2. Contexts may share
+immutable checkpoint weights only through the explicitly tested construction
+adapter; `PreparedContext` objects and their mutable embeddings/positions never
+alias. Runtime code must not mutate either native graph configuration to change D.
+
+- [ ] **Step 1 — RED:** Add fake-session tests for checksum/profile equivalence,
+  D-only config difference, distinct owner/scratch, one-time construction,
+  correct full/window placement, cross-owner rejection, alias rejection and no
+  graph-config mutation.
+- [ ] **Step 2 — GREEN:** Implement validation/ownership around injected sessions
+  and the outer composition factory; do not load within `policies/reference.py`.
+- [ ] **Step 3 — Verify:** Run focused tests and existing strict context/policy/
+  checkpoint regressions. Real shared-checksum D1/D2 evidence remains G4/L2.
+
+#### Task 3B.3 — MethodContext assembly
+
+```python
+build_method_context(
+    raw_demos: tuple[TimedDemoInput, ...],
+    events: EventMemory,
+    sessions: ReferenceSessions,
+    *,
+    context_seed: int,
+    reference_id: str,
+    config: MethodConfig,
+) -> tuple[MethodContext, ContextPreparationRecord]
+```
+
+The builder validates online B=1 and exact raw-demo/hash order, materializes the
+full context or fails setup, attempts only structurally eligible interaction
+windows, and stores `None` for a valid-but-unmaterializable window. It delegates
+final availability exclusively to `MethodContext.native_window_valid`; it does
+not add another mask or treat structural eligibility as native feasibility.
+
+- [ ] **Step 1 — RED:** Cover one/two-demo full contexts, mixed available/absent
+  windows, exact event-slot alignment, raw-hash order, owner mismatch, full-context
+  failure and derived final validity.
+- [ ] **Step 2 — GREEN:** Assemble existing `MethodContext` plus the external
+  immutable preparation record; do not extend online task/context tensors.
+- [ ] **Step 3 — Verify:** Focused and EventMemory/MethodContext regressions.
+
+Task 3B completion wording: **Task 3B exact-index/full native context
+materialization, separate context RNG provenance, owned D1/D2 session boundary
+and MethodContext assembly — COMPLETE under synthetic L1; real native D1/D2
+compatibility and memory cost — NOT RUN until G4/L2.** P06 remains PARTIAL.
+
+### Task 3C: Exactly-one routed reference proposal and canonical lineage
+
+**Status:** PLANNED — contract frozen for RED after Task 3B. Task 3C performs one
+route draw and at most one native prediction. It is not candidate selection.
+
+#### Task 3C.1 — Immutable routed proposal contract
+
+Do not add method provenance fields to generic `Candidate`. Define:
+
+```python
+@dataclass(frozen=True)
+class ReferenceProposal:
+    candidate: Candidate
+    reference_id: str
+    route_index: int              # 0 full; 1..L event windows
+    event_index: int | None       # None iff route_index == 0
+    route_seed: int
+    diffusion_seed: int
+    native_context_id: str        # selected PreparedContext.source_id
+    native_session_id: str        # stable D1/D2 session lineage, never id(...)
+```
+
+Validate route/event consistency, nonnegative integer seeds with booleans
+rejected, exact context/session/reference IDs, `candidate.context_id ==
+native_context_id`, and `candidate.seed == diffusion_seed`. P10's capability
+boundary already treats proposals as opaque; the P06-owned `materialize_prefix`
+adapter accepts `ReferenceProposal` and unwraps `.candidate`, so P10 algorithms
+do not import this concrete policy type.
+
+- [ ] **Step 1 — RED:** Add immutable ownership, malformed provenance, full/window
+  indexing and opaque materialization fixtures; update the canonical planned
+  method contract before runtime implementation.
+- [ ] **Step 2 — GREEN:** Add the wrapper and P06 materializer adapter only.
+
+#### Task 3C.2 — `sample_prior`: exactly one route, exactly one inference
+
+`StageAwareReferencePolicy` is constructed with one validated
+`ReferenceSessions`, one resolved `MethodConfig` and the same `reference_id`; it
+does not load artifacts or construct sessions. Its public `sample_prior` and
+`materialize_prefix` methods satisfy the existing opaque P10 capability seam.
+It executes this fixed sequence:
+
+```text
+validate TaskState B=1 and exact EventMemory context fingerprints
+validate MethodContext.reference_id and ReferenceSessions lineage
+router_probabilities(task.alpha[..., :-1], task.eligible,
+                     context.native_window_valid, config)
+split_route_seed(action_seed) -> route_seed, diffusion_seed
+draw_route(probabilities[0], route_seed=route_seed)
+resolve exactly one (session, PreparedContext):
+    route 0 -> full context and D1/D2 matching raw-demo count
+    route k>0 -> native_windows[k-1] and D1
+validate the selected context owner
+propose_candidates(
+    selected_session,
+    observation,
+    selected_context,
+    count=1,
+    seeds=[diffusion_seed],
+)
+Candidate -> immutable ReferenceProposal
+```
+
+Reuse the existing `propose_candidates(..., count=1,
+seeds=[diffusion_seed])` path exactly. It already owns scoped RNG restoration,
+timing, CUDA synchronization, context/artifact IDs and generic Candidate
+metadata. Do not wrap `policy.predict()` in another RNG scope and do not duplicate
+that proposal bookkeeping in `policies/reference.py`.
+
+**No route retry. No alternate-window retry. No best-of-N native samples.** A
+post-draw validation or inference failure fails that proposal attempt and retains
+the selected route/seeds in failure evidence; it never turns the reference into
+a search policy. A missing full context is a setup error. A window with no native
+context has exact zero route probability and therefore cannot be selected.
+
+- [ ] **Step 1 — RED:** Add deterministic full/window draws, lineage/owner/device
+  negatives, exactly-one call counters, injected predict failure and explicit
+  no-retry proofs. Verify route and diffusion streams independently.
+- [ ] **Step 2 — GREEN:** Implement the B=1 reference policy against injected
+  sessions and the existing single-candidate proposal seam.
+- [ ] **Step 3 — Verify:** Run focused P06/P10 capability regressions; no real
+  model, simulator, preprocessing job or training workload in L1.
+
+#### Task 3C.3 — Existing reference payload and manifest integration
+
+P06 produces metadata for the existing P00 `reference_fingerprint()` and
+`validate_method_manifest()` owners; it never computes a parallel reference ID.
+Extend the existing payload/schema with these exact keys; aliases or alternative
+nesting reject:
+
+```python
+"preprocessing": {
+    # all existing preprocessing fields remain
+    "voxel_size_m": ...,
+    "num_anchors": ...,
+    "num_points": ...,             # existing method geometry lineage
+    "neighbors": ...,
+    "ell0_m": ...,
+    "fps_start": ...,
+    "tie_break": ...,
+    "native_point_count": ...,     # pinned native-profile metadata
+    "exact_window_protocol": "exact-boundary-v1",
+},
+"rng_protocol": {
+    "route": "pcg64-v1",
+    "context_points": "seedsequence-native-choice-v1",
+    "native_predict": "scoped-seed-v1",
+    "config": {
+        "generator_seed": ...,
+        "reset_seed": ...,
+        "action_seed": ...,
+    },
+},
+```
+
+`native_predict` is deliberately not named `diffusion`: the seed passed to one
+native `policy.predict()` also controls live point-cloud subsampling before the
+diffusion noise draw. The outer native-profile/artifact owner resolves
+`native_point_count` from versioned pinned profile metadata and injects the same
+value into `ReferenceSessions`; it is never projected from
+`MethodConfig.geometry.num_points` or accepted from an unverified caller. P00
+validation requires the profile metadata, payload and session value to agree
+before artifact/model use.
+
+The reference payload continues to include IP checksum, native profile,
+physical/event/task weights, router/config, calibration/workspace/camera/gravity
+and cadence, and continues to exclude world model, evaluator, search and learned
+stopping.
+
+Actual context/action seeds and selected route/window IDs belong to immutable
+per-context/proposal evidence. Protocol IDs and behavior-affecting configuration
+belong to the canonical reference payload. Any change to exact-index, point
+sampling, route-boundary or diffusion RNG behavior changes its protocol metadata
+and therefore the existing `reference_id`; outcome labels must then be recollected.
+
+- [ ] **Step 1 — RED:** Extend `test_method_contracts.py` with required nested
+  protocol metadata, behavior-change fingerprint, excluded-field invariance and
+  validate-before-artifact-read negatives. Reject missing/unknown protocol keys,
+  the stale `rng_protocol.diffusion` spelling, and native point-count disagreement
+  between pinned profile metadata, payload and ReferenceSessions.
+- [ ] **Step 2 — GREEN:** Extend only `src/icgs/artifacts/method.py` canonical
+  payload validation/projection; reuse `reference_fingerprint` and manifest schema.
+- [ ] **Step 3 — Verify:** Run P00/P06/P10 plus artifact/config regressions and L0.
+
+Task 3C completion wording: **Task 3C immutable routed ReferenceProposal,
+exactly-one stage-aware native inference and canonical P00 reference-lineage
+integration — COMPLETE under synthetic L1; G4/L2 native D1/D2 fidelity and
+reference freeze remain required.** P06 remains PARTIAL until G4 passes and the
+reference manifest is frozen.
+
+### Parallel Stage B dependency path
+
+Task 3B/3C runtime/reference semantics do not absorb training. In parallel, P02
+must provide versioned task-view tensorization before P11 can wire real Stage B
+batches to the already implemented P06 Task 1C objective. The current P11 gate
+text saying `src/icgs/algorithms/objectives/task.py` is absent is stale after the
+P06 merge; correct that diagnostic in a separate P11-scoped change, but do not
+remove the gate until the batch adapter and data view exist.
+
+Synthetic Task 3B/3C tests may use fabricated TaskState, EventMemory, contexts
+and fake sessions without trained weights. Reference freeze requires both paths:
+trained/frozen event/task/router artifacts and passing G4 D1/D2 native evidence.
+Only after the canonical manifest is frozen may Stage C/P08 outcome collection
+begin; P09/D2/E and real P10/P13 integration follow those labels.
 
 ## Acceptance, resource limits and evidence
 
@@ -449,8 +837,15 @@ behavior before outcome collection.
 
 - L0: `python3 -B scripts/validate_fast.py` and
   `python3 -B -S scripts/validate_fast.py`; syntax/links/boundaries only.
-- L1: `python3 -B -m unittest discover -s tests -p 'test_task_router.py' -v` in an installed supported environment.
-  Tiny deterministic fixtures only; no data loader workers, networking or simulator startup.
+- L1 pure tracker/router: `python3 -B -m unittest discover -s tests -p
+  'test_task_router.py' -v` in an installed supported environment.
+- L1 reference context/policy: `python3 -B -m unittest discover -s tests -p
+  'test_reference_policy.py' -v`; this owner must exist and pass before claiming
+  Task 3B or 3C complete.
+- L1 canonical reference schema after Task 3C.3: `python3 -B -m unittest discover
+  -s tests -p 'test_method_contracts.py' -v`.
+  These use tiny deterministic fixtures only; no data loader workers, networking,
+  real model load, preprocessing job or simulator startup.
 - Preserve native regression coverage and strict published C1–C5 in the final
   integration acceptance; this component's synthetic tests do not replace those gates.
 - Any authorized L2/L3/L4 job must record immutable inputs, command, interpreter,
@@ -472,6 +867,14 @@ phase if an FG fails and request a scoped protocol decision.
 
 - Environment: repository `.venv/bin/python`, CPython 3.10.20, editable install of
   the current checkout; cwd repository root.
+- 2026-09-14 Task 3B/3C contract refinement: documentation only — no RED tests or
+  runtime implementation were started. The plan now fixes exact-index/full-demo
+  materialization, separate context/action RNG lifecycles, D1/D2 ownership,
+  MethodContext assembly, immutable ReferenceProposal semantics, exactly-one
+  inference and existing P00 fingerprint integration. `git diff --check` and the
+  changed-file whitespace scan passed. Both L0 variants remain **FAIL** overall
+  only for the same five pre-existing missing evidence-log links; Python syntax,
+  static harness boundary and 19/19 harness self-tests passed with 0 skips.
 - Task 1A RED: `.venv/bin/python -B -m unittest discover -s tests -p
   'test_task_router.py' -v` — **FAIL as expected**, 8 selected/executed, 8 missing
   planned-surface errors, 0 skips. Seven named the absent task-memory module and one

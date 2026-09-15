@@ -66,6 +66,8 @@ tensors. Shared immutable content uses non-writeable owned backing.
 | `EventMemory` | `tokens [B,Lc,256]`, `valid [B,Lc]`, exactly aligned optional SegmentRefs `[B,Lc]`, ordered raw-demo hashes and per-batch demonstration-representation fingerprints, plus shared encoder/segmentation lineage | state |
 | `TaskState` | `r [B,W]`, `alpha [B,Lc+1]` (last null), rho/nu/eligible `[B,Lc]`, boundary, ordered context fingerprints and tracker lineage | state |
 | `MethodContext` | online-B=1 immutable raw demos + EventMemory + injected, separately owned native full/window PreparedContexts and derived native-window validity, reference ID; no task state | state |
+| `ContextPreparationRecord` | `context_seed`, ordered `full_demo_seeds`, slot-aligned `window_slot_seeds`, `rng_protocol`, `full_context_id`, slot-aligned optional `window_context_ids`; provenance outside online model state | policies/reference |
+| `ReferenceProposal` | generic Candidate plus reference ID, full/window route and event indices, route/diffusion seeds, selected native context ID and stable D1/D2 session ID | policies/reference |
 | `PhysicalPrediction` | next PhysicalState, grip logits `[B,1]`, head ID; contains no context/task output | contracts |
 | `TerminalProbabilities` | success/failure/continue `[B,3]`, finite nonnegative sum 1, event-temperature artifact ID | contracts |
 | `EvaluationOutput` | value/completion/progress logits, calibrated V/S and temperatures ID; V(H=0)=0 | contracts |
@@ -106,8 +108,9 @@ encode_events(raw_demos, segments) -> EventMemory
 track_task(previous: TaskState | None, state: PhysicalState,
            events: EventMemory) -> TaskState
 sample_prior(observation, task: TaskState, context: MethodContext,
-             *, seed: int) -> Candidate
-materialize_prefix(candidate, *, h: int, r: int, duration_s: float) -> CommandPrefix
+             *, seed: int) -> ReferenceProposal
+materialize_prefix(proposal: ReferenceProposal, *, h: int, r: int,
+                   duration_s: float) -> CommandPrefix
 predict_step(state: PhysicalState, command: TimedCommand,
              *, head_id: int) -> PhysicalPrediction
 evaluate_state(state: PhysicalState, task: TaskState,
@@ -127,11 +130,14 @@ pose** and absolute command before stepping. Store it with the transition or
 reconstruct it from the before observation; do not recompute using the successor
 pose. It is zero only at reset. Terminal probabilities at inference are
 `softmax(raw_event_logits / Te)`; raw logits remain the D2 cross-entropy input.
-`Candidate` reuses EI native trajectory/provenance fields, with added route/window
-and seed provenance in a method wrapper; do not expand native Candidate semantics
-silently. Capability protocols expose these operations; no planner imports a
-concrete InstantPolicy. Neural forward methods may implement the operation as a
-module call, but public adapters retain these argument/return meanings.
+`Candidate` retains EI native trajectory/provenance fields. `ReferenceProposal`
+is its immutable P06 method wrapper and owns route/window/reference/session and
+route/diffusion-seed provenance; do not expand native Candidate semantics
+silently. Planners treat proposals as opaque and the P06-owned prefix materializer
+unwraps the generic candidate, so no planner imports a concrete InstantPolicy or
+reference policy. Capability protocols expose these operations. Neural forward
+methods may implement the operation as a module call, but public adapters retain
+these argument/return meanings.
 
 `TimedEnvironment.reset(seed)` returns TimedObservation;
 `advance(command)` returns ExecutedTransition; `close()` is idempotent. Privileged
