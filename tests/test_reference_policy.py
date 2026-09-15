@@ -325,7 +325,20 @@ class ContextPreparationRngTests(unittest.TestCase):
             self._assert_task_3b0_dependency_boundary(violating_surface)
 
 
-class ExactIndexedMaterializationTests(unittest.TestCase):
+class NativeDemoMaterializationTests(unittest.TestCase):
+    _TASK_3B1B_FORBIDDEN_DEPENDENCIES = frozenset(
+        {
+            "ReferenceSessions",
+            "InstantPolicy",
+            "PreparedContext",
+            "MethodContext",
+            "materialize_indexed_native_demo",
+            "build_method_context",
+            "prepare_context",
+            "composition",
+        }
+    )
+
     @staticmethod
     def _pose(boundary):
         pose = np.eye(4)
@@ -414,6 +427,38 @@ class ExactIndexedMaterializationTests(unittest.TestCase):
             demo.transitions[0].before.observation,
             *(transition.after.observation for transition in demo.transitions),
         )
+
+    def _assert_task_3b1b_dependency_boundary(self, surface):
+        source = textwrap.dedent(inspect.getsource(surface))
+        tree = ast.parse(source)
+        referenced = {
+            node.id for node in ast.walk(tree) if isinstance(node, ast.Name)
+        }
+        referenced.update(
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+        )
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported.update(alias.name for alias in node.names)
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                imported.add(node.module)
+                imported.update(alias.name for alias in node.names)
+        found = sorted(
+            dependency
+            for dependency in self._TASK_3B1B_FORBIDDEN_DEPENDENCIES
+            if dependency in referenced
+            or any(dependency in item for item in imported)
+            or dependency in source
+        )
+        if found:
+            self.fail(
+                f"Task 3B.1b surface {surface.__name__} must not reference "
+                f"session/context/later-policy dependencies: {found}; keep "
+                "that dependency in its owning Task 3B.2-3C surface"
+            )
 
     def test_exact_indices_bypass_native_waypoint_selection(self):
         from icgs.data.preprocessing.native import extract_waypoints
@@ -655,6 +700,257 @@ class ExactIndexedMaterializationTests(unittest.TestCase):
         self.assertEqual(random.getstate(), python_before)
         self._assert_numpy_state_equal(np.random.get_state(), numpy_before)
         self.assertTrue(torch.equal(torch.get_rng_state(), torch_before))
+
+    def test_full_context_keeps_real_native_waypoint_selection(self):
+        from icgs.policies.reference import materialize_full_native_demo
+
+        demo = self._demo(grips=(0, 0, 0, 0, 0))
+        measured = self._measured_observations(demo)
+        with mock.patch(
+            "icgs.data.preprocessing.native.remove_statistical_outliers",
+            side_effect=self._identity_outlier_filter,
+        ):
+            result = materialize_full_native_demo(
+                demo,
+                point_seed=7,
+                native_waypoint_count=2,
+                native_point_count=3,
+            )
+
+        self.assertEqual(result["grips"], (0.0, 0.0))
+        np.testing.assert_array_equal(result["T_w_es"][0], measured[0].T_w_e)
+        np.testing.assert_array_equal(result["T_w_es"][1], measured[4].T_w_e)
+
+    def test_full_context_calls_native_collaborator_once_with_explicit_counts(self):
+        from icgs.policies import reference
+        from icgs.policies.reference import materialize_full_native_demo
+
+        demo = self._demo(
+            guarded_commands=True,
+            grips=(0, 0, 0, 0, 0),
+        )
+        measured = self._measured_observations(demo)
+        with mock.patch(
+            "icgs.data.preprocessing.native.remove_statistical_outliers",
+            side_effect=self._identity_outlier_filter,
+        ), mock.patch(
+            "icgs.policies.reference.sample_to_cond_demo",
+            wraps=reference.sample_to_cond_demo,
+        ) as collaborator:
+            result = materialize_full_native_demo(
+                demo,
+                point_seed=np.int64(7),
+                native_waypoint_count=np.uint8(2),
+                native_point_count=np.uint16(3),
+            )
+
+        collaborator.assert_called_once()
+        args, kwargs = collaborator.call_args
+        self.assertEqual(len(args), 2)
+        raw_demo, waypoint_count = args
+        self.assertEqual(set(raw_demo), {"pcds", "grips", "T_w_es"})
+        self.assertTrue(all(type(values) is tuple for values in raw_demo.values()))
+        self.assertEqual(waypoint_count, 2)
+        self.assertEqual(kwargs, {"num_points": 3})
+        for raw_points, observation in zip(raw_demo["pcds"], measured):
+            np.testing.assert_array_equal(raw_points, observation.points)
+        self.assertEqual(raw_demo["grips"], tuple(item.grip for item in measured))
+        for raw_pose, observation in zip(raw_demo["T_w_es"], measured):
+            np.testing.assert_array_equal(raw_pose, observation.T_w_e)
+        self.assertEqual(set(result), {"obs", "grips", "T_w_es"})
+        self.assertTrue(all(type(values) is tuple for values in result.values()))
+
+    def test_full_context_rejects_bad_inputs_before_native_collaborator(self):
+        from icgs.policies.reference import materialize_full_native_demo
+
+        demo = self._demo(grips=(0, 0, 0, 0, 0))
+        cases = (
+            (object(), 7, 2, 3, "demo.*TimedDemoInput"),
+            (demo, True, 2, 3, "point_seed.*nonnegative integer"),
+            (demo, -1, 2, 3, "point_seed.*nonnegative integer"),
+            (demo, 1.5, 2, 3, "point_seed.*nonnegative integer"),
+            (demo, 7, True, 3, "native_waypoint_count.*positive integer"),
+            (demo, 7, 0, 3, "native_waypoint_count.*positive integer"),
+            (demo, 7, 2, np.bool_(False), "native_point_count.*positive integer"),
+            (demo, 7, 2, 0, "native_point_count.*positive integer"),
+        )
+        with mock.patch(
+            "icgs.policies.reference.sample_to_cond_demo",
+            side_effect=AssertionError("native collaborator ran before validation"),
+        ):
+            for value, seed, waypoint_count, point_count, message in cases:
+                with self.subTest(message=message):
+                    with self.assertRaisesRegex((TypeError, ValueError), message):
+                        materialize_full_native_demo(
+                            value,
+                            point_seed=seed,
+                            native_waypoint_count=waypoint_count,
+                            native_point_count=point_count,
+                        )
+
+    def test_full_context_rejects_malformed_native_results_without_repair(self):
+        from icgs.policies.reference import materialize_full_native_demo
+
+        demo = self._demo(grips=(0, 0, 0, 0, 0))
+        pose = self._pose(0)
+        points = np.zeros((3, 3))
+        malformed = (
+            ([], "mapping"),
+            ({"obs": (), "grips": ()}, "fields"),
+            (
+                {"obs": (), "grips": (), "T_w_es": (), "extra": ()},
+                "fields",
+            ),
+            ({"obs": 1, "grips": (), "T_w_es": ()}, "sequence"),
+            (
+                {"obs": (points,), "grips": (), "T_w_es": (pose,)},
+                "cardinalities",
+            ),
+            (
+                {"obs": (points,), "grips": (0.0,), "T_w_es": (pose,)},
+                "native_waypoint_count",
+            ),
+        )
+        for result, message in malformed:
+            with self.subTest(message=message):
+                with mock.patch(
+                    "icgs.policies.reference.sample_to_cond_demo",
+                    return_value=result,
+                ) as collaborator:
+                    with self.assertRaisesRegex((TypeError, ValueError), message):
+                        materialize_full_native_demo(
+                            demo,
+                            point_seed=7,
+                            native_waypoint_count=2,
+                            native_point_count=3,
+                        )
+                    collaborator.assert_called_once()
+
+    def test_full_context_seed_changes_only_native_sampled_points(self):
+        from icgs.policies.reference import materialize_full_native_demo
+
+        demo = self._demo(
+            unique_points=True,
+            grips=(0, 0, 0, 0, 0),
+        )
+        kwargs = {
+            "native_waypoint_count": 2,
+            "native_point_count": 4,
+        }
+        with mock.patch(
+            "icgs.data.preprocessing.native.remove_statistical_outliers",
+            side_effect=self._identity_outlier_filter,
+        ):
+            first = materialize_full_native_demo(
+                demo, point_seed=7, **kwargs
+            )
+            repeated = materialize_full_native_demo(
+                demo, point_seed=7, **kwargs
+            )
+            changed = materialize_full_native_demo(
+                demo, point_seed=8, **kwargs
+            )
+
+        for key in ("obs", "grips", "T_w_es"):
+            for left, right in zip(first[key], repeated[key]):
+                np.testing.assert_array_equal(left, right)
+        self.assertEqual(first["grips"], changed["grips"])
+        for left, right in zip(first["T_w_es"], changed["T_w_es"]):
+            np.testing.assert_array_equal(left, right)
+        self.assertTrue(
+            any(
+                not np.array_equal(left, right)
+                for left, right in zip(first["obs"], changed["obs"])
+            )
+        )
+
+    def test_full_context_does_not_mutate_demo(self):
+        from icgs.policies.reference import materialize_full_native_demo
+
+        demo = self._demo(
+            unique_points=True,
+            grips=(0, 0, 0, 0, 0),
+        )
+        transitions = demo.transitions
+        observations = self._measured_observations(demo)
+        points_before = tuple(np.array(item.points, copy=True) for item in observations)
+        poses_before = tuple(np.array(item.T_w_e, copy=True) for item in observations)
+        with mock.patch(
+            "icgs.data.preprocessing.native.remove_statistical_outliers",
+            side_effect=self._identity_outlier_filter,
+        ):
+            materialize_full_native_demo(
+                demo,
+                point_seed=7,
+                native_waypoint_count=2,
+                native_point_count=4,
+            )
+
+        self.assertIs(demo.transitions, transitions)
+        for observation, points, pose in zip(
+            observations, points_before, poses_before
+        ):
+            np.testing.assert_array_equal(observation.points, points)
+            np.testing.assert_array_equal(observation.T_w_e, pose)
+
+    def test_full_context_restores_global_rng_on_success_and_failure(self):
+        from icgs.policies.reference import materialize_full_native_demo
+
+        demo = self._demo(
+            unique_points=True,
+            grips=(0, 0, 0, 0, 0),
+        )
+        random.seed(101)
+        np.random.seed(202)
+        torch.manual_seed(303)
+        python_before = random.getstate()
+        numpy_before = np.random.get_state()
+        torch_before = torch.get_rng_state().clone()
+
+        with mock.patch(
+            "icgs.data.preprocessing.native.remove_statistical_outliers",
+            side_effect=self._identity_outlier_filter,
+        ):
+            materialize_full_native_demo(
+                demo,
+                point_seed=7,
+                native_waypoint_count=2,
+                native_point_count=4,
+            )
+        self.assertEqual(random.getstate(), python_before)
+        self._assert_numpy_state_equal(np.random.get_state(), numpy_before)
+        self.assertTrue(torch.equal(torch.get_rng_state(), torch_before))
+
+        with mock.patch(
+            "icgs.policies.reference.sample_to_cond_demo",
+            side_effect=RuntimeError("injected native conversion failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "injected native conversion"):
+                materialize_full_native_demo(
+                    demo,
+                    point_seed=11,
+                    native_waypoint_count=2,
+                    native_point_count=4,
+                )
+        self.assertEqual(random.getstate(), python_before)
+        self._assert_numpy_state_equal(np.random.get_state(), numpy_before)
+        self.assertTrue(torch.equal(torch.get_rng_state(), torch_before))
+
+    def test_full_context_function_scoped_dependency_boundary(self):
+        from icgs.policies.reference import materialize_full_native_demo
+
+        self._assert_task_3b1b_dependency_boundary(materialize_full_native_demo)
+        source = inspect.getsource(materialize_full_native_demo)
+        self.assertNotIn("2048", source)
+
+        def violating_surface():
+            return materialize_indexed_native_demo
+
+        with self.assertRaisesRegex(
+            AssertionError,
+            "violating_surface.*materialize_indexed_native_demo.*Task 3B.2-3C",
+        ):
+            self._assert_task_3b1b_dependency_boundary(violating_surface)
 
 
 if __name__ == "__main__":

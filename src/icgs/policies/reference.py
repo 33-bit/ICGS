@@ -8,7 +8,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from icgs.data.preprocessing.events import TimedDemoInput
-from icgs.data.preprocessing.native import subsample_pcd
+from icgs.data.preprocessing.native import sample_to_cond_demo, subsample_pcd
 from icgs.geometry.transforms import transform_pcd
 from icgs.state.randomness import scoped_seed
 
@@ -123,6 +123,71 @@ def materialize_indexed_native_demo(
     }
 
 
+def _validated_native_demo_result(
+    result: object,
+    *,
+    native_waypoint_count: int,
+) -> Mapping[str, tuple]:
+    if not isinstance(result, Mapping):
+        raise TypeError("native result must be a mapping")
+    required = {"obs", "grips", "T_w_es"}
+    if set(result) != required:
+        raise ValueError("native result fields must be exactly obs, grips, T_w_es")
+
+    values = tuple(result[field] for field in ("obs", "grips", "T_w_es"))
+    if any(not isinstance(value, (list, tuple)) for value in values):
+        raise TypeError("native result fields must each be a sequence")
+    lengths = tuple(len(value) for value in values)
+    if len(set(lengths)) != 1:
+        raise ValueError("native result field cardinalities must agree")
+    if lengths[0] != native_waypoint_count:
+        raise ValueError(
+            "native result cardinality must equal native_waypoint_count"
+        )
+    return {
+        field: tuple(result[field])
+        for field in ("obs", "grips", "T_w_es")
+    }
+
+
+def materialize_full_native_demo(
+    demo: TimedDemoInput,
+    *,
+    point_seed: int,
+    native_waypoint_count: int,
+    native_point_count: int,
+) -> Mapping[str, tuple]:
+    """Materialize one measured demo through native waypoint selection once."""
+
+    if not isinstance(demo, TimedDemoInput):
+        raise TypeError("demo must be a TimedDemoInput")
+    seed = _nonnegative_integer(point_seed, "point_seed")
+    waypoint_count = _positive_integer(
+        native_waypoint_count, "native_waypoint_count"
+    )
+    point_count = _positive_integer(native_point_count, "native_point_count")
+
+    observations = (
+        demo.transitions[0].before.observation,
+        *(transition.after.observation for transition in demo.transitions),
+    )
+    raw_demo = {
+        "pcds": tuple(observation.points for observation in observations),
+        "grips": tuple(observation.grip for observation in observations),
+        "T_w_es": tuple(observation.T_w_e for observation in observations),
+    }
+    with scoped_seed(seed, device="cpu"):
+        result = sample_to_cond_demo(
+            raw_demo,
+            waypoint_count,
+            num_points=point_count,
+        )
+    return _validated_native_demo_result(
+        result,
+        native_waypoint_count=waypoint_count,
+    )
+
+
 @dataclass(frozen=True)
 class ContextPreparationRecord:
     """Immutable provenance for one prepared reference context."""
@@ -171,6 +236,7 @@ class ContextPreparationRecord:
 __all__ = (
     "CONTEXT_RNG_PROTOCOL",
     "ContextPreparationRecord",
+    "materialize_full_native_demo",
     "materialize_indexed_native_demo",
     "split_context_seeds",
 )
