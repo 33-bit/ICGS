@@ -18,7 +18,7 @@ RNG protocol and Task 3B.0 context-preparation RNG/provenance foundation
 and Task 3B.1 exact-index/full-demo materialization COMPLETE; P06 remains PARTIAL
 because Task 3B.2a injected-session validation and Task 3B.2b authoritative
 profile/outer D1-D2 construction and Task 3B.3 MethodContext assembly are COMPLETE
-under synthetic L1; Task 3C.1 RED is COMPLETE with runtime NOT IMPLEMENTED,
+under synthetic L1; Task 3C.1 wrapper/execution adapter is COMPLETE under synthetic L1,
 and Task 3C.2/3C.3 are NOT STARTED**.
 Real shared-checksum native D1/D2 loading/inference, compatibility and
 resident-memory evidence remain deferred to G4/L2. This
@@ -88,7 +88,8 @@ evidence; this addendum does not certify that the component consumes every new f
   dependency boundary enforced by `tests/test_architecture.py`.
 
 Implemented/planned capability vocabulary (Task 3B.2b profile/session factory and
-Task 3B.3 context assembly are available; Task 3C surfaces remain unavailable):
+Task 3B.3 context assembly and Task 3C.1 wrapper/execution adapter are available;
+Task 3C.2 sampling and Task 3C.3 manifest integration remain unavailable):
 
 ```python
 track_task(previous: TaskState | None, state: PhysicalState, events: EventMemory) -> TaskState
@@ -111,13 +112,13 @@ build_reference_sessions(checkpoint, *, reference_id, native_profile, device)
 build_method_context(raw_demos, events, sessions, *, context_seed, reference_id,
                      config) -> tuple[MethodContext, ContextPreparationRecord]
 
-# Planned and unavailable until Task 3C; P10 treats proposals as opaque and the
-# execution-owned adapter unwraps proposal.candidate:
-sample_prior(observation, task: TaskState, context: MethodContext,
-             *, seed: int) -> ReferenceProposal
+# Task 3C.1 implemented; P10 treats proposals as opaque:
+ReferenceProposal(...)  # frozen validated provenance, retains Candidate identity
 materialize_reference_prefix(proposal: ReferenceProposal, *, h: int, r: int,
                              duration_s: float) -> CommandPrefix
-# Outer capability assembly exposes this adapter as P10's materialize_prefix.
+# Planned Task 3C.2 outer assembly exposes the adapter as P10's materialize_prefix:
+sample_prior(observation, task: TaskState, context: MethodContext,
+             *, seed: int) -> ReferenceProposal
 ```
 
 TaskState r[B,W],alpha[B,Lc+1] including null,rho/nu/eligible[B,Lc],boundary/context/tracker lineage. Nonmonotonic recovery is legal. Reference pi_ref is exactly one routed sample plus r2 execution, with no V,H-conditioned choice or learned stop.
@@ -915,8 +916,8 @@ deferred to G4/L2. P06 remains PARTIAL; Task 3C is NOT STARTED.
 
 ### Task 3C: Exactly-one routed reference proposal and canonical lineage
 
-**Status:** ACTIVE — Task 3C.1 RED COMPLETE; wrapper/adapter runtime NOT
-IMPLEMENTED. Task 3C.2/3C.3 NOT STARTED. Task 3C performs one route draw and at
+**Status:** ACTIVE — Task 3C.1 wrapper/execution adapter COMPLETE under synthetic
+L1. Task 3C.2/3C.3 NOT STARTED. Task 3C performs one route draw and at
 most one native prediction. It is not candidate selection.
 
 #### Task 3C.1 — Immutable routed proposal contract
@@ -981,17 +982,18 @@ P10's `materialize_prefix`; P10 algorithms need no concrete proposal import.
   method preserve collection and execution of all existing tests.
 - [x] **Step 1b — Commit RED:** Commit tests and updated
   contracts/plan as `test(reference): lock routed proposal contract`.
-- [ ] **Step 2 — GREEN:** Add only the validation-only wrapper in `reference.py`
+- [x] **Step 2 — GREEN:** Add only the validation-only wrapper in `reference.py`
   and the thin `materialize_reference_prefix` adapter in `execution/timed.py`.
   Run `test_architecture.py` immediately after adding the adapter. Route draw,
   StageAwareReferencePolicy, inference and manifest integration remain deferred.
-- [ ] **Step 3 — Verify/commit GREEN:** Run `test_reference_policy.py`,
+- [x] **Step 3 — Verify GREEN:** Run `test_reference_policy.py`,
   `test_candidates.py`, `test_timed_execution.py`, `test_search.py` and
   `test_architecture.py`, then changed-Python `py_compile`, `git diff --check`
   and both L0 variants. Report actual counts and any remaining L0 failures.
-  Commit as `feat(reference): add routed proposal provenance and prefix adapter`.
+- [ ] **Step 3a — Commit GREEN:** Commit as
+  `feat(reference): add routed proposal provenance and prefix adapter`.
 
-Task 3C.1 completion wording, once verified: **ReferenceProposal contract and
+Task 3C.1 completion wording: **ReferenceProposal contract and
 ReferenceProposal → CommandPrefix execution adapter — COMPLETE under synthetic
 L1. Task 3C.2/3C.3 NOT STARTED; P06 PARTIAL; G4/L2 deferred.**
 
@@ -1174,6 +1176,30 @@ phase if an FG fails and request a scoped protocol decision.
 
 - Environment: repository `.venv/bin/python`, CPython 3.10.20, editable install of
   the current checkout; cwd repository root.
+- 2026-09-16 Task 3C.1 GREEN after RED commit `6e2404d`: wrapper validation lives
+  in `policies/reference.py`; the explicit adapter lives in `execution/timed.py`
+  and lazily imports the wrapper only on the reference-specific path. Generic
+  timed conversion and Candidate semantics remain unchanged. Wrapper input values
+  and scalar types are preserved; candidate identity is retained. Adapter tests
+  now execute real root/grip/duration conversion and exactly-once delegation,
+  wrong-wrapper rejection and exception-identity assertions.
+  Ran `.venv/bin/python -B -m unittest discover -s tests -p '<file>' -v`:
+  `test_architecture.py` **PASS** 3/3 immediately after adapter implementation,
+  `test_reference_policy.py` **PASS** 51/51, `test_timed_execution.py` **PASS**
+  30/30, `test_candidates.py` **PASS** 2/2 and `test_search.py` **PASS** 55/55.
+  Total **PASS** 141/141, 0 skips. These are synthetic L1 results; route draws,
+  StageAwareReferencePolicy, native inference and manifest integration were not
+  added. Task 3C.2/3C.3 remain NOT STARTED; G4/L2 remains deferred.
+  `.venv/bin/python -m py_compile src/icgs/policies/reference.py
+  src/icgs/execution/timed.py` and `git diff --check` **PASS**. Both
+  `.venv/bin/python -B scripts/validate_fast.py` and its `-B -S` variant remain
+  **FAIL** overall solely for the five pre-existing missing evidence-log links;
+  syntax, static harness boundary and 19/19 harness self-tests **PASS** per run,
+  0 skips. GREEN runtime/docs changes are left uncommitted for review.
+  Final review added exact eight-field inventory/order to the existing frozen
+  wrapper test. The focused reference command reran **PASS** 51/51, 0 skips;
+  `git diff --check` **PASS**. No runtime or lazy-import changes accompanied this
+  test refinement; broader regressions/L0 were not rerun for this assertion alone.
 - 2026-09-16 Task 3C.1 RED: executed the five canonical per-file commands
   `.venv/bin/python -B -m unittest discover -s tests -p '<file>' -v`:
   `test_reference_policy.py` — **FAIL as expected**, 51 methods selected/executed,

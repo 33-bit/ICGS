@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from math import isfinite
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import numpy as np
 
 from icgs.contracts.method import CommandPrefix, TimedCommand
+
+if TYPE_CHECKING:
+    from icgs.policies.reference import ReferenceProposal
 
 
 def _integer(value: Any, name: str) -> int:
@@ -132,4 +135,20 @@ def materialize_prefix(
     return result
 
 
-__all__ = ["materialize_grips", "materialize_prefix"]
+def materialize_reference_prefix(
+    proposal: ReferenceProposal,
+    *,
+    h: int,
+    r: int,
+    duration_s: float,
+) -> CommandPrefix:
+    """Unwrap a routed proposal and use the existing timed command conversion."""
+    # Load the concrete policy contract only for this reference-specific path.
+    from icgs.policies.reference import ReferenceProposal
+
+    if not isinstance(proposal, ReferenceProposal):
+        raise TypeError("proposal must be a ReferenceProposal")
+    return materialize_prefix(proposal.candidate, h=h, r=r, duration_s=duration_s)
+
+
+__all__ = ["materialize_grips", "materialize_prefix", "materialize_reference_prefix"]

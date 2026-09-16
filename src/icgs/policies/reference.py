@@ -9,6 +9,7 @@ import json
 
 import numpy as np
 
+from icgs.algorithms.planning.candidates import Candidate
 from icgs.algorithms.planning.router import select_window_indices
 from icgs.configuration.method import MethodConfig
 from icgs.configuration.schema import ExperimentConfig
@@ -606,9 +607,50 @@ def build_method_context(
     return context, record
 
 
+@dataclass(frozen=True)
+class ReferenceProposal:
+    """Validated route provenance retaining the native Candidate by identity.
+
+    Freezing these fields does not freeze the Candidate's arrays or tensors.
+    Correspondence with actual sessions and context slots belongs to the caller.
+    """
+
+    candidate: Candidate
+    reference_id: str
+    route_index: int
+    event_index: int | None
+    route_seed: int
+    diffusion_seed: int
+    native_context_id: str
+    native_session_id: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.candidate, Candidate):
+            raise TypeError("candidate must be a Candidate")
+        route = _nonnegative_integer(self.route_index, "route_index")
+        if route == 0:
+            if self.event_index is not None:
+                raise ValueError("full route requires event_index=None")
+        else:
+            event = _nonnegative_integer(self.event_index, "event_index")
+            if event != route - 1:
+                raise ValueError("event_index must equal route_index - 1")
+
+        _nonnegative_integer(self.route_seed, "route_seed")
+        diffusion_seed = _nonnegative_integer(self.diffusion_seed, "diffusion_seed")
+        candidate_seed = _nonnegative_integer(self.candidate.seed, "candidate.seed")
+        for name in ("reference_id", "native_context_id", "native_session_id"):
+            _nonempty_identifier(getattr(self, name), name)
+        if self.candidate.context_id != self.native_context_id:
+            raise ValueError("candidate.context_id must match native_context_id")
+        if candidate_seed != diffusion_seed:
+            raise ValueError("candidate.seed must match diffusion_seed")
+
+
 __all__ = (
     "CONTEXT_RNG_PROTOCOL",
     "ContextPreparationRecord",
+    "ReferenceProposal",
     "ReferenceSessions",
     "build_method_context",
     "materialize_full_native_demo",

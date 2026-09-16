@@ -4,10 +4,11 @@ Status: PR/AD target plus explicitly marked IDs. Runtime implementation now
 includes P05 `EventMemory`/`MethodContext`, P06 `TaskState`, its Task 3B.0
 `ContextPreparationRecord` RNG/provenance foundation and Task 3B.1 native demo
 materializers, its Task 3B.2 `ReferenceSessions` validation plus authoritative
-profile/outer construction runtime, and Task 3B.3 `build_method_context` assembly
-under synthetic L1. Real shared-checksum native D1/D2 loading/inference,
-compatibility and resident-memory evidence remain deferred to G4/L2. Task 3C
-routed reference calls remain unavailable. The active P10 search modules have deterministic fixtures
+profile/outer construction runtime, Task 3B.3 `build_method_context` assembly,
+and Task 3C.1 `ReferenceProposal` plus its execution prefix adapter under synthetic
+L1. Real shared-checksum native D1/D2 loading/inference, compatibility and
+resident-memory evidence remain deferred to G4/L2. Task 3C.2 routed sampling and
+Task 3C.3 manifest integration remain unavailable. The active P10 search modules have deterministic fixtures
 (`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`).
 For every other entry, consult its owning active plan rather than inferring runtime
 availability from this inventory. See the
@@ -140,11 +141,11 @@ pose. It is zero only at reset. Terminal probabilities at inference are
 is its frozen P06 method wrapper and owns route/window/reference/session and
 route/diffusion-seed provenance; do not expand native Candidate semantics
 silently. Frozen assignment does not imply deep immutability of Candidate arrays
-or tensors. Planners treat proposals as opaque. The planned explicit adapter
+or tensors. Planners treat proposals as opaque. The implemented explicit adapter
 `icgs.execution.timed.materialize_reference_prefix` validates the wrapper and
 delegates its generic candidate to the existing timed materializer. P01/execution
-owns command conversion; policies/core must not import execution. Outer capability
-assembly exposes this adapter as P10's `materialize_prefix`, so no planner imports
+owns command conversion; policies/core must not import execution. Planned outer
+capability assembly exposes this adapter as P10's `materialize_prefix`, so no planner imports
 a concrete InstantPolicy or reference policy. Capability protocols expose these operations. Neural forward
 methods may implement the operation as a module call, but public adapters retain
 these argument/return meanings.

@@ -2919,6 +2919,19 @@ class ReferenceProposalTests(unittest.TestCase):
     def test_reference_proposal_is_frozen_but_retains_candidate_identity(self):
         from icgs.policies.reference import ReferenceProposal
 
+        self.assertEqual(
+            tuple(ReferenceProposal.__dataclass_fields__),
+            (
+                "candidate",
+                "reference_id",
+                "route_index",
+                "event_index",
+                "route_seed",
+                "diffusion_seed",
+                "native_context_id",
+                "native_session_id",
+            ),
+        )
         values = self._values()
         proposal = ReferenceProposal(**values)
         self.assertIs(proposal.candidate, values["candidate"])
