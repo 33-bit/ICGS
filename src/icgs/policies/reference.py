@@ -1,4 +1,4 @@
-"""Deterministic context-preparation seed and provenance foundations."""
+"""Owned native reference-context preparation and deterministic provenance."""
 
 from __future__ import annotations
 
@@ -9,11 +9,14 @@ import json
 
 import numpy as np
 
+from icgs.algorithms.planning.router import select_window_indices
+from icgs.configuration.method import MethodConfig
 from icgs.configuration.schema import ExperimentConfig
-from icgs.data.preprocessing.events import TimedDemoInput
+from icgs.data.preprocessing.events import TimedDemoInput, debounced_grip_boundaries
 from icgs.data.preprocessing.native import sample_to_cond_demo, subsample_pcd
 from icgs.geometry.transforms import transform_pcd
 from icgs.policies.instant_policy import InstantPolicy
+from icgs.state.method_context import EventMemory, MethodContext
 from icgs.state.randomness import scoped_seed
 
 
@@ -447,10 +450,167 @@ class ContextPreparationRecord:
                 _nonempty_identifier(identifier, f"window_context_ids[{index}]")
 
 
+def build_method_context(
+    raw_demos: tuple[TimedDemoInput, ...],
+    events: EventMemory,
+    sessions: ReferenceSessions,
+    *,
+    context_seed: int,
+    reference_id: str,
+    config: MethodConfig,
+) -> tuple[MethodContext, ContextPreparationRecord]:
+    """Plan every window before preparing owned full/window native contexts.
+
+    Only a structurally infeasible selector result becomes an absent window.
+    Preparation and validation errors propagate to the setup caller.
+    """
+
+    _exact_tuple(raw_demos, "raw_demos")
+    if len(raw_demos) not in (1, 2):
+        raise ValueError("raw_demos must contain one or two demos (D=1/2)")
+    if not all(isinstance(demo, TimedDemoInput) for demo in raw_demos):
+        raise TypeError("raw_demos must contain only TimedDemoInput records")
+    if not isinstance(events, EventMemory):
+        raise TypeError("events must be an EventMemory")
+    if events.tokens.shape[0] != 1:
+        raise ValueError("method context preparation requires online B=1")
+    if not isinstance(sessions, ReferenceSessions):
+        raise TypeError("sessions must be ReferenceSessions")
+    if not isinstance(config, MethodConfig):
+        raise TypeError("config must be a MethodConfig")
+    _nonempty_identifier(reference_id, "reference_id")
+    if reference_id != sessions.reference_id:
+        raise ValueError("reference_id must match sessions.reference_id")
+    if config.native_profile != sessions.native_profile:
+        raise ValueError("config.native_profile must match sessions.native_profile")
+    hashes = tuple(demo.demo_content_hash for demo in raw_demos)
+    if hashes != events.raw_hashes[0]:
+        raise ValueError("raw demo hash order must exactly match EventMemory raw_hashes")
+    _nonnegative_integer(context_seed, "context_seed")
+
+    event_count = events.tokens.shape[1]
+    full_demo_seeds, window_slot_seeds = split_context_seeds(
+        context_seed,
+        demo_count=len(raw_demos),
+        event_count=event_count,
+    )
+    for seeds, count, name in (
+        (full_demo_seeds, len(raw_demos), "full_demo_seeds"),
+        (window_slot_seeds, event_count, "window_slot_seeds"),
+    ):
+        _exact_tuple(seeds, name)
+        if len(seeds) != count:
+            raise ValueError(f"{name} must have exactly {count} entries")
+        for index, seed in enumerate(seeds):
+            _nonnegative_integer(seed, f"{name}[{index}]")
+
+    native_waypoint_count = sessions.d1.graph_config.traj_horizon
+    native_point_count = sessions.native_point_count
+    demos_by_hash = dict(zip(hashes, raw_demos))
+    partitions = {
+        content_hash: tuple(
+            ref for ref in events.refs[0]
+            if ref is not None
+            and ref.kind == "interaction"
+            and ref.demo_content_hash == content_hash
+        )
+        for content_hash in hashes
+    }
+    # Validate raw-boundary compatibility even for demos with no eligible window.
+    for ref in events.refs[0]:
+        if ref is not None and ref.b > len(demos_by_hash[ref.demo_content_hash].transitions):
+            raise ValueError("event ref boundaries must lie within their measured demo")
+    for content_hash, partition in partitions.items():
+        if not partition:
+            raise ValueError("interaction partition must be nonempty")
+        final_boundary = len(demos_by_hash[content_hash].transitions)
+        if partition[0].a != 0 or partition[-1].b != final_boundary:
+            raise ValueError("interaction partition must cover the complete measured demo")
+        if any(ref.a >= ref.b for ref in partition):
+            raise ValueError("interaction partition must have positive durations")
+        if any(current.b != nxt.a for current, nxt in zip(partition, partition[1:])):
+            raise ValueError("interaction partition must be contiguous with shared endpoints")
+
+    grip_boundaries = {}
+    for demo in raw_demos:
+        measured_grips = (
+            demo.transitions[0].before.observation.grip,
+            *(transition.after.observation.grip for transition in demo.transitions),
+        )
+        grip_boundaries[demo.demo_content_hash] = debounced_grip_boundaries(
+            measured_grips, config.event
+        )
+
+    window_indices = [None] * event_count
+    for index, ref in enumerate(events.refs[0]):
+        if (
+            ref is not None
+            and bool(events.valid[0, index].item())
+            and ref.kind == "interaction"
+            and ref.valid_action_window
+        ):
+            window_indices[index] = select_window_indices(
+                ref,
+                partitions[ref.demo_content_hash],
+                grip_boundaries[ref.demo_content_hash],
+                config.router,
+                native_waypoint_count=native_waypoint_count,
+            )
+
+    full_demos = tuple(
+        materialize_full_native_demo(
+            demo,
+            point_seed=full_demo_seeds[index],
+            native_waypoint_count=native_waypoint_count,
+            native_point_count=native_point_count,
+        )
+        for index, demo in enumerate(raw_demos)
+    )
+    full_policy = sessions.d1 if len(raw_demos) == 1 else sessions.d2
+    native_full = full_policy.prepare_context(full_demos, prepared=True)
+    full_policy.validate_context(native_full)
+
+    native_windows = [None] * event_count
+    window_context_ids = [None] * event_count
+    for index, indices in enumerate(window_indices):
+        if indices is None:
+            continue
+        ref = events.refs[0][index]
+        native_demo = materialize_indexed_native_demo(
+            demos_by_hash[ref.demo_content_hash],
+            indices,
+            point_seed=window_slot_seeds[index],
+            native_waypoint_count=native_waypoint_count,
+            native_point_count=native_point_count,
+        )
+        prepared = sessions.d1.prepare_context((native_demo,), prepared=True)
+        sessions.d1.validate_context(prepared)
+        native_windows[index] = prepared
+        window_context_ids[index] = prepared.source_id
+
+    context = MethodContext(
+        raw_demos=raw_demos,
+        events=events,
+        native_full=native_full,
+        native_windows=tuple(native_windows),
+        reference_id=reference_id,
+    )
+    record = ContextPreparationRecord(
+        context_seed=context_seed,
+        full_demo_seeds=full_demo_seeds,
+        window_slot_seeds=window_slot_seeds,
+        rng_protocol=CONTEXT_RNG_PROTOCOL,
+        full_context_id=native_full.source_id,
+        window_context_ids=tuple(window_context_ids),
+    )
+    return context, record
+
+
 __all__ = (
     "CONTEXT_RNG_PROTOCOL",
     "ContextPreparationRecord",
     "ReferenceSessions",
+    "build_method_context",
     "materialize_full_native_demo",
     "materialize_indexed_native_demo",
     "split_context_seeds",

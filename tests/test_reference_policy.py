@@ -2138,11 +2138,11 @@ class MethodContextBuilderTests(unittest.TestCase):
             ), mock.patch.object(
                 reference,
                 "debounced_grip_boundaries",
-                return_value=(),
+                side_effect=AssertionError("debounce ran before seed cardinality validation"),
             ), mock.patch.object(
                 reference,
                 "select_window_indices",
-                return_value=None,
+                side_effect=AssertionError("selector ran before seed cardinality validation"),
             ), mock.patch.object(
                 reference,
                 "materialize_full_native_demo",
@@ -2174,40 +2174,54 @@ class MethodContextBuilderTests(unittest.TestCase):
 
         sessions = self._sessions()
         demo = self._demo("demo-a")
-        events = self._events((demo,), gap=True)
-        with mock.patch.object(
-            reference,
-            "materialize_full_native_demo",
-            side_effect=AssertionError("full materialization ran before planning"),
-        ) as full_materializer, mock.patch.object(
-            reference,
-            "materialize_indexed_native_demo",
-            side_effect=AssertionError("window materialization ran before planning"),
-        ) as window_materializer, mock.patch.object(
-            sessions.d1,
-            "prepare_context",
-            side_effect=AssertionError("D1 prepare ran before planning"),
-        ) as d1_prepare, mock.patch.object(
-            sessions.d2,
-            "prepare_context",
-            side_effect=AssertionError("D2 prepare ran before planning"),
-        ) as d2_prepare:
-            with self.assertRaisesRegex(ValueError, "partition|contiguous"):
-                build_method_context(
-                    (demo,),
-                    events,
-                    sessions,
-                    context_seed=17,
-                    reference_id=sessions.reference_id,
-                    config=self._config(),
-                )
-        for collaborator in (
-            full_materializer,
-            window_materializer,
-            d1_prepare,
-            d2_prepare,
-        ):
-            collaborator.assert_not_called()
+        base = self._events((demo,))
+        start, first, second, end, padding = base.refs[0]
+        cases = (
+            ("internal gap", first, dataclasses.replace(second, a=3), "contiguous"),
+            ("leading gap", dataclasses.replace(first, a=1), second, "complete measured demo"),
+            ("trailing gap", first, dataclasses.replace(second, b=3), "complete measured demo"),
+            ("empty partition", None, None, "nonempty"),
+        )
+        for name, first_ref, second_ref, message in cases:
+            refs = (start, first_ref, second_ref, end, padding)
+            events = dataclasses.replace(
+                base,
+                refs=(refs,),
+                valid=torch.tensor([[ref is not None for ref in refs]], dtype=torch.bool),
+            )
+            with self.subTest(partition=name), mock.patch.object(
+                reference,
+                "materialize_full_native_demo",
+                side_effect=AssertionError("full materialization ran before planning"),
+            ) as full_materializer, mock.patch.object(
+                reference,
+                "materialize_indexed_native_demo",
+                side_effect=AssertionError("window materialization ran before planning"),
+            ) as window_materializer, mock.patch.object(
+                sessions.d1,
+                "prepare_context",
+                side_effect=AssertionError("D1 prepare ran before planning"),
+            ) as d1_prepare, mock.patch.object(
+                sessions.d2,
+                "prepare_context",
+                side_effect=AssertionError("D2 prepare ran before planning"),
+            ) as d2_prepare:
+                with self.assertRaisesRegex(ValueError, message):
+                    build_method_context(
+                        (demo,),
+                        events,
+                        sessions,
+                        context_seed=17,
+                        reference_id=sessions.reference_id,
+                        config=self._config(),
+                    )
+                for collaborator in (
+                    full_materializer,
+                    window_materializer,
+                    d1_prepare,
+                    d2_prepare,
+                ):
+                    collaborator.assert_not_called()
 
     def test_one_demo_full_context_uses_d1_and_exact_provenance(self):
         from icgs.policies import reference
@@ -2286,7 +2300,10 @@ class MethodContextBuilderTests(unittest.TestCase):
         from icgs.policies.reference import build_method_context
 
         sessions = self._sessions()
-        raw_demos = (self._demo("demo-a"), self._demo("demo-b"))
+        raw_demos = (
+            self._demo("demo-a"),
+            self._demo("demo-b", grips=(1, 0, 0, 0, 0)),
+        )
         events = self._events(raw_demos)
         full_seeds = (101, 102)
         window_seeds = tuple(range(301, 301 + events.tokens.shape[1]))
@@ -2297,6 +2314,12 @@ class MethodContextBuilderTests(unittest.TestCase):
         full = self._prepared(sessions.d2.context_owner, "full-d2")
         order = []
         native_demo_iterator = iter(native_demos)
+        real_debounce = reference.debounced_grip_boundaries
+
+        def debounce(grips, resolved):
+            order.append("debounce")
+            self.assertEqual(resolved, self._config().event)
+            return real_debounce(grips, resolved)
 
         def select(target, interactions, *args, **kwargs):
             order.append(f"select:{target.demo_content_hash}:{target.a}")
@@ -2308,6 +2331,8 @@ class MethodContextBuilderTests(unittest.TestCase):
                 and reference_ref.demo_content_hash == target.demo_content_hash
             )
             self.assertEqual(interactions, expected)
+            expected_grip_indices = (3,) if target.demo_content_hash == "demo-a" else (2,)
+            self.assertEqual(args[0], expected_grip_indices)
             return None
 
         def materialize_full(*args, **kwargs):
@@ -2319,6 +2344,10 @@ class MethodContextBuilderTests(unittest.TestCase):
             "split_context_seeds",
             return_value=(full_seeds, window_seeds),
         ), mock.patch.object(
+            reference,
+            "debounced_grip_boundaries",
+            side_effect=debounce,
+        ) as debounce_spy, mock.patch.object(
             reference,
             "select_window_indices",
             side_effect=select,
@@ -2348,9 +2377,14 @@ class MethodContextBuilderTests(unittest.TestCase):
             )
 
         first_materialization = order.index("materialize-full")
-        self.assertEqual(first_materialization, 4)
+        self.assertEqual(first_materialization, 6)
+        self.assertEqual(order[:2], ["debounce", "debounce"])
+        self.assertEqual(
+            [tuple(call.args[0]) for call in debounce_spy.call_args_list],
+            [(0, 0, 1, 1, 1), (1, 0, 0, 0, 0)],
+        )
         self.assertTrue(
-            all(item.startswith("select:") for item in order[:first_materialization])
+            all(item.startswith("select:") for item in order[2:first_materialization])
         )
         self.assertEqual(select_spy.call_count, 4)
         self.assertEqual(
@@ -2422,6 +2456,20 @@ class MethodContextBuilderTests(unittest.TestCase):
             order.append("materialize-full")
             return full_native
 
+        def materialize_window(*args, **kwargs):
+            order.append("materialize-window")
+            return window_native
+
+        prepared_contexts = iter((full, window))
+
+        def prepare_context(demos, *, prepared):
+            context = next(prepared_contexts)
+            order.append(f"prepare:{context.source_id}")
+            return context
+
+        def validate_context(context):
+            order.append(f"validate:{context.source_id}")
+
         with mock.patch.object(
             reference,
             "split_context_seeds",
@@ -2441,14 +2489,15 @@ class MethodContextBuilderTests(unittest.TestCase):
         ), mock.patch.object(
             reference,
             "materialize_indexed_native_demo",
-            return_value=window_native,
+            side_effect=materialize_window,
         ) as window_materializer, mock.patch.object(
             sessions.d1,
             "prepare_context",
-            side_effect=(full, window),
+            side_effect=prepare_context,
         ) as prepare, mock.patch.object(
             sessions.d1,
             "validate_context",
+            side_effect=validate_context,
         ) as validate:
             points_before = tuple(
                 observation.points.copy()
@@ -2467,6 +2516,14 @@ class MethodContextBuilderTests(unittest.TestCase):
 
         self.assertEqual(order[:3], ["debounce", "select:0-1", "select:1-3"])
         self.assertEqual(order[3], "materialize-full")
+        self.assertEqual(
+            order[4:],
+            [
+                "prepare:full-context", "validate:full-context",
+                "materialize-window",
+                "prepare:window-context", "validate:window-context",
+            ],
+        )
         debounce_spy.assert_called_once()
         self.assertEqual(select_spy.call_count, 2)
         window_materializer.assert_called_once_with(
@@ -2711,6 +2768,24 @@ class MethodContextBuilderTests(unittest.TestCase):
             "violating_surface.*resolve_native_profile.*segment_demo",
         ):
             self._assert_builder_dependency_boundary(violating_surface)
+
+        # Isolate each import form so another forbidden identifier cannot hide
+        # a broken artifact-import check.
+        def plain_artifact_import():
+            import icgs.artifacts.checkpoints as checkpoints
+
+            return checkpoints
+
+        def from_artifact_import():
+            from icgs.artifacts import checkpoints
+
+            return checkpoints
+
+        for surface in (plain_artifact_import, from_artifact_import):
+            with self.subTest(surface=surface.__name__), self.assertRaisesRegex(
+                AssertionError, "forbidden artifact imports:.*icgs.artifacts"
+            ):
+                self._assert_builder_dependency_boundary(surface)
 
 
 if __name__ == "__main__":

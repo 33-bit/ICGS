@@ -3,8 +3,11 @@
 Status: PR/AD target plus explicitly marked IDs. Runtime implementation now
 includes P05 `EventMemory`/`MethodContext`, P06 `TaskState`, its Task 3B.0
 `ContextPreparationRecord` RNG/provenance foundation and Task 3B.1 native demo
-materializers, and its Task 3B.2 `ReferenceSessions` validation plus authoritative
-profile/outer construction runtime. The active P10 search modules have deterministic fixtures
+materializers, its Task 3B.2 `ReferenceSessions` validation plus authoritative
+profile/outer construction runtime, and Task 3B.3 `build_method_context` assembly
+under synthetic L1. Real shared-checksum native D1/D2 loading/inference,
+compatibility and resident-memory evidence remain deferred to G4/L2. Task 3C
+routed reference calls remain unavailable. The active P10 search modules have deterministic fixtures
 (`icgs.algorithms.planning.{belief,budget,mcts,rerank,shooting}`).
 For every other entry, consult its owning active plan rather than inferring runtime
 availability from this inventory. See the
