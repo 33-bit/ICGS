@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -833,6 +834,95 @@ class TimedExecutionTests(unittest.TestCase):
             environment.reset(seed=4)
         environment.close()
         self.assertEqual(controller.calls[-2:], ["safe_hold", "close"])
+
+
+class ReferencePrefixAdapterTests(unittest.TestCase):
+    @staticmethod
+    def _candidate():
+        from icgs.algorithms.planning.candidates import Candidate
+        from icgs.contracts.records import ActionTrajectory
+
+        root = np.eye(4)
+        root[:3, :3] = ((0, -1, 0), (1, 0, 0), (0, 0, 1))
+        root[:3, 3] = (1, 2, 3)
+        actions = np.tile(np.eye(4), (1, 4, 1, 1))
+        actions[0, :, 0, 3] = (0.1, 0.2, 0.3, 0.4)
+        actions[0, 1, :3, :3] = ((0, 1, 0), (-1, 0, 0), (0, 0, 1))
+        grips = np.array([[[1.0], [-1.0], [-1.0], [1.0]]])
+        return Candidate(
+            index=7, trajectory=ActionTrajectory(actions, grips), root_pose=root,
+            context_id="context-fixture", source_id="artifact-fixture", seed=29,
+            seconds=0.01, batch_size=1, horizon=4,
+        )
+
+    @classmethod
+    def _proposal(cls):
+        from icgs.policies.reference import ReferenceProposal
+
+        candidate = cls._candidate()
+        return ReferenceProposal(
+            candidate=candidate, reference_id="reference-fixture",
+            route_index=3, event_index=2, route_seed=17, diffusion_seed=29,
+            native_context_id=candidate.context_id, native_session_id="session-fixture",
+        )
+
+    def test_materialize_reference_prefix_unwraps_and_delegates_once(self):
+        from icgs.execution.timed import materialize_reference_prefix
+
+        proposal = self._proposal()
+        with mock.patch(
+            "icgs.execution.timed.materialize_prefix", return_value=mock.sentinel.prefix
+        ) as delegate:
+            result = materialize_reference_prefix(proposal, h=4, r=2, duration_s=0.125)
+        delegate.assert_called_once_with(proposal.candidate, h=4, r=2, duration_s=0.125)
+        self.assertIs(delegate.call_args.args[0], proposal.candidate)
+        self.assertIs(result, mock.sentinel.prefix)
+
+    def test_materialize_reference_prefix_uses_existing_real_materializer(self):
+        from icgs.contracts.method import CommandPrefix
+        from icgs.execution.timed import materialize_reference_prefix
+
+        proposal = self._proposal()
+        candidate = proposal.candidate
+        arrays = (candidate.root_pose, candidate.trajectory.transforms, candidate.trajectory.grips)
+        snapshots = tuple(array.copy() for array in arrays)
+        prefix = materialize_reference_prefix(proposal, h=4, r=2, duration_s=0.125)
+        self.assertIsInstance(prefix, CommandPrefix)
+        self.assertEqual(len(prefix.commands), 4)
+        self.assertEqual(prefix.raw_candidate_id, "7")
+        np.testing.assert_array_equal(prefix.proposal_root, snapshots[0])
+        for index, command in enumerate(prefix.commands):
+            np.testing.assert_allclose(command.target_w, snapshots[0] @ snapshots[1][0, index])
+            self.assertEqual(command.grip, (1, 1, 0, 0)[index])
+            self.assertEqual(command.duration_s, 0.125)
+        for array, before in zip(arrays, snapshots):
+            np.testing.assert_array_equal(array, before)
+        self.assertIs(proposal.candidate, candidate)
+
+    def test_materialize_reference_prefix_rejects_non_reference_proposal(self):
+        from icgs.execution.timed import materialize_reference_prefix
+
+        for invalid in (self._candidate(), SimpleNamespace(candidate=self._candidate()), None):
+            with self.subTest(proposal=type(invalid).__name__), mock.patch(
+                "icgs.execution.timed.materialize_prefix",
+                side_effect=AssertionError("delegate called before wrapper validation"),
+            ) as delegate:
+                with self.assertRaisesRegex((TypeError, ValueError), "ReferenceProposal"):
+                    materialize_reference_prefix(invalid, h=4, r=2, duration_s=0.125)
+                delegate.assert_not_called()
+
+    def test_materialize_reference_prefix_propagates_delegate_failure(self):
+        from icgs.execution.timed import materialize_reference_prefix
+
+        proposal = self._proposal()
+        failure = RuntimeError("injected timed materializer failure")
+        with mock.patch(
+            "icgs.execution.timed.materialize_prefix", side_effect=failure
+        ) as delegate:
+            with self.assertRaises(RuntimeError) as raised:
+                materialize_reference_prefix(proposal, h=4, r=2, duration_s=0.125)
+        self.assertIs(raised.exception, failure)
+        delegate.assert_called_once_with(proposal.candidate, h=4, r=2, duration_s=0.125)
 
 
 if __name__ == "__main__":

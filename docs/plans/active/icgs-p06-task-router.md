@@ -18,7 +18,8 @@ RNG protocol and Task 3B.0 context-preparation RNG/provenance foundation
 and Task 3B.1 exact-index/full-demo materialization COMPLETE; P06 remains PARTIAL
 because Task 3B.2a injected-session validation and Task 3B.2b authoritative
 profile/outer D1-D2 construction and Task 3B.3 MethodContext assembly are COMPLETE
-under synthetic L1; Task 3C routed reference calls are NOT IMPLEMENTED**.
+under synthetic L1; Task 3C.1 RED is COMPLETE with runtime NOT IMPLEMENTED,
+and Task 3C.2/3C.3 are NOT STARTED**.
 Real shared-checksum native D1/D2 loading/inference, compatibility and
 resident-memory evidence remain deferred to G4/L2. This
 document is a category C component of the approved research migration; it does not
@@ -81,6 +82,10 @@ evidence; this addendum does not certify that the component consumes every new f
   `src/icgs/artifacts/method.py` rather than creating another reference hash.
 - New Task 3B/3C test owner: `tests/test_reference_policy.py`; keep pure arithmetic
   and dependency tests in `tests/test_task_router.py`.
+- Task 3C.1 prefix adapter owner: `src/icgs/execution/timed.py`, with adapter
+  delegation/conversion tests in `tests/test_timed_execution.py`. P06 owns the
+  proposal contract; P01/execution owns command conversion. Preserve the core
+  dependency boundary enforced by `tests/test_architecture.py`.
 
 Implemented/planned capability vocabulary (Task 3B.2b profile/session factory and
 Task 3B.3 context assembly are available; Task 3C surfaces remain unavailable):
@@ -107,11 +112,12 @@ build_method_context(raw_demos, events, sessions, *, context_seed, reference_id,
                      config) -> tuple[MethodContext, ContextPreparationRecord]
 
 # Planned and unavailable until Task 3C; P10 treats proposals as opaque and the
-# P06-owned materializer unwraps proposal.candidate:
+# execution-owned adapter unwraps proposal.candidate:
 sample_prior(observation, task: TaskState, context: MethodContext,
              *, seed: int) -> ReferenceProposal
-materialize_prefix(proposal: ReferenceProposal, *, h: int, r: int,
-                   duration_s: float) -> CommandPrefix
+materialize_reference_prefix(proposal: ReferenceProposal, *, h: int, r: int,
+                             duration_s: float) -> CommandPrefix
+# Outer capability assembly exposes this adapter as P10's materialize_prefix.
 ```
 
 TaskState r[B,W],alpha[B,Lc+1] including null,rho/nu/eligible[B,Lc],boundary/context/tracker lineage. Nonmonotonic recovery is legal. Reference pi_ref is exactly one routed sample plus r2 execution, with no V,H-conditioned choice or learned stop.
@@ -909,8 +915,9 @@ deferred to G4/L2. P06 remains PARTIAL; Task 3C is NOT STARTED.
 
 ### Task 3C: Exactly-one routed reference proposal and canonical lineage
 
-**Status:** PLANNED — contract frozen for RED after Task 3B. Task 3C performs one
-route draw and at most one native prediction. It is not candidate selection.
+**Status:** ACTIVE — Task 3C.1 RED COMPLETE; wrapper/adapter runtime NOT
+IMPLEMENTED. Task 3C.2/3C.3 NOT STARTED. Task 3C performs one route draw and at
+most one native prediction. It is not candidate selection.
 
 #### Task 3C.1 — Immutable routed proposal contract
 
@@ -929,25 +936,74 @@ class ReferenceProposal:
     native_session_id: str        # stable D1/D2 session lineage, never id(...)
 ```
 
-Validate route/event consistency, nonnegative integer seeds with booleans
-rejected, exact context/session/reference IDs, `candidate.context_id ==
-native_context_id`, and `candidate.seed == diffusion_seed`. P10's capability
-boundary already treats proposals as opaque; the P06-owned `materialize_prefix`
-adapter accepts `ReferenceProposal` and unwraps `.candidate`, so P10 algorithms
-do not import this concrete policy type.
+`ReferenceProposal` lives in `src/icgs/policies/reference.py`. Its constructor
+validates intrinsic consistency only: `candidate` is a `Candidate` retained by
+identity; route 0 requires `event_index is None`, and route k>0 requires
+`event_index == k - 1`; seeds and indices are nonnegative `int`/`np.integer`
+values with `bool`/`np.bool_` rejected. Validate `candidate.seed` before comparing
+it with `diffusion_seed`. Reference/context/session IDs must be nonempty strings
+and are preserved exactly; whitespace-only IDs reject. Require
+`candidate.context_id == native_context_id` and
+`candidate.seed == diffusion_seed`. Do not normalize constructor inputs.
+Frozen field assignment does not imply deep immutability of the retained
+Candidate's arrays/tensors. Task 3C.2 owns correspondence with actual sessions
+and contexts, including event-slot bounds; the wrapper does not construct them.
 
-- [ ] **Step 1 — RED:** Add immutable ownership, malformed provenance, full/window
-  indexing and opaque materialization fixtures; update the canonical planned
-  method contract before runtime implementation.
-- [ ] **Step 2 — GREEN:** Add the wrapper and P06 materializer adapter only.
+P10's capability boundary treats proposals as opaque. P06 owns this proposal
+contract; P01/execution owns its prefix adapter and command conversion:
+
+```python
+# src/icgs/execution/timed.py
+materialize_reference_prefix(proposal: ReferenceProposal, *, h: int, r: int,
+                             duration_s: float) -> CommandPrefix
+```
+
+The explicit adapter validates the wrapper type and delegates exactly once to
+the existing `materialize_prefix(proposal.candidate, h=h, r=r,
+duration_s=duration_s)`, returning its result and propagating exceptions. Preserve
+the generic materializer's existing API, single-root world transforms, grip
+holding and duration validation. Dependency direction is execution → policies/core;
+`reference.py` must not import execution, even inside a function. Do not weaken
+the architecture guard. Outer capability assembly will expose this adapter as
+P10's `materialize_prefix`; P10 algorithms need no concrete proposal import.
+
+- [x] **Step 1 — RED:** In `test_reference_policy.py`, cover full/window mapping,
+  seed/index/ID validation, candidate identity, frozen assignment and mismatched
+  context/seed provenance. In `test_timed_execution.py`, separate an exactly-once
+  delegation spy (patch the consumer namespace) from a real timed-conversion
+  fixture with a nontrivial root, grip holding, explicit duration and caller
+  immutability. Cover wrong wrapper type and delegated exception propagation;
+  reuse the existing timed-materializer negative matrix rather than duplicating
+  it in P06. Keep architecture guards scoped to their accepted owners.
+- [x] **Step 1a — Verify RED:** Existing reference/timed/candidate/search/
+  architecture tests remain green; new cases fail only for the absent wrapper
+  or adapter, with 0 skips and no runtime changes. Lazy imports inside each new
+  method preserve collection and execution of all existing tests.
+- [x] **Step 1b — Commit RED:** Commit tests and updated
+  contracts/plan as `test(reference): lock routed proposal contract`.
+- [ ] **Step 2 — GREEN:** Add only the validation-only wrapper in `reference.py`
+  and the thin `materialize_reference_prefix` adapter in `execution/timed.py`.
+  Run `test_architecture.py` immediately after adding the adapter. Route draw,
+  StageAwareReferencePolicy, inference and manifest integration remain deferred.
+- [ ] **Step 3 — Verify/commit GREEN:** Run `test_reference_policy.py`,
+  `test_candidates.py`, `test_timed_execution.py`, `test_search.py` and
+  `test_architecture.py`, then changed-Python `py_compile`, `git diff --check`
+  and both L0 variants. Report actual counts and any remaining L0 failures.
+  Commit as `feat(reference): add routed proposal provenance and prefix adapter`.
+
+Task 3C.1 completion wording, once verified: **ReferenceProposal contract and
+ReferenceProposal → CommandPrefix execution adapter — COMPLETE under synthetic
+L1. Task 3C.2/3C.3 NOT STARTED; P06 PARTIAL; G4/L2 deferred.**
 
 #### Task 3C.2 — `sample_prior`: exactly one route, exactly one inference
 
 `StageAwareReferencePolicy` is constructed with one validated
 `ReferenceSessions`, one resolved `MethodConfig` and the same `reference_id`; it
-does not load artifacts or construct sessions. Its public `sample_prior` and
-`materialize_prefix` methods satisfy the existing opaque P10 capability seam.
-It executes this fixed sequence:
+does not load artifacts or construct sessions. It owns public `sample_prior`.
+Outer capability assembly pairs that method with execution's
+`materialize_reference_prefix` adapter, exposed under P10's existing
+`materialize_prefix` capability name. The core policy does not import execution
+or duplicate timed command conversion. `sample_prior` executes this fixed sequence:
 
 ```text
 validate TaskState B=1 and exact EventMemory context fingerprints
@@ -1090,6 +1146,9 @@ behavior before outcome collection.
 - L1 reference context/policy: `python3 -B -m unittest discover -s tests -p
   'test_reference_policy.py' -v`; this owner must exist and pass before claiming
   Task 3B or 3C complete.
+- L1 Task 3C.1 execution adapter: `python3 -B -m unittest discover -s tests -p
+  'test_timed_execution.py' -v`; preserve candidate/search regressions and the
+  unchanged core dependency checks in `test_architecture.py`.
 - L1 canonical reference schema after Task 3C.3: `python3 -B -m unittest discover
   -s tests -p 'test_method_contracts.py' -v`.
   These use tiny deterministic fixtures only; no data loader workers, networking,
@@ -1115,6 +1174,42 @@ phase if an FG fails and request a scoped protocol decision.
 
 - Environment: repository `.venv/bin/python`, CPython 3.10.20, editable install of
   the current checkout; cwd repository root.
+- 2026-09-16 Task 3C.1 RED: executed the five canonical per-file commands
+  `.venv/bin/python -B -m unittest discover -s tests -p '<file>' -v`:
+  `test_reference_policy.py` — **FAIL as expected**, 51 methods selected/executed,
+  45 existing PASS and six new ImportErrors only for absent `ReferenceProposal`;
+  `test_timed_execution.py` — **FAIL as expected**, 30 methods selected/executed,
+  26 existing PASS and four new ImportErrors only for absent
+  `materialize_reference_prefix`; `test_candidates.py` **PASS** 2/2,
+  `test_search.py` **PASS** 55/55 and `test_architecture.py` **PASS** 3/3.
+  Total: 141 methods, 131 existing PASS, 10 intended import errors, 0 skips.
+  Wrapper fixtures specify full/window mapping, int/NumPy integer acceptance,
+  bool rejection, candidate-seed validation before comparison, exact identifiers,
+  candidate identity and frozen assignment. Execution fixtures separately specify
+  one-call delegation, real root/grip/duration conversion with input snapshots,
+  rejection before delegation and exact exception propagation. These new behavior
+  assertions remain unexecuted until GREEN; this evidence proves absence of the
+  required surfaces and preservation of existing tests, not adapter correctness.
+  No new broad dependency guard or runtime implementation was added. The RED
+  checkpoint contains no GREEN or Task 3C.2/3C.3 implementation.
+  Pre-commit review replaced scalar object-identity assertions with equality and
+  exact type checks, retaining Candidate identity only. All five suites reran:
+  131 existing PASS, 10 absent-surface ImportErrors, 0 skips; counts unchanged.
+  `.venv/bin/python -m py_compile tests/test_reference_policy.py
+  tests/test_timed_execution.py`, `git diff --check` and
+  `git diff --exit-code -- src` **PASS**. Both `.venv` L0 commands (with `-B`
+  and `-B -S`) **FAIL** only for the five pre-existing missing evidence-log links;
+  Python syntax, static harness boundary and 19/19 harness tests **PASS** per
+  invocation, 0 skips. L2/G4, simulator and training workloads were NOT RUN.
+- 2026-09-16 Task 3C.1 pre-RED ownership correction: documentation only. The
+  proposal wrapper remains in policies/reference; the explicit prefix adapter
+  is planned in execution/timed, with separate test owners and RED/GREEN commits.
+  Task 3C.2 capability wiring is assigned to the outer owner so core never imports
+  execution. `test_architecture.py -v` through canonical `.venv` discovery
+  **PASS** 3/3, 0 skips; `git diff --check` **PASS**. Both `.venv` L0 variants
+  **FAIL** only on the same five missing evidence-log links; syntax, static
+  boundary and 19/19 harness tests **PASS** per run. Task 3C.1 RED/runtime remain
+  NOT STARTED; no new implementation or integration proof is claimed.
 - 2026-09-14 Task 3B/3C contract refinement: documentation only — no RED tests or
   runtime implementation were started. The plan now fixes exact-index/full-demo
   materialization, separate context/action RNG lifecycles, D1/D2 ownership,

@@ -2788,5 +2788,144 @@ class MethodContextBuilderTests(unittest.TestCase):
                 self._assert_builder_dependency_boundary(surface)
 
 
+class ReferenceProposalTests(unittest.TestCase):
+    @staticmethod
+    def _values():
+        from icgs.algorithms.planning.candidates import Candidate
+        from icgs.contracts.records import ActionTrajectory
+
+        candidate = Candidate(
+            index=0,
+            trajectory=ActionTrajectory(
+                np.tile(np.eye(4), (1, 2, 1, 1)), np.ones((1, 2, 1))
+            ),
+            root_pose=np.eye(4),
+            context_id="context-fixture",
+            source_id="artifact-fixture",
+            seed=29,
+            seconds=0.01,
+            batch_size=1,
+            horizon=2,
+        )
+        return dict(
+            candidate=candidate,
+            reference_id="reference-fixture",
+            route_index=0,
+            event_index=None,
+            route_seed=17,
+            diffusion_seed=29,
+            native_context_id=candidate.context_id,
+            native_session_id="session-fixture",
+        )
+
+    def test_reference_proposal_accepts_full_and_window_routes(self):
+        from icgs.policies.reference import ReferenceProposal
+
+        for route, event in ((0, None), (3, 2), (np.int64(3), np.int64(2))):
+            with self.subTest(route=route, event=event):
+                values = self._values()
+                values.update(route_index=route, event_index=event)
+                if isinstance(route, np.integer):
+                    values.update(route_seed=np.int64(17), diffusion_seed=np.int64(29))
+                    values["candidate"] = dataclasses.replace(
+                        values["candidate"], seed=values["diffusion_seed"]
+                    )
+                proposal = ReferenceProposal(**values)
+                self.assertIs(proposal.candidate, values["candidate"])
+                for name, value in values.items():
+                    if name != "candidate":
+                        self.assertEqual(getattr(proposal, name), value, name)
+                        self.assertIs(type(getattr(proposal, name)), type(value), name)
+
+    def test_reference_proposal_rejects_invalid_route_event_mapping(self):
+        from icgs.policies.reference import ReferenceProposal
+
+        cases = [(0, 0), (1, None), (2, 0), (-1, None), (1, -1)]
+        for invalid in (True, False, np.bool_(True), np.bool_(False), 1.0, "1", None):
+            cases.append((invalid, None))
+            if invalid is not None:
+                cases.append((1, invalid))
+        for route, event in cases:
+            with self.subTest(route=route, event=event):
+                values = self._values()
+                values.update(route_index=route, event_index=event)
+                with self.assertRaisesRegex((TypeError, ValueError), "route|event"):
+                    ReferenceProposal(**values)
+
+    def test_reference_proposal_rejects_invalid_seeds(self):
+        from icgs.policies.reference import ReferenceProposal
+
+        class ComparisonForbidden:
+            def __eq__(self, other):
+                raise AssertionError("malformed candidate.seed compared before validation")
+
+        invalid_seeds = (-1, True, False, np.bool_(True), 29.0, "29", None)
+        for field in ("route_seed", "diffusion_seed", "candidate.seed"):
+            for invalid in (*invalid_seeds, ComparisonForbidden()):
+                with self.subTest(field=field, invalid=repr(invalid)):
+                    values = self._values()
+                    if field == "candidate.seed":
+                        values["candidate"] = dataclasses.replace(values["candidate"], seed=invalid)
+                        # Equality alone would accept bools/floats matching an int.
+                        if isinstance(invalid, (bool, np.bool_, float)):
+                            values["diffusion_seed"] = int(invalid)
+                    else:
+                        values[field] = invalid
+                    with self.assertRaisesRegex((TypeError, ValueError), "seed"):
+                        ReferenceProposal(**values)
+
+    def test_reference_proposal_validates_ids_without_normalizing(self):
+        from icgs.policies.reference import ReferenceProposal
+
+        for field in ("reference_id", "native_context_id", "native_session_id"):
+            for invalid in ("", "   ", None, 7, b"id"):
+                with self.subTest(field=field, invalid=invalid):
+                    values = self._values()
+                    values[field] = invalid
+                    if field == "native_context_id":
+                        values["candidate"] = dataclasses.replace(
+                            values["candidate"], context_id=invalid
+                        )
+                    with self.assertRaises((TypeError, ValueError)):
+                        ReferenceProposal(**values)
+        values = self._values()
+        values.update(
+            reference_id="  ref-id  ", native_context_id="  context-id  ",
+            native_session_id="  session-id  ",
+        )
+        values["candidate"] = dataclasses.replace(
+            values["candidate"], context_id=values["native_context_id"]
+        )
+        proposal = ReferenceProposal(**values)
+        for field in ("reference_id", "native_context_id", "native_session_id"):
+            self.assertEqual(getattr(proposal, field), values[field])
+
+    def test_reference_proposal_rejects_candidate_provenance_mismatch(self):
+        from icgs.policies.reference import ReferenceProposal
+
+        for changed, message in (({"context_id": "other-context"}, "context"), ({"seed": 30}, "seed")):
+            with self.subTest(changed=changed):
+                values = self._values()
+                values["candidate"] = dataclasses.replace(values["candidate"], **changed)
+                with self.assertRaisesRegex(ValueError, message):
+                    ReferenceProposal(**values)
+        for invalid in (None, object(), SimpleNamespace(**vars(self._values()["candidate"]))):
+            with self.subTest(candidate=type(invalid).__name__):
+                values = self._values()
+                values["candidate"] = invalid
+                with self.assertRaisesRegex((TypeError, ValueError), "Candidate|candidate"):
+                    ReferenceProposal(**values)
+
+    def test_reference_proposal_is_frozen_but_retains_candidate_identity(self):
+        from icgs.policies.reference import ReferenceProposal
+
+        values = self._values()
+        proposal = ReferenceProposal(**values)
+        self.assertIs(proposal.candidate, values["candidate"])
+        for field in dataclasses.fields(proposal):
+            with self.subTest(field=field.name), self.assertRaises(dataclasses.FrozenInstanceError):
+                setattr(proposal, field.name, getattr(proposal, field.name))
+
+
 if __name__ == "__main__":
     unittest.main()
