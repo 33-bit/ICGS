@@ -58,6 +58,7 @@ _SPECS = (
     _spec("V02", "development", ("grasp", "rotate", "place into holder"), "selection/calibration composition"),
     _spec("V03", "development", ("park", "retrieve", "place", "restore"), "selection/calibration composition"),
     _spec("V04", "development", ("open gate", "retrieve", "close gate"), "selection/calibration composition"),
+    _spec("E01", "dev", ("grasp target", "lift target"), "exploratory physical dynamics baseline", "rlbench-exploratory"),
     _spec("P1", "test", ("open", "place A", "place B", "close"), "pack-add-close", "pack-add-close"),
     _spec("P2", "test", ("open", "place B", "place A", "close"), "order and object-size variation", "pack-add-close"),
     _spec("P3", "test", ("open", "place A", "place spacer", "place B", "close"), "spacer-dependent packing", "pack-add-close"),

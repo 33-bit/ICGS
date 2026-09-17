@@ -18,6 +18,7 @@ dist/
 checkpoints/
 outputs/
 *.log
+output/
 
 # macOS metadata
 .DS_Store

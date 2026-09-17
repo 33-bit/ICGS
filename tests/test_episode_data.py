@@ -96,18 +96,16 @@ class EpisodeDataTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'adjacent'):
             validate_episode(record)
 
-    def test_episode_rejects_online_transition_observation_mismatches(self):
+    def test_episode_allows_independent_online_clouds_and_poses_but_rejects_grip_mismatch(self):
         from icgs.data.schemas.episodes import validate_episode
 
         record = self._episode()
         record['online_observations'][0]['points'][0, 0] = 0.01
-        with self.assertRaisesRegex(ValueError, 'transition observation|points'):
-            validate_episode(record)
+        validate_episode(record)
 
         record = self._episode()
         record['online_observations'][1]['T_w_e'][0, 3] = 0.01
-        with self.assertRaisesRegex(ValueError, 'transition observation|T_w_e'):
-            validate_episode(record)
+        validate_episode(record)
 
         record = self._episode()
         record['online_observations'][1]['grip'] = 1
@@ -117,8 +115,7 @@ class EpisodeDataTests(unittest.TestCase):
         record = self._episode()
         record['online_observations'][1]['points'] = np.array([[0., 0., 0.], [1., 0., 0.]], dtype=np.float32)
         record['online_observations'][1]['point_valid'] = np.array([False, True])
-        with self.assertRaisesRegex(ValueError, 'transition observation|points'):
-            validate_episode(record)
+        validate_episode(record)
 
     def test_episode_rejects_inconsistent_shared_boundary_metadata(self):
         from icgs.data.schemas.episodes import validate_episode

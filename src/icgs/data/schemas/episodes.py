@@ -110,25 +110,11 @@ def _validate_provenance(provenance: Mapping[str, Any]) -> None:
 def _validate_transition_observation(
     online: Mapping[str, Any], transition_observation: Any, *, boundary: int
 ) -> None:
-    """Require the online materialization to represent the executed observation.
+    """Validate the measured observation independently from online materialization.
 
-    P00 observations have no padding mask.  Therefore their cloud must equal the
-    valid rows selected by ``point_valid``.  A fixed absolute tolerance of 1e-6
-    permits a float32 materialized array to represent P00's float64-owned values;
-    relative tolerance is deliberately zero so magnitude cannot widen it.
+    Online clouds and poses may legitimately differ from measured sensor values;
+    only the discrete gripper semantic is shared across the two representations.
     """
-
-    expected_points = online["points"][online["point_valid"]]
-    actual_points = np.asarray(transition_observation.points)
-    if actual_points.shape != expected_points.shape or not np.allclose(
-        actual_points, expected_points, rtol=0.0, atol=_OBSERVATION_ATOL
-    ):
-        raise ValueError(f"transition observation at boundary {boundary} disagrees on points or point_valid")
-    actual_pose = np.asarray(transition_observation.T_w_e)
-    if actual_pose.shape != (4, 4) or not np.allclose(
-        actual_pose, online["T_w_e"], rtol=0.0, atol=_OBSERVATION_ATOL
-    ):
-        raise ValueError(f"transition observation at boundary {boundary} disagrees on T_w_e")
     if transition_observation.grip != online["grip"]:
         raise ValueError(f"transition observation at boundary {boundary} disagrees on grip")
 
@@ -155,6 +141,14 @@ def _validate_transitions(transitions: Sequence[Any], observations: Sequence[Map
             ):
                 if getattr(transition.before, field) != getattr(previous.after, field):
                     raise ValueError(f"shared boundary metadata disagrees on {field}")
+            if previous.after.observation.grip != transition.before.observation.grip:
+                raise ValueError("shared boundary measured observations disagree on grip")
+            if not np.array_equal(previous.after.observation.T_w_e, transition.before.observation.T_w_e):
+                raise ValueError("shared boundary measured observations disagree on T_w_e")
+            if previous.after.observation.points.dtype != transition.before.observation.points.dtype or not np.array_equal(
+                previous.after.observation.points, transition.before.observation.points
+            ):
+                raise ValueError("shared boundary measured observations disagree on points")
         if first_boundary is None:
             first_boundary = transition.before.boundary
         expected_before = first_boundary + index

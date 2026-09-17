@@ -1,7 +1,31 @@
-"""Deterministic P02 collection metadata and annotation helpers.
+"""Deterministic P02 collection metadata, attempt execution, and bounded collection runner."""
 
-This package does not start an environment or collect episodes.  Runtime
-collection remains deferred until the P01 execution boundary and G2 protocol
-are available.
-"""
+from icgs.data.collection.attempts import (
+    AttemptExecutionError,
+    AttemptResult,
+    attempt_counts,
+    collect_attempt,
+    persist_attempt,
+)
+from icgs.data.collection.runner import (
+    AttemptSpec,
+    CollectionLimits,
+    CollectionReport,
+    MaterializedCommands,
+    reconcile_episode,
+    run_collection,
+)
 
+__all__ = [
+    "AttemptExecutionError",
+    "AttemptResult",
+    "AttemptSpec",
+    "CollectionLimits",
+    "CollectionReport",
+    "MaterializedCommands",
+    "attempt_counts",
+    "collect_attempt",
+    "persist_attempt",
+    "reconcile_episode",
+    "run_collection",
+]

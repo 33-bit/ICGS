@@ -12,9 +12,11 @@
 
 ## Status, authority and prerequisites
 
-Status: **ACTIVE — Tasks 1–2 in-memory boundaries, Task 3 deterministic
-foundation, and the in-memory bounded attempt collector are implemented;
-versioned storage/views and physical simulator collection remain NOT IMPLEMENTED**.
+Status: **ACTIVE — initial geom/dyn software slice implemented: in-memory
+contracts, bounded attempts, versioned archives, lineage validation, initial
+views/adapters and bounded Python runner. Initial software slice accepted after
+manager verification and scoped Sol audit;
+physical simulator collection and later task/outcome views remain incomplete**.
 This document is a category C component of the approved research migration; its
 gates still do not authorize simulator collection. The
 [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
@@ -167,16 +169,16 @@ ancestry closure. Descendant-aware mesh-family and augmentation split validation
 blocked on that manifest/lineage protocol decision; literal duplicate lineage IDs
 remain guarded.
 
-- [ ] **Step 4 — Verify GREEN:** The supported targeted suite passes the implemented
-  helper assertions, but Task2 acceptance is incomplete until the approved view and
-  descendant-lineage protocols exist and their assertions can run.
-- [x] **Step 5 — Review:** Inspected the new dataset helper and deterministic tests;
-  no simulator, collection, native data loader, or P01 source was changed. The
-  current partial/blocker status is recorded here; no commit was made.
+- [x] **Step 4 — Verify GREEN:** Implemented `validate_dataset_manifest`,
+  lineage closure/acyclicity, `build_view` for `geom` and `dyn` views, and
+  `adapter_a0` / `adapter_a1` consumer adapters per ADR0011. Tested with 6
+  deterministic tests in `tests/test_episode_views.py`.
+- [x] **Step 5 — Review:** Inspected the dataset helper and deterministic tests;
+  no simulator, collection, native data loader, or P01 source was changed.
 
-Task 2 status: **PARTIAL/BLOCKED** — literal lineage isolation and causal prefixes
-exist, but views, context independence, unique-count accounting, padding/mask view
-semantics, and descendant ancestry require an approved manifest/view protocol.
+Task 2 status: **RESOLVED FOR INITIAL GEOM/DYN VIEWS** (ADR0011) — manifest
+lineage closure, acyclicity, asset family uniqueness, `geom` and `dyn` views,
+and consumer adapters implemented; future task outcome views (P08) deferred.
 
 ### Task 3: Retain failed attempts and intervention provenance
 
@@ -373,27 +375,185 @@ phase if an FG fails and request a scoped protocol decision.
   Full L1/C1–C5/L3/L4 NOT RUN; no physical workloads. P02 remains ACTIVE/PARTIAL with
   named persistence, dataset view, lineage closure, and full-runner gaps.
 - Remaining protocol blockers:
-  1. Archive persistence protocol: concrete manifest JSON schema, NPZ shard array
-     keys, ragged cloud offset indexing, content hash/checksum format, atomic
-     publication directory tree, and quarantine directory/manifest layout.
-  2. Dataset view contract: durable payload, unique transition/sample ID mapping,
-     query/context independence representation, and view-specific mask semantics
-     for geom/dyn/task/terminal/value/pair/calib/audit views (and `EpisodeView`
-     representation).
-  3. Lineage closure: representation of root/parent lineage and ancestry closure
-     for descendant-aware mesh-family and augmentation split validation (literal
-     `lineage_id` split isolation is implemented).
-  4. Durable episode/attempt linkage: mapping in-memory attempt results to
-     persisted `icgs_episode_v1` manifests and quarantine records (blocked on
-     archive persistence protocol, item 1).
+  1. Archive persistence protocol: RESOLVED by ADR0011 and implemented in Batch A (`src/icgs/data/archives.py`).
+  2. Dataset view contract: RESOLVED for geom/dyn views by ADR0011 and implemented in Batch B (`src/icgs/data/datasets/episodes.py`).
+  3. Lineage closure: RESOLVED by ADR0011 and implemented in Batch B (`validate_dataset_manifest`).
+  4. Durable episode/attempt linkage: RESOLVED by ADR0011 and implemented in Batch A (`persist_attempt`) and Batch C (`run_collection`).
   5. G1/G2 physical feasibility and workload authorization: concrete asset/seed
      catalog bindings, measured force/penetration observability and predicate
      tolerances, and physical simulator execution permissions (still blocked
-     under repository research policy).
+     under repository research policy; not self-certified).
 
-## Observability integration addendum — 2026-09-09
+## Initial-data completion batch — 2026-09-15
 
-No P02 episode collector or replay producer exists, so observability emits no
-fabricated lineage, rejection, censoring or terminal records. Offline run inspection
-can link current outer-boundary records and explicit capture IDs, but it does not
-replace approved episode storage, ancestry splitting, views, or executed evidence.
+Owner delegated concrete contract decisions to the manager after requesting
+Gemini 3.8 Flash High implementation followed by GPT 5.6 Sol Medium audit/fix
+loops. Category C; [ADR0011](../../decisions/0011-episode-archive-and-initial-views.md)
+is the accepted specification for this batch. This resolves storage/lineage/view
+design authority, not missing physical measurements. Preserve existing evidence.
+
+Goal: lossless durable attempts, split-safe geom/dyn datasets and a bounded Python
+collection entry point. No native IP edits, new dependencies, generic frameworks,
+task/outcome views, model training, simulator launches or invented assets/tolerances.
+
+### Batch A: archive and attempt persistence
+
+Files: create `src/icgs/data/archives.py`; extend
+`src/icgs/data/collection/attempts.py` only for the small persistence adapter if
+needed; add `tests/test_episode_archives.py`. Keep validation-only schema APIs
+compatible. Interface: `write_episode_archive(root, record, *, config, metadata)`
+returns manifest Path; `read_episode_archive(manifest_path)` returns the original
+in-memory record. Separate report metadata has a documented reader.
+
+- [x] RED: test a two-transition ragged roundtrip with online float32 vs measured
+  float64 clouds differing within the existing tolerance. Assert both survive
+  independently with exact values/dtypes. Test 257-transition shard boundaries,
+  one canonical shared observation, digest/offset/key corruption, NaN/object
+  rejection, path escape, symlinks, duplicate publication and failed writes.
+- [x] Run supported installed `python -B -m unittest discover -s tests -p
+  'test_episode_archives.py' -v`; record actual expected assertion failures.
+- [x] GREEN: implement atomic lossless numeric archives and strict loader per
+  ADR0011; preserve valid failed attempts, partial evidence, zero-transition
+  reports, annotations and cleanup errors with no silent success classification.
+- [x] Repeat targeted tests and existing `test_episode_data.py`; inspect diff and
+  record commands/environment/counts. No commit/staging during shared checkout work.
+  Passed 12/12 `test_episode_archives.py` and 25/25 `test_episode_data.py`.
+
+### Batch B: manifest lineage, views and existing consumer handoff
+
+Files: extend `src/icgs/data/datasets/episodes.py`; add
+`tests/test_episode_views.py`. Interface: `build_view(dataset_manifest_path, view,
+*, split, config)`; finite manifest and sample payloads follow ADR0011. Keep the
+old `causal_prefix` and `validate_split_lineage` APIs intact.
+
+- [x] RED: test cycles/dangling parents, shared ancestors/assets across splits,
+  unknown program/split mismatch, duplicate episode IDs/digests, and corrupted
+  archived inputs. Test unique boundary counts across shards and causal dynamics
+  windows from reset. Test a short failure retained for geom but excluded/countable
+  for A1 windows lacking configured supervised intervals.
+- [x] Run supported installed `python -B -m unittest discover -s tests -p
+  'test_episode_views.py' -v`; record RED.
+- [x] GREEN: implement manifest validation, finite views and narrow P11
+  batch conversion without changing model objectives or existing contracts.
+  Current views load episode data into memory; large-dataset lazy loading is not
+  an implemented capability or part of this slice's completion claim.
+- [x] Repeat tests; prove A0/A1 batches satisfy the actual consumer boundary with
+  tiny deterministic seam tests, not a training workload; record the result.
+  Passed 6/6 `test_episode_views.py`.
+
+### Batch C: bounded run entry point and operational handoff
+
+Files: create `src/icgs/data/collection/runner.py`, add
+`tests/test_collection_runner.py`, update CLI/data component documentation with
+the actual Python API and validation example. Do not add fictitious CLI collect.
+Interface: `run_collection` composes explicit attempt specs, injected factories,
+validated manifests, config/limits and output root; returns a finite run report.
+Choose and document concrete parameter names before implementing its first test.
+
+- [x] RED: spy factory proves incomplete protocol/limit/split inputs are rejected
+  before environment construction. Test bounded attempts/interval/wall/disk,
+  no silent retries, successful/failed/empty/interrupted attempts, shared total
+  budget, cleanup, collision-safe restart and run-summary consistency.
+- [x] Run supported installed `python -B -m unittest discover -s tests -p
+  'test_collection_runner.py' -v`; record RED.
+- [x] GREEN: implement the small explicit runner, failure retention and a
+  copyable data-generation handoff showing external controller/scene bindings
+  as prerequisites, not invented working implementations.
+- [x] Repeat targeted tests plus both L0 variants and architecture tests. Report
+  real external readiness checks and remaining physical blockers separately.
+  Passed 9/9 `test_collection_runner.py`.
+
+### Manager acceptance
+
+- [x] Gemini reports exact diff, commands/counts and gaps; manager inspects scope.
+- [x] Sol Medium audits read-only after implementation, independently tests edge
+  cases, and returns severity/source evidence plus minimal corrections.
+- [x] Gemini fixes confirmed findings; Sol re-audits; manager independently reruns
+  focused tests before accepting the batch. Do not expand to stylistic rewrites.
+- [x] Preserve full P02 active status and distinguish software slice completion
+  from physical generation readiness and mandatory C1–C5 migration acceptance.
+
+## Historical manager verification hold — 2026-09-16
+
+At this checkpoint the Gemini report was **not accepted**, pending correction
+of the following manager-reproduced defects. These failures are retained as
+historical evidence; see the latest verification checkpoint below for status.
+
+- Environment: repository root, installed editable ICGS in `.venv`, CPython
+  3.11.15, macOS arm64. No model training or physical environment was run.
+- `.venv/bin/python -B -m unittest discover -s tests -p 'test_episode*.py' -v`
+  — PASS, 56/56, zero skips.
+- `.venv/bin/python -B -m unittest discover -s tests -p
+  'test_collection_runner.py' -v` — PASS, 16/16, zero skips.
+- Bounded inline probe using the existing `CollectionRunnerTests` temporary
+  fixture: three attempts each record one valid transition then raise an
+  operational error, with global interval cap two. **FAIL:** three valid
+  transitions execute, report says zero intervals, all three attempts run.
+  Failed-attempt physical work must consume the shared budget.
+- Successful one-attempt archive -> geom view -> existing P11
+  `_validate_record_provenance(..., is_eval=False)`. **FAIL:** the view sample
+  lacks `lineage_id`; `adapter_a0` output lacks `provenance` entirely. Actual P11
+  public-runner readiness must work, not only the private reconstruction helper.
+- Full P02, C1–C5 and physical generation remain incomplete/NOT RUN. No new
+  authority for simulator assets, training, or expanding the data architecture
+  follows from this verification hold.
+
+## Historical disk-budget verification hold — 2026-09-16
+
+Manager latest disk-budget regression, 2026-09-16: 92 selected focused/regression
+tests pass with zero skips under installed `.venv` CPython 3.11.15, but the
+implementation remains **NOT ACCEPTED**. A one-transition archive with 100000
+characters of metadata and a 32768-byte staging cap reached 107166 bytes on disk
+before rejection (measured after flushing the manifest write). An injected reset
+failure with a 10000-character exception wrote 21080 bytes of quarantine evidence
+under a 629-byte dataset cap. Both probes used temporary directories and existing
+test fixtures, not physical execution. Fixed overhead guesses and uncapped failure
+reports do not establish peak-disk enforcement; Sol has the reproductions.
+
+## Latest manager verification checkpoint — 2026-09-16
+
+The implementer remains Gemini 3.8 Flash High and independent reviewer remains
+GPT 5.6 Sol Medium. After disk fixes passed re-audit, manager found an additional
+recovery-path defect: `reconcile_episode` could attach an unknown lineage/family
+and invalidate the dataset index. Gemini added six regression tests and corrected
+only recovery validation/path handling/budgeted publication. The manager's original
+probe now rejects the candidate and preserves a byte-identical valid index.
+
+Fresh manager evidence, repository-root cwd, `.venv` CPython 3.11.15 and installed
+editable ICGS:
+
+- `.venv/bin/python -B -m unittest tests/test_episode_archives.py
+  tests/test_collection_runner.py tests/test_episode_views.py
+  tests/test_episode_data.py tests/test_architecture.py` — **PASS**, 106 executed,
+  zero failures/errors/skips (32 archive, 37 runner, 9 views, 25 prior P02,
+  3 architecture).
+- `python3 -B scripts/validate_fast.py` and
+  `python3 -B -S scripts/validate_fast.py` — **PASS**, 19/19 each, zero skips;
+  two existing invalid-escape SyntaxWarnings in `test_task_router.py` on host
+  Python 3.14.4. L0 is not model execution.
+- `git diff --check` — **PASS** after removing introduced trailing blank lines.
+- Final scoped Sol recovery/documentation re-audit: **PASS**, 106/106 tests with
+  zero skips, matching manager execution. The reviewer also independently probed
+  intermediate-directory symlink rejection. Unknown lineage/family/split/program
+  candidates reject before write; successful recovery is visible to views, and
+  disk exhaustion leaves the original index unchanged. API documentation matches
+  actual signatures and honestly describes eager loading and physical limitations.
+- Manager accepts the **initial-data software slice only**. Earlier failed
+  checkpoints above remain historical evidence, superseded by these corrections
+  and final scoped verification; no physical or model gate is reclassified.
+
+Owner `.gitignore` edit is preserved; nothing staged or committed. Runtime changes
+are confined to `src/icgs/data`, with focused tests and owning docs. No changes to
+native IP or P11 model/training objectives were made.
+
+Full L1 model coverage, fresh C1–C5, physical G1/G2 measurements, L3/L4 and training
+are **NOT RUN** in this software task. Local `.venv` has no RLBench/PyRep; concrete
+scene/expert assets and calibration remain external prerequisites. This initial
+slice does not close all P02 task/outcome views or the migration's mandatory gates.
+
+## Observability integration addendum — 2026-09-09 (historical)
+
+The original observability addendum preceded durable P02 collection. The current
+initial slice persists explicit attempt/archive metadata but adds no fictitious
+physical replay or simulator evidence. Offline run inspection is not a substitute
+for measured collection, lineage manifests, or protocol certification.

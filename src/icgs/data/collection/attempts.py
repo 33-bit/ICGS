@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 import copy
 from dataclasses import dataclass
+import math
 import time
 from typing import Any, Callable
 
@@ -81,6 +82,17 @@ class AttemptExecutionError(RuntimeError):
         self.rejected_transition = rejected_transition
         self.initial_observation = initial_observation
 
+    @property
+    def evidence(self) -> dict[str, Any]:
+        return {
+            "initial_observation": self.initial_observation,
+            "transitions": self.transitions,
+            "annotations": self.annotations,
+            "rejected_transition": self.rejected_transition,
+            "cause": self.cause,
+            "cleanup_error": self.cleanup_error,
+        }
+
 
 @dataclass(frozen=True)
 class AttemptResult(Mapping[str, Any]):
@@ -97,6 +109,7 @@ class AttemptResult(Mapping[str, Any]):
     transitions: tuple[ExecutedTransition, ...]
     annotations: tuple[Mapping[str, Any], ...]
     status: str
+    online_observations: tuple[Mapping[str, Any], ...] | None = None
 
     def __getitem__(self, key: str) -> Any:
         if key == "initial_observation":
@@ -107,13 +120,17 @@ class AttemptResult(Mapping[str, Any]):
             return self.annotations
         if key == "status":
             return self.status
+        if key == "online_observations":
+            return self.online_observations
         raise KeyError(key)
 
     def __iter__(self) -> Iterator[str]:
         yield from ("initial_observation", "transitions", "annotations", "status")
+        if self.online_observations is not None:
+            yield "online_observations"
 
     def __len__(self) -> int:
-        return 4
+        return 5 if self.online_observations is not None else 4
 
 
 def _resolve_collection_bounds(config: Any) -> tuple[int, float | None]:
@@ -195,28 +212,9 @@ def collect_attempt(
     monitor: Any = None,
     seed: int | None = None,
     clock: Callable[[], float] = time.monotonic,
+    online_provider: Callable[[Any], Mapping[str, Any]] | None = None,
 ) -> AttemptResult:
-    """Execute one bounded attempt against an injected environment and monitor.
-
-    This partial seam validates explicit configuration, resets the environment once,
-    advances sequentially through commands up to configured resource limits,
-    validates strict causal boundary continuity, and detaches annotation snapshots.
-    It halts on command exhaustion or resource limit; physical terminal classification
-    is deferred and not inferred from opaque monitor metadata.
-
-    When an external monitor is provided, ``annotations[i]`` corresponds to
-    ``transitions[i]`` for each step where annotation succeeded. If no monitor is
-    provided, ``annotations`` is empty. If annotation computation fails on a step,
-    the attempt halts with ``AttemptExecutionError`` whose ``transitions`` includes
-    the executed transition while ``annotations`` contains only the shorter successful prefix.
-
-    Limitations:
-    - Only bounded in-memory execution is performed; no disk/JSON IO or physical
-      simulator launching occurs.
-    - Wall limits are evaluated between steps; blocking capability calls are
-      not preempted. Outer multi-attempt quotas are not evaluated here.
-    - Terminal success/failure classification is not implemented by this partial seam.
-    """
+    """Execute one bounded attempt against an injected environment and monitor."""
     max_intervals, wall_limit_s = _resolve_collection_bounds(config)
 
     primary_error: BaseException | None = None
@@ -224,8 +222,51 @@ def collect_attempt(
     rejected_transition: ExecutedTransition | None = None
     transitions: list[ExecutedTransition] = []
     annotations: list[Mapping[str, Any]] = []
+    online_obs_list: list[Mapping[str, Any]] = []
     initial_observation: TimedObservation | None = None
     status = "completed"
+
+    def _process_online_obs(raw: Any) -> dict[str, Any]:
+        if not isinstance(raw, Mapping):
+            raise TypeError(f"online observation must be a Mapping, got {type(raw).__name__}")
+        allowed_keys = {"points", "point_valid", "T_w_e", "grip"}
+        for k in raw:
+            if k not in allowed_keys:
+                raise ValueError(f"online observation contains unapproved key: {k!r}")
+        for required in ("points", "point_valid", "T_w_e", "grip"):
+            if required not in raw:
+                raise KeyError(f"online observation missing required field: {required!r}")
+
+        pts = np.array(raw["points"], copy=True)
+        if pts.ndim != 2 or pts.shape[1] != 3:
+            raise ValueError(f"online points must have shape [N, 3], got {pts.shape}")
+        if pts.dtype not in (np.float32, np.float64):
+            raise TypeError(f"online points must have float32 or float64 dtype, got {pts.dtype}")
+        if not np.all(np.isfinite(pts)):
+            raise ValueError("online points contain non-finite values")
+
+        valid = np.array(raw["point_valid"], dtype=bool, copy=True)
+        if valid.shape != (len(pts),):
+            raise ValueError(f"online point_valid must have shape ({len(pts)},), got {valid.shape}")
+
+        twe = np.array(raw["T_w_e"], copy=True)
+        if twe.shape != (4, 4):
+            raise ValueError(f"online T_w_e must have shape (4, 4), got {twe.shape}")
+        if twe.dtype not in (np.float32, np.float64):
+            raise TypeError(f"online T_w_e must have float32 or float64 dtype, got {twe.dtype}")
+        if not np.all(np.isfinite(twe)):
+            raise ValueError("online T_w_e contains non-finite values")
+
+        grip = float(raw["grip"])
+        if not math.isfinite(grip):
+            raise ValueError("online grip must be finite")
+
+        return {
+            "points": pts,
+            "point_valid": valid,
+            "T_w_e": twe,
+            "grip": grip,
+        }
 
     try:
         start_time = clock()
@@ -236,6 +277,11 @@ def collect_attempt(
                 f"environment.reset must return TimedObservation, got {type(initial_observation).__name__}"
             )
         last_observation = initial_observation
+
+        if online_provider is not None:
+            online_obs_list.append(_process_online_obs(online_provider(initial_observation)))
+        elif callable(getattr(environment, "get_online_observation", None)):
+            online_obs_list.append(_process_online_obs(environment.get_online_observation()))
 
         for _ in range(max_intervals):
             if wall_limit_s is not None and (clock() - start_time) >= wall_limit_s:
@@ -260,6 +306,11 @@ def collect_attempt(
 
             transitions.append(transition)
             last_observation = transition.after
+
+            if online_provider is not None:
+                online_obs_list.append(_process_online_obs(online_provider(transition)))
+            elif callable(getattr(environment, "get_online_observation", None)):
+                online_obs_list.append(_process_online_obs(environment.get_online_observation()))
 
             if monitor is not None:
                 ann = monitor.annotate(transition)
@@ -312,7 +363,90 @@ def collect_attempt(
         transitions=tuple(transitions),
         annotations=tuple(annotations),
         status=status,
+        online_observations=tuple(online_obs_list) if online_obs_list else None,
     )
+
+
+def persist_attempt(
+    root: str | Path,
+    result: AttemptResult,
+    *,
+    provenance: Mapping[str, Any],
+    config: MethodConfig | None = None,
+    metadata: Mapping[str, Any] | None = None,
+    staging_byte_cap: int | None = None,
+    online_provider: Callable[[Any], Mapping[str, Any]] | None = None,
+) -> Path:
+    """Persist an AttemptResult to an episode archive or attempt report.
+
+    Valid completed, failed, or timeout attempts with transitions are written
+    to durable episode archives under ``episodes/<episode_id>``.
+    Empty attempts (0 transitions) are written as attempt reports under ``reports/<episode_id>``.
+    Refuses fallback reconstruction if actual online observations are missing and no online_provider is supplied.
+    """
+    from icgs.data.archives import write_attempt_report, write_episode_archive
+    import numpy as np
+
+    episode_id = provenance.get("episode_id")
+    if not isinstance(episode_id, str) or not episode_id.strip():
+        raise ValueError("provenance must contain nonempty episode_id")
+
+    if len(result.transitions) == 0:
+        if metadata is not None:
+            for reserved in ("attempt_id", "status", "transition_count", "provenance", "annotations"):
+                if reserved in metadata:
+                    raise ValueError(f"caller metadata may not override recorder-owned report key: {reserved!r}")
+        report_data: dict[str, Any] = {
+            "attempt_id": episode_id,
+            "status": result.status,
+            "transition_count": 0,
+            "provenance": dict(provenance),
+            "annotations": list(result.annotations),
+        }
+        if metadata is not None:
+            report_data["metadata"] = dict(metadata)
+        return write_attempt_report(root, episode_id, report_data, staging_byte_cap=staging_byte_cap)
+
+    if result.online_observations is not None:
+        raw_obs_seq: Sequence[Mapping[str, Any]] = result.online_observations
+    elif online_provider is not None:
+        raw_obs_seq = [online_provider(result.initial_observation)]
+        for t in result.transitions:
+            raw_obs_seq.append(online_provider(t))
+    else:
+        raise ValueError(
+            "persist_attempt refuses fallback reconstruction of online observations; "
+            "AttemptResult must carry actual online_observations or an explicit online_provider must be supplied"
+        )
+
+    online_obs: list[dict[str, Any]] = []
+    for o in raw_obs_seq:
+        online_obs.append({
+            "points": o["points"].copy() if hasattr(o["points"], "copy") else np.array(o["points"]),
+            "point_valid": o["point_valid"].copy() if hasattr(o["point_valid"], "copy") else np.array(o["point_valid"], dtype=bool),
+            "T_w_e": o["T_w_e"].copy() if hasattr(o["T_w_e"], "copy") else np.array(o["T_w_e"]),
+            "grip": o["grip"],
+        })
+
+    record = {
+        "schema_version": "icgs_episode_v1",
+        "provenance": dict(provenance),
+        "online_observations": online_obs,
+        "transitions": list(result.transitions),
+    }
+
+    if metadata is not None:
+        for reserved in ("attempt_status", "annotations"):
+            if reserved in metadata:
+                raise ValueError(f"caller metadata may not override recorder-owned key: {reserved!r}")
+
+    meta: dict[str, Any] = {}
+    if metadata is not None:
+        meta.update(metadata)
+    meta["attempt_status"] = result.status
+    meta["annotations"] = list(result.annotations)
+
+    return write_episode_archive(root, record, config=config, metadata=meta, staging_byte_cap=staging_byte_cap)
 
 
 __all__ = [
@@ -320,4 +454,5 @@ __all__ = [
     "AttemptResult",
     "attempt_counts",
     "collect_attempt",
+    "persist_attempt",
 ]
