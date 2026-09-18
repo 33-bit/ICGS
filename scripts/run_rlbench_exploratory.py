@@ -463,6 +463,9 @@ def make_concrete_rlbench_environment(task_name: str = G1_DEFAULT_TASK, headless
     obs_config.wrist_camera.depth = True
     obs_config.gripper_pose = True
     obs_config.gripper_open = True
+    obs_config.joint_positions = True
+    obs_config.joint_velocities = True
+    obs_config.front_camera.rgb = True
 
     action_mode = MoveArmThenGripper(
         arm_action_mode=EndEffectorPoseViaIK(),

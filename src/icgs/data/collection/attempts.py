@@ -110,6 +110,7 @@ class AttemptResult(Mapping[str, Any]):
     annotations: tuple[Mapping[str, Any], ...]
     status: str
     online_observations: tuple[Mapping[str, Any], ...] | None = None
+    auxiliary: Mapping[str, Any] | None = None
 
     def __getitem__(self, key: str) -> Any:
         if key == "initial_observation":
@@ -122,15 +123,24 @@ class AttemptResult(Mapping[str, Any]):
             return self.status
         if key == "online_observations":
             return self.online_observations
+        if key == "auxiliary":
+            return self.auxiliary
         raise KeyError(key)
 
     def __iter__(self) -> Iterator[str]:
         yield from ("initial_observation", "transitions", "annotations", "status")
         if self.online_observations is not None:
             yield "online_observations"
+        if self.auxiliary is not None:
+            yield "auxiliary"
 
     def __len__(self) -> int:
-        return 5 if self.online_observations is not None else 4
+        count = 4
+        if self.online_observations is not None:
+            count += 1
+        if self.auxiliary is not None:
+            count += 1
+        return count
 
 
 def _resolve_collection_bounds(config: Any) -> tuple[int, float | None]:
@@ -224,6 +234,7 @@ def collect_attempt(
     annotations: list[Mapping[str, Any]] = []
     online_obs_list: list[Mapping[str, Any]] = []
     initial_observation: TimedObservation | None = None
+    auxiliary_data: Mapping[str, Any] | None = None
     status = "completed"
 
     def _process_online_obs(raw: Any) -> dict[str, Any]:
@@ -324,6 +335,13 @@ def collect_attempt(
     except BaseException as exc:
         primary_error = exc
     finally:
+        get_aux = getattr(environment, "get_auxiliary_data", None)
+        if callable(get_aux):
+            try:
+                auxiliary_data = get_aux()
+            except Exception:
+                auxiliary_data = None
+
         close_fn = getattr(environment, "close", None)
         if not callable(close_fn):
             cleanup_error = TypeError(
@@ -364,6 +382,7 @@ def collect_attempt(
         annotations=tuple(annotations),
         status=status,
         online_observations=tuple(online_obs_list) if online_obs_list else None,
+        auxiliary=auxiliary_data,
     )
 
 
@@ -446,7 +465,14 @@ def persist_attempt(
     meta["attempt_status"] = result.status
     meta["annotations"] = list(result.annotations)
 
-    return write_episode_archive(root, record, config=config, metadata=meta, staging_byte_cap=staging_byte_cap)
+    return write_episode_archive(
+        root,
+        record,
+        config=config,
+        metadata=meta,
+        staging_byte_cap=staging_byte_cap,
+        auxiliary=result.auxiliary,
+    )
 
 
 __all__ = [

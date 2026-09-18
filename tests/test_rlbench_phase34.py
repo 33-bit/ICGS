@@ -944,6 +944,100 @@ class RLBenchPhase34Tests(unittest.TestCase):
                 with self.assertRaisesRegex(RuntimeError, "Drive root must be a descendant of /content/drive/MyDrive"):
                     uploader.sync_episode("ep-test")
 
+    def test_telemetry_and_video_companion_archival_and_upload(self):
+        """Companion telemetry.npz and video_front.mp4 are saved and synced seamlessly."""
+        from icgs.data.archives import write_episode_archive, read_episode_archive
+        from icgs.data.schemas.episodes import validate_episode
+        from icgs.data.collection.uploader import ExploratoryUploader
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tmp = Path(tmp_dir)
+            local_root = tmp / "local"
+            drive_root = tmp / "drive"
+            local_root.mkdir()
+            drive_root.mkdir()
+
+            fake_hf = _FakeHF()
+            uploader = ExploratoryUploader(
+                local_root,
+                drive_root=drive_root,
+                hf_repo_id="org/repo",
+                hf_client=fake_hf,
+                hf_subfolder="exploratory",
+            )
+
+            # Construct valid minimal episode record
+            from icgs.contracts.method import TimedObservation, TimedCommand, ExecutedTransition
+            from icgs.contracts.records import Observation
+            from icgs.configuration.method import MethodConfig
+
+            pts = np.zeros((10, 3), dtype=np.float64)
+            T = np.eye(4, dtype=np.float64)
+            obs0 = Observation(points=pts, T_w_e=T, grip=1)
+            t_obs0 = TimedObservation(observation=obs0, boundary=0, simulator_timestamp=0.0, measured_wall_timestamp=0.0, sensor_profile_id="p1")
+            obs1 = Observation(points=pts, T_w_e=T, grip=1)
+            t_obs1 = TimedObservation(observation=obs1, boundary=1, simulator_timestamp=0.1, measured_wall_timestamp=0.1, sensor_profile_id="p1")
+            cmd = TimedCommand(target_w=T, grip=1, duration_s=0.1)
+            trans = ExecutedTransition(before=t_obs0, after=t_obs1, command=cmd, achieved_duration_s=0.1, physics_substeps=5, controller_status="ok")
+
+            online_obs = [
+                {"points": pts, "point_valid": np.ones(10, dtype=bool), "T_w_e": T, "grip": 1},
+                {"points": pts, "point_valid": np.ones(10, dtype=bool), "T_w_e": T, "grip": 1},
+            ]
+            record = {
+                "schema_version": "icgs_episode_v1",
+                "provenance": {
+                    "episode_id": "ep-aux-001",
+                    "source_lineage_id": "lineage-1",
+                    "asset_family_id": "family-1",
+                    "program_id": "program-1",
+                    "calibration_id": "calibration-1",
+                    "raw_commands_id": "cmds-1",
+                    "materialized_commands_id": "mat-1",
+                    "split": "dev",
+                    "observation_origin": "measured",
+                },
+                "online_observations": online_obs,
+                "transitions": [trans],
+            }
+
+            auxiliary = {
+                "joint_positions": np.ones((2, 7), dtype=np.float64),
+                "joint_velocities": np.zeros((2, 7), dtype=np.float64),
+                "front_rgb_frames": np.zeros((2, 32, 32, 3), dtype=np.uint8),
+            }
+
+            manifest_p = write_episode_archive(local_root, record, auxiliary=auxiliary)
+            ep_dir = local_root / "episodes" / "ep-aux-001"
+
+            # Check files on disk
+            self.assertTrue((ep_dir / "telemetry.npz").is_file())
+            self.assertTrue((ep_dir / "video_front.mp4").is_file())
+
+            # Read telemetry arrays
+            with np.load(ep_dir / "telemetry.npz") as telem:
+                self.assertEqual(telem["joint_positions"].shape, (2, 7))
+                self.assertEqual(telem["joint_velocities"].shape, (2, 7))
+
+            # Validate episode archive roundtrip
+            restored = read_episode_archive(manifest_p)
+            validate_episode(restored)
+
+            # Sync episode to Drive and HF
+            sync_res = uploader.sync_episode("ep-aux-001")
+            self.assertTrue(sync_res["drive_verified"])
+            self.assertTrue(sync_res["hf_verified"])
+            self.assertIn("episodes/ep-aux-001/telemetry.npz", sync_res["synced_files"])
+            self.assertIn("episodes/ep-aux-001/video_front.mp4", sync_res["synced_files"])
+
+            # Verify Drive copy
+            self.assertTrue((drive_root / "episodes/ep-aux-001/telemetry.npz").is_file())
+            self.assertTrue((drive_root / "episodes/ep-aux-001/video_front.mp4").is_file())
+
+            # Verify HF copy
+            self.assertIn("exploratory/episodes/ep-aux-001/telemetry.npz", fake_hf.objects)
+            self.assertIn("exploratory/episodes/ep-aux-001/video_front.mp4", fake_hf.objects)
+
     def test_two_episode_end_to_end_publication_and_indexing(self):
         """Integration test with TWO real archive fixtures through actual uploader + runner.
 

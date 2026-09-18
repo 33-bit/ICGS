@@ -296,6 +296,7 @@ def write_episode_archive(
     config: MethodConfig | None = None,
     metadata: Mapping[str, Any] | None = None,
     staging_byte_cap: int | None = None,
+    auxiliary: Mapping[str, Any] | None = None,
 ) -> Path:
     """Losslessly write an episode record to disk with atomic publication and SHA256 hashes.
 
@@ -450,13 +451,40 @@ def write_episode_archive(
                 "array_schema": array_schema,
             })
 
+        meta_dict: dict[str, Any] = dict(metadata) if metadata is not None else {}
+        if auxiliary is not None:
+            # 1. Telemetry: joint positions & joint velocities
+            if auxiliary.get("joint_positions") is not None or auxiliary.get("joint_velocities") is not None:
+                telem_arrays: dict[str, np.ndarray] = {}
+                if auxiliary.get("joint_positions") is not None:
+                    telem_arrays["joint_positions"] = np.asarray(auxiliary["joint_positions"], dtype=np.float64)
+                if auxiliary.get("joint_velocities") is not None:
+                    telem_arrays["joint_velocities"] = np.asarray(auxiliary["joint_velocities"], dtype=np.float64)
+                telem_buf = io.BytesIO()
+                np.savez_compressed(telem_buf, **telem_arrays)
+                telem_bytes = telem_buf.getvalue()
+                telem_buf.close()
+                telem_path = staging_dir / "telemetry.npz"
+                remaining = effective_staging_cap - staged_bytes if effective_staging_cap is not None else None
+                check_and_write_bytes(telem_path, telem_bytes, remaining_bytes=remaining, atomic=False)
+                staged_bytes += len(telem_bytes)
+                meta_dict["telemetry"] = "telemetry.npz"
+
+            # 2. RGB Video: front camera frames
+            if auxiliary.get("front_rgb_frames") is not None and len(auxiliary["front_rgb_frames"]) > 0:
+                video_path = staging_dir / "video_front.mp4"
+                from icgs.data.collection.video import encode_frames_to_mp4
+                if encode_frames_to_mp4(auxiliary["front_rgb_frames"], video_path, fps=10):
+                    staged_bytes += video_path.stat().st_size
+                    meta_dict["video_front"] = "video_front.mp4"
+
         manifest_data = {
             "archive_version": ARCHIVE_VERSION,
             "schema_version": record["schema_version"],
             "provenance": _json_safe(record["provenance"]),
             "shards": shards_manifest,
             "total_intervals": num_transitions,
-            "metadata": _json_safe(metadata) if metadata is not None else None,
+            "metadata": _json_safe(meta_dict) if meta_dict else None,
         }
 
         manifest_bytes = json.dumps(manifest_data, indent=2, allow_nan=False).encode("utf-8")

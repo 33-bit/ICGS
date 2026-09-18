@@ -584,6 +584,33 @@ class RLBenchTimedController(TimedController):
             raise RuntimeError("TaskEnvironment.get_observation is required")
         return get_observation()
 
+    def get_joint_positions(self) -> np.ndarray:
+        """Query the 7-DOF arm joint positions in radians."""
+        get_fn = getattr(self._arm, "get_joint_positions", None)
+        if callable(get_fn):
+            return np.asarray(get_fn(), dtype=np.float64)
+        return np.zeros(7, dtype=np.float64)
+
+    def get_joint_velocities(self) -> np.ndarray:
+        """Query the 7-DOF arm joint velocities in radians/second."""
+        get_fn = getattr(self._arm, "get_joint_velocities", None)
+        if callable(get_fn):
+            return np.asarray(get_fn(), dtype=np.float64)
+        return np.zeros(7, dtype=np.float64)
+
+    def get_front_rgb(self) -> np.ndarray | None:
+        """Query the front camera RGB image frame (H, W, 3) uint8 if available."""
+        try:
+            raw_obs = self.observe_raw()
+            rgb = getattr(raw_obs, "front_rgb", None)
+            if rgb is None and isinstance(raw_obs, Mapping):
+                rgb = raw_obs.get("front_rgb")
+            if rgb is not None:
+                return np.asarray(rgb, dtype=np.uint8)
+        except Exception:
+            pass
+        return None
+
     def simulator_time(self) -> float:
         """Return the current simulation clock time in seconds."""
         value = float(self._get_sim_time())

@@ -473,6 +473,22 @@ class ExploratoryUploader:
                 raise ValueError(f"shard escapes episode directory: {shard_name}")
             allowed_filenames.add(shard_name)
 
+        meta = manifest_data.get("metadata")
+        if isinstance(meta, dict):
+            for aux_key in ("video_front", "telemetry"):
+                aux_val = meta.get(aux_key)
+                if isinstance(aux_val, str) and aux_val:
+                    if "/" in aux_val or "\\" in aux_val or ".." in aux_val:
+                        raise ValueError(f"unsafe path in metadata {aux_key}: {aux_val!r}")
+                    aux_path = ep_dir / aux_val
+                    if aux_path.is_symlink():
+                        raise ValueError(f"auxiliary file is a symlink: {aux_val}")
+                    if not aux_path.is_file():
+                        raise FileNotFoundError(f"referenced auxiliary file not found: {aux_path}")
+                    if aux_path.resolve().parent != ep_dir.resolve():
+                        raise ValueError(f"auxiliary file escapes episode directory: {aux_val}")
+                    allowed_filenames.add(aux_val)
+
         # Audit entire directory tree BEFORE ANY WRITE:
         # Strictly reject extra nested files, unsafe path components, and all symlink escapes
         for root, dirs, filenames in os.walk(ep_dir, followlinks=False):

@@ -174,6 +174,9 @@ class TimedRLBenchAdapter:
         self._current: TimedObservation | None = None
         self._closed = False
         self._invalidated = False
+        self._aux_joint_positions: list[np.ndarray] = []
+        self._aux_joint_velocities: list[np.ndarray] = []
+        self._aux_front_rgb_frames: list[np.ndarray] = []
 
     @staticmethod
     def _require_controller(controller: Any) -> None:
@@ -297,6 +300,10 @@ class TimedRLBenchAdapter:
                     self._controller.reset(seed=seed)
                     current = self._read_observation(0)
                     self._current = current
+                    self._aux_joint_positions.clear()
+                    self._aux_joint_velocities.clear()
+                    self._aux_front_rgb_frames.clear()
+                    self._record_aux()
                     self._event("execution.reset.complete", fields={"seed": seed, "boundary": 0})
                     return current
                 except Exception as exc:
@@ -358,6 +365,7 @@ class TimedRLBenchAdapter:
                     raise cleanup_error from operation_error
                 raise
             self._current = after
+            self._record_aux()
             self._event(
                 "execution.transition",
                 fields={
@@ -379,6 +387,40 @@ class TimedRLBenchAdapter:
                 },
             )
             return transition
+
+    def _record_aux(self) -> None:
+        get_jp = getattr(self._controller, "get_joint_positions", None)
+        if callable(get_jp):
+            try:
+                self._aux_joint_positions.append(np.asarray(get_jp(), dtype=np.float64))
+            except Exception:
+                pass
+        get_jv = getattr(self._controller, "get_joint_velocities", None)
+        if callable(get_jv):
+            try:
+                self._aux_joint_velocities.append(np.asarray(get_jv(), dtype=np.float64))
+            except Exception:
+                pass
+        get_rgb = getattr(self._controller, "get_front_rgb", None)
+        if callable(get_rgb):
+            try:
+                rgb = get_rgb()
+                if rgb is not None:
+                    self._aux_front_rgb_frames.append(rgb)
+            except Exception:
+                pass
+
+    def get_auxiliary_data(self) -> dict[str, Any] | None:
+        if not self._aux_joint_positions and not self._aux_front_rgb_frames:
+            return None
+        res: dict[str, Any] = {}
+        if self._aux_joint_positions:
+            res["joint_positions"] = np.stack(self._aux_joint_positions, axis=0)
+        if self._aux_joint_velocities:
+            res["joint_velocities"] = np.stack(self._aux_joint_velocities, axis=0)
+        if self._aux_front_rgb_frames:
+            res["front_rgb_frames"] = np.stack(self._aux_front_rgb_frames, axis=0)
+        return res
 
     def close(self) -> None:
         """Run controller-specific hold cleanup, then close; permit close retry."""
