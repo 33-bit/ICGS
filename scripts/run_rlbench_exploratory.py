@@ -591,6 +591,12 @@ def run_exploratory_collection(
         if drive_dir is not None and (Path(drive_dir) / "dataset_manifest.json").is_file():
             output_dir.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(Path(drive_dir) / "dataset_manifest.json", manifest_path)
+            drive_episodes = Path(drive_dir) / "episodes"
+            if drive_episodes.is_dir():
+                local_episodes = output_dir / "episodes"
+                for ep_dir in drive_episodes.iterdir():
+                    if ep_dir.is_dir() and not (local_episodes / ep_dir.name).exists():
+                        shutil.copytree(ep_dir, local_episodes / ep_dir.name)
         else:
             output_dir.mkdir(parents=True, exist_ok=True)
             initial_manifest = {
