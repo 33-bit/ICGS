@@ -318,7 +318,10 @@ class RLBenchExploratoryTests(unittest.TestCase):
 
     def test_uploader_drive_first_then_hf_with_verified_checksums(self):
         """Uploader verifies SHA-256 before writing and mirrors to Drive first."""
-        from tests.test_rlbench_phase34 import _write_valid_test_episode
+        try:
+            from tests.test_rlbench_phase34 import _write_valid_test_episode
+        except ModuleNotFoundError:
+            from test_rlbench_phase34 import _write_valid_test_episode
 
         drive_dir = self.root / "drive_mirror"
         local_dir = self.root / "local_data"
@@ -341,7 +344,10 @@ class RLBenchExploratoryTests(unittest.TestCase):
 
     def test_uploader_idempotency_and_resume_skips_matching_files(self):
         """Uploader skips files already present with identical SHA-256."""
-        from tests.test_rlbench_phase34 import _write_valid_test_episode
+        try:
+            from tests.test_rlbench_phase34 import _write_valid_test_episode
+        except ModuleNotFoundError:
+            from test_rlbench_phase34 import _write_valid_test_episode
 
         drive_dir = self.root / "drive_mirror"
         local_dir = self.root / "local_data"

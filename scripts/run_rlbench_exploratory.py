@@ -16,6 +16,7 @@ import math
 import os
 from pathlib import Path
 import secrets
+import shutil
 import signal
 import subprocess
 import sys
@@ -525,6 +526,7 @@ def run_exploratory_collection(
     online_provider: Any = None,
     result_file: Path | str | None = None,
     nonce: str | None = None,
+    start_index: int | None = None,
 ) -> int:
     """Run concrete bounded E01 exploratory collection with live expert demonstration.
 
@@ -586,37 +588,56 @@ def run_exploratory_collection(
     # Ensure dataset_manifest.json exists with valid exploratory schema
     manifest_path = output_dir / "dataset_manifest.json"
     if not manifest_path.is_file():
-        output_dir.mkdir(parents=True, exist_ok=True)
-        initial_manifest = {
-            "manifest_version": 1,
-            "dataset_track": "exploratory",
-            "episodes": [],
-            "lineage": [
-                {"lineage_id": "exploratory_rlbench_dev", "split": "dev", "parent_ids": []}
-            ],
-            "asset_families": [
-                {"asset_family_id": "rlbench-exploratory", "split": "dev"}
-            ],
-        }
-        manifest_path.write_text(json.dumps(initial_manifest, indent=2), encoding="utf-8")
+        if drive_dir is not None and (Path(drive_dir) / "dataset_manifest.json").is_file():
+            output_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(Path(drive_dir) / "dataset_manifest.json", manifest_path)
+        else:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            initial_manifest = {
+                "manifest_version": 1,
+                "dataset_track": "exploratory",
+                "episodes": [],
+                "lineage": [
+                    {"lineage_id": "exploratory_rlbench_dev", "split": "dev", "parent_ids": []}
+                ],
+                "asset_families": [
+                    {"asset_family_id": "rlbench-exploratory", "split": "dev"}
+                ],
+            }
+            manifest_path.write_text(json.dumps(initial_manifest, indent=2), encoding="utf-8")
 
     # Concrete AttemptSpecs composition
     if specs is None:
         from icgs.data.collection.runner import AttemptSpec
+        if start_index is None:
+            start_index = 0
+            if manifest_path.is_file():
+                try:
+                    m_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+                    for ep in m_data.get("episodes", []):
+                        ep_id = ep.get("episode_id", "")
+                        if ep_id.startswith("e01-ep-"):
+                            try:
+                                ep_num = int(ep_id[len("e01-ep-"):])
+                                start_index = max(start_index, ep_num + 1)
+                            except ValueError:
+                                pass
+                except Exception:
+                    pass
         specs = [
             AttemptSpec(
-                episode_id=f"e01-ep-{idx:04d}",
+                episode_id=f"e01-ep-{(start_index + idx):04d}",
                 program_id="E01",
                 source_lineage_id="exploratory_rlbench_dev",
                 asset_family_id="rlbench-exploratory",
                 split="dev",
-                generator_seed=1000 + idx,
-                reset_seed=2000 + idx,
-                action_seed=3000 + idx,
+                generator_seed=1000 + start_index + idx,
+                reset_seed=2000 + start_index + idx,
+                action_seed=3000 + start_index + idx,
                 calibration_id="rlbench-wrist-depth-raw-v1",
                 observation_origin="measured",
                 raw_commands_id="rlbench-live-expert-v1",
-                materialized_commands_id=f"rlbench-live-mat-{idx:04d}",
+                materialized_commands_id=f"rlbench-live-mat-{(start_index + idx):04d}",
             )
             for idx in range(num_attempts)
         ]
@@ -844,6 +865,7 @@ def run_supervised_exploratory_collection(
     outcome_file: Path | None = None,
     poll_interval_s: float = 0.05,
     kill_grace_s: float = 2.0,
+    start_index: int | None = None,
 ) -> dict[str, Any]:
     """Execute E01 collection in an isolated subprocess supervised by hard wall timeout.
 
@@ -913,6 +935,8 @@ def run_supervised_exploratory_collection(
             cmd.extend(["--hf-repo-id", str(hf_repo_id)])
         if hf_token_file is not None:
             cmd.extend(["--hf-token-file", str(hf_token_file)])
+        if start_index is not None:
+            cmd.extend(["--start-index", str(start_index)])
     else:
         cmd = list(worker_cmd)
         has_result_file = any(
@@ -1204,6 +1228,7 @@ def main() -> None:
     parser.add_argument("--outcome-file", type=Path, default=None, help="Path for durable supervisor JSON outcome.")
     parser.add_argument("--result-file", type=Path, default=None, help="Path for worker result JSON (worker mode).")
     parser.add_argument("--nonce", type=str, default=None, help="Nonce for worker result verification (worker mode).")
+    parser.add_argument("--start-index", type=int, default=None, help="Starting episode index (auto-detected if omitted).")
     args = parser.parse_args()
 
     # Enforce parameter validation immediately so neither supervisor nor --worker can bypass it
@@ -1227,6 +1252,7 @@ def main() -> None:
                 task_name=args.task,
                 result_file=args.result_file,
                 nonce=args.nonce,
+                start_index=args.start_index,
             )
         except Exception as exc:
             print(f"[WORKER ERROR] {exc}", file=sys.stderr)
@@ -1244,6 +1270,7 @@ def main() -> None:
                 wall_time_s=args.wall_time_s,
                 task_name=args.task,
                 outcome_file=args.outcome_file,
+                start_index=args.start_index,
             )
         except Exception as exc:
             print(f"[SUPERVISOR ERROR] {exc}", file=sys.stderr)
