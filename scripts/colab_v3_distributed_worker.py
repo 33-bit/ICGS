@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -33,6 +34,52 @@ def _file_hashes(root: Path) -> dict[str, str]:
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
             hashes[str(path.relative_to(root))] = digest
     return hashes
+
+
+class SimulatorSlotPool:
+    """Cross-process semaphore for memory-heavy simulator launches.
+
+    The worker count remains 200, but a VM can configure a smaller number of
+    simultaneous CoppeliaSim processes with ``ICGS_SIMULATOR_SLOTS``. POSIX
+    flock releases a slot automatically if a worker is killed, so recovery
+    never depends on stale lease metadata.
+    """
+
+    def __init__(self, run_root: str | Path):
+        try:
+            slot_count = int(os.environ.get("ICGS_SIMULATOR_SLOTS", "200"))
+        except ValueError as exc:
+            raise ValueError("ICGS_SIMULATOR_SLOTS must be an integer") from exc
+        if slot_count <= 0:
+            raise ValueError("ICGS_SIMULATOR_SLOTS must be positive")
+        self.slot_count = slot_count
+        self.root = Path(run_root) / "control" / "simulator-slots"
+        self.root.mkdir(parents=True, exist_ok=True)
+        self._stream = None
+        self.acquired_slot: Path | None = None
+
+    def __enter__(self):
+        while True:
+            for index in range(self.slot_count):
+                path = self.root / f"slot-{index:03d}.lock"
+                stream = path.open("a+")
+                try:
+                    fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    stream.close()
+                    continue
+                self._stream = stream
+                self.acquired_slot = path
+                return self
+            time.sleep(0.2)
+
+    def __exit__(self, exc_type, exc, tb):
+        if self._stream is not None:
+            fcntl.flock(self._stream.fileno(), fcntl.LOCK_UN)
+            self._stream.close()
+            self._stream = None
+            self.acquired_slot = None
+        return False
 
 
 def run_worker(
@@ -117,7 +164,8 @@ def run_worker(
                 "/content/icgs-data-env/bin/python", "-B",
                 "/content/ICGS/scripts/colab_v3_pilot_episodes_worker.py", job.program_id,
             ]
-            process = subprocess.run(command, env=env, text=True, capture_output=True, timeout=1200)
+            with SimulatorSlotPool(Path(job.output_root).parent):
+                process = subprocess.run(command, env=env, text=True, capture_output=True, timeout=1200)
             log_path = output_root / "worker.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text((process.stdout or "") + (process.stderr or ""), encoding="utf-8")
