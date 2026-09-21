@@ -43,6 +43,11 @@ Cheap L0: `PYTHONPATH=src python3 -B -m unittest discover -s tests -p 'test_prim
 Reviewer-facing generation description: [docs/audits/2026-09-20-icgs-v3-generation.md](../../audits/2026-09-20-icgs-v3-generation.md).
 Colab CPU session `icgs-primary-v3-cpu` is retained. Do not launch the 200-success + 80-attempt scale until asked.
 
+The distributed full-launch implementation is committed in the 2026-09-21
+distributed generation plan. A full run remains blocked until its fresh
+36-program smoke, bounded worker smokes and first verified publication are
+recorded in [the launch record](../../audits/2026-09-21-icgs-v3-full-launch.md).
+
 ## Compatibility
 
 `primary_v2` archives, `icgs_episode_v1`, and MethodConfig defaults stay as-is. v3 is an additive protocol and layout.

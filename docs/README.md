@@ -40,6 +40,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Validation guide](../tests/README.md) | Validation tiers, ownership, commands, result vocabulary |
 | [Onboarding audit](audits/harness-onboarding.md) | Dated evidence, design approval, adoption choices and discovered debt |
 | [ICGS primary v3 generation report](audits/2026-09-20-icgs-v3-generation.md) | Phase-1 collection quota, splits, schema, perturbations, views; not a launch receipt |
+| [ICGS primary v3 full launch record](audits/2026-09-21-icgs-v3-full-launch.md) | Distributed 200-worker/coordinator launch evidence and publication receipts |
 | [Third-party notices](third-party-notices.md) | Attribution and license for adapted guidance |
 
 Source code owns implementation detail; tests establish only the behavior they
