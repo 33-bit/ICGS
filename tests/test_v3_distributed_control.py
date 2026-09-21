@@ -3,6 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from scripts.colab_v3_distributed_launch import build_worker_commands, validate_smoke_receipt
+from scripts.colab_v3_distributed_coordinator import _inflight_jobs_from_queue
+from icgs.data.collection.v3.distributed_contracts import GenerationJob, RunConfig
+from icgs.data.collection.v3.distributed_planner import DistributedPlanner
+from icgs.data.collection.v3.distributed_queue import FilesystemJobQueue
 
 
 def test_launcher_builds_exactly_200_fixed_display_workers():
@@ -86,3 +90,23 @@ def test_launch_smoke_rejects_crash_or_missing_timeline(tmp_path):
     path.write_text(json.dumps(payload), encoding="utf-8")
     with pytest.raises(ValueError, match="blocking smoke outcomes"):
         validate_smoke_receipt(path, expected_program_ids=programs)
+
+
+def test_coordinator_resume_loads_pending_and_ready_jobs(tmp_path):
+    import hashlib
+    import json
+
+    manifest_path = Path("artifacts/composition/approved_composition_manifest_v3.json")
+    rows = {row["program_id"]: row for row in json.loads(manifest_path.read_text())["catalog"]}
+    run = RunConfig(
+        run_id="resume-test", run_root=str(tmp_path), code_revision="a" * 40,
+        approved_manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+    )
+    planner = DistributedPlanner.from_manifest(run, rows, {"episodes": [], "failure_attempts": []})
+    queue = FilesystemJobQueue(tmp_path / "queue")
+    first, second = planner.next_job(), planner.next_job()
+    queue.enqueue(first)
+    queue.enqueue(second)
+    assert queue.claim("000") == first
+    loaded = _inflight_jobs_from_queue(queue)
+    assert {job.job_id for job in loaded} == {first.job_id, second.job_id}

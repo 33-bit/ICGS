@@ -72,19 +72,23 @@ class HuggingFaceBatchPublisher:
         merged["total_failure_attempts"] = len(merged["failure_attempts"])
         return merged
 
-    def _batch_manifest(self) -> dict[str, Any]:
+    def _manifest_from_states(self, states: tuple[str, ...]) -> dict[str, Any]:
         episodes: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
-        for path in sorted((self.queue.root / "ingested").iterdir()):
-            if not path.is_dir():
-                continue
-            result = json.loads((path / "result.json").read_text(encoding="utf-8"))
-            result_root = Path(result["result_dir"])
-            for filename, target in (("episode.json", episodes), ("attempt.json", failures)):
-                candidate = result_root / filename
-                if candidate.is_file():
-                    target.append(json.loads(candidate.read_text(encoding="utf-8")))
+        for state in states:
+            for path in sorted((self.queue.root / state).iterdir()):
+                if not path.is_dir():
+                    continue
+                result = json.loads((path / "result.json").read_text(encoding="utf-8"))
+                result_root = Path(result["result_dir"])
+                for filename, target in (("episode.json", episodes), ("attempt.json", failures)):
+                    candidate = result_root / filename
+                    if candidate.is_file():
+                        target.append(json.loads(candidate.read_text(encoding="utf-8")))
         return {"manifest_version": 3, "episodes": episodes, "failure_attempts": failures}
+
+    def _batch_manifest(self) -> dict[str, Any]:
+        return self._manifest_from_states(("ingested",))
 
     def plan_batch(self, local_manifest: Mapping[str, Any], remote_manifest: Mapping[str, Any]) -> dict[str, Any]:
         merged = self._merge_manifest(local_manifest, remote_manifest)
@@ -140,6 +144,7 @@ class HuggingFaceBatchPublisher:
             raise RuntimeError("Hugging Face commit returned no revision")
         if self.remote_verify is not None:
             self.remote_verify(job_ids, oid, self._token)
+        self.remote_manifest = dict(plan["manifest"])
         receipt = PublicationReceipt(oid, job_ids, now_s, len(operations))
         for job_id in job_ids:
             self.queue.mark_published(job_id)

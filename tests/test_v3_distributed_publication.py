@@ -84,6 +84,7 @@ def test_publish_due_only_after_300_seconds_or_force(tmp_path: Path):
     receipt = publisher.publish_due(now_s=400.0, force=False)
     assert receipt is not None
     assert receipt.job_ids == (job.job_id,)
+    assert publisher.remote_manifest["episodes"][0]["episode_id"] == job.episode_id
 
 
 def test_failed_commit_keeps_jobs_unpublished(tmp_path: Path):

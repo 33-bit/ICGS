@@ -16,13 +16,46 @@ from icgs.data.collection.v3.distributed_queue import FilesystemJobQueue
 from icgs.data.collection.v3.distributed_validation import ingest_validated_result, validate_closed_result
 
 
+def _inflight_jobs_from_queue(queue: FilesystemJobQueue):
+    from icgs.data.collection.v3.distributed_contracts import GenerationJob
+
+    paths = list((queue.root / "pending").glob("*.json"))
+    paths.extend(
+        path for path in (queue.root / "claimed").glob("*/*.json")
+        if not path.name.endswith(".claim.json")
+    )
+    paths.extend(
+        path / "job.json" for path in (queue.root / "ready").iterdir()
+        if path.is_dir() and ".partial-" not in path.name
+    )
+    jobs = [GenerationJob.from_dict(json.loads(path.read_text(encoding="utf-8"))) for path in paths]
+    by_id = {job.job_id: job for job in jobs}
+    if len(by_id) != len(jobs):
+        raise ValueError("duplicate in-flight jobs while resuming coordinator")
+    return tuple(by_id[key] for key in sorted(by_id))
+
+
+def _manifest_from_closed_queue(queue: FilesystemJobQueue) -> dict:
+    from icgs.data.collection.v3.distributed_contracts import GenerationJob, WorkerResult
+
+    manifest = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
+    for state in ("ingested", "published"):
+        for directory in sorted((queue.root / state).iterdir()):
+            if not directory.is_dir():
+                continue
+            job = GenerationJob.from_dict(json.loads((directory / "job.json").read_text(encoding="utf-8")))
+            result = WorkerResult.from_dict(json.loads((directory / "result.json").read_text(encoding="utf-8")))
+            manifest = ingest_validated_result(manifest, validate_closed_result(job, result))
+    return manifest
+
+
 class CoordinatorControlPlane:
-    def __init__(self, run: RunConfig, queue: FilesystemJobQueue, planner: DistributedPlanner, publisher: HuggingFaceBatchPublisher):
+    def __init__(self, run: RunConfig, queue: FilesystemJobQueue, planner: DistributedPlanner, publisher: HuggingFaceBatchPublisher, manifest=None):
         self.run = run
         self.queue = queue
         self.planner = planner
         self.publisher = publisher
-        self.manifest = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
+        self.manifest = dict(manifest or {"manifest_version": 3, "episodes": [], "failure_attempts": []})
         self.status = "PREFLIGHT"
 
     @classmethod
@@ -32,11 +65,15 @@ class CoordinatorControlPlane:
         queue = FilesystemJobQueue(run.run_root + "/queue")
         approved = json.loads(Path(payload["approved_manifest"]).read_text(encoding="utf-8"))
         rows = {row["program_id"]: row for row in approved["catalog"]}
-        planner = DistributedPlanner.from_manifest(run, rows, payload.get("manifest", {"episodes": [], "failure_attempts": []}))
+        manifest = _manifest_from_closed_queue(queue)
+        if not manifest["episodes"] and not manifest["failure_attempts"]:
+            manifest = payload.get("manifest", manifest)
+        planner = DistributedPlanner.from_manifest(run, rows, manifest, _inflight_jobs_from_queue(queue))
         api = api_factory()
         token = Path("/content/.icgs_hf_token").read_text(encoding="utf-8").strip()
         publisher = HuggingFaceBatchPublisher(run, api, token, queue)
-        return cls(run, queue, planner, publisher)
+        publisher.remote_manifest = publisher._manifest_from_states(("published",))
+        return cls(run, queue, planner, publisher, manifest)
 
     def _refill(self, target: int = 400) -> None:
         while self.queue.counts().pending + self.queue.counts().claimed < target:
