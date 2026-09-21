@@ -117,6 +117,7 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
     result_class = classify_generation_outcome(
         simulator_crash=row.get("result_class") == "simulator_crash",
         predicates_ok=bool(row.get("success")),
+        observation_valid=row.get("result_class") != "invalid_observation",
     )
     if result_class in {"simulator_crash", "invalid_observation"}:
         from icgs.data.collection.v3.episode_record import assemble_attempt_record
@@ -366,14 +367,21 @@ def run_program(env, spec, plan=None) -> dict:
 
         camera = find_object(VisionSensor, ("wrist_camera", "wrist_camera#0", "cam_wrist"))
         lights = []
-        for name in ("DefaultLight", "defaultLight", "light", "light0", "Light"):
+        for name in ("DefaultLightA", "DefaultLightB", "DefaultLightC", "DefaultLightD"):
             found = find_object(Light, (name,))
             if found is not None and all(found is not item for item in lights):
                 lights.append(found)
+        from pyrep.backend import sim
+        class AmbientTarget:
+            @staticmethod
+            def set_ambient_light(rgb):
+                values = sim.ffi.new("simFloat[]", list(rgb))
+                sim.simSetArrayParameter(sim.sim_arrayparam_ambient_light, values)
+
         sensor_randomization = apply_sensor_randomization(
             camera=camera,
             lights=lights,
-            ambient_target=getattr(env, "_scene", None) or env,
+            ambient_target=AmbientTarget(),
             camera_viewpoint=plan.randomization.get("camera_viewpoint_applied") or {},
             lighting_profile=plan.randomization.get("lighting_applied") or {},
         )
@@ -756,7 +764,7 @@ def run_program(env, spec, plan=None) -> dict:
         for item in timed_obs
     )
     from icgs.data.collection.v3.task_labels import materialize_task_labels
-    task_labels = materialize_task_labels(spec.events, object_states)
+    task_labels = materialize_task_labels(spec.events, object_states, robot_states)
     intervention = None if plan is None or prepared is None else prepared.get("intervention")
     if isinstance(intervention, dict) and intervention.get("intervention_frame") is None:
         intervention = dict(intervention)
@@ -802,6 +810,7 @@ def main() -> int:
     obs_config.set_all_high_dim(False)
     obs_config.set_all_low_dim(False)
     obs_config.wrist_camera.point_cloud = True
+    obs_config.wrist_camera.depth = True
     obs_config.gripper_pose = True
     obs_config.gripper_open = True
     obs_config.joint_positions = True
@@ -844,7 +853,7 @@ def main() -> int:
                     "_plan": None if plan is None else plan.as_dict(),
                 }
             results.append(row)
-            public = {k: v for k, v in row.items() if k != "_timed_obs"}
+            public = {k: v for k, v in row.items() if not k.startswith("_")}
             print(json.dumps(public), flush=True)
             write_dir = Path(os.environ.get("ICGS_V3_WRITE_EPISODE", ""))
             if write_dir:
@@ -864,7 +873,7 @@ def main() -> int:
     print("SUMMARY", json.dumps(summary), flush=True)
     Path("/content/v3_pilot_episode_results.json").write_text(
         json.dumps({"summary": summary, "results": [
-            {k: v for k, v in row.items() if k != "_timed_obs"} for row in results
+            {k: v for k, v in row.items() if not k.startswith("_")} for row in results
         ]}, indent=2) + "\n"
     )
     return 0

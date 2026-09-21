@@ -128,3 +128,37 @@ than silently treated as covered:
 
 No full-generation launch is authorized by this audit alone. The above items
 remain tracked until a fresh bounded simulator/publication receipt closes them.
+
+## CPU simulator validation (2026-09-21)
+
+Session `icgs-v3-cpu-audit-20260921` provisioned the pinned CoppeliaSim 4.1,
+PyRep `8f420be…` and RLBench `02720bba…` stack. Remote contract tests passed
+64/64 before simulator probing. The base-scene probe established the concrete
+runtime API and names: wrist VisionSensor `cam_wrist`, lights
+`DefaultLightA`–`DefaultLightD`, `Light.set_diffuse`, relative
+`VisionSensor.set_orientation`, and ambient light through
+`simSetArrayParameter(sim_arrayparam_ambient_light, CFFI buffer)`.
+
+An apply/read-back/restore probe then PASSed on the live CPU simulator:
+camera receipt recorded `relative_to_parent=true`; all four light diffuse
+values read back as `[0.5, 0.5, 0.5]`; ambient read back as approximately
+`[0.35, 0.35, 0.35]`. The runtime adapter and both generator paths were
+corrected to those measured APIs. This closes the base-scene sensor API gap;
+a generated-task episode smoke remains required to prove the same receipt is
+preserved in a closed episode artifact.
+
+The follow-up generated-task smoke built and ran one planned nominal `T02`
+attempt on the same CPU session. It PASSed predicate success with 165 actions,
+166 measured observations and a closed episode containing the sensor application
+receipt. `rho`, `nu`, `epsilon` and all three validity masks had shape `[166,2]`;
+each validity mask contained 332 valid values. All six task arrays, the training
+layout manifest and root artifact manifest were present. Downloaded receipt
+SHA256: `1ff5e7c6cafdf1ea50d6695d5725883ea0b558082f45ede071834280ec793607`;
+sensor API/read-back receipt SHA256:
+`4a5475619a930196cef76275b1328ae56a020b25af12f0481516f12ab4b6749d`.
+
+This smoke also caught and repaired two integration defects before scale: wrist
+depth was not enabled even though point-cloud capture depended on it, and the
+pilot writer omitted `observation_valid` when classifying results, which could
+have relabeled `invalid_observation` as `valid_failure`. The runner now enables
+wrist depth and passes the explicit observation-valid classification.

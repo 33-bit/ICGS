@@ -83,12 +83,25 @@ class ExpertPlanningTests(unittest.TestCase):
         self.assertIn('T_w_e=np.asarray([item["T_w_e"] for item in timed]', text)
         self.assertNotIn('dtype=object', text)
 
+    def test_pilot_public_receipt_excludes_all_numeric_private_fields(self):
+        from pathlib import Path
+
+        text = Path("scripts/colab_v3_pilot_episodes_worker.py").read_text(encoding="utf-8")
+        self.assertIn('if not k.startswith("_")', text)
+
     def test_pilot_uses_measured_wrist_points_not_tip_repetition(self):
         from pathlib import Path
 
         text = Path("scripts/colab_v3_pilot_episodes_worker.py").read_text(encoding="utf-8")
         self.assertIn("wrist_point_cloud", text)
         self.assertNotIn("np.repeat(pos.reshape(1, 3), 8", text)
+        self.assertIn("obs_config.wrist_camera.depth = True", text)
+
+    def test_pilot_does_not_relabel_invalid_observation_as_valid_failure(self):
+        from pathlib import Path
+
+        text = Path("scripts/colab_v3_pilot_episodes_worker.py").read_text(encoding="utf-8")
+        self.assertIn('observation_valid=row.get("result_class") != "invalid_observation"', text)
 
     def test_distributed_worker_propagates_approved_binding(self):
         from pathlib import Path

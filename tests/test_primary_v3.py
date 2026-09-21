@@ -281,15 +281,17 @@ class CameraAndSchemaTests(unittest.TestCase):
         class Camera:
             def __init__(self):
                 self.orientation = [0.0, 0.0, 0.0]
-            def get_orientation(self):
+            def get_parent(self):
+                return "wrist"
+            def get_orientation(self, relative_to=None):
                 return list(self.orientation)
-            def set_orientation(self, value):
+            def set_orientation(self, value, relative_to=None):
                 self.orientation = list(value)
         class Light:
             def __init__(self):
                 self.intensity = None
                 self.orientation = None
-            def set_intensity(self, value):
+            def set_diffuse(self, value):
                 self.intensity = value
             def set_orientation(self, value):
                 self.orientation = list(value)
@@ -308,7 +310,7 @@ class CameraAndSchemaTests(unittest.TestCase):
         self.assertTrue(receipt["applied"])
         self.assertAlmostEqual(camera.orientation[0], -0.034906585, places=6)
         self.assertAlmostEqual(camera.orientation[1], 0.087266462, places=6)
-        self.assertEqual(light.intensity, 0.8)
+        self.assertEqual(light.intensity, [0.8, 0.8, 0.8])
         self.assertEqual(ambient.value, 0.5)
 
     def test_sensor_randomization_rejects_missing_runtime_objects(self):
@@ -321,6 +323,7 @@ class CameraAndSchemaTests(unittest.TestCase):
             )
 
     def test_task_labels_use_measured_states_and_explicit_masks(self):
+        import numpy as np
         steps = [{
             "object_role": "object_a", "target_role": "target_a",
             "postcondition": "object_a_placed", "precondition": None,
@@ -335,13 +338,42 @@ class CameraAndSchemaTests(unittest.TestCase):
                 {"name": "target_a", "position": [0.2, 0.0, 0.0]},
             ]},
         ]
-        labels = materialize_task_labels(steps, states)
+        robots = [
+            {"T_w_e": np.eye(4), "grip": 1},
+            {"T_w_e": np.eye(4), "grip": 1},
+        ]
+        labels = materialize_task_labels(steps, states, robots)
         self.assertEqual(labels["nu"].shape, (2, 1))
         self.assertTrue(labels["nu_valid"][0, 0])
         self.assertFalse(labels["nu"][0, 0])
         self.assertTrue(labels["nu_valid"][1, 0])
         self.assertTrue(labels["rho"][1, 0])
         self.assertTrue(labels["epsilon_valid"].all())
+
+    def test_task_labels_measure_grasp_history_and_eligibility(self):
+        import numpy as np
+        steps = [
+            {"object_role": "object_a", "postcondition": "object_a_grasped", "precondition": "object_a_free"},
+            {"object_role": "object_a", "target_role": "target_a", "postcondition": "object_a_placed", "precondition": "object_a_grasped"},
+        ]
+        states = []
+        robots = []
+        for object_x, ee_x, grip in ((0.0, 0.4, 1), (0.0, 0.02, 0), (0.2, 0.2, 1)):
+            states.append({"objects": [
+                {"name": "object_a", "position": [object_x, 0.0, 0.0]},
+                {"name": "target_a", "position": [0.2, 0.0, 0.0]},
+            ]})
+            transform = np.eye(4)
+            transform[0, 3] = ee_x
+            robots.append({"T_w_e": transform, "grip": grip})
+        labels = materialize_task_labels(steps, states, robots)
+        self.assertTrue(labels["epsilon_valid"][0, 0])
+        self.assertTrue(labels["epsilon"][0, 0])
+        self.assertTrue(labels["rho"][1, 0])
+        self.assertTrue(labels["epsilon_valid"][1, 1])
+        self.assertTrue(labels["epsilon"][1, 1])
+        self.assertTrue(labels["rho"][2, 0])
+        self.assertFalse(labels["nu"][2, 0])
 
     def test_held_out_provenance_is_materialized_for_eval_perturbation(self):
         bounds = {

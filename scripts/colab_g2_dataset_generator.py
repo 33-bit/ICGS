@@ -361,15 +361,22 @@ def _collect_single_episode_legacy(
 
         camera = find_runtime_object(VisionSensor, ("wrist_camera", "wrist_camera#0", "cam_wrist"))
         lights = []
-        for name in ("DefaultLight", "defaultLight", "light", "light0", "Light"):
+        for name in ("DefaultLightA", "DefaultLightB", "DefaultLightC", "DefaultLightD"):
             light = find_runtime_object(Light, (name,))
             if light is not None and all(light is not item for item in lights):
                 lights.append(light)
         plan_randomization = prepared["plan"].randomization
+        from pyrep.backend import sim
+        class AmbientTarget:
+            @staticmethod
+            def set_ambient_light(rgb):
+                values = sim.ffi.new("simFloat[]", list(rgb))
+                sim.simSetArrayParameter(sim.sim_arrayparam_ambient_light, values)
+
         sensor_randomization = apply_sensor_randomization(
             camera=camera,
             lights=lights,
-            ambient_target=getattr(env, "_scene", None) or env,
+            ambient_target=AmbientTarget(),
             camera_viewpoint=plan_randomization.get("camera_viewpoint_applied") or {},
             lighting_profile=plan_randomization.get("lighting_applied") or {},
         )
@@ -821,7 +828,13 @@ def _collect_single_episode_legacy(
     from icgs.data.collection.v3.task_labels import materialize_task_labels
     structured_steps = approved_binding.get("structured_steps") or approved_binding.get("events") or ()
     if structured_steps:
-        auxiliary["task_labels"] = materialize_task_labels(structured_steps, scene_state_by_boundary)
+        robot_label_states = [
+            {"T_w_e": item["T_w_e"], "grip": item["grip"]}
+            for item in online_observations
+        ]
+        auxiliary["task_labels"] = materialize_task_labels(
+            structured_steps, scene_state_by_boundary, robot_label_states
+        )
     auxiliary["sensor_randomization"] = sensor_randomization
 
     return record, auxiliary

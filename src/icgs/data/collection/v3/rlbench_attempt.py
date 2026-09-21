@@ -198,7 +198,10 @@ def materialize_raw_attempt(
     if len(object_states) != len(observations):
         object_states = [{} for _ in observations]
     structured_steps = binding.get("structured_steps") or binding.get("events") or ()
-    task_labels = materialize_task_labels(structured_steps, object_states) if structured_steps else {}
+    task_labels = (
+        materialize_task_labels(structured_steps, object_states, robot_states)
+        if structured_steps else {}
+    )
     episode = assemble_episode_v2(
         plan=job.plan,
         binding=binding,

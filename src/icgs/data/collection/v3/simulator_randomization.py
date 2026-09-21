@@ -29,17 +29,29 @@ def apply_camera_viewpoint(camera: Any, viewpoint: Mapping[str, Any]) -> dict[st
     getter = getattr(camera, "get_orientation", None)
     if not callable(getter):
         raise SimulatorRandomizationError("camera has no get_orientation()")
-    orientation = list(getter())
+    parent_getter = getattr(camera, "get_parent", None)
+    parent = parent_getter() if callable(parent_getter) else None
+    try:
+        orientation = list(getter(relative_to=parent))
+    except TypeError:
+        orientation = list(getter())
     if len(orientation) != 3:
         raise SimulatorRandomizationError("camera orientation must be XYZ Euler [3]")
     orientation[0] += pitch
     orientation[1] += yaw
-    method = _call_first(camera, ("set_orientation",), orientation)
+    setter = getattr(camera, "set_orientation", None)
+    if not callable(setter):
+        raise SimulatorRandomizationError("camera has no set_orientation()")
+    try:
+        setter(orientation, relative_to=parent)
+    except TypeError:
+        setter(orientation)
     return {
         "applied": True,
         "d_yaw_deg": float(viewpoint.get("d_yaw_deg", 0.0)),
         "d_pitch_deg": float(viewpoint.get("d_pitch_deg", 0.0)),
-        "setter": method,
+        "setter": "set_orientation",
+        "relative_to_parent": parent is not None,
     }
 
 
@@ -67,7 +79,7 @@ def apply_lighting_profile(
     if ambient_setter is None:
         raise SimulatorRandomizationError("runtime has no ambient-light setter")
     for light in lights:
-        intensity_setter = _call_first(light, ("set_intensity",), directional)
+        intensity_setter = _call_first(light, ("set_diffuse",), [directional] * 3)
         orientation = [elevation, 0.0, azimuth]
         orientation_setter = _call_first(light, ("set_orientation",), orientation)
         setters.append({"intensity": intensity_setter, "orientation": orientation_setter})
