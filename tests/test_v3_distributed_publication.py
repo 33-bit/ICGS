@@ -87,6 +87,13 @@ def test_publish_due_only_after_300_seconds_or_force(tmp_path: Path):
     assert publisher.remote_manifest["episodes"][0]["episode_id"] == job.episode_id
 
 
+def test_pending_job_limit_must_be_positive(tmp_path: Path):
+    queue, _job_value = _queue(tmp_path)
+    publisher = HuggingFaceBatchPublisher(_run(), FakeApi(), "secret", queue)
+    with pytest.raises(ValueError, match="limit must be positive"):
+        publisher.pending_job_ids(limit=0)
+
+
 def test_failed_commit_keeps_jobs_unpublished(tmp_path: Path):
     queue, job = _queue(tmp_path)
     publisher = HuggingFaceBatchPublisher(_run(), FakeApi(fail_create_commit=True), "secret", queue, last_success_s=0.0)

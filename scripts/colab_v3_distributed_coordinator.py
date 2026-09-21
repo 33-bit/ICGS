@@ -16,6 +16,9 @@ from icgs.data.collection.v3.distributed_queue import FilesystemJobQueue
 from icgs.data.collection.v3.distributed_validation import ingest_validated_result, validate_closed_result
 
 
+MAX_READY_PER_TICK = 200
+
+
 def _inflight_jobs_from_queue(queue: FilesystemJobQueue):
     from icgs.data.collection.v3.distributed_contracts import GenerationJob
 
@@ -85,7 +88,7 @@ class CoordinatorControlPlane:
     def tick(self, *, now_s: float | None = None) -> None:
         now = time.time() if now_s is None else now_s
         self.queue.recover_stale(now_s=now, stale_after_s=1800.0)
-        for result in self.queue.iter_ready():
+        for result in self.queue.iter_ready()[:MAX_READY_PER_TICK]:
             job_path = self.queue.root / "ready" / result.job_id / "job.json"
             from icgs.data.collection.v3.distributed_contracts import GenerationJob
             job = GenerationJob.from_dict(json.loads(job_path.read_text(encoding="utf-8")))

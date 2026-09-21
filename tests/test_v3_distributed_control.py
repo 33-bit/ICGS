@@ -44,6 +44,12 @@ def test_launcher_exports_pinned_simulator_environment_to_workers():
     assert "PYTHONPATH" in text
 
 
+def test_coordinator_bounds_ingestion_per_tick():
+    text = Path("scripts/colab_v3_distributed_coordinator.py").read_text(encoding="utf-8")
+    assert "MAX_READY_PER_TICK = 200" in text
+    assert "self.queue.iter_ready()[:MAX_READY_PER_TICK]" in text
+
+
 def test_launcher_requires_real_code_revision_for_run_contract():
     text = Path("scripts/colab_v3_distributed_launch.py").read_text(encoding="utf-8")
     assert '"--code-revision"' in text

@@ -29,6 +29,7 @@ def _same_identity(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
 
 
 class HuggingFaceBatchPublisher:
+    MAX_JOBS_PER_COMMIT = 200
     def __init__(
         self,
         run: RunConfig,
@@ -51,8 +52,26 @@ class HuggingFaceBatchPublisher:
         self.remote_verify = remote_verify
         self.receipts: list[PublicationReceipt] = []
 
-    def pending_job_ids(self) -> tuple[str, ...]:
-        return tuple(sorted(path.name for path in (self.queue.root / "ingested").iterdir() if path.is_dir()))
+    def pending_job_ids(self, *, limit: int | None = None) -> tuple[str, ...]:
+        if limit is not None and limit <= 0:
+            raise ValueError("limit must be positive")
+        values = tuple(sorted(path.name for path in (self.queue.root / "ingested").iterdir() if path.is_dir()))
+        return values if limit is None else values[:limit]
+
+    def _select_manifest(self, manifest: Mapping[str, Any], job_ids: tuple[str, ...]) -> dict[str, Any]:
+        episode_ids: set[str] = set()
+        attempt_ids: set[str] = set()
+        for job_id in job_ids:
+            result = json.loads((self.queue.root / "ingested" / job_id / "result.json").read_text(encoding="utf-8"))
+            if result.get("episode_id"):
+                episode_ids.add(str(result["episode_id"]))
+            else:
+                attempt_ids.add(str(result["attempt_id"]))
+        return {
+            "manifest_version": manifest.get("manifest_version", 3),
+            "episodes": [row for row in manifest.get("episodes", ()) if str(row.get("episode_id")) in episode_ids],
+            "failure_attempts": [row for row in manifest.get("failure_attempts", ()) if str(row.get("attempt_id")) in attempt_ids],
+        }
 
     def _merge_manifest(self, local: Mapping[str, Any], remote: Mapping[str, Any]) -> dict[str, Any]:
         merged = dict(remote)
@@ -126,11 +145,12 @@ class HuggingFaceBatchPublisher:
     ) -> PublicationReceipt | None:
         if not force and not complete and now_s - self.last_success_s < self.run.publish_interval_s:
             return None
-        job_ids = self.pending_job_ids()
+        job_ids = self.pending_job_ids(limit=self.MAX_JOBS_PER_COMMIT)
         if not job_ids:
             return None
         remote = self.remote_manifest if remote_manifest is None else dict(remote_manifest)
-        local = self._batch_manifest() if local_manifest is None else dict(local_manifest)
+        source_manifest = self._batch_manifest() if local_manifest is None else local_manifest
+        local = self._select_manifest(source_manifest, job_ids)
         plan = self.plan_batch(local, remote)
         operations = self._operations(job_ids, plan["manifest"])
         commit = self.api.create_commit(
