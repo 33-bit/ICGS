@@ -67,6 +67,7 @@ class ExpertPlanningTests(unittest.TestCase):
         text = Path("scripts/colab_v3_pilot_episodes_worker.py").read_text(encoding="utf-8")
         self.assertIn("write_training_episode_layout", text)
         self.assertIn('write_dir / "layout"', text)
+        self.assertIn('"attempt_id": f"att-{plan.episode_id}"', text)
 
     def test_pilot_persists_only_outcome_not_result_class(self):
         from pathlib import Path

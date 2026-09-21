@@ -280,6 +280,7 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
             "bytes": path.stat().st_size,
         }
     (write_dir / "artifact_manifest.json").write_text(json.dumps({
+        "attempt_id": f"att-{plan.episode_id}",
         "episode_id": plan.episode_id,
         "program_id": row["program_id"],
         "outcome": result_class,
