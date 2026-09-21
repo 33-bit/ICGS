@@ -85,6 +85,17 @@ Bounded CPU verification: T03 returned `success`, `n_actions=137`,
 The full v6e1 36-program gate has not yet been rerun; the scale gate therefore
 remains blocked pending that fresh receipt.
 
+## 2026-09-21 fresh v6e1 rerun
+
+Session `icgs-primary-v3-full` was recreated as TPU `V6E1` from committed
+revision `1ff4985`. Parity passed and all 36 procedural task models built. The
+fresh one-attempt-per-program smoke completed with 32 `success`, 4
+`valid_failure` (`T01`, `T06`, `V02`, `R3`), 0 simulator crashes, and valid
+`T+1` timelines for all 36 programs. T03 now passes at `0.00224 m` from its
+push target. Because the mandatory gate requires 36 PASS and zero failures or
+skips, zero workers, coordinator, watchdog, or HF publication processes were
+started. The TPU session remains allocated for bounded diagnosis.
+
 ## Required publication contents
 
 Each verified commit must include closed `success` and `valid_failure` episode
