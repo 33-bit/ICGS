@@ -94,6 +94,8 @@ report = run_collection(
     code_revision=actual_code_revision,
     is_dirty=actual_is_dirty,
     generator_version=generator_version,
+    binding_manifest_path="/absolute/path/to/g2/program_bindings.json",
+    required_program_ids=("T06", "T08", "T09", "T11", "T13", "T14"),
     dirty_patch_digest=actual_dirty_patch_sha256,
     online_provider=online_provider,
 )
@@ -114,6 +116,12 @@ not prove that an external factory honored it.
 `metadata` mapping. These identifiers are caller-supplied provenance, not measured
 G1/G2 certifications. Dirty source requires a SHA256 `dirty_patch_digest`; use
 `None` for a clean source tree. Do not substitute a literal `HEAD` for code identity.
+
+`binding_manifest_path` validates scene/asset/version, workspace and randomization
+ranges, seed IDs, expert/waypoint/controller/predicate protocols, calibration and
+split/lineage closure before an environment is constructed. `required_program_ids`
+limits preflight to the bounded pilot or full train set; missing or incomplete
+bindings fail closed.
 
 The environment must implement the P01 timed reset/advance/close capability.
 `online_provider` receives the initial `TimedObservation`, then each

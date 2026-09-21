@@ -1,0 +1,4626 @@
+{
+  "T01": {
+    "class_name": "T01GraspAndLift",
+    "module": "t01_grasp_and_lift",
+    "description": "grasp object A and lift it",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.25,
+          0.0,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.0,
+          0.88
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.0,
+        0.9
+      ],
+      [
+        0.25,
+        0.0,
+        0.79
+      ],
+      [
+        0.25,
+        0.0,
+        0.88
+      ]
+    ]
+  },
+  "T02": {
+    "class_name": "T02GraspAndPlace",
+    "module": "t02_grasp_and_place",
+    "description": "grasp object A and place it on a pad",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.25,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "pad": {
+        "pos": [
+          0.25,
+          0.15,
+          0.755
+        ],
+        "size": [
+          0.15,
+          0.15,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.15,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        -0.1,
+        0.9
+      ],
+      [
+        0.25,
+        -0.1,
+        0.79
+      ],
+      [
+        0.25,
+        0.15,
+        0.9
+      ],
+      [
+        0.25,
+        0.15,
+        0.8
+      ]
+    ]
+  },
+  "T03": {
+    "class_name": "T03PushBlockerReach",
+    "module": "t03_push_blocker_reach",
+    "description": "push blocker away and reach the target",
+    "objects": {
+      "blocker": {
+        "pos": [
+          0.25,
+          -0.05,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "push_target": {
+        "pos": [
+          0.25,
+          0.08,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          -0.05,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "blocker",
+        "push_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        -0.05,
+        0.9
+      ],
+      [
+        0.25,
+        -0.05,
+        0.8
+      ],
+      [
+        0.25,
+        0.08,
+        0.8
+      ]
+    ],
+    "push": {
+      "obj": "blocker",
+      "target": "push_target"
+    }
+  },
+  "T04": {
+    "class_name": "T04OpenAndCloseDrawer",
+    "module": "t04_open_and_close_drawer",
+    "description": "open drawer then close it",
+    "objects": {
+      "drawer": {
+        "pos": [
+          0.25,
+          0.16,
+          0.755
+        ],
+        "size": [
+          0.25,
+          0.22,
+          0.04
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          0.04,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.25,
+          -0.06,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.04,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "drawer_handle",
+        "close_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.04,
+        0.9
+      ],
+      [
+        0.25,
+        0.04,
+        0.79
+      ],
+      [
+        0.25,
+        -0.06,
+        0.79
+      ],
+      [
+        0.25,
+        0.04,
+        0.79
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "y"
+    }
+  },
+  "T05": {
+    "class_name": "T05OpenDrawerRetrieve",
+    "module": "t05_open_drawer_retrieve",
+    "description": "open drawer and retrieve object A",
+    "objects": {
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          0.04,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.25,
+          -0.06,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.25,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          -0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.04,
+        0.9
+      ],
+      [
+        0.25,
+        0.04,
+        0.79
+      ],
+      [
+        0.25,
+        -0.06,
+        0.79
+      ],
+      [
+        0.25,
+        0.16,
+        0.9
+      ],
+      [
+        0.25,
+        0.16,
+        0.79
+      ],
+      [
+        0.25,
+        -0.14,
+        0.8
+      ]
+    ]
+  },
+  "T06": {
+    "class_name": "T06PlaceIntoDrawer",
+    "module": "t06_place_into_drawer",
+    "description": "place object A into a drawer target",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.25,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "drawer": {
+        "pos": [
+          0.25,
+          0.16,
+          0.755
+        ],
+        "size": [
+          0.25,
+          0.22,
+          0.04
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.12,
+          0.1,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          -0.06,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.04,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "drawer_handle",
+        "close_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        -0.1,
+        0.9
+      ],
+      [
+        0.25,
+        -0.1,
+        0.79
+      ],
+      [
+        0.25,
+        0.16,
+        0.9
+      ],
+      [
+        0.25,
+        0.16,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": null,
+      "close_target": "close_target",
+      "axis": "y"
+    }
+  },
+  "T07": {
+    "class_name": "T07PlaceTwoInTray",
+    "module": "t07_place_two_in_tray",
+    "description": "place object A and object B into tray",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.22,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "object_b": {
+        "pos": [
+          0.34,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.035,
+          0.05
+        ],
+        "color": [
+          0.15,
+          0.35,
+          0.85
+        ]
+      },
+      "tray": {
+        "pos": [
+          0.28,
+          0.16,
+          0.755
+        ],
+        "size": [
+          0.28,
+          0.18,
+          0.04
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.22,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "target_b": {
+        "pos": [
+          0.34,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "object_b",
+        "target_b",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.22,
+        -0.1,
+        0.9
+      ],
+      [
+        0.22,
+        -0.1,
+        0.79
+      ],
+      [
+        0.22,
+        0.16,
+        0.8
+      ],
+      [
+        0.34,
+        -0.1,
+        0.9
+      ],
+      [
+        0.34,
+        -0.1,
+        0.79
+      ],
+      [
+        0.34,
+        0.16,
+        0.8
+      ]
+    ]
+  },
+  "T08": {
+    "class_name": "T08PackTwoObjects",
+    "module": "t08_pack_two_objects",
+    "description": "place B then A into distinct tray slots",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.22,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "object_b": {
+        "pos": [
+          0.34,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.035,
+          0.05
+        ],
+        "color": [
+          0.15,
+          0.35,
+          0.85
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.22,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "target_b": {
+        "pos": [
+          0.34,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "drawer": {
+        "pos": [
+          0.28,
+          0.16,
+          0.755
+        ],
+        "size": [
+          0.28,
+          0.18,
+          0.04
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "drawer_handle": {
+        "pos": [
+          0.28,
+          -0.06,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.28,
+          0.04,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "object_b",
+        "target_b",
+        0.01
+      ],
+      [
+        "drawer_handle",
+        "close_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.34,
+        -0.1,
+        0.9
+      ],
+      [
+        0.34,
+        -0.1,
+        0.79
+      ],
+      [
+        0.34,
+        0.16,
+        0.8
+      ],
+      [
+        0.22,
+        -0.1,
+        0.9
+      ],
+      [
+        0.22,
+        -0.1,
+        0.79
+      ],
+      [
+        0.22,
+        0.16,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": null,
+      "close_target": "close_target",
+      "axis": "y"
+    }
+  },
+  "T09": {
+    "class_name": "T09PlaceIntoHolder",
+    "module": "t09_place_into_holder",
+    "description": "grasp A and place it into a cylindrical holder",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.25,
+          -0.06,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.06
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "holder": {
+        "pos": [
+          0.25,
+          0.16,
+          0.755
+        ],
+        "size": [
+          0.13,
+          0.13,
+          0.04
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        -0.06,
+        0.9
+      ],
+      [
+        0.25,
+        -0.06,
+        0.8
+      ],
+      [
+        0.25,
+        0.16,
+        0.9
+      ],
+      [
+        0.25,
+        0.16,
+        0.81
+      ]
+    ]
+  },
+  "T10": {
+    "class_name": "T10PushAperturePlace",
+    "module": "t10_push_aperture_place",
+    "description": "push object A through aperture and place at target",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.25,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "aperture_wp": {
+        "pos": [
+          0.25,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.02
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        -0.12,
+        0.9
+      ],
+      [
+        0.25,
+        -0.12,
+        0.79
+      ],
+      [
+        0.25,
+        0.02,
+        0.8
+      ],
+      [
+        0.25,
+        0.16,
+        0.8
+      ]
+    ]
+  },
+  "T11": {
+    "class_name": "T11RotateAndPlace",
+    "module": "t11_rotate_and_place",
+    "description": "grasp A, rotate it, and place it on an oriented pad",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.22,
+          -0.06,
+          0.775
+        ],
+        "size": [
+          0.035,
+          0.075,
+          0.035
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "pad": {
+        "pos": [
+          0.22,
+          0.16,
+          0.755
+        ],
+        "size": [
+          0.15,
+          0.15,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.22,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.22,
+        -0.06,
+        0.9
+      ],
+      [
+        0.22,
+        -0.06,
+        0.79
+      ],
+      [
+        0.22,
+        0.16,
+        0.9
+      ],
+      [
+        0.22,
+        0.16,
+        0.8
+      ]
+    ]
+  },
+  "T12": {
+    "class_name": "T12OpenGatePushClose",
+    "module": "t12_open_gate_push_close",
+    "description": "open gate, push object through gate, and close gate",
+    "objects": {
+      "gate_handle": {
+        "pos": [
+          0.25,
+          0.0,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.36,
+          0.0,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.0,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.25,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "gate_wp": {
+        "pos": [
+          0.25,
+          0.05,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.02
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.0,
+        0.9
+      ],
+      [
+        0.36,
+        0.0,
+        0.8
+      ],
+      [
+        0.25,
+        -0.1,
+        0.9
+      ],
+      [
+        0.25,
+        0.16,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "gate_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "x"
+    }
+  },
+  "T13": {
+    "class_name": "T13ParkBlockerRetrieve",
+    "module": "t13_park_blocker_retrieve",
+    "description": "park blocker before retrieving object A",
+    "objects": {
+      "blocker": {
+        "pos": [
+          0.25,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.06
+        ],
+        "color": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.25,
+          0.18,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "park_target": {
+        "pos": [
+          0.35,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.1,
+          0.1,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.28,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "blocker",
+        "park_target",
+        0.01
+      ],
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.02,
+        0.9
+      ],
+      [
+        0.35,
+        0.02,
+        0.8
+      ],
+      [
+        0.25,
+        0.18,
+        0.9
+      ],
+      [
+        0.25,
+        0.28,
+        0.8
+      ]
+    ]
+  },
+  "T14": {
+    "class_name": "T14ParkAndRestore",
+    "module": "t14_park_and_restore",
+    "description": "park blocker and restore it after a retrieval motion",
+    "objects": {
+      "blocker": {
+        "pos": [
+          0.26,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.06
+        ],
+        "color": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.26,
+          0.18,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "park_target": {
+        "pos": [
+          0.35,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.1,
+          0.1,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "restore_target": {
+        "pos": [
+          0.26,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "blocker",
+        "restore_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.26,
+        0.02,
+        0.9
+      ],
+      [
+        0.35,
+        0.02,
+        0.8
+      ],
+      [
+        0.26,
+        0.02,
+        0.8
+      ]
+    ]
+  },
+  "T15": {
+    "class_name": "T15ParkTwoRetrieve",
+    "module": "t15_park_two_retrieve",
+    "description": "park object A and object B then retrieve object C",
+    "objects": {
+      "blocker_a": {
+        "pos": [
+          0.2,
+          0.0,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "color": [
+          0.8,
+          0.4,
+          0.1
+        ]
+      },
+      "blocker_b": {
+        "pos": [
+          0.32,
+          0.0,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "color": [
+          0.1,
+          0.4,
+          0.8
+        ]
+      },
+      "object_c": {
+        "pos": [
+          0.26,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "park_target_a": {
+        "pos": [
+          0.2,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "park_target_b": {
+        "pos": [
+          0.35,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_c": {
+        "pos": [
+          0.26,
+          0.0,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "blocker_a",
+        "park_target_a",
+        0.01
+      ],
+      [
+        "blocker_b",
+        "park_target_b",
+        0.01
+      ],
+      [
+        "object_c",
+        "target_c",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.2,
+        0.0,
+        0.9
+      ],
+      [
+        0.2,
+        -0.16,
+        0.8
+      ],
+      [
+        0.32,
+        0.0,
+        0.9
+      ],
+      [
+        0.35,
+        -0.16,
+        0.8
+      ],
+      [
+        0.26,
+        0.16,
+        0.9
+      ],
+      [
+        0.26,
+        0.0,
+        0.8
+      ]
+    ]
+  },
+  "T16": {
+    "class_name": "T16OpenDrawerParkRetrieve",
+    "module": "t16_open_drawer_park_retrieve",
+    "description": "open drawer, park blocker, and retrieve object A",
+    "objects": {
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.25,
+          -0.1,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "blocker": {
+        "pos": [
+          0.22,
+          0.08,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "color": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "park_target": {
+        "pos": [
+          0.35,
+          0.08,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.28,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.28,
+          -0.05,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "blocker",
+        "park_target",
+        0.01
+      ],
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.02,
+        0.9
+      ],
+      [
+        0.25,
+        -0.1,
+        0.8
+      ],
+      [
+        0.22,
+        0.08,
+        0.9
+      ],
+      [
+        0.35,
+        0.08,
+        0.8
+      ],
+      [
+        0.28,
+        0.16,
+        0.9
+      ],
+      [
+        0.28,
+        -0.05,
+        0.8
+      ]
+    ]
+  },
+  "T17": {
+    "class_name": "T17RegraspObject",
+    "module": "t17_regrasp_object",
+    "description": "grasp object A, temporarily place it, and regrasp to target",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.25,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "temp_target": {
+        "pos": [
+          0.25,
+          0.04,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.08,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.18,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        -0.1,
+        0.9
+      ],
+      [
+        0.25,
+        0.04,
+        0.8
+      ],
+      [
+        0.25,
+        0.04,
+        0.9
+      ],
+      [
+        0.25,
+        0.18,
+        0.8
+      ]
+    ]
+  },
+  "T18": {
+    "class_name": "T18RetrievePlaceRetrieve",
+    "module": "t18_retrieve_place_retrieve",
+    "description": "retrieve object A, place it, then retrieve object B",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.28,
+          0.0,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.2,
+          -0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_b": {
+        "pos": [
+          0.28,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.15,
+          0.35,
+          0.85
+        ]
+      },
+      "target_b": {
+        "pos": [
+          0.36,
+          -0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "object_b",
+        "target_b",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.22,
+        0.12,
+        0.9
+      ],
+      [
+        0.22,
+        -0.1,
+        0.8
+      ],
+      [
+        0.34,
+        0.12,
+        0.9
+      ],
+      [
+        0.34,
+        -0.1,
+        0.8
+      ]
+    ],
+    "future_dependency": {
+      "blocker_role": "object_a",
+      "blocked_role": "object_b",
+      "enabling_step_id": "s2",
+      "dependent_step_id": "s3",
+      "reason": "object_a occupies the shared retrieval corridor in front of object_b"
+    }
+  },
+  "T19": {
+    "class_name": "T19PlaceSpacerPack",
+    "module": "t19_place_spacer_pack",
+    "description": "place spacer then place object A into drawer",
+    "objects": {
+      "spacer": {
+        "pos": [
+          0.2,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.6,
+          0.4,
+          0.2
+        ]
+      },
+      "target_spacer": {
+        "pos": [
+          0.2,
+          0.15,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.32,
+          -0.1,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.32,
+          0.15,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "drawer": {
+        "pos": [
+          0.26,
+          0.15,
+          0.755
+        ],
+        "size": [
+          0.28,
+          0.18,
+          0.04
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "drawer_handle": {
+        "pos": [
+          0.26,
+          -0.06,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.26,
+          0.04,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "spacer",
+        "target_spacer",
+        0.01
+      ],
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "drawer_handle",
+        "close_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.2,
+        -0.1,
+        0.9
+      ],
+      [
+        0.2,
+        0.15,
+        0.8
+      ],
+      [
+        0.32,
+        -0.1,
+        0.9
+      ],
+      [
+        0.32,
+        0.15,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": null,
+      "close_target": "close_target",
+      "axis": "y"
+    }
+  },
+  "T20": {
+    "class_name": "T20ParkRetrievePlace",
+    "module": "t20_park_retrieve_place",
+    "description": "park blocker, retrieve object A, and place it on pad",
+    "objects": {
+      "blocker": {
+        "pos": [
+          0.25,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "color": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "park_target": {
+        "pos": [
+          0.35,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.08,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.25,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "blocker",
+        "park_target",
+        0.01
+      ],
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.02,
+        0.9
+      ],
+      [
+        0.35,
+        0.02,
+        0.8
+      ],
+      [
+        0.25,
+        0.16,
+        0.9
+      ],
+      [
+        0.25,
+        -0.12,
+        0.8
+      ]
+    ]
+  },
+  "V01": {
+    "class_name": "V01OpenPlaceClose",
+    "module": "v01_open_place_close",
+    "description": "open drawer, place object A, and close drawer",
+    "objects": {
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.25,
+          -0.08,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.25,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.02,
+        0.9
+      ],
+      [
+        0.25,
+        -0.08,
+        0.8
+      ],
+      [
+        0.25,
+        -0.16,
+        0.9
+      ],
+      [
+        0.25,
+        0.14,
+        0.8
+      ],
+      [
+        0.25,
+        0.02,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "y"
+    }
+  },
+  "V02": {
+    "class_name": "V02GraspRotatePlaceHolder",
+    "module": "v02_grasp_rotate_place_holder",
+    "description": "grasp object, rotate in flight, and place into holder",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.22,
+          -0.06,
+          0.775
+        ],
+        "size": [
+          0.035,
+          0.075,
+          0.035
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "holder": {
+        "pos": [
+          0.22,
+          0.16,
+          0.755
+        ],
+        "size": [
+          0.13,
+          0.13,
+          0.04
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.22,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.22,
+        -0.06,
+        0.9
+      ],
+      [
+        0.22,
+        0.16,
+        0.8
+      ]
+    ]
+  },
+  "V03": {
+    "class_name": "V03ParkRetrievePlaceRestore",
+    "module": "v03_park_retrieve_place_restore",
+    "description": "park blocker, retrieve object, place on pad, and restore blocker",
+    "objects": {
+      "blocker": {
+        "pos": [
+          0.26,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "color": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "park_target": {
+        "pos": [
+          0.35,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.08,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.26,
+          0.18,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.26,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "restore_target": {
+        "pos": [
+          0.26,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "blocker",
+        "restore_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.26,
+        0.02,
+        0.9
+      ],
+      [
+        0.35,
+        0.02,
+        0.8
+      ],
+      [
+        0.26,
+        0.18,
+        0.9
+      ],
+      [
+        0.26,
+        -0.12,
+        0.8
+      ],
+      [
+        0.26,
+        0.02,
+        0.8
+      ]
+    ]
+  },
+  "V04": {
+    "class_name": "V04OpenGateRetrieveClose",
+    "module": "v04_open_gate_retrieve_close",
+    "description": "open gate, retrieve object A, and close gate",
+    "objects": {
+      "gate_handle": {
+        "pos": [
+          0.25,
+          0.0,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.36,
+          0.0,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.0,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.25,
+          0.15,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.0,
+        0.9
+      ],
+      [
+        0.36,
+        0.0,
+        0.8
+      ],
+      [
+        0.25,
+        0.15,
+        0.9
+      ],
+      [
+        0.25,
+        -0.12,
+        0.8
+      ],
+      [
+        0.25,
+        0.0,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "gate_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "x"
+    }
+  },
+  "P1": {
+    "class_name": "P1OpenPlaceTwoClose",
+    "module": "p1_open_place_two_close",
+    "description": "open drawer, place object A and B, close drawer",
+    "objects": {
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.25,
+          -0.08,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.2,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.2,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_b": {
+        "pos": [
+          0.32,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.15,
+          0.35,
+          0.85
+        ]
+      },
+      "target_b": {
+        "pos": [
+          0.32,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "object_b",
+        "target_b",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.02,
+        0.9
+      ],
+      [
+        0.25,
+        -0.08,
+        0.8
+      ],
+      [
+        0.2,
+        -0.16,
+        0.9
+      ],
+      [
+        0.2,
+        0.14,
+        0.8
+      ],
+      [
+        0.32,
+        -0.16,
+        0.9
+      ],
+      [
+        0.32,
+        0.14,
+        0.8
+      ],
+      [
+        0.25,
+        0.02,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "y"
+    }
+  },
+  "P2": {
+    "class_name": "P2OpenPlaceTwoReverseClose",
+    "module": "p2_open_place_two_reverse_close",
+    "description": "open drawer, place object B then A, close drawer",
+    "objects": {
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.25,
+          -0.08,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_b": {
+        "pos": [
+          0.32,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.15,
+          0.35,
+          0.85
+        ]
+      },
+      "target_b": {
+        "pos": [
+          0.32,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.2,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.2,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_b",
+        "target_b",
+        0.01
+      ],
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.02,
+        0.9
+      ],
+      [
+        0.25,
+        -0.08,
+        0.8
+      ],
+      [
+        0.32,
+        -0.16,
+        0.9
+      ],
+      [
+        0.32,
+        0.14,
+        0.8
+      ],
+      [
+        0.2,
+        -0.16,
+        0.9
+      ],
+      [
+        0.2,
+        0.14,
+        0.8
+      ],
+      [
+        0.25,
+        0.02,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "y"
+    }
+  },
+  "P3": {
+    "class_name": "P3OpenPlaceSpacerClose",
+    "module": "p3_open_place_spacer_close",
+    "description": "open drawer, place object A, place spacer, place B, close",
+    "objects": {
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.25,
+          -0.08,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.2,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.2,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "spacer": {
+        "pos": [
+          0.26,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.03,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.6,
+          0.4,
+          0.2
+        ]
+      },
+      "target_spacer": {
+        "pos": [
+          0.26,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.03
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "object_b": {
+        "pos": [
+          0.32,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.15,
+          0.35,
+          0.85
+        ]
+      },
+      "target_b": {
+        "pos": [
+          0.32,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "spacer",
+        "target_spacer",
+        0.01
+      ],
+      [
+        "object_b",
+        "target_b",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.02,
+        0.9
+      ],
+      [
+        0.25,
+        0.14,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "y"
+    }
+  },
+  "P4": {
+    "class_name": "P4OpenPlaceRetrievePlaceClose",
+    "module": "p4_open_place_retrieve_place_close",
+    "description": "open drawer, place A, retrieve C, place B, close",
+    "objects": {
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.25,
+          -0.08,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.2,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.2,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_c": {
+        "pos": [
+          0.32,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.1,
+          0.6,
+          0.2
+        ]
+      },
+      "target_c": {
+        "pos": [
+          0.42,
+          0.0,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "object_b": {
+        "pos": [
+          0.32,
+          -0.16,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.04
+        ],
+        "color": [
+          0.15,
+          0.35,
+          0.85
+        ]
+      },
+      "target_b": {
+        "pos": [
+          0.32,
+          0.14,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "object_c",
+        "target_c",
+        0.01
+      ],
+      [
+        "object_b",
+        "target_b",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.02,
+        0.9
+      ],
+      [
+        0.25,
+        0.14,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "y"
+    },
+    "future_dependency": {
+      "blocker_role": "object_c",
+      "blocked_role": "object_b",
+      "enabling_step_id": "s3",
+      "dependent_step_id": "s4",
+      "reason": "object_c occupies target_b until retrieved"
+    }
+  },
+  "G1": {
+    "class_name": "G1GraspAperturePlaceHolder",
+    "module": "g1_grasp_aperture_place_holder",
+    "description": "grasp object, transport through aperture, and place into holder",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.25,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.05
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "aperture_wp": {
+        "pos": [
+          0.25,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.02
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "holder": {
+        "pos": [
+          0.25,
+          0.16,
+          0.755
+        ],
+        "size": [
+          0.13,
+          0.13,
+          0.04
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        -0.12,
+        0.9
+      ],
+      [
+        0.25,
+        0.02,
+        0.8
+      ],
+      [
+        0.25,
+        0.16,
+        0.81
+      ]
+    ]
+  },
+  "G2": {
+    "class_name": "G2GraspRotateAperturePlace",
+    "module": "g2_grasp_rotate_aperture_place",
+    "description": "grasp object, rotate in free space, transport through aperture, place",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.22,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.035,
+          0.075,
+          0.035
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "aperture_wp": {
+        "pos": [
+          0.22,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.02
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.22,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.22,
+        -0.12,
+        0.9
+      ],
+      [
+        0.22,
+        0.02,
+        0.8
+      ],
+      [
+        0.22,
+        0.16,
+        0.8
+      ]
+    ]
+  },
+  "G3": {
+    "class_name": "G3OpenGateTransportClose",
+    "module": "g3_open_gate_transport_close",
+    "description": "open gate, grasp object, transport, place, close gate",
+    "objects": {
+      "gate_handle": {
+        "pos": [
+          0.25,
+          0.0,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.36,
+          0.0,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.0,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.25,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "gate_wp": {
+        "pos": [
+          0.25,
+          0.04,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.02
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.25,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.0,
+        0.9
+      ],
+      [
+        0.36,
+        0.0,
+        0.8
+      ],
+      [
+        0.25,
+        0.16,
+        0.8
+      ],
+      [
+        0.25,
+        0.0,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "gate_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "x"
+    }
+  },
+  "G4": {
+    "class_name": "G4RegraspTransportFit",
+    "module": "g4_regrasp_transport_fit",
+    "description": "grasp object, temporary place, regrasp, transport, fit",
+    "objects": {
+      "object_a": {
+        "pos": [
+          0.22,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.04,
+          0.04,
+          0.05
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "temp_target": {
+        "pos": [
+          0.22,
+          0.0,
+          0.755
+        ],
+        "size": [
+          0.08,
+          0.08,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "holder": {
+        "pos": [
+          0.22,
+          0.16,
+          0.755
+        ],
+        "size": [
+          0.13,
+          0.13,
+          0.04
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.22,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.22,
+        -0.12,
+        0.9
+      ],
+      [
+        0.22,
+        0.0,
+        0.8
+      ],
+      [
+        0.22,
+        0.16,
+        0.8
+      ]
+    ]
+  },
+  "R1": {
+    "class_name": "R1ParkRetrieveRestore",
+    "module": "r1_park_retrieve_restore",
+    "description": "park blocker, retrieve target, and restore blocker",
+    "objects": {
+      "blocker": {
+        "pos": [
+          0.26,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.06
+        ],
+        "color": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "park_target": {
+        "pos": [
+          0.35,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.1,
+          0.1,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.26,
+          0.18,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.26,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "restore_target": {
+        "pos": [
+          0.26,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "blocker",
+        "restore_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.26,
+        0.02,
+        0.9
+      ],
+      [
+        0.35,
+        0.02,
+        0.8
+      ],
+      [
+        0.26,
+        0.18,
+        0.9
+      ],
+      [
+        0.26,
+        -0.12,
+        0.8
+      ],
+      [
+        0.26,
+        0.02,
+        0.8
+      ]
+    ]
+  },
+  "R2": {
+    "class_name": "R2ParkTwoRetrieveRestoreTwo",
+    "module": "r2_park_two_retrieve_restore_two",
+    "description": "park A, park B, retrieve, restore B, restore A",
+    "objects": {
+      "blocker_a": {
+        "pos": [
+          0.2,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "color": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "park_target_a": {
+        "pos": [
+          0.35,
+          -0.06,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.08,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "restore_target_a": {
+        "pos": [
+          0.2,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "blocker_b": {
+        "pos": [
+          0.32,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "color": [
+          0.2,
+          0.2,
+          0.2
+        ]
+      },
+      "park_target_b": {
+        "pos": [
+          0.35,
+          0.08,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.08,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "restore_target_b": {
+        "pos": [
+          0.32,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.26,
+          0.18,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.26,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "blocker_b",
+        "restore_target_b",
+        0.01
+      ],
+      [
+        "blocker_a",
+        "restore_target_a",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.2,
+        0.02,
+        0.9
+      ],
+      [
+        0.35,
+        -0.06,
+        0.8
+      ],
+      [
+        0.32,
+        0.02,
+        0.9
+      ],
+      [
+        0.35,
+        0.08,
+        0.8
+      ]
+    ]
+  },
+  "R3": {
+    "class_name": "R3OpenDrawerParkRetrieveRestoreClose",
+    "module": "r3_open_drawer_park_retrieve_restore_close",
+    "description": "open drawer, park blocker, retrieve, restore, close drawer",
+    "objects": {
+      "drawer_handle": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.08,
+          0.03,
+          0.03
+        ],
+        "color": [
+          0.15,
+          0.15,
+          0.15
+        ]
+      },
+      "open_target": {
+        "pos": [
+          0.25,
+          -0.08,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.8,
+          0.8,
+          0.2
+        ]
+      },
+      "close_target": {
+        "pos": [
+          0.25,
+          0.02,
+          0.78
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.025
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "blocker": {
+        "pos": [
+          0.22,
+          0.08,
+          0.775
+        ],
+        "size": [
+          0.05,
+          0.05,
+          0.05
+        ],
+        "color": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "park_target": {
+        "pos": [
+          0.35,
+          0.08,
+          0.775
+        ],
+        "size": [
+          0.08,
+          0.08,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "restore_target": {
+        "pos": [
+          0.22,
+          0.08,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.28,
+          0.16,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.28,
+          -0.05,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "blocker",
+        "restore_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.02,
+        0.9
+      ],
+      [
+        0.25,
+        -0.08,
+        0.8
+      ],
+      [
+        0.22,
+        0.08,
+        0.9
+      ],
+      [
+        0.35,
+        0.08,
+        0.8
+      ]
+    ],
+    "articulation": {
+      "handle": "drawer_handle",
+      "open_target": "open_target",
+      "close_target": "close_target",
+      "axis": "y"
+    }
+  },
+  "R4": {
+    "class_name": "R4ParkRetrieveTwoRestore",
+    "module": "r4_park_retrieve_two_restore",
+    "description": "park blocker, retrieve target A, retrieve target B, restore blocker",
+    "objects": {
+      "blocker": {
+        "pos": [
+          0.26,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.06
+        ],
+        "color": [
+          0.1,
+          0.1,
+          0.1
+        ]
+      },
+      "park_target": {
+        "pos": [
+          0.35,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.1,
+          0.1,
+          0.025
+        ],
+        "color": [
+          0.35,
+          0.35,
+          0.38
+        ]
+      },
+      "restore_target": {
+        "pos": [
+          0.26,
+          0.02,
+          0.775
+        ],
+        "size": [
+          0.07,
+          0.07,
+          0.04
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_a": {
+        "pos": [
+          0.22,
+          0.18,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.85,
+          0.25,
+          0.15
+        ]
+      },
+      "target_a": {
+        "pos": [
+          0.22,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      },
+      "object_b": {
+        "pos": [
+          0.32,
+          0.18,
+          0.775
+        ],
+        "size": [
+          0.045,
+          0.045,
+          0.045
+        ],
+        "color": [
+          0.15,
+          0.35,
+          0.85
+        ]
+      },
+      "target_b": {
+        "pos": [
+          0.32,
+          -0.12,
+          0.775
+        ],
+        "size": [
+          0.06,
+          0.06,
+          0.03
+        ],
+        "color": [
+          0.2,
+          0.7,
+          0.3
+        ]
+      }
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.01
+      ],
+      [
+        "object_b",
+        "target_b",
+        0.01
+      ],
+      [
+        "blocker",
+        "restore_target",
+        0.01
+      ]
+    ],
+    "waypoints": [
+      [
+        0.26,
+        0.02,
+        0.9
+      ],
+      [
+        0.35,
+        0.02,
+        0.8
+      ]
+    ]
+  }
+}

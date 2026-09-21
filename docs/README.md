@@ -30,6 +30,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Target boundaries decision](decisions/0006-icgs-target-boundaries.md) | Added components and native preservation |
 | [Timed data decision](decisions/0007-icgs-timed-data-lineage.md) | New control protocol, executed data and replay provenance |
 | [Exploratory RLBench G1 decision](decisions/0012-exploratory-rlbench-g1-track.md) | Isolated feasibility-only RLBench controller/data track |
+| [G2 certification decision](decisions/0013-g2-certification-authorization.md) | Owner authorization to prepare G2 evidence; physical gate remains pending |
 | [Reference/stopping decision](decisions/0008-reference-value-and-stopping.md) | Frozen continuation target separate from learned stopping |
 | [CLI and data](components/cli-and-data.md) | Explicit config paths, command migration, safe input/output schema |
 | [Published acceptance evidence](experiments/vv19-validation/README.md) | Actual Colab checkpoint/inference/fidelity results |
@@ -38,6 +39,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Experiment template](experiments/TEMPLATE.md) | Lightweight research-contract record |
 | [Validation guide](../tests/README.md) | Validation tiers, ownership, commands, result vocabulary |
 | [Onboarding audit](audits/harness-onboarding.md) | Dated evidence, design approval, adoption choices and discovered debt |
+| [ICGS primary v3 generation report](audits/2026-09-20-icgs-v3-generation.md) | Phase-1 collection quota, splits, schema, perturbations, views; not a launch receipt |
 | [Third-party notices](third-party-notices.md) | Attribution and license for adapted guidance |
 
 Source code owns implementation detail; tests establish only the behavior they

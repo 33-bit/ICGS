@@ -68,7 +68,8 @@ Read [ADR0006](../../decisions/0006-icgs-target-boundaries.md),
 ## Release phases and acceptance gates
 
 - [ ] Foundation: P00/P01/P02 synthetic tests; select supported Linux model environment;
-  freeze G1/G2 protocols before any main collection.
+  G2 certification is authorized by [ADR0013](../../decisions/0013-g2-certification-authorization.md),
+  but its physical gate remains pending measured evidence before any main collection.
 - [ ] Representation: P03/P04/P07 pilot model plus P11 A0/A1; pass G3 bridge,
   train P05/P06 B, pass G4 and freeze reference manifest.
 - [ ] Executed labels: pass G5 replay; authorize bounded pilot P08 collection.
@@ -89,6 +90,11 @@ Read [ADR0006](../../decisions/0006-icgs-target-boundaries.md),
 | G6 compatibility | L1 executed counts plus C1 artifact/config,C2 strict load,C3 real inference,C4 reference fidelity,C5 installed independence | Required check SKIPPED/FAIL keeps migration active; use provisioned reference/native environments, not fake imports |
 | G7 pilot | six training programs, contexts/attempt failures, timing/storage/replay/support/bridge/model/calibration/search traces, B0–B7 feasible-control reports | No meaningful supported actions, unbounded errors or unexplained optimistic exploitation: diagnose; do not scale to conceal the failure |
 | G8 primary launch | measured throughput/render/reset cost, actual trial counts, storage/compute estimate, frozen protocol/splits/metrics, approved execution budget | Missing estimate/tolerances/owner scope: do not launch main collection; retain pilot evidence and request explicit scope |
+
+**Current G2 status:** **AUTHORIZED FOR CERTIFICATION — PENDING MEASURED
+EVIDENCE**. Owner approval authorizes preparation of the concrete catalog and a
+bounded certification record; it is not a G2 PASS and does not authorize
+primary-scale collection or training.
 
 Thresholds for G1/G2/G3/G5 that require physical calibration are **FG**, not blanks
 for implementers to guess: the pilot first produces a development discrepancy/

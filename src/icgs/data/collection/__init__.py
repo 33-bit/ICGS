@@ -15,6 +15,7 @@ from icgs.data.collection.runner import (
     reconcile_episode,
     run_collection,
 )
+from icgs.data.collection.bindings import ProgramBinding, load_binding_manifest
 
 __all__ = [
     "AttemptExecutionError",
@@ -28,4 +29,6 @@ __all__ = [
     "persist_attempt",
     "reconcile_episode",
     "run_collection",
+    "ProgramBinding",
+    "load_binding_manifest",
 ]

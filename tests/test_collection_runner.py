@@ -180,6 +180,26 @@ class CollectionRunnerTests(unittest.TestCase):
         # Assert environment was NEVER constructed!
         self.assertFalse(env_factory_called)
 
+    def test_binding_manifest_preflight_rejects_before_env_construction(self):
+        env_factory_called = False
+
+        def spy_env_factory(spec):
+            nonlocal env_factory_called
+            env_factory_called = True
+            return MockEnvironment()
+
+        binding_manifest = self.root / "bindings.json"
+        binding_manifest.write_text(json.dumps({"manifest_version": 1, "bindings": []}))
+
+        with self.assertRaisesRegex(ValueError, "bindings must be a non-empty sequence"):
+            self._run_collection(
+                [self._make_spec("ep-binding-preflight")],
+                spy_env_factory,
+                binding_manifest_path=binding_manifest,
+                required_program_ids=("T01",),
+            )
+        self.assertFalse(env_factory_called)
+
     def test_preflight_rejects_invalid_seed_and_empty_provenance(self):
         env_factory_called = False
 
@@ -1349,4 +1369,3 @@ class CollectionRunnerTests(unittest.TestCase):
             index_publisher=unverified_index_pub,
         )
         self.assertEqual(report3.status, "index_publication_unverified")
-

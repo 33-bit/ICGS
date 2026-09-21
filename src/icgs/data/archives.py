@@ -460,6 +460,19 @@ def write_episode_archive(
                     telem_arrays["joint_positions"] = np.asarray(auxiliary["joint_positions"], dtype=np.float64)
                 if auxiliary.get("joint_velocities") is not None:
                     telem_arrays["joint_velocities"] = np.asarray(auxiliary["joint_velocities"], dtype=np.float64)
+                if auxiliary.get("ee_poses") is not None:
+                    telem_arrays["ee_poses"] = np.asarray(auxiliary["ee_poses"], dtype=np.float64)
+                if auxiliary.get("gripper_states") is not None:
+                    telem_arrays["gripper_states"] = np.asarray(auxiliary["gripper_states"])
+                if auxiliary.get("wrist_depth_frames") is not None:
+                    telem_arrays["wrist_depth_frames"] = np.asarray(auxiliary["wrist_depth_frames"])
+                if auxiliary.get("wrist_mask_frames") is not None:
+                    telem_arrays["wrist_mask_frames"] = np.asarray(auxiliary["wrist_mask_frames"])
+                if auxiliary.get("front_mask_frames") is not None:
+                    telem_arrays["front_mask_frames"] = np.asarray(auxiliary["front_mask_frames"])
+                if auxiliary.get("scene_state_arrays") is not None:
+                    for key, value in auxiliary["scene_state_arrays"].items():
+                        telem_arrays[f"scene_{key}"] = np.asarray(value)
                 telem_buf = io.BytesIO()
                 np.savez_compressed(telem_buf, **telem_arrays)
                 telem_bytes = telem_buf.getvalue()

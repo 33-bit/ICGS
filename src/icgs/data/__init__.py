@@ -11,6 +11,13 @@ from icgs.data.archives import (
     write_attempt_report,
     write_episode_archive,
 )
+from icgs.data.training_layout import (
+    LAYOUT_VERSION,
+    initialize_dataset_layout,
+    validate_training_episode_layout,
+    write_cache_manifest,
+    write_training_episode_layout,
+)
 
 __all__ = [
     "StorageLimitExceeded",
@@ -22,4 +29,9 @@ __all__ = [
     "read_episode_archive",
     "write_attempt_report",
     "write_episode_archive",
+    "LAYOUT_VERSION",
+    "initialize_dataset_layout",
+    "validate_training_episode_layout",
+    "write_cache_manifest",
+    "write_training_episode_layout",
 ]

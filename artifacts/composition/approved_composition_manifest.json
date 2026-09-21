@@ -1,0 +1,2989 @@
+{
+  "manifest_version": 1,
+  "protocol_id": "icgs-composition-primary-v1",
+  "generation_targets": {
+    "train_successes_per_program": 200,
+    "development_successes_by_program": {
+      "V01": 63,
+      "V02": 63,
+      "V03": 62,
+      "V04": 62
+    },
+    "test_contexts_per_composition": 100,
+    "retain_valid_failures": true,
+    "test_is_evaluation_only": true
+  },
+  "catalog": [
+    {
+      "program_id": "T01",
+      "split": "train",
+      "family": "basic-manipulation",
+      "ordered_steps": [
+        "grasp A",
+        "lift A"
+      ],
+      "scene_id": "planned-t01-v1",
+      "asset_family_id": "icgs-train-basic-manipulation-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t01-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t01-seed-0001",
+        "t01-seed-0002",
+        "t01-seed-0003",
+        "t01-seed-0004",
+        "t01-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t01-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T02",
+      "split": "train",
+      "family": "basic-manipulation",
+      "ordered_steps": [
+        "grasp A",
+        "place A on pad"
+      ],
+      "scene_id": "planned-t02-v1",
+      "asset_family_id": "icgs-train-basic-manipulation-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t02-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t02-seed-0001",
+        "t02-seed-0002",
+        "t02-seed-0003",
+        "t02-seed-0004",
+        "t02-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t02-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T03",
+      "split": "train",
+      "family": "obstacle-access",
+      "ordered_steps": [
+        "push blocker",
+        "reach target"
+      ],
+      "scene_id": "planned-t03-v1",
+      "asset_family_id": "icgs-train-obstacle-access-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t03-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t03-seed-0001",
+        "t03-seed-0002",
+        "t03-seed-0003",
+        "t03-seed-0004",
+        "t03-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t03-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T04",
+      "split": "train",
+      "family": "container-access",
+      "ordered_steps": [
+        "open drawer",
+        "close drawer"
+      ],
+      "scene_id": "planned-t04-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_id": "t04-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t04-seed-0001",
+        "t04-seed-0002",
+        "t04-seed-0003",
+        "t04-seed-0004",
+        "t04-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t04-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T05",
+      "split": "train",
+      "family": "container-access",
+      "ordered_steps": [
+        "open drawer",
+        "retrieve A"
+      ],
+      "scene_id": "planned-t05-v1",
+      "asset_family_id": "icgs-train-container-access-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t05-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t05-seed-0001",
+        "t05-seed-0002",
+        "t05-seed-0003",
+        "t05-seed-0004",
+        "t05-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t05-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T06",
+      "split": "train",
+      "family": "container-access",
+      "ordered_steps": [
+        "place A into open drawer",
+        "close"
+      ],
+      "scene_id": "t06-place-into-drawer-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_id": "t06-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t06-seed-0001",
+        "t06-seed-0002",
+        "t06-seed-0003",
+        "t06-seed-0004",
+        "t06-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t06_place_into_drawer-pose-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T07",
+      "split": "train",
+      "family": "packing",
+      "ordered_steps": [
+        "place A",
+        "place B into open tray"
+      ],
+      "scene_id": "planned-t07-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_id": "t07-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t07-seed-0001",
+        "t07-seed-0002",
+        "t07-seed-0003",
+        "t07-seed-0004",
+        "t07-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t07-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T08",
+      "split": "train",
+      "family": "packing",
+      "ordered_steps": [
+        "place B",
+        "place A",
+        "close open drawer"
+      ],
+      "scene_id": "t08-pack-two-objects-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_id": "t08-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t08-seed-0001",
+        "t08-seed-0002",
+        "t08-seed-0003",
+        "t08-seed-0004",
+        "t08-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t08_pack_two_objects-pose-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T09",
+      "split": "train",
+      "family": "grasp-fit",
+      "ordered_steps": [
+        "grasp A",
+        "place A into open holder"
+      ],
+      "scene_id": "t09-place-into-holder-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_id": "t09-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t09-seed-0001",
+        "t09-seed-0002",
+        "t09-seed-0003",
+        "t09-seed-0004",
+        "t09-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t09_place_into_holder-pose-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T10",
+      "split": "train",
+      "family": "grasp-fit",
+      "ordered_steps": [
+        "push A through aperture",
+        "place A"
+      ],
+      "scene_id": "planned-t10-v1",
+      "asset_family_id": "icgs-train-grasp-fit-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t10-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t10-seed-0001",
+        "t10-seed-0002",
+        "t10-seed-0003",
+        "t10-seed-0004",
+        "t10-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t10-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T11",
+      "split": "train",
+      "family": "orientation",
+      "ordered_steps": [
+        "grasp A",
+        "rotate A",
+        "place A on pad"
+      ],
+      "scene_id": "t11-rotate-and-place-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_id": "t11-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t11-seed-0001",
+        "t11-seed-0002",
+        "t11-seed-0003",
+        "t11-seed-0004",
+        "t11-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t11_rotate_and_place-pose-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T12",
+      "split": "train",
+      "family": "gated-access",
+      "ordered_steps": [
+        "open gate",
+        "push A through gate",
+        "close gate"
+      ],
+      "scene_id": "planned-t12-v1",
+      "asset_family_id": "icgs-train-gated-access-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t12-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t12-seed-0001",
+        "t12-seed-0002",
+        "t12-seed-0003",
+        "t12-seed-0004",
+        "t12-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t12-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T13",
+      "split": "train",
+      "family": "park-retrieve-restore",
+      "ordered_steps": [
+        "park blocker",
+        "retrieve A"
+      ],
+      "scene_id": "t13-park-blocker-retrieve-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_id": "t13-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t13-seed-0001",
+        "t13-seed-0002",
+        "t13-seed-0003",
+        "t13-seed-0004",
+        "t13-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t13_park_blocker_retrieve-pose-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T14",
+      "split": "train",
+      "family": "park-retrieve-restore",
+      "ordered_steps": [
+        "park blocker",
+        "restore blocker"
+      ],
+      "scene_id": "t14-park-and-restore-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_id": "t14-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t14-seed-0001",
+        "t14-seed-0002",
+        "t14-seed-0003",
+        "t14-seed-0004",
+        "t14-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t14_park_and_restore-pose-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T15",
+      "split": "train",
+      "family": "park-retrieve-restore",
+      "ordered_steps": [
+        "park A",
+        "park B",
+        "retrieve C"
+      ],
+      "scene_id": "planned-t15-v1",
+      "asset_family_id": "icgs-train-park-retrieve-restore-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t15-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t15-seed-0001",
+        "t15-seed-0002",
+        "t15-seed-0003",
+        "t15-seed-0004",
+        "t15-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t15-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T16",
+      "split": "train",
+      "family": "container-access",
+      "ordered_steps": [
+        "open drawer",
+        "park blocker",
+        "retrieve A"
+      ],
+      "scene_id": "planned-t16-v1",
+      "asset_family_id": "icgs-train-container-access-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t16-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t16-seed-0001",
+        "t16-seed-0002",
+        "t16-seed-0003",
+        "t16-seed-0004",
+        "t16-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t16-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T17",
+      "split": "train",
+      "family": "regrasp",
+      "ordered_steps": [
+        "grasp A",
+        "temporary place",
+        "regrasp A"
+      ],
+      "scene_id": "planned-t17-v1",
+      "asset_family_id": "icgs-train-regrasp-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t17-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t17-seed-0001",
+        "t17-seed-0002",
+        "t17-seed-0003",
+        "t17-seed-0004",
+        "t17-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t17-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T18",
+      "split": "train",
+      "family": "shared-corridor",
+      "ordered_steps": [
+        "retrieve A",
+        "place A",
+        "retrieve B"
+      ],
+      "scene_id": "planned-t18-v1",
+      "asset_family_id": "icgs-train-shared-corridor-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t18-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t18-seed-0001",
+        "t18-seed-0002",
+        "t18-seed-0003",
+        "t18-seed-0004",
+        "t18-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t18-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T19",
+      "split": "train",
+      "family": "packing",
+      "ordered_steps": [
+        "place spacer",
+        "place A",
+        "close open drawer"
+      ],
+      "scene_id": "planned-t19-v1",
+      "asset_family_id": "icgs-train-packing-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t19-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t19-seed-0001",
+        "t19-seed-0002",
+        "t19-seed-0003",
+        "t19-seed-0004",
+        "t19-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t19-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "T20",
+      "split": "train",
+      "family": "park-retrieve-restore",
+      "ordered_steps": [
+        "park blocker",
+        "retrieve A",
+        "place A on pad"
+      ],
+      "scene_id": "planned-t20-v1",
+      "asset_family_id": "icgs-train-park-retrieve-restore-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "t20-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "t20-seed-0001",
+        "t20-seed-0002",
+        "t20-seed-0003",
+        "t20-seed-0004",
+        "t20-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "t20-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "V01",
+      "split": "development",
+      "family": "pack-add-close",
+      "ordered_steps": [
+        "open",
+        "place A",
+        "close"
+      ],
+      "scene_id": "planned-v01-v1",
+      "asset_family_id": "icgs-dev-pack-add-close-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "v01-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "v01-seed-0001",
+        "v01-seed-0002",
+        "v01-seed-0003",
+        "v01-seed-0004",
+        "v01-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "v01-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "V02",
+      "split": "development",
+      "family": "grasp-transport-fit",
+      "ordered_steps": [
+        "grasp",
+        "rotate",
+        "place into holder"
+      ],
+      "scene_id": "planned-v02-v1",
+      "asset_family_id": "icgs-dev-grasp-transport-fit-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "v02-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "v02-seed-0001",
+        "v02-seed-0002",
+        "v02-seed-0003",
+        "v02-seed-0004",
+        "v02-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "v02-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "V03",
+      "split": "development",
+      "family": "park-retrieve-restore",
+      "ordered_steps": [
+        "park",
+        "retrieve",
+        "place",
+        "restore"
+      ],
+      "scene_id": "planned-v03-v1",
+      "asset_family_id": "icgs-dev-park-retrieve-restore-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "v03-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "v03-seed-0001",
+        "v03-seed-0002",
+        "v03-seed-0003",
+        "v03-seed-0004",
+        "v03-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "v03-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "V04",
+      "split": "development",
+      "family": "gated-access",
+      "ordered_steps": [
+        "open gate",
+        "retrieve",
+        "close gate"
+      ],
+      "scene_id": "planned-v04-v1",
+      "asset_family_id": "icgs-dev-gated-access-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "v04-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "v04-seed-0001",
+        "v04-seed-0002",
+        "v04-seed-0003",
+        "v04-seed-0004",
+        "v04-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "v04-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "P1",
+      "split": "test",
+      "family": "pack-add-close",
+      "ordered_steps": [
+        "open",
+        "place A",
+        "place B",
+        "close"
+      ],
+      "scene_id": "planned-p1-v1",
+      "asset_family_id": "icgs-test-pack-add-close-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "p1-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "p1-seed-0001",
+        "p1-seed-0002",
+        "p1-seed-0003",
+        "p1-seed-0004",
+        "p1-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "p1-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "P2",
+      "split": "test",
+      "family": "pack-add-close",
+      "ordered_steps": [
+        "open",
+        "place B",
+        "place A",
+        "close"
+      ],
+      "scene_id": "planned-p2-v1",
+      "asset_family_id": "icgs-test-pack-add-close-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "p2-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "p2-seed-0001",
+        "p2-seed-0002",
+        "p2-seed-0003",
+        "p2-seed-0004",
+        "p2-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "p2-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "P3",
+      "split": "test",
+      "family": "pack-add-close",
+      "ordered_steps": [
+        "open",
+        "place A",
+        "place spacer",
+        "place B",
+        "close"
+      ],
+      "scene_id": "planned-p3-v1",
+      "asset_family_id": "icgs-test-pack-add-close-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "p3-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "p3-seed-0001",
+        "p3-seed-0002",
+        "p3-seed-0003",
+        "p3-seed-0004",
+        "p3-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "p3-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "P4",
+      "split": "test",
+      "family": "pack-add-close",
+      "ordered_steps": [
+        "open",
+        "place A",
+        "retrieve C",
+        "place B",
+        "close"
+      ],
+      "scene_id": "planned-p4-v1",
+      "asset_family_id": "icgs-test-pack-add-close-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "p4-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "p4-seed-0001",
+        "p4-seed-0002",
+        "p4-seed-0003",
+        "p4-seed-0004",
+        "p4-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "p4-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "G1",
+      "split": "test",
+      "family": "grasp-transport-fit",
+      "ordered_steps": [
+        "grasp",
+        "transport through aperture",
+        "place into holder"
+      ],
+      "scene_id": "planned-g1-v1",
+      "asset_family_id": "icgs-test-grasp-transport-fit-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "g1-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "g1-seed-0001",
+        "g1-seed-0002",
+        "g1-seed-0003",
+        "g1-seed-0004",
+        "g1-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "g1-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "G2",
+      "split": "test",
+      "family": "grasp-transport-fit",
+      "ordered_steps": [
+        "grasp",
+        "rotate in free space",
+        "transport through aperture",
+        "place"
+      ],
+      "scene_id": "planned-g2-v1",
+      "asset_family_id": "icgs-test-grasp-transport-fit-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "g2-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "g2-seed-0001",
+        "g2-seed-0002",
+        "g2-seed-0003",
+        "g2-seed-0004",
+        "g2-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "g2-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "G3",
+      "split": "test",
+      "family": "grasp-transport-fit",
+      "ordered_steps": [
+        "open gate",
+        "grasp",
+        "transport",
+        "place",
+        "close gate"
+      ],
+      "scene_id": "planned-g3-v1",
+      "asset_family_id": "icgs-test-grasp-transport-fit-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "g3-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "g3-seed-0001",
+        "g3-seed-0002",
+        "g3-seed-0003",
+        "g3-seed-0004",
+        "g3-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "g3-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "G4",
+      "split": "test",
+      "family": "grasp-transport-fit",
+      "ordered_steps": [
+        "grasp",
+        "temporary place",
+        "regrasp",
+        "transport",
+        "fit"
+      ],
+      "scene_id": "planned-g4-v1",
+      "asset_family_id": "icgs-test-grasp-transport-fit-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "g4-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "g4-seed-0001",
+        "g4-seed-0002",
+        "g4-seed-0003",
+        "g4-seed-0004",
+        "g4-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "g4-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "R1",
+      "split": "test",
+      "family": "park-retrieve-restore",
+      "ordered_steps": [
+        "park blocker",
+        "retrieve target",
+        "restore blocker"
+      ],
+      "scene_id": "planned-r1-v1",
+      "asset_family_id": "icgs-test-park-retrieve-restore-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "r1-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "r1-seed-0001",
+        "r1-seed-0002",
+        "r1-seed-0003",
+        "r1-seed-0004",
+        "r1-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "r1-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "R2",
+      "split": "test",
+      "family": "park-retrieve-restore",
+      "ordered_steps": [
+        "park A",
+        "park B",
+        "retrieve",
+        "restore B",
+        "restore A"
+      ],
+      "scene_id": "planned-r2-v1",
+      "asset_family_id": "icgs-test-park-retrieve-restore-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "r2-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "r2-seed-0001",
+        "r2-seed-0002",
+        "r2-seed-0003",
+        "r2-seed-0004",
+        "r2-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "r2-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "R3",
+      "split": "test",
+      "family": "park-retrieve-restore",
+      "ordered_steps": [
+        "open drawer",
+        "park blocker",
+        "retrieve",
+        "restore",
+        "close"
+      ],
+      "scene_id": "planned-r3-v1",
+      "asset_family_id": "icgs-test-park-retrieve-restore-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "r3-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "r3-seed-0001",
+        "r3-seed-0002",
+        "r3-seed-0003",
+        "r3-seed-0004",
+        "r3-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "r3-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    },
+    {
+      "program_id": "R4",
+      "split": "test",
+      "family": "park-retrieve-restore",
+      "ordered_steps": [
+        "park blocker",
+        "retrieve target A",
+        "retrieve target B",
+        "restore"
+      ],
+      "scene_id": "planned-r4-v1",
+      "asset_family_id": "icgs-test-park-retrieve-restore-v1",
+      "asset_version": "procedural-primitive-2026-09-18",
+      "source_lineage_id": "r4-seed-root-v1",
+      "workspace": {
+        "x_m": [
+          -0.4,
+          0.4
+        ],
+        "y_m": [
+          -0.4,
+          0.4
+        ],
+        "z_m": [
+          0.75,
+          1.25
+        ]
+      },
+      "randomization": {
+        "translation_m": {
+          "x": [
+            -0.012,
+            0.012
+          ],
+          "y": [
+            -0.012,
+            0.012
+          ],
+          "z": [
+            0,
+            0
+          ]
+        },
+        "yaw_deg": [
+          -30,
+          30
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1",
+        "waypoint_delta_m": [
+          -0.01,
+          0.01
+        ]
+      },
+      "seed_demos": [
+        "r4-seed-0001",
+        "r4-seed-0002",
+        "r4-seed-0003",
+        "r4-seed-0004",
+        "r4-seed-0005"
+      ],
+      "execution_modes": [
+        "scripted_waypoint_v1"
+      ],
+      "controller": {
+        "protocol_id": "rlbench-timed-ik-v1",
+        "quaternion_hemisphere_continuity": true,
+        "joint_branch_continuity": true,
+        "step_s": 0.05
+      },
+      "predicates": {
+        "protocol_id": "r4-predicate-v1",
+        "position_m": 0.01,
+        "rotation_deg": 10,
+        "hold_intervals": 5,
+        "unsafe_penetration_m": 0.002
+      },
+      "execution_status": "generation_authorized"
+    }
+  ],
+  "asset_split": {
+    "train_ratio": 0.7,
+    "development_ratio": 0.15,
+    "test_ratio": 0.15,
+    "closed_by": "asset_family_id"
+  },
+  "excluded_tracks": [
+    {
+      "program_id": "E01",
+      "track": "exploratory",
+      "reason": "not part of primary 20/4/12 cardinality"
+    }
+  ]
+}

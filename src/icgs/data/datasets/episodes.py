@@ -68,6 +68,7 @@ def validate_dataset_manifest(
     manifest_data: Mapping[str, Any] | str | Path,
     *,
     dataset_root: str | Path | None = None,
+    approved_manifest_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Validate dataset manifest schema, lineage closure, acyclicity, and split consistency."""
     if isinstance(manifest_data, (str, Path)):
@@ -82,6 +83,12 @@ def validate_dataset_manifest(
         data = dict(manifest_data)
     else:
         raise TypeError(f"manifest_data must be a mapping or path, got {type(manifest_data).__name__}")
+
+    approved_manifest = None
+    if approved_manifest_path is not None:
+        from icgs.data.collection.approved_manifest import load_approved_manifest
+
+        approved_manifest = load_approved_manifest(approved_manifest_path)
 
     if data.get("manifest_version") != 1:
         raise ValueError(f"Unsupported manifest_version: {data.get('manifest_version')!r}")
@@ -244,6 +251,12 @@ def validate_dataset_manifest(
             raise ValueError(
                 f"Episode {ep_id} program {program_id} catalog split {expected_split} != episode split {ep_split}"
             )
+        if approved_manifest is not None:
+            from icgs.data.collection.approved_manifest import validate_episode_provenance
+
+            approved_errors = validate_episode_provenance(approved_manifest, prov)
+            if approved_errors:
+                raise ValueError(f"Episode {ep_id} is not authorized by approved manifest: {'; '.join(approved_errors)}")
 
     return data
 

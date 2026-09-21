@@ -1,0 +1,698 @@
+{
+  "T06": {
+    "class_name": "T06PlaceIntoDrawer",
+    "module": "t06_place_into_drawer",
+    "scene_id": "t06-place-into-drawer-v1",
+    "description": "place object A into a drawer target",
+    "objects": {
+      "object_a": [
+        [
+          0.28,
+          -0.02,
+          0.82
+        ],
+        [
+          0.045,
+          0.045,
+          0.045
+        ],
+        [
+          0.85,
+          0.25,
+          0.15
+        ]
+      ],
+      "drawer": [
+        [
+          0.28,
+          0.16,
+          0.8
+        ],
+        [
+          0.25,
+          0.22,
+          0.08
+        ],
+        [
+          0.35,
+          0.35,
+          0.38
+        ]
+      ],
+      "target_a": [
+        [
+          0.28,
+          0.16,
+          0.86
+        ],
+        [
+          0.12,
+          0.1,
+          0.03
+        ],
+        [
+          0.2,
+          0.7,
+          0.3
+        ]
+      ]
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.07
+      ]
+    ],
+    "waypoints": [
+      [
+        0.28,
+        -0.02,
+        0.98
+      ],
+      [
+        0.28,
+        -0.02,
+        0.86
+      ],
+      [
+        0.28,
+        0.16,
+        0.98
+      ],
+      [
+        0.28,
+        0.16,
+        0.88
+      ]
+    ],
+    "gripper_commands": {
+      "1": "close_gripper()",
+      "3": "open_gripper()"
+    }
+  },
+  "T08": {
+    "class_name": "T08PackTwoObjects",
+    "module": "t08_pack_two_objects",
+    "scene_id": "t08-pack-two-objects-v1",
+    "description": "place B then A into distinct tray slots",
+    "objects": {
+      "object_a": [
+        [
+          0.23,
+          -0.1,
+          0.82
+        ],
+        [
+          0.04,
+          0.04,
+          0.04
+        ],
+        [
+          0.85,
+          0.25,
+          0.15
+        ]
+      ],
+      "object_b": [
+        [
+          0.35,
+          -0.1,
+          0.82
+        ],
+        [
+          0.05,
+          0.035,
+          0.05
+        ],
+        [
+          0.15,
+          0.35,
+          0.85
+        ]
+      ],
+      "tray": [
+        [
+          0.3,
+          0.16,
+          0.79
+        ],
+        [
+          0.28,
+          0.18,
+          0.06
+        ],
+        [
+          0.35,
+          0.35,
+          0.38
+        ]
+      ],
+      "target_a": [
+        [
+          0.25,
+          0.16,
+          0.84
+        ],
+        [
+          0.06,
+          0.06,
+          0.03
+        ],
+        [
+          0.2,
+          0.7,
+          0.3
+        ]
+      ],
+      "target_b": [
+        [
+          0.35,
+          0.16,
+          0.84
+        ],
+        [
+          0.06,
+          0.06,
+          0.03
+        ],
+        [
+          0.2,
+          0.7,
+          0.3
+        ]
+      ]
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.07
+      ],
+      [
+        "object_b",
+        "target_b",
+        0.07
+      ]
+    ],
+    "waypoints": [
+      [
+        0.35,
+        -0.1,
+        0.98
+      ],
+      [
+        0.35,
+        -0.1,
+        0.86
+      ],
+      [
+        0.35,
+        0.16,
+        0.96
+      ],
+      [
+        0.35,
+        0.16,
+        0.88
+      ],
+      [
+        0.23,
+        -0.1,
+        0.98
+      ],
+      [
+        0.23,
+        -0.1,
+        0.86
+      ],
+      [
+        0.25,
+        0.16,
+        0.96
+      ],
+      [
+        0.25,
+        0.16,
+        0.88
+      ]
+    ],
+    "gripper_commands": {
+      "1": "close_gripper()",
+      "3": "open_gripper()",
+      "5": "close_gripper()",
+      "7": "open_gripper()"
+    }
+  },
+  "T09": {
+    "class_name": "T09PlaceIntoHolder",
+    "module": "t09_place_into_holder",
+    "scene_id": "t09-place-into-holder-v1",
+    "description": "grasp A and place it into a cylindrical holder",
+    "objects": {
+      "object_a": [
+        [
+          0.25,
+          -0.04,
+          0.83
+        ],
+        [
+          0.045,
+          0.045,
+          0.07
+        ],
+        [
+          0.85,
+          0.25,
+          0.15
+        ]
+      ],
+      "holder": [
+        [
+          0.25,
+          0.18,
+          0.84
+        ],
+        [
+          0.13,
+          0.13,
+          0.05
+        ],
+        [
+          0.35,
+          0.35,
+          0.38
+        ]
+      ],
+      "target_a": [
+        [
+          0.25,
+          0.18,
+          0.9
+        ],
+        [
+          0.07,
+          0.07,
+          0.05
+        ],
+        [
+          0.2,
+          0.7,
+          0.3
+        ]
+      ]
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.07
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        -0.04,
+        1.0
+      ],
+      [
+        0.25,
+        -0.04,
+        0.9
+      ],
+      [
+        0.25,
+        0.18,
+        1.0
+      ],
+      [
+        0.25,
+        0.18,
+        0.92
+      ]
+    ],
+    "gripper_commands": {
+      "1": "close_gripper()",
+      "3": "open_gripper()"
+    }
+  },
+  "T11": {
+    "class_name": "T11RotateAndPlace",
+    "module": "t11_rotate_and_place",
+    "scene_id": "t11-rotate-and-place-v1",
+    "description": "grasp A, rotate it, and place it on an oriented pad",
+    "objects": {
+      "object_a": [
+        [
+          0.22,
+          -0.06,
+          0.84
+        ],
+        [
+          0.035,
+          0.075,
+          0.035
+        ],
+        [
+          0.85,
+          0.25,
+          0.15
+        ]
+      ],
+      "pad": [
+        [
+          0.22,
+          0.18,
+          0.8
+        ],
+        [
+          0.15,
+          0.15,
+          0.025
+        ],
+        [
+          0.35,
+          0.35,
+          0.38
+        ]
+      ],
+      "target_a": [
+        [
+          0.22,
+          0.18,
+          0.84
+        ],
+        [
+          0.06,
+          0.06,
+          0.05
+        ],
+        [
+          0.2,
+          0.7,
+          0.3
+        ]
+      ]
+    },
+    "conditions": [
+      [
+        "object_a",
+        "target_a",
+        0.07
+      ]
+    ],
+    "waypoints": [
+      [
+        0.22,
+        -0.06,
+        1.0
+      ],
+      [
+        0.22,
+        -0.06,
+        0.92
+      ],
+      [
+        0.22,
+        0.18,
+        1.0
+      ],
+      [
+        0.22,
+        0.18,
+        0.9
+      ]
+    ],
+    "gripper_commands": {
+      "1": "close_gripper()",
+      "3": "open_gripper()"
+    }
+  },
+  "T13": {
+    "class_name": "T13ParkBlockerRetrieve",
+    "module": "t13_park_blocker_retrieve",
+    "scene_id": "t13-park-blocker-retrieve-v1",
+    "description": "park blocker before retrieving object A",
+    "objects": {
+      "blocker": [
+        [
+          0.25,
+          0.03,
+          0.84
+        ],
+        [
+          0.06,
+          0.06,
+          0.08
+        ],
+        [
+          0.1,
+          0.1,
+          0.1
+        ]
+      ],
+      "object_a": [
+        [
+          0.25,
+          0.2,
+          0.84
+        ],
+        [
+          0.045,
+          0.045,
+          0.045
+        ],
+        [
+          0.85,
+          0.25,
+          0.15
+        ]
+      ],
+      "park_target": [
+        [
+          0.48,
+          0.03,
+          0.8
+        ],
+        [
+          0.12,
+          0.12,
+          0.025
+        ],
+        [
+          0.35,
+          0.35,
+          0.38
+        ]
+      ],
+      "target_a": [
+        [
+          0.25,
+          0.3,
+          0.84
+        ],
+        [
+          0.07,
+          0.07,
+          0.04
+        ],
+        [
+          0.2,
+          0.7,
+          0.3
+        ]
+      ]
+    },
+    "conditions": [
+      [
+        "blocker",
+        "park_target",
+        0.1
+      ],
+      [
+        "object_a",
+        "target_a",
+        0.08
+      ]
+    ],
+    "waypoints": [
+      [
+        0.25,
+        0.03,
+        1.0
+      ],
+      [
+        0.25,
+        0.03,
+        0.92
+      ],
+      [
+        0.48,
+        0.03,
+        1.0
+      ],
+      [
+        0.48,
+        0.03,
+        0.9
+      ],
+      [
+        0.25,
+        0.2,
+        1.0
+      ],
+      [
+        0.25,
+        0.2,
+        0.92
+      ],
+      [
+        0.25,
+        0.3,
+        0.98
+      ],
+      [
+        0.25,
+        0.3,
+        0.9
+      ]
+    ],
+    "gripper_commands": {
+      "1": "close_gripper()",
+      "3": "open_gripper()",
+      "5": "close_gripper()",
+      "7": "open_gripper()"
+    }
+  },
+  "T14": {
+    "class_name": "T14ParkAndRestore",
+    "module": "t14_park_and_restore",
+    "scene_id": "t14-park-and-restore-v1",
+    "description": "park blocker and restore it after a retrieval motion",
+    "objects": {
+      "blocker": [
+        [
+          0.26,
+          0.03,
+          0.84
+        ],
+        [
+          0.06,
+          0.06,
+          0.08
+        ],
+        [
+          0.1,
+          0.1,
+          0.1
+        ]
+      ],
+      "object_a": [
+        [
+          0.26,
+          0.21,
+          0.84
+        ],
+        [
+          0.045,
+          0.045,
+          0.045
+        ],
+        [
+          0.85,
+          0.25,
+          0.15
+        ]
+      ],
+      "park_target": [
+        [
+          0.48,
+          0.03,
+          0.8
+        ],
+        [
+          0.12,
+          0.12,
+          0.025
+        ],
+        [
+          0.35,
+          0.35,
+          0.38
+        ]
+      ],
+      "restore_target": [
+        [
+          0.26,
+          0.03,
+          0.89
+        ],
+        [
+          0.07,
+          0.07,
+          0.05
+        ],
+        [
+          0.2,
+          0.7,
+          0.3
+        ]
+      ]
+    },
+    "conditions": [
+      [
+        "blocker",
+        "restore_target",
+        0.08
+      ]
+    ],
+    "waypoints": [
+      [
+        0.26,
+        0.03,
+        1.0
+      ],
+      [
+        0.26,
+        0.03,
+        0.92
+      ],
+      [
+        0.48,
+        0.03,
+        1.0
+      ],
+      [
+        0.48,
+        0.03,
+        0.9
+      ],
+      [
+        0.48,
+        0.03,
+        0.98
+      ],
+      [
+        0.48,
+        0.03,
+        0.9
+      ],
+      [
+        0.26,
+        0.03,
+        1.0
+      ],
+      [
+        0.26,
+        0.03,
+        0.94
+      ]
+    ],
+    "gripper_commands": {
+      "1": "close_gripper()",
+      "3": "open_gripper()",
+      "5": "close_gripper()",
+      "7": "open_gripper()"
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "summary": {
+    "n": 11,
+    "success": ["T01", "T04"],
+    "valid_failure": ["T02", "T03", "T07", "T09", "T10", "T11", "T12", "T13", "T17"],
+    "simulator_crash": []
+  },
+  "notes": {
+    "timeline": "all 11 episodes had n_obs == n_actions + 1",
+    "no_crashes": true,
+    "session": "icgs-primary-v3-cpu"
+  },
+  "results": [
+    {"program_id": "T01", "family": "basic-manipulation", "success": true, "result_class": "success", "n_actions": 138, "n_obs": 139, "timeline_ok": true, "sim_time_s": 6.9, "events": ["grasp", "lift"], "routine": ["grasp", "lift"]},
+    {"program_id": "T02", "family": "basic-manipulation", "success": false, "result_class": "valid_failure", "n_actions": 153, "n_obs": 154, "timeline_ok": true, "sim_time_s": 7.65, "events": ["grasp", "place"], "routine": ["grasp", "place"]},
+    {"program_id": "T03", "family": "obstacle-access", "success": false, "result_class": "valid_failure", "n_actions": 159, "n_obs": 160, "timeline_ok": true, "sim_time_s": 7.95, "events": ["push", "reach"], "routine": ["push", "reach"]},
+    {"program_id": "T04", "family": "container-access", "success": true, "result_class": "success", "n_actions": 179, "n_obs": 180, "timeline_ok": true, "sim_time_s": 8.95, "events": ["open", "close"], "routine": ["open_articulation", "close_articulation"]},
+    {"program_id": "T07", "family": "packing", "success": false, "result_class": "valid_failure", "n_actions": 295, "n_obs": 296, "timeline_ok": true, "sim_time_s": 14.75, "events": ["place", "place"], "routine": ["pick_place", "pick_place"]},
+    {"program_id": "T09", "family": "grasp-fit", "success": false, "result_class": "valid_failure", "n_actions": 149, "n_obs": 150, "timeline_ok": true, "sim_time_s": 7.45, "events": ["grasp", "place"], "routine": ["grasp", "place"]},
+    {"program_id": "T10", "family": "grasp-fit", "success": false, "result_class": "valid_failure", "n_actions": 242, "n_obs": 243, "timeline_ok": true, "sim_time_s": 12.1, "events": ["push_through_aperture", "place"], "routine": ["push", "pick_place"]},
+    {"program_id": "T11", "family": "orientation", "success": false, "result_class": "valid_failure", "n_actions": 203, "n_obs": 204, "timeline_ok": true, "sim_time_s": 10.15, "events": ["grasp", "rotate", "place"], "routine": ["grasp", "grasp_rotate", "place"]},
+    {"program_id": "T12", "family": "gated-access", "success": false, "result_class": "valid_failure", "n_actions": 290, "n_obs": 291, "timeline_ok": true, "sim_time_s": 14.5, "events": ["open", "push_through_aperture", "close"], "routine": ["open_articulation", "push", "close_articulation"]},
+    {"program_id": "T13", "family": "park-retrieve", "success": false, "result_class": "valid_failure", "n_actions": 241, "n_obs": 242, "timeline_ok": true, "sim_time_s": 12.05, "events": ["park", "retrieve"], "routine": ["pick_place", "pick_place"]},
+    {"program_id": "T17", "family": "regrasp", "success": false, "result_class": "valid_failure", "n_actions": 162, "n_obs": 163, "timeline_ok": true, "sim_time_s": 8.1, "events": ["grasp", "temporary_place", "regrasp"], "routine": ["grasp", "place", "grasp"]}
+  ]
+}

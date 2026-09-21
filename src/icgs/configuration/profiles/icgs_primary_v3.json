@@ -1,0 +1,56 @@
+{
+  "dataset_version": "icgs-primary-v3",
+  "program_manifest_version": 3,
+  "episode_schema_version": "icgs_episode_v2",
+  "composition_protocol_id": "icgs-composition-primary-v2",
+  "controller_protocol_id": "rlbench-timed-ik-v2",
+  "minimum_execution_modes": 1,
+  "execution_modes": ["scripted_waypoint_v1"],
+  "preserves": "primary_v2",
+  "phase": "1",
+  "splits": {
+    "train": 20,
+    "development": 4,
+    "test": 12
+  },
+  "train_on": "train_core",
+  "validation": "train_val",
+  "evaluation": ["development", "test"],
+  "pilot_program_ids": ["T01", "T02", "T03", "T04", "T07", "T09", "T10", "T11", "T12", "T13", "T17"],
+  "required_train_families": [
+    "basic-manipulation",
+    "container-access",
+    "packing",
+    "grasp-fit",
+    "orientation",
+    "park-retrieve",
+    "gated-access"
+  ],
+  "warmup_mixture": [0.7, 0.3],
+  "mixture_measured_on": "training_transitions",
+  "mixture_views": ["D_temporal", "D_dyn"],
+  "train_nominal_successes_per_program": 200,
+  "train_perturbed_attempts_per_program": 80,
+  "eval_perturbed_attempts_per_program": 20,
+  "perturbation_inner_fraction": 0.7,
+  "eval_held_out_position_bin": 3,
+  "quota_attempt_cap_multiplier": 5,
+  "train_core_fraction": 0.8,
+  "perturbed_per_kind": 16,
+  "perturbation_kinds": [
+    "action_pose_offset",
+    "gripper_timing",
+    "object_displacement",
+    "blocker_insertion",
+    "pause_hold"
+  ],
+  "outcome_classes": [
+    "success",
+    "valid_failure",
+    "simulator_crash",
+    "invalid_observation"
+  ],
+  "views": ["D_geom", "D_temporal", "D_dyn", "D_task"],
+  "camera_profile_id": "rlbench-wrist-depth-v1",
+  "layout_version": 3
+}

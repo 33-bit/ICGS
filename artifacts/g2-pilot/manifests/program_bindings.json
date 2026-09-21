@@ -1,0 +1,389 @@
+{
+  "manifest_version": 1,
+  "bindings": [
+    {
+      "program_id": "T06",
+      "split": "train",
+      "scene_id": "t06-place-into-drawer-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_root": "t06-seed-root-v1",
+      "workspace_bounds_m": [
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          0.75,
+          1.25
+        ]
+      ],
+      "randomization": {
+        "translation_bounds_m": [
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "yaw_deg": [
+          -30.0,
+          30.0
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1"
+      },
+      "seed_ids": [
+        "t06-seed-0001",
+        "t06-seed-0002",
+        "t06-seed-0003",
+        "t06-seed-0004",
+        "t06-seed-0005"
+      ],
+      "expert_id": "t06_place_into_drawer-waypoint-expert-v1",
+      "waypoint_protocol_id": "rlbench-static-waypoints-v1",
+      "controller_protocol_id": "rlbench-timed-v1",
+      "predicate_protocol_id": "t06_place_into_drawer-pose-predicate-v1",
+      "predicate_tolerances": {
+        "position_m": 0.08,
+        "rotation_deg": 15.0
+      },
+      "calibration_id": "rlbench-base-calibration-v1"
+    },
+    {
+      "program_id": "T08",
+      "split": "train",
+      "scene_id": "t08-pack-two-objects-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_root": "t08-seed-root-v1",
+      "workspace_bounds_m": [
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          0.75,
+          1.25
+        ]
+      ],
+      "randomization": {
+        "translation_bounds_m": [
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "yaw_deg": [
+          -30.0,
+          30.0
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1"
+      },
+      "seed_ids": [
+        "t08-seed-0001",
+        "t08-seed-0002",
+        "t08-seed-0003",
+        "t08-seed-0004",
+        "t08-seed-0005"
+      ],
+      "expert_id": "t08_pack_two_objects-waypoint-expert-v1",
+      "waypoint_protocol_id": "rlbench-static-waypoints-v1",
+      "controller_protocol_id": "rlbench-timed-v1",
+      "predicate_protocol_id": "t08_pack_two_objects-pose-predicate-v1",
+      "predicate_tolerances": {
+        "position_m": 0.08,
+        "rotation_deg": 15.0
+      },
+      "calibration_id": "rlbench-base-calibration-v1"
+    },
+    {
+      "program_id": "T09",
+      "split": "train",
+      "scene_id": "t09-place-into-holder-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_root": "t09-seed-root-v1",
+      "workspace_bounds_m": [
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          0.75,
+          1.25
+        ]
+      ],
+      "randomization": {
+        "translation_bounds_m": [
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "yaw_deg": [
+          -30.0,
+          30.0
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1"
+      },
+      "seed_ids": [
+        "t09-seed-0001",
+        "t09-seed-0002",
+        "t09-seed-0003",
+        "t09-seed-0004",
+        "t09-seed-0005"
+      ],
+      "expert_id": "t09_place_into_holder-waypoint-expert-v1",
+      "waypoint_protocol_id": "rlbench-static-waypoints-v1",
+      "controller_protocol_id": "rlbench-timed-v1",
+      "predicate_protocol_id": "t09_place_into_holder-pose-predicate-v1",
+      "predicate_tolerances": {
+        "position_m": 0.08,
+        "rotation_deg": 15.0
+      },
+      "calibration_id": "rlbench-base-calibration-v1"
+    },
+    {
+      "program_id": "T11",
+      "split": "train",
+      "scene_id": "t11-rotate-and-place-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_root": "t11-seed-root-v1",
+      "workspace_bounds_m": [
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          0.75,
+          1.25
+        ]
+      ],
+      "randomization": {
+        "translation_bounds_m": [
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "yaw_deg": [
+          -30.0,
+          30.0
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1"
+      },
+      "seed_ids": [
+        "t11-seed-0001",
+        "t11-seed-0002",
+        "t11-seed-0003",
+        "t11-seed-0004",
+        "t11-seed-0005"
+      ],
+      "expert_id": "t11_rotate_and_place-waypoint-expert-v1",
+      "waypoint_protocol_id": "rlbench-static-waypoints-v1",
+      "controller_protocol_id": "rlbench-timed-v1",
+      "predicate_protocol_id": "t11_rotate_and_place-pose-predicate-v1",
+      "predicate_tolerances": {
+        "position_m": 0.08,
+        "rotation_deg": 15.0
+      },
+      "calibration_id": "rlbench-base-calibration-v1"
+    },
+    {
+      "program_id": "T13",
+      "split": "train",
+      "scene_id": "t13-park-blocker-retrieve-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_root": "t13-seed-root-v1",
+      "workspace_bounds_m": [
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          0.75,
+          1.25
+        ]
+      ],
+      "randomization": {
+        "translation_bounds_m": [
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "yaw_deg": [
+          -30.0,
+          30.0
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1"
+      },
+      "seed_ids": [
+        "t13-seed-0001",
+        "t13-seed-0002",
+        "t13-seed-0003",
+        "t13-seed-0004",
+        "t13-seed-0005"
+      ],
+      "expert_id": "t13_park_blocker_retrieve-waypoint-expert-v1",
+      "waypoint_protocol_id": "rlbench-static-waypoints-v1",
+      "controller_protocol_id": "rlbench-timed-v1",
+      "predicate_protocol_id": "t13_park_blocker_retrieve-pose-predicate-v1",
+      "predicate_tolerances": {
+        "position_m": 0.08,
+        "rotation_deg": 15.0
+      },
+      "calibration_id": "rlbench-base-calibration-v1"
+    },
+    {
+      "program_id": "T14",
+      "split": "train",
+      "scene_id": "t14-park-and-restore-v1",
+      "asset_family_id": "icgs-procedural-primitives-v1",
+      "asset_version": "primitive-scene-2026-09-18",
+      "source_lineage_root": "t14-seed-root-v1",
+      "workspace_bounds_m": [
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          -0.4,
+          0.4
+        ],
+        [
+          0.75,
+          1.25
+        ]
+      ],
+      "randomization": {
+        "translation_bounds_m": [
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            -0.012,
+            0.012
+          ],
+          [
+            0.0,
+            0.0
+          ]
+        ],
+        "yaw_deg": [
+          -30.0,
+          30.0
+        ],
+        "scale": [
+          0.8,
+          1.2
+        ],
+        "camera_profile_id": "rlbench-base-cameras-v1",
+        "lighting_profile_id": "rlbench-base-lighting-v1"
+      },
+      "seed_ids": [
+        "t14-seed-0001",
+        "t14-seed-0002",
+        "t14-seed-0003",
+        "t14-seed-0004",
+        "t14-seed-0005"
+      ],
+      "expert_id": "t14_park_and_restore-waypoint-expert-v1",
+      "waypoint_protocol_id": "rlbench-static-waypoints-v1",
+      "controller_protocol_id": "rlbench-timed-v1",
+      "predicate_protocol_id": "t14_park_and_restore-pose-predicate-v1",
+      "predicate_tolerances": {
+        "position_m": 0.08,
+        "rotation_deg": 15.0
+      },
+      "calibration_id": "rlbench-base-calibration-v1"
+    }
+  ]
+}

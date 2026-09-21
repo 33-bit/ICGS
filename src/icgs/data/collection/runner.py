@@ -130,6 +130,8 @@ class AttemptSpec:
     commands: Sequence[TimedCommand] | None = None
     metadata: Mapping[str, Any] | None = None
     seed: int | None = None
+    approved_seed_id: str | None = None
+    execution_mode: str | None = None
 
     def __post_init__(self) -> None:
         for s_name, s_val in (
@@ -191,6 +193,9 @@ def run_collection(
     code_revision: str,
     is_dirty: bool,
     generator_version: str,
+    binding_manifest_path: str | Path | None = None,
+    approved_manifest_path: str | Path | None = None,
+    required_program_ids: Sequence[str] | None = None,
     dirty_patch_digest: str | None = None,
     command_factory: Callable[[AttemptSpec, Any], Iterable[TimedCommand] | MaterializedCommands] | None = None,
     monitor_factory: Callable[[AttemptSpec, Any], Any] | None = None,
@@ -235,6 +240,19 @@ def run_collection(
     if not isinstance(protocol_manifest, Mapping):
         raise TypeError(f"protocol_manifest must be a Mapping, got {type(protocol_manifest).__name__}")
 
+    if required_program_ids is not None and binding_manifest_path is None:
+        raise ValueError("required_program_ids requires binding_manifest_path")
+    if binding_manifest_path is not None:
+        from icgs.data.collection.bindings import load_binding_manifest
+
+        load_binding_manifest(binding_manifest_path, required_program_ids=required_program_ids)
+
+    approved_manifest_data = None
+    if approved_manifest_path is not None:
+        from icgs.data.collection.approved_manifest import load_approved_manifest
+
+        approved_manifest_data = load_approved_manifest(approved_manifest_path)
+
     required_protocol_identities = (
         "environment_protocol_id",
         "controller_protocol_id",
@@ -263,7 +281,11 @@ def run_collection(
 
     # Preflight dataset manifest
     from icgs.data.datasets.episodes import validate_dataset_manifest
-    manifest_data = validate_dataset_manifest(manifest_path, dataset_root=root_path)
+    manifest_data = validate_dataset_manifest(
+        manifest_path,
+        dataset_root=root_path,
+        approved_manifest_path=approved_manifest_path,
+    )
 
     # Lineage and asset family lookup
     valid_lineages = {entry["lineage_id"]: entry["split"] for entry in manifest_data.get("lineage", ())}
@@ -343,6 +365,23 @@ def run_collection(
         expected_split = "dev" if cat_prog.split == "development" else cat_prog.split
         if spec.split != expected_split:
             raise ValueError(f"spec {idx} program {spec.program_id} catalog split {expected_split} != spec split {spec.split}")
+
+        if approved_manifest_data is not None:
+            from icgs.data.collection.approved_manifest import validate_episode_provenance
+
+            approved_errors = validate_episode_provenance(
+                approved_manifest_data,
+                {
+                    "program_id": spec.program_id,
+                    "split": "development" if spec.split == "dev" else spec.split,
+                    "source_lineage_id": spec.source_lineage_id,
+                    "asset_family_id": spec.asset_family_id,
+                    "seed_id": spec.approved_seed_id,
+                    "execution_mode": spec.execution_mode,
+                },
+            )
+            if approved_errors:
+                raise ValueError(f"spec {idx} is not authorized by approved manifest: {'; '.join(approved_errors)}")
 
         # Program and track mixing guard
         if dataset_track == "exploratory":
@@ -520,6 +559,9 @@ def run_collection(
             "raw_commands_id": spec.raw_commands_id,
             "materialized_commands_id": spec.materialized_commands_id,
         }
+        if approved_manifest_data is not None:
+            prov["seed_id"] = spec.approved_seed_id
+            prov["execution_mode"] = spec.execution_mode
 
         attempt_metadata = dict(spec.metadata) if spec.metadata is not None else {}
         attempt_metadata["run_provenance"] = {

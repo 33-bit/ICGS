@@ -22,7 +22,9 @@ gates still do not authorize simulator collection. The
 [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
 
-Prerequisites: P00–P01 contracts; FG assets/calibration and split manifest approval before collection.
+Prerequisites: P00–P01 contracts; [ADR0013](../../decisions/0013-g2-certification-authorization.md)
+authorizes G2 certification work, but measured assets/calibration and split
+manifest approval remain required before collection.
 Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
 [baseline](../../baselines/instant_policy.md), [native contract](../../components/policy-data-contract.md),
 [research policy](../../RESEARCH.md) and [validation guide](../../../tests/README.md)
@@ -223,7 +225,9 @@ Run object-frame waypoint adaptations and free-space connectors only through phy
 
 Transcribe the archived proposal's T01–T20, V01–V04 and P/G/R held-out skeletons
 into an explicit program catalog; no filename inference. Pilot selects
-T06/T08/T09/T11/T13/T14. Bind actual assets/ranges/seeds only after G2 approval.
+T06/T08/T09/T11/T13/T14. Bind actual assets/ranges/seeds only after G2
+certification evidence and the resulting manifest approval; owner authorization
+alone is not a physical G2 PASS.
 Implement `map_event_annotation(segment, primitive_intervals)` by greatest temporal
 overlap with >=50% coverage, ties to earlier occurrence, otherwise mask. Compute
 rho from observed completion history, nu from current predicates and eligibility
@@ -249,6 +253,21 @@ foundations and the in-memory bounded attempt collector (`collect_attempt`) are
 implemented. Concrete simulator execution, concrete assets/seeds/tolerances,
 dataset collection workloads, and G1/G2 physical feasibility gates remain
 deferred/unauthorized.
+
+### Executable program-binding preflight — 2026-09-18
+
+`icgs.data.collection.bindings.load_binding_manifest` now provides the minimal
+fail-closed preflight for executable program specifications. Each binding must
+declare a catalog-matching scene, asset family/version, source-lineage root,
+workspace bounds, translation/yaw/scale/camera/lighting randomization, unique
+seed IDs, expert and waypoint protocols, controller/predicate protocol IDs,
+predicate tolerances and calibration identity. The loader checks catalog split
+agreement and rejects asset-family or source-lineage leakage before a caller
+constructs a simulator.
+
+This is metadata enforcement, not physical certification: scene files, expert
+executions, calibration measurements and tolerance sensitivity still need to be
+supplied and recorded for G2.
 
 ## Acceptance, resource limits and evidence
 
