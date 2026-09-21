@@ -17,3 +17,9 @@ def test_worker_command_uses_fixed_display_number():
     text = Path("scripts/colab_v3_distributed_worker.py").read_text(encoding="utf-8")
     assert "200 + worker_id" in text
     assert "xvfb-run -a" not in text
+
+
+def test_worker_invalid_result_hashes_the_candidate_directory():
+    text = Path("scripts/colab_v3_distributed_worker.py").read_text(encoding="utf-8")
+    assert "file_sha256=_file_hashes(candidate)" in text
+    assert "file_sha256=_file_hashes(result_dir)" not in text

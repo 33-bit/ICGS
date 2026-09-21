@@ -80,7 +80,7 @@ def run_worker(worker_id: str, queue: FilesystemJobQueue, *, once: bool = False,
                 result = WorkerResult(
                     job_id=job.job_id, attempt_id=job.attempt_id, episode_id=None,
                     program_id=job.program_id, outcome=outcome, result_dir=str(candidate),
-                    file_sha256=_file_hashes(result_dir), timeline=None,
+                    file_sha256=_file_hashes(candidate), timeline=None,
                 )
             queue.publish_ready(worker_id, result)
         except Exception as exc:
