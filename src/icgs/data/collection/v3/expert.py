@@ -79,12 +79,12 @@ def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, 
         norm = (dx * dx + dy * dy) ** 0.5
         ux, uy = (dx / norm, dy / norm) if norm > 1e-6 else (1.0, 0.0)
         pre = [obj[0] - ux * 0.06 + ax, obj[1] - uy * 0.06 + ay]
-        motions.append({"kind": "move", "xyz": [pre[0], pre[1], approach_z + az], "grip": 0.0, "grasp": False})
-        motions.append({"kind": "move", "xyz": [pre[0], pre[1], push_z], "grip": 0.0, "grasp": False})
+        motions.append({"kind": "move", "xyz": [pre[0], pre[1], approach_z + az], "grip": 1.0, "grasp": False})
+        motions.append({"kind": "move", "xyz": [pre[0], pre[1], push_z], "grip": 1.0, "grasp": False})
         if via is not None:
-            motions.append({"kind": "move", "xyz": [via[0], via[1], push_z], "grip": 0.0, "grasp": False})
-        motions.append({"kind": "move", "xyz": [target[0], target[1], push_z], "grip": 0.0, "grasp": False})
-        motions.append({"kind": "move", "xyz": [target[0] + rx, target[1] + ry, approach_z + rz], "grip": 0.0, "grasp": False})
+            motions.append({"kind": "move", "xyz": [via[0], via[1], push_z], "grip": 1.0, "grasp": False})
+        motions.append({"kind": "move", "xyz": [target[0], target[1], push_z], "grip": 1.0, "grasp": False})
+        motions.append({"kind": "move", "xyz": [target[0] + rx, target[1] + ry, approach_z + rz], "grip": 1.0, "grasp": False})
         return motions
 
     if stype in ARTICULATION_TYPES:
