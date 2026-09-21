@@ -445,27 +445,34 @@ def run_program(env, spec, plan=None) -> dict:
             continue
         if dist > 0.28:
             continue
-        if obj_a in push_objs:
-            retry = {"type": "push", "obj": obj_a, "target": obj_b, "push_z": 0.02}
-        else:
-            retry = {"type": "pick_place", "obj": obj_a, "target": obj_b, "grasp_z": 0.02, "place_z": 0.0}
-        grasped_name = obj_a
-        for motion in plan_step(retry, live_poses(spec.objects)):
-            kind = motion["kind"]
-            if kind in {"move", "slide"}:
-                xyz = np.asarray(motion["xyz"], dtype=np.float64)
-                if motion.get("grasp") or motion.get("frame") == "object":
-                    tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
-                    held = find_shape(obj_a)
-                    if held is not None:
-                        offset = np.asarray(held.get_position(), dtype=np.float64) - tip
-                    xyz = xyz - offset
-                    if xyz[2] < 0.86:
-                        xyz[2] -= float(V3_PROTOCOL.place_ik_z_shortfall_m)
-                move_ik(xyz, float(motion.get("grip", 1.0)))
-            elif kind == "grip":
-                obj = find_shape(obj_a) if float(motion.get("grip", 1)) < 0.5 else None
-                actuate(float(motion["grip"]), obj)
+        retry_count = 3 if obj_a in push_objs else 1
+        for _retry_index in range(retry_count):
+            retry = (
+                {"type": "push", "obj": obj_a, "target": obj_b, "push_z": 0.02}
+                if obj_a in push_objs
+                else {"type": "pick_place", "obj": obj_a, "target": obj_b, "grasp_z": 0.02, "place_z": 0.0}
+            )
+            grasped_name = obj_a
+            for motion in plan_step(retry, live_poses(spec.objects)):
+                kind = motion["kind"]
+                if kind in {"move", "slide"}:
+                    xyz = np.asarray(motion["xyz"], dtype=np.float64)
+                    if motion.get("grasp") or motion.get("frame") == "object":
+                        tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
+                        held = find_shape(obj_a)
+                        if held is not None:
+                            offset = np.asarray(held.get_position(), dtype=np.float64) - tip
+                        xyz = xyz - offset
+                        if xyz[2] < 0.86:
+                            xyz[2] -= float(V3_PROTOCOL.place_ik_z_shortfall_m)
+                    move_ik(xyz, float(motion.get("grip", 1.0)))
+                elif kind == "grip":
+                    obj = find_shape(obj_a) if float(motion.get("grip", 1)) < 0.5 else None
+                    actuate(float(motion["grip"]), obj)
+            if obj_a in push_objs:
+                remaining = _condition_distance(obj_a, obj_b)
+                if remaining is None or remaining <= 0.01:
+                    break
 
     tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
     for _ in range(15):
