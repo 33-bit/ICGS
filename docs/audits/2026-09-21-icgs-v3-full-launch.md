@@ -136,9 +136,9 @@ No worker receives the Hugging Face token.
 
 ## Remaining risk
 
-The full run is active. Remaining risks are Colab assignment lifetime and the
-publication backlog; queue state is recoverable only while the ephemeral VM is
-alive or after closed results have reached a verified HF revision.
+The full run is paused/stopped for schema repair. No workers or coordinator are
+currently active. A repaired run must start from a fresh VM and fresh bounded
+receipts; the old ephemeral queue is not reusable as repaired data.
 
 ## 2026-09-21 schema/publishing pause
 
@@ -153,5 +153,7 @@ RGB/depth/joint/object modalities remain omitted rather than synthesized.
 Publisher paths are semantic `episodes/{PROGRAM_ID}/{EPISODE_ID}` or
 `attempts/{PROGRAM_ID}/{ATTEMPT_ID}`. Closed-result validation now rejects an
 episode without a valid layout or artifact manifest. The already published
-legacy batch at `09368256...` is quarantined for cleanup/republication review;
-no new session or worker has been started after the pause.
+legacy batch at `09368256...` was removed from the current HF tree in cleanup
+commits `aa25a783...` and `7c96162e...`; the pre-repair bytes remain recoverable
+only through HF history and are documented in `primary_v3/legacy_schema_cleanup.json`.
+No new session or worker has been started after the pause.
