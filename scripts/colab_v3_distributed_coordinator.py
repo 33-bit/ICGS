@@ -16,7 +16,7 @@ from icgs.data.collection.v3.distributed_queue import FilesystemJobQueue
 from icgs.data.collection.v3.distributed_validation import ingest_validated_result, validate_closed_result
 
 
-MAX_READY_PER_TICK = 200
+MAX_READY_PER_TICK = 100
 
 
 def _inflight_jobs_from_queue(queue: FilesystemJobQueue):

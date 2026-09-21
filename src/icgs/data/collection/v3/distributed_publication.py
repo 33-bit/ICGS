@@ -29,7 +29,7 @@ def _same_identity(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
 
 
 class HuggingFaceBatchPublisher:
-    MAX_JOBS_PER_COMMIT = 200
+    MAX_JOBS_PER_COMMIT = 100
     def __init__(
         self,
         run: RunConfig,
