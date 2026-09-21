@@ -96,6 +96,18 @@ def test_failed_commit_keeps_jobs_unpublished(tmp_path: Path):
     assert queue.counts().ingested == 1
 
 
+def test_publish_uses_supplied_compact_manifest(tmp_path: Path):
+    queue, job = _queue(tmp_path)
+    publisher = HuggingFaceBatchPublisher(_run(), FakeApi(), "secret", queue, last_success_s=0.0)
+    compact = {
+        "manifest_version": 3,
+        "episodes": [{"episode_id": job.episode_id, "program_id": job.program_id, "outcome": "success"}],
+        "failure_attempts": [],
+    }
+    publisher.publish_due(now_s=300.0, force=False, local_manifest=compact)
+    assert publisher.remote_manifest["episodes"] == compact["episodes"]
+
+
 def test_conflicting_remote_manifest_refuses_before_api_call(tmp_path: Path):
     queue, job = _queue(tmp_path)
     api = FakeApi()

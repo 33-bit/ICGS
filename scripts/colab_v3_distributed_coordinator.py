@@ -35,11 +35,11 @@ def _inflight_jobs_from_queue(queue: FilesystemJobQueue):
     return tuple(by_id[key] for key in sorted(by_id))
 
 
-def _manifest_from_closed_queue(queue: FilesystemJobQueue) -> dict:
+def _manifest_from_closed_queue(queue: FilesystemJobQueue, states=("ingested", "published")) -> dict:
     from icgs.data.collection.v3.distributed_contracts import GenerationJob, WorkerResult
 
     manifest = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
-    for state in ("ingested", "published"):
+    for state in states:
         for directory in sorted((queue.root / state).iterdir()):
             if not directory.is_dir():
                 continue
@@ -72,7 +72,7 @@ class CoordinatorControlPlane:
         api = api_factory()
         token = Path("/content/.icgs_hf_token").read_text(encoding="utf-8").strip()
         publisher = HuggingFaceBatchPublisher(run, api, token, queue)
-        publisher.remote_manifest = publisher._manifest_from_states(("published",))
+        publisher.remote_manifest = _manifest_from_closed_queue(queue, states=("published",))
         return cls(run, queue, planner, publisher, manifest)
 
     def _refill(self, target: int = 400) -> None:
@@ -95,7 +95,10 @@ class CoordinatorControlPlane:
             self.queue.mark_ingested(result)
         self._refill()
         complete = self.planner.quota_complete()
-        receipt = self.publisher.publish_due(now_s=now, force=complete, complete=complete)
+        receipt = self.publisher.publish_due(
+            now_s=now, force=complete, complete=complete,
+            local_manifest=self.manifest,
+        )
         self.status = "COMPLETE" if complete and not self.queue.counts().claimed else "RUNNING"
         control = self.queue.root.parent / "control"
         control.mkdir(parents=True, exist_ok=True)

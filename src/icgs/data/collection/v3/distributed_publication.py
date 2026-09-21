@@ -122,6 +122,7 @@ class HuggingFaceBatchPublisher:
         force: bool,
         complete: bool = False,
         remote_manifest: Mapping[str, Any] | None = None,
+        local_manifest: Mapping[str, Any] | None = None,
     ) -> PublicationReceipt | None:
         if not force and not complete and now_s - self.last_success_s < self.run.publish_interval_s:
             return None
@@ -129,7 +130,7 @@ class HuggingFaceBatchPublisher:
         if not job_ids:
             return None
         remote = self.remote_manifest if remote_manifest is None else dict(remote_manifest)
-        local = self._batch_manifest()
+        local = self._batch_manifest() if local_manifest is None else dict(local_manifest)
         plan = self.plan_batch(local, remote)
         operations = self._operations(job_ids, plan["manifest"])
         commit = self.api.create_commit(
