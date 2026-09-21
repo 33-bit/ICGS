@@ -183,6 +183,9 @@ def assemble_attempt_record(
     error: str,
     episode_id: str | None = None,
     episode_kind: str = "nominal",
+    failure_type: str | None = None,
+    terminal_t: int | None = None,
+    valid_observation_until: int | None = None,
 ) -> dict[str, Any]:
     """Crash / invalid observation sidecar. No dynamics training, no episode_id."""
     keep_episode = outcome in {SUCCESS, VALID_FAILURE}
@@ -192,10 +195,10 @@ def assemble_attempt_record(
         "program_id": program_id,
         "episode_kind": episode_kind,
         "outcome": outcome,
-        "failure_type": None if outcome == SUCCESS else outcome,
+        "failure_type": failure_type,
         "terminal_reason": error,
-        "terminal_t": None,
-        "valid_observation_until": None,
+        "terminal_t": terminal_t,
+        "valid_observation_until": valid_observation_until,
         "terminated": True,
         "truncated": True,
         "status": "failed_attempt",
@@ -219,4 +222,5 @@ def quarantine_sidecar(
         outcome=outcome,
         error=error,
         episode_id=episode_id,
+        failure_type=None,
     )

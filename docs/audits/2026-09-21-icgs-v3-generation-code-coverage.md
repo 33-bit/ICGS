@@ -95,3 +95,34 @@ Local evidence: focused control/raw tests 18/18 PASS; complete generation and
 distributed suite 107/107 PASS; `scripts/validate_fast.py` 19/19 PASS;
 Python compilation and `git diff --check` PASS. L3 simulator, HF publication,
 and full quota launch remain NOT RUN in this repair turn.
+
+## Second detailed field audit (2026-09-21)
+
+The provenance/schema comparison against section 10 found and repaired two
+additional omissions: held-out status is now copied into
+`episode.provenance.held_out`, and pilot online observations are projected to
+the four-field whitelist before validation. Crash/invalid pilot attempts now
+retain numeric prefix arrays (`points` + offsets, poses, grip, actions), plan
+identity and a non-outcome failure cause. Persisted execution sidecars use the
+single canonical `outcome` field; `result_class` remains an internal runner
+classification only.
+
+The following are explicit NOT-PASS items for a future simulator gate, rather
+than silently treated as covered:
+
+1. `lighting_applied` and `camera_viewpoint_applied` are sampled and retained
+   in the plan, but the current RLBench adapter does not yet demonstrate that
+   those lighting/camera changes are applied to the simulator. The fresh L3
+   smoke must either prove the physical application or authorize an explicit
+   unavailable-modality policy.
+2. `rho`, `nu`, and `epsilon` task-label arrays are not currently materialized;
+   D_task therefore emits event pointers and null label pointers. This is a
+   contract gap if the section-12 label tuple is mandatory and must be resolved
+   before claiming complete D_task coverage.
+3. `V3_PROTOCOL.layout_version == 3` identifies the v3 dataset tree, while the
+   approved portable training sidecar remains `training_layout.LAYOUT_VERSION ==
+   2` under the 2026-09-19 design. These are currently separate namespaces, but
+   the operator documentation must keep that distinction explicit.
+
+No full-generation launch is authorized by this audit alone. The above items
+remain tracked until a fresh bounded simulator/publication receipt closes them.

@@ -68,6 +68,21 @@ class ExpertPlanningTests(unittest.TestCase):
         self.assertIn("write_training_episode_layout", text)
         self.assertIn('write_dir / "layout"', text)
 
+    def test_pilot_persists_only_outcome_not_result_class(self):
+        from pathlib import Path
+
+        text = Path("scripts/colab_v3_pilot_episodes_worker.py").read_text(encoding="utf-8")
+        self.assertIn('execution["outcome"] = result_class', text)
+        self.assertIn('"result_class"}', text.replace(", ", ""))
+
+    def test_pilot_invalid_attempt_retains_safe_prefix_arrays(self):
+        from pathlib import Path
+
+        text = Path("scripts/colab_v3_pilot_episodes_worker.py").read_text(encoding="utf-8")
+        self.assertIn('point_offsets=point_offsets', text)
+        self.assertIn('T_w_e=np.asarray([item["T_w_e"] for item in timed]', text)
+        self.assertNotIn('dtype=object', text)
+
     def test_pilot_uses_measured_wrist_points_not_tip_repetition(self):
         from pathlib import Path
 

@@ -52,39 +52,13 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
     from icgs.data.collection.v3.batch import plan_program_attempts, bounds_from_row
     from icgs.data.collection.v3.episode_record import assemble_episode_v2, classify_generation_outcome
     from icgs.data.training_layout import LAYOUT_VERSION, write_training_episode_layout
+    from icgs.data.collection.v3.rlbench_attempt import online_observation_view
 
     write_dir.mkdir(parents=True, exist_ok=True)
     binding_path = Path(os.environ.get("ICGS_V3_BINDING_JSON", ""))
     if binding_path.is_file():
         row["_binding"] = json.loads(binding_path.read_text(encoding="utf-8"))
     timed = row.get("_timed_obs") or []
-    if len(timed) < 2:
-        plan_payload = Path(os.environ.get("ICGS_V3_ATTEMPT_JSON", ""))
-        planned_episode = None
-        if plan_payload.is_file():
-            planned_episode = json.loads(plan_payload.read_text(encoding="utf-8")).get("episode_id")
-        attempt_episode = planned_episode or f"v3-{row['program_id'].lower()}-00000"
-        attempt = {
-            "attempt_id": f"att-{attempt_episode}",
-            "episode_id": None,
-            "program_id": row["program_id"],
-            "outcome": row.get("result_class", "simulator_crash"),
-            "terminal_reason": row.get("error", "observation_incomplete"),
-            "status": "failed_attempt",
-        }
-        (write_dir / "attempt.json").write_text(json.dumps(attempt, indent=2) + "\n")
-        sidecar = {
-            "outcome": attempt["outcome"],
-            "program_id": row["program_id"],
-            "error": attempt["terminal_reason"],
-        }
-        (write_dir / "execution.json").write_text(json.dumps(sidecar, indent=2) + "\n")
-        files = {
-            str(path.relative_to(write_dir)): {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size}
-            for path in write_dir.iterdir() if path.is_file()
-        }
-        (write_dir / "artifact_manifest.json").write_text(json.dumps({**attempt, "files": files}, indent=2) + "\n")
-        return
     transitions = []
     for index in range(len(timed) - 1):
         transitions.append({
@@ -146,6 +120,7 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
     )
     if result_class in {"simulator_crash", "invalid_observation"}:
         from icgs.data.collection.v3.episode_record import assemble_attempt_record
+        valid_until = len(timed) - 1 if timed else None
         attempt = assemble_attempt_record(
             attempt_id=f"att-{plan.episode_id}",
             program_id=row["program_id"],
@@ -153,19 +128,51 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
             error=row.get("error", row.get("terminal_reason", "observation_incomplete")),
             episode_id=None,
             episode_kind=plan.episode_kind,
+            failure_type=row.get("error_type") or ("observation_schema" if result_class == "invalid_observation" else "simulator_exception"),
+            terminal_t=len(row.get("_actions") or ()) or None,
+            valid_observation_until=valid_until,
         )
+        attempt.update({
+            "scene_seed": plan.scene_seed,
+            "scene_signature": plan.randomization.get("scene_signature"),
+            "asset_instance_id": plan.randomization.get("asset_instance_id"),
+            "asset_family_id": binding.get("asset_family_id"),
+            "split": "dev" if binding.get("split") == "development" else binding.get("split"),
+            "dataset_version": V3_PROTOCOL.dataset_version,
+            "program_manifest_version": V3_PROTOCOL.program_manifest_version,
+            "execution_mode": V3_PROTOCOL.execution_mode,
+            "execution_source": V3_PROTOCOL.execution_mode,
+            "error_type": row.get("error_type"),
+            "traceback": row.get("traceback"),
+        })
         (write_dir / "attempt.json").write_text(json.dumps(_enc(attempt), indent=2) + "\n")
-        np.savez_compressed(write_dir / "valid_prefix.npz", actions=np.empty((0, 8), dtype=np.float64))
+        point_frames = [np.asarray(item["points"], dtype=np.float32).reshape(-1, 3) for item in timed]
+        point_offsets = np.zeros(len(point_frames) + 1, dtype=np.int64)
+        for index, frame in enumerate(point_frames):
+            point_offsets[index + 1] = point_offsets[index] + len(frame)
+        point_values = (
+            np.concatenate(point_frames, axis=0)
+            if point_frames else np.empty((0, 3), dtype=np.float32)
+        )
+        np.savez_compressed(
+            write_dir / "valid_prefix.npz",
+            actions=np.asarray(row.get("_actions") or (), dtype=np.float64),
+            points=point_values,
+            point_offsets=point_offsets,
+            T_w_e=np.asarray([item["T_w_e"] for item in timed], dtype=np.float64),
+            grip=np.asarray([item["grip"] for item in timed], dtype=np.float32),
+        )
         files = {
             str(path.relative_to(write_dir)): {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size}
             for path in write_dir.iterdir() if path.is_file()
         }
         (write_dir / "artifact_manifest.json").write_text(json.dumps({**attempt, "files": files}, indent=2) + "\n")
         return
+    online_timed = [online_observation_view(item) for item in timed]
     record = assemble_episode_v2(
         plan=plan,
         binding=binding,
-        observations=timed,
+        observations=online_timed,
         transitions=transitions,
         result_class=result_class,
         intervention=row.get("intervention"),
@@ -173,7 +180,11 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
         object_states=row.get("_object_states"),
     )
     (write_dir / "episode.json").write_text(json.dumps(_enc(record), indent=2) + "\n")
-    execution = {k: v for k, v in row.items() if k != "_timed_obs"}
+    execution = {
+        k: v for k, v in row.items()
+        if k not in {"_timed_obs", "result_class"}
+    }
+    execution["outcome"] = result_class
     (write_dir / "execution.json").write_text(json.dumps(_enc(execution), indent=2) + "\n")
 
     def _pose_vector(transform) -> np.ndarray:
@@ -341,6 +352,7 @@ def run_program(env, spec, plan=None) -> dict:
     sim_time = 0.0
     dt = 0.05
     timed_obs: list[dict] = []
+    actions_series: list[np.ndarray] = []
     robot_states: list[dict] = []
     object_states: list[dict] = []
 
@@ -421,6 +433,7 @@ def run_program(env, spec, plan=None) -> dict:
         sim_time += dt
         n_actions += 1
         n_obs += 1
+        actions_series.append(np.asarray(action, dtype=np.float64).copy())
         observed = snapshot_obs(raw, fallback_grip)
         timed_obs.append(observed)
         robot_states.append({
@@ -736,6 +749,7 @@ def run_program(env, spec, plan=None) -> dict:
             if find_shape(name) is not None
         },
         "_timed_obs": timed_obs,
+        "_actions": actions_series,
         "_robot_states": robot_states,
         "_object_states": object_states,
         "_plan": None if plan is None else plan.as_dict(),
@@ -792,6 +806,7 @@ def main() -> int:
                     "traceback": traceback.format_exc()[-2000:],
                     "events": [event["primitive"] for event in spec.events],
                     "routine": [step["type"] for step in spec.routine],
+                    "_plan": None if plan is None else plan.as_dict(),
                 }
             results.append(row)
             public = {k: v for k, v in row.items() if k != "_timed_obs"}

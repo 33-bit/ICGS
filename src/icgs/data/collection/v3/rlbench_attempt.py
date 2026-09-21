@@ -14,6 +14,17 @@ from typing import Any, Mapping, Sequence
 
 import numpy as np
 
+
+ONLINE_OBSERVATION_FIELDS = frozenset({"points", "point_valid", "T_w_e", "grip"})
+
+
+def online_observation_view(observation: Mapping[str, Any]) -> dict[str, Any]:
+    """Return only the public online-observation contract fields."""
+    missing = ONLINE_OBSERVATION_FIELDS - set(observation)
+    if missing:
+        raise ValueError(f"online observation missing fields: {sorted(missing)}")
+    return {field: observation[field] for field in ("points", "point_valid", "T_w_e", "grip")}
+
 from icgs.data.collection.v3.distributed_contracts import GenerationJob, WorkerResult
 from icgs.data.collection.v3.episode_record import assemble_attempt_record, assemble_episode_v2
 from icgs.data.collection.v3.perturbations import INVALID_OBSERVATION, SIMULATOR_CRASH, SUCCESS, VALID_FAILURE
@@ -131,6 +142,7 @@ def materialize_raw_attempt(
             error=_attempt_error(raw),
             episode_id=None,
             episode_kind=job.plan.episode_kind,
+            failure_type=raw.error_type or ("simulator_exception" if raw.simulator_crash else None),
         )
         attempt.update({
             "error_type": raw.error_type,
@@ -352,8 +364,10 @@ def raw_attempt_from_exception(task: Any, exc: BaseException) -> RawAttempt:
 
 __all__ = [
     "MaterializedAttempt",
+    "ONLINE_OBSERVATION_FIELDS",
     "RawAttempt",
     "materialize_raw_attempt",
+    "online_observation_view",
     "raw_attempt_from_exception",
     "write_closed_attempt_result",
 ]

@@ -67,13 +67,27 @@ def run_worker(
                 env = env_factory(job)
                 try:
                     task = task_loader(job.program_id)
-                    from scripts.colab_g2_dataset_generator import execute_raw_attempt
-                    raw = execute_raw_attempt(task, env, {
+                    from scripts.colab_g2_dataset_generator import execute_raw_attempt, load_task_specs
+                    from icgs.data.collection.v3.attempt_prep import prepare_attempt
+                    from icgs.data.collection.v3.batch import attempt_from_dict
+                    compiled = load_task_specs(approved_manifest, protocol="v3")[job.program_id]
+                    prepared = prepare_attempt(
+                        job.plan,
+                        compiled.get("objects") or {},
+                        compiled["routine"],
+                    )
+                    execution_spec = dict(compiled)
+                    execution_spec.update({
                         "task_id": job.program_id,
                         "episode_id": job.episode_id,
                         "_approved_binding": binding,
-                        "_plan": job.plan.as_dict(),
+                        "_plan": attempt_from_dict(job.plan.as_dict()),
+                        "_prepared": prepared,
+                        "routine": prepared["routine"],
                         "_allow_valid_failure": True,
+                    })
+                    raw = execute_raw_attempt(task, env, {
+                        **execution_spec,
                     })
                     materialized = materialize_raw_attempt(raw, job, binding)
                     written_result = write_closed_attempt_result(

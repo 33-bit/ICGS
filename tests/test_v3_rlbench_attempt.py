@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import os
 from pathlib import Path
 import inspect
 
@@ -13,6 +14,7 @@ from icgs.data.collection.v3.rlbench_attempt import (
     RawAttempt,
     materialize_raw_attempt,
     write_closed_attempt_result,
+    online_observation_view,
 )
 
 
@@ -109,6 +111,7 @@ def test_invalid_observation_is_attempt_with_null_episode_id():
     assert materialized.episode_record is None
     assert materialized.attempt_record is not None
     assert materialized.attempt_record["episode_id"] is None
+    assert materialized.attempt_record["failure_type"] is None
 
 
 def test_simulator_crash_remains_attempt_even_with_valid_prefix():
@@ -118,6 +121,20 @@ def test_simulator_crash_remains_attempt_even_with_valid_prefix():
     assert materialized.outcome == "simulator_crash"
     assert materialized.episode_record is None
     assert materialized.attempt_record["episode_id"] is None
+    assert materialized.attempt_record["failure_type"] == "simulator_exception"
+
+
+def test_attempt_record_keeps_failure_cause_and_prefix_boundaries():
+    from icgs.data.collection.v3.episode_record import assemble_attempt_record
+
+    record = assemble_attempt_record(
+        attempt_id="att-1", program_id="T01", outcome="invalid_observation",
+        error="bad point cloud", failure_type="observation_schema",
+        terminal_t=2, valid_observation_until=1,
+    )
+    assert record["failure_type"] == "observation_schema"
+    assert record["terminal_t"] == 2
+    assert record["valid_observation_until"] == 1
 
 
 def test_closed_valid_failure_writes_full_layout_and_hashes(tmp_path: Path):
@@ -148,3 +165,17 @@ def test_shared_raw_executor_has_exact_public_signature_and_wrapper_dependency()
     signature = inspect.signature(execute_raw_attempt)
     assert list(signature.parameters) == ["task", "env", "spec"]
     assert "execute_raw_attempt" in Path("scripts/colab_g2_dataset_generator.py").read_text(encoding="utf-8")
+
+
+def test_pilot_writer_strips_robot_telemetry_from_online_observation_whitelist(tmp_path: Path):
+    observation = {
+            "points": np.ones((2, 3), dtype=np.float32),
+            "point_valid": np.ones(2, dtype=bool),
+            "T_w_e": np.eye(4),
+            "grip": 0,
+            "joint_positions": np.zeros(7),
+            "joint_velocities": np.zeros(7),
+    }
+    public = online_observation_view(observation)
+    assert set(public) == {"points", "point_valid", "T_w_e", "grip"}
+    assert "joint_positions" not in public
