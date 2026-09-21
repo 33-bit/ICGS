@@ -43,6 +43,8 @@ class ExpertPlanningTests(unittest.TestCase):
         self.assertTrue(all(not item.get("grasp") for item in motions))
         self.assertTrue(any(item["kind"] == "move" for item in motions))
         self.assertNotIn("pick_place", [item.get("kind") for item in motions])
+        final_contact = motions[-2]["xyz"]
+        self.assertGreater(final_contact[1], poses["push_target"][1])
 
     def test_worker_does_not_remap_push_to_pick_place(self):
         from pathlib import Path
