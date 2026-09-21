@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import time
 
 from icgs.data.collection.v3.distributed_contracts import RunConfig
 from icgs.data.collection.v3.steps import V3_PROGRAMS
@@ -106,34 +107,50 @@ def main() -> int:
         "manifest": {"manifest_version": 3, "episodes": [], "failure_attempts": []},
     }, indent=2) + "\n", encoding="utf-8")
     processes = []
+    worker_pids = {}
     for command in commands:
-        processes.append(subprocess.Popen(
+        process = subprocess.Popen(
             command, env=env, start_new_session=True,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        ))
+        )
+        worker_pids[command[command.index("--worker-id") + 1]] = process.pid
+        processes.append(process)
     coordinator_log = root / "control" / "coordinator.log"
     coordinator_stream = coordinator_log.open("a", encoding="utf-8")
-    processes.append(subprocess.Popen(
+    coordinator_process = subprocess.Popen(
         coordinator, env=env, start_new_session=True,
         stdout=coordinator_stream, stderr=subprocess.STDOUT,
-    ))
+    )
+    processes.append(coordinator_process)
     watchdog = [
         "/content/icgs-data-env/bin/python", "-B",
         "/content/ICGS/scripts/colab_v3_distributed_watchdog.py",
         "--run-root", str(root),
     ]
-    processes.append(subprocess.Popen(
+    watchdog_process = subprocess.Popen(
         watchdog, env=env, start_new_session=True,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-    ))
-    (root / "control" / "launch.json").write_text(
-        json.dumps({"workers": 200, "coordinator_pid": processes[-2].pid, "watchdog_pid": processes[-1].pid}) + "\n",
-        encoding="utf-8",
     )
-    print(json.dumps({"workers": 200, "coordinator_pid": processes[-2].pid, "watchdog_pid": processes[-1].pid}))
+    processes.append(watchdog_process)
+    launch_receipt = {
+        "workers": 200,
+        "worker_pids": worker_pids,
+        "coordinator_pid": coordinator_process.pid,
+        "watchdog_pid": watchdog_process.pid,
+        "restart_counts": {
+            "coordinator": 0,
+            "workers": {worker_id: 0 for worker_id in worker_pids},
+        },
+        "launched_at_s": time.time(),
+    }
+    receipt_path = root / "control" / "launch.json"
+    temporary = receipt_path.with_name(receipt_path.name + f".partial-{os.getpid()}")
+    temporary.write_text(json.dumps(launch_receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temporary, receipt_path)
+    print(json.dumps(launch_receipt, sort_keys=True))
     if args.detach:
         return 0
-    return processes[-2].wait()
+    return coordinator_process.wait()
 
 
 if __name__ == "__main__":

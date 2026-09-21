@@ -140,3 +140,11 @@ def test_legacy_collector_exposes_opt_in_valid_failure_capture():
 
     parameter = inspect.signature(collect_single_episode).parameters["allow_valid_failure"]
     assert parameter.default is False
+
+
+def test_shared_raw_executor_has_exact_public_signature_and_wrapper_dependency():
+    from scripts.colab_g2_dataset_generator import execute_raw_attempt
+
+    signature = inspect.signature(execute_raw_attempt)
+    assert list(signature.parameters) == ["task", "env", "spec"]
+    assert "execute_raw_attempt" in Path("scripts/colab_g2_dataset_generator.py").read_text(encoding="utf-8")

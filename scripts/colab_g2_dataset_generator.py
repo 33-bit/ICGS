@@ -19,9 +19,11 @@ import shutil
 import sys
 import time
 import traceback
-from typing import Any
+from typing import Any, Mapping
 
 import numpy as np
+
+from icgs.data.collection.v3.rlbench_attempt import RawAttempt
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("icgs.g2.generator")
@@ -235,6 +237,43 @@ def load_approved_generation_manifest(
     return data, digest
 
 
+def execute_raw_attempt(task: Any, env: Any, spec: Mapping[str, Any]) -> RawAttempt:
+    """Execute one measured RLBench attempt through the legacy-compatible path.
+
+    The executor is deliberately independent of v3 planning/materialization.  It
+    records the raw simulator prefix and keeps the v1 materialized return in
+    metadata so old callers can retain their exact record shape.
+    """
+    task_id = str(spec.get("task_id") or spec.get("program_id") or "unknown")
+    ep_id = str(spec.get("episode_id") or f"raw-{task_id.lower()}")
+    binding = dict(spec.get("_approved_binding") or spec.get("approved_binding") or {})
+    result = _collect_single_episode_legacy(
+        task,
+        env,
+        dict(spec),
+        ep_id,
+        task_id,
+        approved_binding=binding,
+        approved_manifest_digest=str(spec.get("approved_manifest_digest", "")),
+        seed_id=str(spec.get("seed_id", "")),
+        execution_mode=str(spec.get("execution_mode", "scripted_waypoint_v1")),
+        allow_valid_failure=bool(spec.get("_allow_valid_failure", True)),
+    )
+    record, auxiliary = result
+    state = getattr(task, "_icgs_attempt_state", {}) or {}
+    provenance = record.get("provenance", {})
+    return RawAttempt(
+        observations=tuple(state.get("observations") or ()),
+        actions=tuple(state.get("actions") or ()),
+        scene_states=tuple(state.get("scene_states") or ()),
+        collision_events=tuple(state.get("collision_events") or auxiliary.get("collision_events", ())),
+        sim_time_s=float(state.get("sim_time", 0.0)),
+        predicates_ok=bool(provenance.get("terminal_success", auxiliary.get("metadata", {}).get("terminal_success", False))),
+        terminal_reason=str(provenance.get("terminal_reason", auxiliary.get("metadata", {}).get("terminal_reason", "completed"))),
+        metadata={"legacy_record": record, "legacy_auxiliary": auxiliary},
+    )
+
+
 def collect_single_episode(
     task,
     env,
@@ -248,6 +287,33 @@ def collect_single_episode(
     execution_mode: str,
     allow_valid_failure: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Compatibility wrapper preserving v1 false-predicate behavior."""
+    raw = execute_raw_attempt(task, env, {
+        **dict(spec),
+        "task_id": task_id,
+        "episode_id": ep_id,
+        "_approved_binding": approved_binding,
+        "approved_manifest_digest": approved_manifest_digest,
+        "seed_id": seed_id,
+        "execution_mode": execution_mode,
+    })
+    metadata = dict(raw.metadata or {})
+    return metadata["legacy_record"], metadata["legacy_auxiliary"]
+
+
+def _collect_single_episode_legacy(
+    task,
+    env,
+    spec: dict[str, Any],
+    ep_id: str,
+    task_id: str,
+    *,
+    approved_binding: dict[str, Any],
+    approved_manifest_digest: str,
+    seed_id: str,
+    execution_mode: str,
+    allow_valid_failure: bool = False,
+):
     from icgs.contracts.method import TimedObservation, TimedCommand, ExecutedTransition
     from icgs.contracts.records import Observation
     from icgs.environments.rlbench.controller import pose_to_matrix, filter_and_downsample_points
@@ -712,7 +778,8 @@ def collect_single_episode(
         "collision_events": collision_events,
         "metadata": {
             "seed_id": seed_id,
-            "execution_mode": execution_mode,
+        "execution_mode": execution_mode,
+        "_allow_valid_failure": allow_valid_failure,
             "approved_manifest_digest": approved_manifest_digest,
             "approved_manifest_protocol_id": "icgs-composition-primary-v1",
             "randomization_declared": approved_binding["randomization"],

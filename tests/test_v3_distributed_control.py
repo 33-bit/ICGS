@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import os
 
 from scripts.colab_v3_distributed_launch import build_worker_commands, validate_smoke_receipt
-from scripts.colab_v3_distributed_coordinator import _inflight_jobs_from_queue
+from scripts.colab_v3_distributed_coordinator import CoordinatorLock, _inflight_jobs_from_queue
+from scripts.colab_v3_distributed_watchdog import (
+    _coordinator_lock_is_free,
+    _pid_matches,
+    reconcile_processes,
+)
 from icgs.data.collection.v3.distributed_contracts import GenerationJob, RunConfig
 from icgs.data.collection.v3.distributed_planner import DistributedPlanner
 from icgs.data.collection.v3.distributed_queue import FilesystemJobQueue
@@ -60,6 +67,73 @@ def test_launcher_detaches_child_output_from_control_pipe():
     text = Path("scripts/colab_v3_distributed_launch.py").read_text(encoding="utf-8")
     assert "stdout=subprocess.DEVNULL" in text
     assert "coordinator.log" in text
+
+
+def test_coordinator_lock_rejects_second_owner_and_becomes_free(tmp_path):
+    lock_path = tmp_path / "control" / "coordinator.lock"
+    with CoordinatorLock(lock_path):
+        assert _coordinator_lock_is_free(lock_path) is False
+        import pytest
+        with pytest.raises(RuntimeError, match="coordinator lock is already held"):
+            with CoordinatorLock(lock_path):
+                pass
+    assert _coordinator_lock_is_free(lock_path) is True
+
+
+def test_pid_identity_requires_every_expected_cmdline_token():
+    reader = lambda pid: b"python\0worker.py\0--worker-id\0" + b"007" + b"\0--run-root\0/content/run\0"
+    assert _pid_matches(12, ("worker.py", "007", "/content/run"), cmdline_reader=reader)
+    assert not _pid_matches(12, ("worker.py", "008", "/content/run"), cmdline_reader=reader)
+    assert not _pid_matches(12, ("worker.py", "007", "/content/other"), cmdline_reader=reader)
+
+
+def test_watchdog_restarts_only_missing_slots_and_updates_receipt(tmp_path):
+    root = tmp_path / "run"
+    control = root / "control"
+    control.mkdir(parents=True)
+    approved = tmp_path / "approved.json"
+    approved.write_text("{}", encoding="utf-8")
+    (control / "run.json").write_text(json.dumps({
+        "run": {"worker_count": 200},
+        "approved_manifest": str(approved),
+    }), encoding="utf-8")
+    worker_pids = {f"{index:03d}": 1000 + index for index in range(200)}
+    launch = {
+        "workers": 200,
+        "worker_pids": worker_pids,
+        "coordinator_pid": 900,
+        "watchdog_pid": os.getpid(),
+        "restart_counts": {
+            "coordinator": 0,
+            "workers": {f"{index:03d}": 0 for index in range(200)},
+        },
+    }
+    (control / "launch.json").write_text(json.dumps(launch), encoding="utf-8")
+
+    def reader(pid: int) -> bytes:
+        if pid == 900:
+            return f"python\0colab_v3_distributed_coordinator.py\0--run-config\0{control / 'run.json'}\0".encode()
+        if pid == worker_pids["007"]:
+            return b""
+        worker_id = f"{pid - 1000:03d}"
+        return f"python\0colab_v3_distributed_worker.py\0--worker-id\0{worker_id}\0--run-root\0{root}\0".encode()
+
+    class Process:
+        pid = 7777
+
+    calls = []
+    def popen(command, **kwargs):
+        calls.append((command, kwargs))
+        return Process()
+
+    updated = reconcile_processes(root, popen=popen, cmdline_reader=reader)
+    assert len(calls) == 1
+    command = calls[0][0]
+    assert command[command.index("--worker-id") + 1] == "007"
+    assert command[command.index("--server-num") + 1] == "207"
+    assert updated["worker_pids"]["007"] == 7777
+    assert updated["restart_counts"]["workers"]["007"] == 1
+    assert updated["coordinator_pid"] == 900
 
 
 def test_launch_smoke_accepts_retained_valid_failure(tmp_path):

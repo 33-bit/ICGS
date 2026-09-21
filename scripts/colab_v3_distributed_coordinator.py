@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import json
+import os
 from pathlib import Path
 import time
 
@@ -18,6 +20,44 @@ from icgs.data.collection.v3.distributed_validation import ingest_validated_resu
 
 
 MAX_READY_PER_TICK = 100
+
+
+def _atomic_json(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + f".partial-{os.getpid()}-{time.time_ns()}")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+class CoordinatorLock:
+    """Non-blocking filesystem lock held for the complete coordinator lifetime."""
+
+    def __init__(self, path: str | Path):
+        self.path = Path(path)
+        self.stream = None
+
+    def __enter__(self):
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.stream = self.path.open("a+")
+        try:
+            fcntl.flock(self.stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            self.stream.close()
+            self.stream = None
+            raise RuntimeError("coordinator lock is already held") from exc
+        self.stream.seek(0)
+        self.stream.truncate()
+        self.stream.write(f"{os.getpid()}\n")
+        self.stream.flush()
+        os.fsync(self.stream.fileno())
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self.stream is not None:
+            fcntl.flock(self.stream.fileno(), fcntl.LOCK_UN)
+            self.stream.close()
+            self.stream = None
+        return False
 
 
 def _inflight_jobs_from_queue(queue: FilesystemJobQueue):
@@ -130,6 +170,7 @@ class CoordinatorControlPlane:
 
     def tick(self, *, now_s: float | None = None) -> None:
         now = time.time() if now_s is None else now_s
+        self._write_heartbeat(now, phase="tick_start")
         self.queue.recover_stale(now_s=now, stale_after_s=1800.0)
         for result in self.queue.iter_ready()[:MAX_READY_PER_TICK]:
             job_path = self.queue.root / "ready" / result.job_id / "job.json"
@@ -146,19 +187,32 @@ class CoordinatorControlPlane:
             local_manifest=self.manifest,
         )
         self.status = "COMPLETE" if complete and not self.queue.counts().claimed else "RUNNING"
+        self._write_heartbeat(now, phase="tick_end")
+
+    def _write_heartbeat(self, now: float, *, phase: str) -> None:
         control = self.queue.root.parent / "control"
-        control.mkdir(parents=True, exist_ok=True)
-        (control / "coordinator-heartbeat.json").write_text(json.dumps({
+        _atomic_json(control / "coordinator-heartbeat.json", {
             "status": self.status, "timestamp_s": now,
+            "phase": phase, "pid": os.getpid(),
             "queue": self.queue.counts().__dict__, "planner": self.planner.snapshot().as_dict(),
-        }, indent=2) + "\n", encoding="utf-8")
+        })
 
     def run_forever(self, *, poll_s: float = 1.0) -> int:
-        self.status = "RUNNING"
-        while self.status not in {"COMPLETE", "INCOMPLETE", "FAILED"}:
-            self.tick()
-            time.sleep(poll_s)
-        return 0 if self.status == "COMPLETE" else 1
+        control = self.queue.root.parent / "control"
+        with CoordinatorLock(control / "coordinator.lock"):
+            _atomic_json(control / "coordinator.pid", {"pid": os.getpid(), "run_id": self.run.run_id})
+            try:
+                self.status = "RUNNING"
+                while self.status not in {"COMPLETE", "INCOMPLETE", "FAILED"}:
+                    self.tick()
+                    if self.status not in {"COMPLETE", "INCOMPLETE", "FAILED"}:
+                        time.sleep(poll_s)
+                return 0 if self.status == "COMPLETE" else 1
+            finally:
+                try:
+                    (control / "coordinator.pid").unlink()
+                except FileNotFoundError:
+                    pass
 
 
 def main() -> int:

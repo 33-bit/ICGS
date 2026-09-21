@@ -1,7 +1,7 @@
 # ICGS v3 generation-plan/code coverage audit
 
 Date: 2026-09-21  
-Audit revision: working tree after `cc81bf4`  
+Audit revision: working tree after coordinator/watchdog and raw-executor repair
 Scope: `docs/superpowers/plans/2026-09-21-primary-v3-distributed-generation.md`,
 the v3 generation spec, distributed runtime, pilot runner, materializer,
 training layout, views, queue, planner, validation and HF publisher.
@@ -18,7 +18,7 @@ training layout, views, queue, planner, validation and HF publisher.
 | Validation/ingestion | `v3/distributed_validation.py`, coordinator | Identity, checksums, timeline, schema, layout and artifact manifest checks |
 | Resume/planning | `v3/distributed_planner.py`, coordinator resume helpers | Reconstructs pending/claimed/ready/ingested/published state; remote manifest fetched on startup |
 | HF publication | `v3/distributed_publication.py` | Semantic paths, compact manifest, receipts/views, bounded batches and remote hash verification hook |
-| Launch/keepalive | `scripts/colab_v3_distributed_launch.py`, watchdog | Exact 200 displays and detached output; watchdog restart remains incomplete |
+| Launch/keepalive | `scripts/colab_v3_distributed_launch.py`, watchdog | Exact 200 displays, detached output, atomic PID receipt, bounded replacement and coordinator lock |
 | Training views | `src/icgs/data/datasets/v3_views.py` | Pointer generation is now emitted per episode; sampler remains downstream |
 
 ## Plan coverage matrix
@@ -26,12 +26,12 @@ training layout, views, queue, planner, validation and HF publisher.
 | Plan task | Result | Remaining gap / proof |
 |---|---|---|
 | T1 contracts + queue | PASS | 24+ focused tests; no distributed lock owner yet |
-| T2 full-fidelity materialization | PARTIAL→repaired | Canonical materializer writes layout/artifact manifest. The pilot path still differs from the planned `execute_raw_attempt` extraction; this is a maintainability gap, not an accepted schema shortcut. |
+| T2 full-fidelity materialization | PASS (local) | `execute_raw_attempt(task, env, spec) -> RawAttempt` is the shared compatibility boundary; canonical materializer writes layout/artifact manifest. |
 | T3 planner/quota/resume | PASS with recovery repair | Planner counters and attempt caps are tested; coordinator reconstructs local closed state and fetches remote manifest. Remote conflict tests remain pure-local. |
 | T4 closed-result validation | PASS after repair | Episodes without `layout/` or `artifact_manifest.json` are rejected; crash/invalid attempts require `attempt.json`. |
 | T5 five-minute HF publisher | PASS after repair | Uses semantic paths, compact manifests, `resume_receipt.json`, `publication_receipt.json`, four view pointers, bounded commits and a remote hash verifier. |
-| T6 worker | PARTIAL→repaired | Binding is now loaded from the approved manifest and result classification preserves attempts. Worker still invokes the pilot entry point rather than the planned reusable raw-attempt API. |
-| T7 coordinator/watchdog/launcher | PARTIAL | Launcher validates smoke outcomes and runtime env, writes real revision and detaches pipes. Watchdog currently observes but does not yet perform bounded coordinator replacement or PID ownership locking. |
+| T6 worker | PASS (local seam) | Binding is loaded from the approved manifest; native worker seam consumes shared raw executor/materializer/writer; CLI fallback remains pilot-compatible. |
+| T7 coordinator/watchdog/launcher | PASS (local) | Non-blocking single-owner lock, PID command-line identity checks, bounded worker/coordinator replacement, atomic launch receipt and fixed displays are tested. |
 | T8 docs/validation | IN PROGRESS | This audit and launch audit are updated; full plan checklist is not retroactively marked complete. |
 | T9 full launch | PAUSED | Session was explicitly stopped for schema repair. No new session may launch until fresh smoke plus schema-aware bounded worker/publication receipts pass. |
 
@@ -78,3 +78,20 @@ UNKNOWNS:
 6. Clean or quarantine the legacy `primary_v3/results/...` batch only after a
    remote file inventory confirms its exact paths; never mutate `primary_v2/`.
 7. Resume full generation only after these receipts pass.
+
+## Repair evidence (2026-09-21)
+
+The local repair is bounded to orchestration/reuse and does not launch a
+simulator or Colab session. `CoordinatorLock` holds an `fcntl.LOCK_EX |
+fcntl.LOCK_NB` descriptor for the full coordinator lifetime; the watchdog
+proves the lock is free before replacing a coordinator and verifies every PID
+against the expected run root/script/worker ID. Launch receipts now contain all
+200 worker PIDs and per-slot restart counters. The worker's injectable native
+seam calls the shared `execute_raw_attempt`, `materialize_raw_attempt`, and
+`write_closed_attempt_result` path; the existing CLI pilot fallback remains for
+the already-provisioned RLBench environment.
+
+Local evidence: focused control/raw tests 18/18 PASS; complete generation and
+distributed suite 107/107 PASS; `scripts/validate_fast.py` 19/19 PASS;
+Python compilation and `git diff --check` PASS. L3 simulator, HF publication,
+and full quota launch remain NOT RUN in this repair turn.

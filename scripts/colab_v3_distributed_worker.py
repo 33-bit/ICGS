@@ -9,9 +9,14 @@ import os
 from pathlib import Path
 import subprocess
 import time
+from typing import Any, Callable
 
 from icgs.data.collection.v3.distributed_contracts import GenerationJob, WorkerResult
 from icgs.data.collection.v3.distributed_queue import FilesystemJobQueue
+from icgs.data.collection.v3.rlbench_attempt import (
+    materialize_raw_attempt,
+    write_closed_attempt_result,
+)
 
 
 def display_number(worker_id: str) -> int:
@@ -30,7 +35,16 @@ def _file_hashes(root: Path) -> dict[str, str]:
     return hashes
 
 
-def run_worker(worker_id: str, queue: FilesystemJobQueue, *, approved_manifest: str = "/content/ICGS/artifacts/composition/approved_composition_manifest_v3.json", once: bool = False, idle_poll_s: float = 1.0) -> int:
+def run_worker(
+    worker_id: str,
+    queue: FilesystemJobQueue,
+    env_factory: Callable[[GenerationJob], Any] | None = None,
+    task_loader: Callable[[str], Any] | None = None,
+    *,
+    approved_manifest: str = "/content/ICGS/artifacts/composition/approved_composition_manifest_v3.json",
+    once: bool = False,
+    idle_poll_s: float = 1.0,
+) -> int:
     display_number(worker_id)
     while True:
         queue.write_heartbeat(worker_id, None)
@@ -47,6 +61,33 @@ def run_worker(worker_id: str, queue: FilesystemJobQueue, *, approved_manifest: 
             plan_path.write_text(json.dumps(job.plan.as_dict(), indent=2) + "\n", encoding="utf-8")
             approved = json.loads(Path(approved_manifest).read_text(encoding="utf-8"))
             binding = next(row for row in approved["catalog"] if row["program_id"] == job.program_id)
+            if env_factory is not None and task_loader is not None:
+                # Testable/native seam: workers consume the same raw executor and
+                # closed-result writer as the legacy compatibility collector.
+                env = env_factory(job)
+                try:
+                    task = task_loader(job.program_id)
+                    from scripts.colab_g2_dataset_generator import execute_raw_attempt
+                    raw = execute_raw_attempt(task, env, {
+                        "task_id": job.program_id,
+                        "episode_id": job.episode_id,
+                        "_approved_binding": binding,
+                        "_plan": job.plan.as_dict(),
+                        "_allow_valid_failure": True,
+                    })
+                    materialized = materialize_raw_attempt(raw, job, binding)
+                    written_result = write_closed_attempt_result(
+                        materialized, job,
+                        Path(job.output_root) / "worker-results" / job.job_id / job.program_id,
+                    )
+                finally:
+                    close = getattr(env, "shutdown", None) or getattr(env, "close", None)
+                    if callable(close):
+                        close()
+                queue.publish_ready(worker_id, written_result)
+                if once:
+                    return 0
+                continue
             binding_path = Path(job.output_root) / "plans" / f"{job.job_id}.binding.json"
             binding_path.write_text(json.dumps(binding, indent=2) + "\n", encoding="utf-8")
             output_root = Path(job.output_root) / "worker-results" / job.job_id

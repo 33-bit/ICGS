@@ -33,6 +33,7 @@ class RawAttempt:
     error_type: str | None = None
     error: str | None = None
     traceback: str | None = None
+    metadata: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
