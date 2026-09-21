@@ -33,4 +33,10 @@ def test_worker_command_uses_fixed_display_number():
 def test_worker_invalid_result_hashes_the_candidate_directory():
     text = Path("scripts/colab_v3_distributed_worker.py").read_text(encoding="utf-8")
     assert "file_sha256=_file_hashes(candidate)" in text
-    assert "file_sha256=_file_hashes(result_dir)" not in text
+    assert "file_sha256=_file_hashes(result_dir)" in text
+
+
+def test_worker_exception_path_does_not_publish_empty_inventory():
+    text = Path("scripts/colab_v3_distributed_worker.py").read_text(encoding="utf-8")
+    assert "file_sha256=_file_hashes(result_dir)" in text
+    assert "stale candidate" in text

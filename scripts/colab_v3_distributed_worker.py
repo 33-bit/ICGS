@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import time
 from typing import Any, Callable
@@ -214,6 +215,41 @@ def run_worker(
             queue.publish_ready(worker_id, result)
         except Exception as exc:
             result_dir = Path(job.output_root) / "worker-results" / job.job_id / job.program_id
+            episode_path = result_dir / "episode.json"
+            artifact_manifest_path = result_dir / "artifact_manifest.json"
+            # A subprocess timeout can happen after the pilot has atomically
+            # closed a complete episode. Preserve that valid data instead of
+            # overlaying an attempt record onto the same directory.
+            if episode_path.is_file() and artifact_manifest_path.is_file():
+                try:
+                    payload = json.loads(episode_path.read_text(encoding="utf-8"))
+                    outcome = str(payload.get("provenance", {}).get("outcome", ""))
+                    if outcome in {"success", "valid_failure"}:
+                        queue.publish_ready(worker_id, WorkerResult(
+                            job_id=job.job_id,
+                            attempt_id=job.attempt_id,
+                            episode_id=job.episode_id,
+                            program_id=job.program_id,
+                            outcome=outcome,
+                            result_dir=str(result_dir),
+                            file_sha256=_file_hashes(result_dir),
+                            timeline={
+                                "actions": len(payload.get("transitions", [])),
+                                "observations": len(payload.get("online_observations", [])),
+                                "durations": len(payload.get("dt", [])),
+                            },
+                        ))
+                        if once:
+                            return 0
+                        continue
+                except Exception:
+                    # Fall through to a closed crash attempt if the candidate
+                    # cannot satisfy the episode contract.
+                    pass
+            # No closed episode survived. Remove the stale candidate so the
+            # crash attempt has an immutable, self-consistent inventory.
+            if result_dir.exists():
+                shutil.rmtree(result_dir)
             result_dir.mkdir(parents=True, exist_ok=True)
             (result_dir / "attempt.json").write_text(json.dumps({
                 "attempt_id": job.attempt_id, "episode_id": None, "program_id": job.program_id,
@@ -222,7 +258,7 @@ def run_worker(
             result = WorkerResult(
                 job_id=job.job_id, attempt_id=job.attempt_id, episode_id=None,
                 program_id=job.program_id, outcome="simulator_crash", result_dir=str(result_dir),
-                file_sha256={}, timeline=None,
+                file_sha256=_file_hashes(result_dir), timeline=None,
             )
             queue.publish_ready(worker_id, result)
         if once:
