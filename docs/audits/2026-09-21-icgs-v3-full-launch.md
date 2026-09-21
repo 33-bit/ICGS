@@ -1,6 +1,6 @@
 # ICGS primary v3 distributed full-launch record
 
-Status: **NOT LAUNCHED**
+Status: **BLOCKED BEFORE FULL LAUNCH**
 
 This record is updated only from fresh receipts produced by the committed
 distributed coordinator. It does not treat a local unit test, an old simulator
@@ -21,9 +21,9 @@ receipt, or a skipped gate as evidence of a full collection run.
 | Gate | Command / receipt | Result |
 |---|---|---|
 | Clean committed source | `git status --porcelain=v1 -uall` | NOT RUN |
-| v3 parity | `colab_v3_phase1_parity.py` | NOT RUN |
-| 36 task build | `colab_v3_build_tasks.py --programs ...` | NOT RUN |
-| 36-program strict smoke | `colab_v3_pilot_episodes_worker.py` | NOT RUN |
+| v3 parity | `colab_v3_phase1_parity.py` | PASS: all_primary_match=true |
+| 36 task build | `colab_v3_build_tasks.py --programs ...` | PASS: 36/36 built |
+| 36-program strict smoke | `colab_v3_pilot_episodes_worker.py` | FAIL: 34 success, 2 valid_failure (`T03`, `T12`), 0 simulator crashes |
 | 2-worker queue smoke | distributed launcher, publication disabled | NOT RUN |
 | 200-worker bounded smoke | one job per worker, publication disabled | NOT RUN |
 | Small real publication | verified HF commit/hash | NOT RUN |
@@ -44,7 +44,26 @@ receipt, or a skipped gate as evidence of a full collection run.
 | active worker slots | 0 |
 | first HF revision | NOT RUN |
 | last HF revision | NOT RUN |
-| run status | `NOT_LAUNCHED` |
+| run status | `BLOCKED_BEFORE_FULL_LAUNCH` |
+
+## 2026-09-21 fresh VM gate result
+
+The fresh v6e1 VM passed v3 parity and built all 36 task models. The strict
+36-program smoke produced valid `T+1` timelines for every program, but did not
+close the scale gate: T03 (contact push blocker) remained a `valid_failure` at
+4.52 cm from its push target after three physical contact-push retries. T12
+passed after the task models were rebuilt with child dynamics enabled.
+
+The attempted hypotheses were recorded and rejected without changing the data
+contract: gripper-open contact, target overshoot, and repeated contact pushes.
+No tolerance increase, object snap, pick-place remap or failure relabeling was
+accepted. Therefore the run launched zero full-generation workers, zero
+coordinator publication commits and zero Hugging Face data commits.
+
+The Colab session remains allocated for owner inspection and further bounded
+push-controller debugging. Full launch remains blocked until a fresh 36/36
+smoke has zero FAIL/SKIPPED and the T03 predicate is physically satisfied under
+the frozen 1 cm predicate protocol.
 
 ## Required publication contents
 
