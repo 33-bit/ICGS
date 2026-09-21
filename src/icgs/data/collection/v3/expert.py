@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Sequence
 
+from icgs.data.collection.v3.protocol import V3_PROTOCOL
+
 
 ROUTINE_TYPES = frozenset({
     "grasp",
@@ -78,6 +80,11 @@ def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, 
         dx, dy = target[0] - obj[0], target[1] - obj[1]
         norm = (dx * dx + dy * dy) ** 0.5
         ux, uy = (dx / norm, dy / norm) if norm > 1e-6 else (1.0, 0.0)
+        # The open gripper contacts the blocker ahead of the tool tip.  The
+        # target is expressed at the blocker centre, so stop the tool before
+        # the target by the measured Panda contact-face offset.  Callers may
+        # override this for a task with a different contact geometry.
+        contact_offset_m = float(step.get("contact_offset_m", V3_PROTOCOL.push_contact_offset_m))
         overshoot_m = float(step.get("overshoot_m", 0.0))
         pre = [obj[0] - ux * 0.06 + ax, obj[1] - uy * 0.06 + ay]
         motions.append({"kind": "move", "xyz": [pre[0], pre[1], approach_z + az], "grip": 0.0, "grasp": False})
@@ -86,7 +93,11 @@ def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, 
             motions.append({"kind": "move", "xyz": [via[0], via[1], push_z], "grip": 0.0, "grasp": False})
         motions.append({
             "kind": "move",
-            "xyz": [target[0] + ux * overshoot_m, target[1] + uy * overshoot_m, push_z],
+            "xyz": [
+                target[0] - ux * contact_offset_m + ux * overshoot_m,
+                target[1] - uy * contact_offset_m + uy * overshoot_m,
+                push_z,
+            ],
             "grip": 0.0,
             "grasp": False,
         })

@@ -44,6 +44,16 @@ class ExpertPlanningTests(unittest.TestCase):
         self.assertTrue(any(item["kind"] == "move" for item in motions))
         self.assertNotIn("pick_place", [item.get("kind") for item in motions])
 
+    def test_push_stops_before_target_for_open_contact_face(self):
+        poses = {"blocker": [0.25, -0.05, 0.775], "push_target": [0.25, 0.08, 0.775]}
+        motions = plan_step({"type": "push", "obj": "blocker", "target": "push_target"}, poses)
+        final_contact = motions[-2]["xyz"]
+        self.assertAlmostEqual(
+            final_contact[1],
+            poses["push_target"][1] - V3_PROTOCOL.push_contact_offset_m,
+            places=3,
+        )
+
     def test_worker_does_not_remap_push_to_pick_place(self):
         from pathlib import Path
 

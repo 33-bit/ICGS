@@ -65,6 +65,26 @@ push-controller debugging. Full launch remains blocked until a fresh 36/36
 smoke has zero FAIL/SKIPPED and the T03 predicate is physically satisfied under
 the frozen 1 cm predicate protocol.
 
+## 2026-09-21 bounded CPU T03 debug
+
+The failure was reproduced on the temporary CPU session `icgs-debug-cpu` with
+the same v3 task model. A motion trace showed that commanding the tool tip to
+the marker centre (`y=0.080 m`) placed the blocker centre at `y≈0.126 m`: the
+open Panda contact face is approximately `0.045 m` ahead of the commanded tip.
+The existing three retries then alternated the push direction and ended at
+`4.52 cm` from the target.
+
+The planner now exposes this measured geometry as
+`V3_PROTOCOL.push_contact_offset_m = 0.045` and commands the contact point at
+`target - contact_offset` while preserving physical open-contact push semantics.
+The regression test asserts this offset without changing the 1 cm predicate or
+remapping `push` to `pick_place`.
+
+Bounded CPU verification: T03 returned `success`, `n_actions=137`,
+`n_obs=138`, `timeline_ok=true`, and blocker-to-target distance `0.00224 m`.
+The full v6e1 36-program gate has not yet been rerun; the scale gate therefore
+remains blocked pending that fresh receipt.
+
 ## Required publication contents
 
 Each verified commit must include closed `success` and `valid_failure` episode

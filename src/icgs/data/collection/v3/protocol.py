@@ -158,6 +158,9 @@ class V3Protocol:
         "R1", "R2", "R3", "R4",
     )
     place_ik_z_shortfall_m: float = 0.033
+    # Distance from the Panda tool-tip command point to the open contact face
+    # used by the physical push primitive.
+    push_contact_offset_m: float = 0.045
     predicate_success_m: float = 0.01
 
 
