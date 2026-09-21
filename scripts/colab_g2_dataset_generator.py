@@ -246,7 +246,8 @@ def collect_single_episode(
     approved_manifest_digest: str,
     seed_id: str,
     execution_mode: str,
-) -> tuple[dict[str, Any], dict[str, Any], int]:
+    allow_valid_failure: bool = False,
+) -> tuple[dict[str, Any], dict[str, Any]]:
     from icgs.contracts.method import TimedObservation, TimedCommand, ExecutedTransition
     from icgs.contracts.records import Observation
     from icgs.environments.rlbench.controller import pose_to_matrix, filter_and_downsample_points
@@ -332,6 +333,8 @@ def collect_single_episode(
                 "sim_time": float(sim_time),
                 "observation_count": len(raw_obs_list),
                 "action_count": len(actions_list),
+                "scene_states": list(scene_state_series),
+                "collision_events": list(collision_events),
             }
         except Exception:
             pass
@@ -581,7 +584,7 @@ def collect_single_episode(
         except Exception:
             pass
     logger.info(f"Episode execution complete: steps={len(actions_list)}, success={success}, conds=[{', '.join(cond_details)}]")
-    if not success:
+    if not success and not allow_valid_failure:
         raise RuntimeError(f"Episode did not meet task success criteria: {', '.join(cond_details)}")
 
     # Downsample transitions to 10 Hz intervals (2 physics steps per interval)
@@ -715,8 +718,8 @@ def collect_single_episode(
             "randomization_declared": approved_binding["randomization"],
             "controller_protocol_id": approved_binding["controller"]["protocol_id"],
             "predicate_protocol_id": approved_binding["predicates"]["protocol_id"],
-            "terminal_success": True,
-            "terminal_reason": "predicate_satisfied",
+            "terminal_success": bool(success),
+            "terminal_reason": "predicate_satisfied" if success else "predicate_failed",
         },
     }
 
