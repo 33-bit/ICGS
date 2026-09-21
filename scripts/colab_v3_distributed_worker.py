@@ -30,7 +30,7 @@ def _file_hashes(root: Path) -> dict[str, str]:
     return hashes
 
 
-def run_worker(worker_id: str, queue: FilesystemJobQueue, *, once: bool = False, idle_poll_s: float = 1.0) -> int:
+def run_worker(worker_id: str, queue: FilesystemJobQueue, *, approved_manifest: str = "/content/ICGS/artifacts/composition/approved_composition_manifest_v3.json", once: bool = False, idle_poll_s: float = 1.0) -> int:
     display_number(worker_id)
     while True:
         queue.write_heartbeat(worker_id, None)
@@ -45,11 +45,17 @@ def run_worker(worker_id: str, queue: FilesystemJobQueue, *, once: bool = False,
             plan_path = Path(job.output_root) / "plans" / f"{job.job_id}.json"
             plan_path.parent.mkdir(parents=True, exist_ok=True)
             plan_path.write_text(json.dumps(job.plan.as_dict(), indent=2) + "\n", encoding="utf-8")
+            approved = json.loads(Path(approved_manifest).read_text(encoding="utf-8"))
+            binding = next(row for row in approved["catalog"] if row["program_id"] == job.program_id)
+            binding_path = Path(job.output_root) / "plans" / f"{job.job_id}.binding.json"
+            binding_path.write_text(json.dumps(binding, indent=2) + "\n", encoding="utf-8")
             output_root = Path(job.output_root) / "worker-results" / job.job_id
             env = os.environ.copy()
             env.update({
                 "ICGS_V3_ATTEMPT_JSON": str(plan_path),
                 "ICGS_V3_WRITE_EPISODE": str(output_root),
+                "ICGS_V3_BINDING_JSON": str(binding_path),
+                "ICGS_V3_APPROVED_MANIFEST": str(approved_manifest),
                 "PYTHONUNBUFFERED": "1",
             })
             command = [
@@ -75,8 +81,28 @@ def run_worker(worker_id: str, queue: FilesystemJobQueue, *, once: bool = False,
                     },
                 )
             else:
-                sidecar = candidate / "quarantine.json"
-                outcome = "simulator_crash" if process.returncode else "invalid_observation"
+                attempt_path = candidate / "attempt.json"
+                if attempt_path.is_file():
+                    attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
+                    outcome = str(attempt.get("outcome", "simulator_crash"))
+                else:
+                    outcome = "simulator_crash" if process.returncode else "invalid_observation"
+                    candidate.mkdir(parents=True, exist_ok=True)
+                    attempt_path.write_text(json.dumps({
+                        "attempt_id": job.attempt_id, "episode_id": None, "program_id": job.program_id,
+                        "outcome": outcome, "error": "worker did not produce a closed attempt",
+                    }, indent=2) + "\n", encoding="utf-8")
+                    file_inventory = {
+                        "attempt.json": {
+                            "sha256": hashlib.sha256(attempt_path.read_bytes()).hexdigest(),
+                            "bytes": attempt_path.stat().st_size,
+                        }
+                    }
+                    (candidate / "artifact_manifest.json").write_text(json.dumps({
+                        "attempt_id": job.attempt_id, "episode_id": None,
+                        "program_id": job.program_id, "outcome": outcome,
+                        "files": file_inventory,
+                    }, indent=2) + "\n", encoding="utf-8")
                 result = WorkerResult(
                     job_id=job.job_id, attempt_id=job.attempt_id, episode_id=None,
                     program_id=job.program_id, outcome=outcome, result_dir=str(candidate),
@@ -108,7 +134,7 @@ def main() -> int:
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     queue = FilesystemJobQueue(Path(args.run_root) / "queue")
-    return run_worker(args.worker_id, queue, once=args.once)
+    return run_worker(args.worker_id, queue, approved_manifest=args.approved_manifest, once=args.once)
 
 
 if __name__ == "__main__":

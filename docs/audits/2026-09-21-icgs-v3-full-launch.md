@@ -32,19 +32,19 @@ receipt, or a skipped gate as evidence of a full collection run.
 
 | Field | Value |
 |---|---|
-| Run ID | NOT RUN |
-| Colab session ID | NOT RUN |
-| code revision | `097bb5c` plus later launch commits, if any |
-| approved manifest SHA256 | NOT RUN |
-| PyRep revision | NOT RUN |
-| RLBench revision | NOT RUN |
-| CoppeliaSim SHA256 | NOT RUN |
-| coordinator PID | NOT RUN |
-| watchdog PID | NOT RUN |
-| active worker slots | 0 |
-| first HF revision | NOT RUN |
-| last HF revision | NOT RUN |
-| run status | `BLOCKED_BEFORE_FULL_LAUNCH` |
+| Run ID | `icgs-primary-v3-run` |
+| Colab session ID | `icgs-primary-v3-full` / `tpu-v6e1-s-kkb-euw4a0-3fnsv28mgt7tq` |
+| code revision | worker/run identity `7891199`; coordinator publication hotfixes through `29157c1` |
+| approved manifest SHA256 | `cf08ba141df8c6d131e88362ed6aba389af5bcfa64822956f54f30b33fa614b0` |
+| PyRep revision | `8f420be8064b1970aae18a9cfbc978dfb15747ef` |
+| RLBench revision | `02720bba4c73fe02eb75df946b8791b806028a9d` |
+| CoppeliaSim SHA256 | `512de3a7347387fcc1b12fa675195a912265753f7901808382865bbf51a2a7f8` |
+| coordinator PID | `511307` |
+| watchdog PID | `48724` |
+| active worker slots | 200 (`:200` through `:399`) |
+| first HF revision | `09368256ff84c034063669bee900afb172dfe068` |
+| last HF revision | `09368256ff84c034063669bee900afb172dfe068` at this checkpoint |
+| run status | `RUNNING` |
 
 ## 2026-09-21 fresh VM gate result
 
@@ -99,6 +99,26 @@ episodes with valid timelines and there were zero crashes, invalid observations,
 or skips. Nominal `valid_failure` still does not count toward the nominal-success
 quota.
 
+## 2026-09-21 full launch and assignment recovery
+
+The launch passed a two-worker smoke (2/2 retained successes) and a bounded
+200-worker smoke (200/200 exit zero; 160 successes and 40 retained valid
+failures). The full run then launched exactly 200 fixed-display worker slots,
+one coordinator and one watchdog. A coordinator restart gap was repaired by
+reconstructing planner state from pending/claimed/ready jobs and compact manifest
+state from ingested/published closed results; publication batches are bounded so
+heartbeats and commits remain observable.
+
+The Colab CLI temporarily pruned the local name while the server assignment
+remained alive. Server assignments were enumerated, the accidentally created
+replacement endpoint was unassigned, and the original endpoint
+`tpu-v6e1-s-kkb-euw4a0-3fnsv28mgt7tq` was rebound to
+`icgs-primary-v3-full`. No full-run result was deleted. The first canonical HF
+commit `09368256ff84c034063669bee900afb172dfe068` was verified at its revision:
+200 compact manifest episodes, comprising 177 `success` and 23
+`valid_failure`, with zero failure-attempt rows. Generation and scheduled
+publication remain live.
+
 ## Required publication contents
 
 Each verified commit must include closed `success` and `valid_failure` episode
@@ -116,5 +136,22 @@ No worker receives the Hugging Face token.
 
 ## Remaining risk
 
-The current implementation still requires the fresh VM gates above. Full quota
-generation must not start until all mandatory gates are recorded PASS.
+The full run is active. Remaining risks are Colab assignment lifetime and the
+publication backlog; queue state is recoverable only while the ephemeral VM is
+alive or after closed results have reached a verified HF revision.
+
+## 2026-09-21 schema/publishing pause
+
+The first full-run publication exposed a schema defect: the worker's pilot
+writer emitted only `episode.json` and `physics.json`, and the publisher placed
+them below the internal `results/{job_id}/` path. The run was paused before any
+further workers were launched. The repair now materializes the measured v2
+training layout (`layout/observations`, `layout/robot`, `layout/actions`,
+`layout/task`, `result.json`, `layout_manifest.json`), root
+`artifact_manifest.json`, `telemetry.npz`, and `execution.json`; unavailable
+RGB/depth/joint/object modalities remain omitted rather than synthesized.
+Publisher paths are semantic `episodes/{PROGRAM_ID}/{EPISODE_ID}` or
+`attempts/{PROGRAM_ID}/{ATTEMPT_ID}`. Closed-result validation now rejects an
+episode without a valid layout or artifact manifest. The already published
+legacy batch at `09368256...` is quarantined for cleanup/republication review;
+no new session or worker has been started after the pause.

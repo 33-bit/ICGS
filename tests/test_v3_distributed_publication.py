@@ -115,6 +115,17 @@ def test_publish_uses_supplied_compact_manifest(tmp_path: Path):
     assert publisher.remote_manifest["episodes"] == compact["episodes"]
 
 
+def test_operations_use_meaningful_episode_path(tmp_path: Path):
+    queue, job = _queue(tmp_path)
+    publisher = HuggingFaceBatchPublisher(_run(), FakeApi(), "secret", queue, last_success_s=0.0)
+    ops = publisher._operations((job.job_id,), {"manifest_version": 3, "episodes": [], "failure_attempts": []})
+    paths = [op.path_in_repo for op in ops]
+    assert any(f"episodes/{job.program_id}/{job.episode_id}/" in path for path in paths)
+    assert not any(f"results/{job.job_id}/" in path for path in paths)
+    assert any(path.endswith("/resume_receipt.json") for path in paths)
+    assert any("/views/" in path for path in paths)
+
+
 def test_conflicting_remote_manifest_refuses_before_api_call(tmp_path: Path):
     queue, job = _queue(tmp_path)
     api = FakeApi()

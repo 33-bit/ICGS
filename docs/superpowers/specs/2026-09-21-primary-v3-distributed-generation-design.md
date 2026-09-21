@@ -167,6 +167,12 @@ Both are valid `icgs_episode_v2` episodes and must contain:
 - event/task labels and pointer-layout sidecars for the four phase-1 views;
 - result, checksums and per-file manifest.
 
+Published paths use compact semantic identities rather than internal queue job
+IDs: `primary_v3/episodes/{PROGRAM_ID}/{EPISODE_ID}/...` for valid episodes and
+`primary_v3/attempts/{PROGRAM_ID}/{ATTEMPT_ID}/...` for crash/invalid attempts.
+The result root contains `episode.json` or `attempt.json`, `artifact_manifest.json`
+and the measured `layout/` sidecar; `job-*` is queue-internal only.
+
 A nominal `valid_failure` is retained but does not increment the nominal-success
 quota. A perturbed `valid_failure` is retained and does increment the valid
 perturbed-attempt quota. Neither may be discarded because its final predicate

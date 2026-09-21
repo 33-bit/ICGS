@@ -52,6 +52,32 @@ def _verify_identity(job: GenerationJob, result: WorkerResult) -> None:
         raise ValueError("result episode identity mismatch")
 
 
+def _validate_artifact_manifest(root: Path, result: WorkerResult) -> None:
+    path = root / "artifact_manifest.json"
+    if not path.is_file():
+        raise ValueError("artifact manifest is required")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    expected = {
+        "attempt_id": result.attempt_id,
+        "episode_id": result.episode_id,
+        "program_id": result.program_id,
+        "outcome": result.outcome,
+    }
+    for key, value in expected.items():
+        if payload.get(key) != value:
+            raise ValueError(f"artifact manifest identity mismatch for {key}")
+    files = payload.get("files")
+    if not isinstance(files, dict):
+        raise ValueError("artifact manifest files must be an object")
+    actual = _actual_files(root)
+    actual.pop("artifact_manifest.json", None)
+    if set(files) != set(actual):
+        raise ValueError("artifact manifest file inventory mismatch")
+    for relative, info in files.items():
+        if not isinstance(info, dict) or info.get("sha256") != actual[relative]:
+            raise ValueError(f"artifact manifest checksum mismatch: {relative}")
+
+
 def validate_closed_result(job: GenerationJob, result: WorkerResult) -> ValidatedResult:
     _verify_identity(job, result)
     root = Path(result.result_dir)
@@ -68,6 +94,12 @@ def validate_closed_result(job: GenerationJob, result: WorkerResult) -> Validate
 
     if result.outcome in {"success", "valid_failure"}:
         episode_path = root / "episode.json"
+        layout_path = root / "layout"
+        if not (layout_path / "layout_manifest.json").is_file():
+            raise ValueError("episode training layout is required")
+        from icgs.data.training_layout import validate_training_episode_layout
+        validate_training_episode_layout(layout_path)
+        _validate_artifact_manifest(root, result)
         episode = json.loads(episode_path.read_text(encoding="utf-8"))
         validate_episode_v2(episode)
         provenance = dict(episode["provenance"])
@@ -113,6 +145,7 @@ def validate_closed_result(job: GenerationJob, result: WorkerResult) -> Validate
         }
         return ValidatedResult(job, result, provenance, entry, None)
 
+    _validate_artifact_manifest(root, result)
     attempt_path = root / "attempt.json"
     attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
     if attempt.get("attempt_id") != job.attempt_id or attempt.get("episode_id") is not None:

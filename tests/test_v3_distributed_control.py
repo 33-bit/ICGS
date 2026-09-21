@@ -56,6 +56,12 @@ def test_launcher_requires_real_code_revision_for_run_contract():
     assert '"code_revision": "unknown"' not in text
 
 
+def test_launcher_detaches_child_output_from_control_pipe():
+    text = Path("scripts/colab_v3_distributed_launch.py").read_text(encoding="utf-8")
+    assert "stdout=subprocess.DEVNULL" in text
+    assert "coordinator.log" in text
+
+
 def test_launch_smoke_accepts_retained_valid_failure(tmp_path):
     import json
 

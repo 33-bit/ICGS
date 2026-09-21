@@ -107,14 +107,25 @@ def main() -> int:
     }, indent=2) + "\n", encoding="utf-8")
     processes = []
     for command in commands:
-        processes.append(subprocess.Popen(command, env=env, start_new_session=True))
-    processes.append(subprocess.Popen(coordinator, env=env, start_new_session=True))
+        processes.append(subprocess.Popen(
+            command, env=env, start_new_session=True,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        ))
+    coordinator_log = root / "control" / "coordinator.log"
+    coordinator_stream = coordinator_log.open("a", encoding="utf-8")
+    processes.append(subprocess.Popen(
+        coordinator, env=env, start_new_session=True,
+        stdout=coordinator_stream, stderr=subprocess.STDOUT,
+    ))
     watchdog = [
         "/content/icgs-data-env/bin/python", "-B",
         "/content/ICGS/scripts/colab_v3_distributed_watchdog.py",
         "--run-root", str(root),
     ]
-    processes.append(subprocess.Popen(watchdog, env=env, start_new_session=True))
+    processes.append(subprocess.Popen(
+        watchdog, env=env, start_new_session=True,
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    ))
     (root / "control" / "launch.json").write_text(
         json.dumps({"workers": 200, "coordinator_pid": processes[-2].pid, "watchdog_pid": processes[-1].pid}) + "\n",
         encoding="utf-8",

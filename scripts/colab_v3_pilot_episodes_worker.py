@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import hashlib
 import json
 import os
 import sys
@@ -50,16 +51,39 @@ def live_poses(names) -> dict:
 def _write_v3_episode(write_dir: Path, row: dict) -> None:
     from icgs.data.collection.v3.batch import plan_program_attempts, bounds_from_row
     from icgs.data.collection.v3.episode_record import assemble_episode_v2, classify_generation_outcome
+    from icgs.data.training_layout import LAYOUT_VERSION, write_training_episode_layout
 
     write_dir.mkdir(parents=True, exist_ok=True)
+    binding_path = Path(os.environ.get("ICGS_V3_BINDING_JSON", ""))
+    if binding_path.is_file():
+        row["_binding"] = json.loads(binding_path.read_text(encoding="utf-8"))
     timed = row.get("_timed_obs") or []
     if len(timed) < 2:
-        sidecar = {
-            "result_class": row.get("result_class", "valid_failure"),
+        plan_payload = Path(os.environ.get("ICGS_V3_ATTEMPT_JSON", ""))
+        planned_episode = None
+        if plan_payload.is_file():
+            planned_episode = json.loads(plan_payload.read_text(encoding="utf-8")).get("episode_id")
+        attempt_episode = planned_episode or f"v3-{row['program_id'].lower()}-00000"
+        attempt = {
+            "attempt_id": f"att-{attempt_episode}",
+            "episode_id": None,
             "program_id": row["program_id"],
-            "error": "not enough observations",
+            "outcome": row.get("result_class", "simulator_crash"),
+            "terminal_reason": row.get("error", "observation_incomplete"),
+            "status": "failed_attempt",
         }
-        (write_dir / "quarantine.json").write_text(json.dumps(sidecar, indent=2) + "\n")
+        (write_dir / "attempt.json").write_text(json.dumps(attempt, indent=2) + "\n")
+        sidecar = {
+            "outcome": attempt["outcome"],
+            "program_id": row["program_id"],
+            "error": attempt["terminal_reason"],
+        }
+        (write_dir / "execution.json").write_text(json.dumps(sidecar, indent=2) + "\n")
+        files = {
+            str(path.relative_to(write_dir)): {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size}
+            for path in write_dir.iterdir() if path.is_file()
+        }
+        (write_dir / "artifact_manifest.json").write_text(json.dumps({**attempt, "files": files}, indent=2) + "\n")
         return
     transitions = []
     for index in range(len(timed) - 1):
@@ -74,7 +98,16 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
             "before_boundary": index,
             "after_boundary": index + 1,
         })
-    binding = {
+    binding = row.get("_binding")
+    if binding is None:
+        manifest_path = Path(os.environ.get(
+            "ICGS_V3_APPROVED_MANIFEST",
+            "/content/ICGS/artifacts/composition/approved_composition_manifest_v3.json",
+        ))
+        if manifest_path.is_file():
+            catalog = json.loads(manifest_path.read_text(encoding="utf-8")).get("catalog", [])
+            binding = next((item for item in catalog if item.get("program_id") == row["program_id"]), None)
+    binding = dict(binding or {
         "program_id": row["program_id"],
         "asset_family_id": f"icgs-train-{row.get('family', 'basic-manipulation')}-v1",
         "source_lineage_id": f"{row['program_id'].lower()}-seed-root-v1",
@@ -85,7 +118,7 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
             "scale": [0.8, 1.2],
             "camera_profile_id": "rlbench-wrist-depth-v1",
         },
-    }
+    })
     from icgs.data.collection.v3.batch import attempt_from_dict
 
     if row.get("_plan"):
@@ -98,18 +131,6 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
             bounds=bounds_from_row(binding),
             asset_family_id=binding.get("asset_family_id"),
         )[0]
-    result_class = classify_generation_outcome(
-        simulator_crash=row.get("result_class") == "simulator_crash",
-        predicates_ok=bool(row.get("success")),
-    )
-    record = assemble_episode_v2(
-        plan=plan,
-        binding=binding,
-        observations=timed,
-        transitions=transitions,
-        result_class=result_class,
-        intervention=row.get("intervention"),
-    )
     def _enc(value):
         if isinstance(value, np.ndarray):
             return value.tolist()
@@ -118,8 +139,136 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
         if isinstance(value, list):
             return [_enc(v) for v in value]
         return value
+
+    result_class = classify_generation_outcome(
+        simulator_crash=row.get("result_class") == "simulator_crash",
+        predicates_ok=bool(row.get("success")),
+    )
+    if result_class in {"simulator_crash", "invalid_observation"}:
+        from icgs.data.collection.v3.episode_record import assemble_attempt_record
+        attempt = assemble_attempt_record(
+            attempt_id=f"att-{plan.episode_id}",
+            program_id=row["program_id"],
+            outcome=result_class,
+            error=row.get("error", row.get("terminal_reason", "observation_incomplete")),
+            episode_id=None,
+            episode_kind=plan.episode_kind,
+        )
+        (write_dir / "attempt.json").write_text(json.dumps(_enc(attempt), indent=2) + "\n")
+        np.savez_compressed(write_dir / "valid_prefix.npz", actions=np.empty((0, 8), dtype=np.float64))
+        files = {
+            str(path.relative_to(write_dir)): {"sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "bytes": path.stat().st_size}
+            for path in write_dir.iterdir() if path.is_file()
+        }
+        (write_dir / "artifact_manifest.json").write_text(json.dumps({**attempt, "files": files}, indent=2) + "\n")
+        return
+    record = assemble_episode_v2(
+        plan=plan,
+        binding=binding,
+        observations=timed,
+        transitions=transitions,
+        result_class=result_class,
+        intervention=row.get("intervention"),
+        robot_states=row.get("_robot_states"),
+        object_states=row.get("_object_states"),
+    )
     (write_dir / "episode.json").write_text(json.dumps(_enc(record), indent=2) + "\n")
-    (write_dir / "physics.json").write_text(json.dumps({k: v for k, v in row.items() if k != "_timed_obs"}, indent=2) + "\n")
+    execution = {k: v for k, v in row.items() if k != "_timed_obs"}
+    (write_dir / "execution.json").write_text(json.dumps(_enc(execution), indent=2) + "\n")
+
+    def _pose_vector(transform) -> np.ndarray:
+        matrix = np.asarray(transform, dtype=np.float64)
+        rotation = matrix[:3, :3]
+        trace = float(np.trace(rotation))
+        if trace > 0:
+            scale = np.sqrt(trace + 1.0) * 2.0
+            qw = 0.25 * scale
+            qx = (rotation[2, 1] - rotation[1, 2]) / scale
+            qy = (rotation[0, 2] - rotation[2, 0]) / scale
+            qz = (rotation[1, 0] - rotation[0, 1]) / scale
+        else:
+            diagonal = np.diag(rotation)
+            index = int(np.argmax(diagonal))
+            if index == 0:
+                scale = np.sqrt(1.0 + rotation[0, 0] - rotation[1, 1] - rotation[2, 2]) * 2.0
+                qw = (rotation[2, 1] - rotation[1, 2]) / scale
+                qx = 0.25 * scale
+                qy = (rotation[0, 1] + rotation[1, 0]) / scale
+                qz = (rotation[0, 2] + rotation[2, 0]) / scale
+            elif index == 1:
+                scale = np.sqrt(1.0 + rotation[1, 1] - rotation[0, 0] - rotation[2, 2]) * 2.0
+                qw = (rotation[0, 2] - rotation[2, 0]) / scale
+                qx = (rotation[0, 1] + rotation[1, 0]) / scale
+                qy = 0.25 * scale
+                qz = (rotation[1, 2] + rotation[2, 1]) / scale
+            else:
+                scale = np.sqrt(1.0 + rotation[2, 2] - rotation[0, 0] - rotation[1, 1]) * 2.0
+                qw = (rotation[1, 0] - rotation[0, 1]) / scale
+                qx = (rotation[0, 2] + rotation[2, 0]) / scale
+                qy = (rotation[1, 2] + rotation[2, 1]) / scale
+                qz = 0.25 * scale
+        return np.asarray([*matrix[:3, 3], qx, qy, qz, qw], dtype=np.float64)
+
+    action_array = np.stack([
+        np.concatenate([_pose_vector(item["command"]["T_w_e"]), [item["command"]["grip"]]])
+        for item in transitions
+    ])
+    ee_poses = np.stack([np.asarray(item["T_w_e"], dtype=np.float64) for item in timed])
+    gripper = np.asarray([item["grip"] for item in timed], dtype=np.float32)
+    write_training_episode_layout(write_dir / "layout", {
+        "episode": {
+            "episode_id": plan.episode_id,
+            "program_id": row["program_id"],
+            "split": binding["split"],
+            "layout_version": LAYOUT_VERSION,
+            "outcome": result_class,
+        },
+        "observations": {"pointcloud": [item["points"] for item in timed]},
+        "robot": {"ee_pose": ee_poses, "gripper": gripper},
+        "actions": action_array,
+        "task": {
+            "events": binding.get("structured_steps") or binding.get("events") or [
+                {"event_id": f"event_{index:02d}", "primitive": primitive}
+                for index, primitive in enumerate(row.get("events") or ())
+            ],
+            "collisions": [],
+        },
+        "result": {
+            "success": result_class == "success",
+            "outcome": result_class,
+            "terminal_reason": "predicate_satisfied" if result_class == "success" else "predicate_failed",
+        },
+    })
+    from icgs.data.datasets.v3_views import build_v3_view
+    views_dir = write_dir / "views"
+    views_dir.mkdir(parents=True, exist_ok=True)
+    for view_name in ("D_geom", "D_temporal", "D_dyn", "D_task"):
+        (views_dir / f"{view_name}.json").write_text(json.dumps({
+            "view": view_name,
+            "episode_id": plan.episode_id,
+            "pointers": build_v3_view([record], view_name, role="all", mix=False),
+        }, indent=2, default=_enc) + "\n")
+    np.savez_compressed(
+        write_dir / "telemetry.npz",
+        ee_pose=ee_poses,
+        gripper=gripper,
+        action=action_array,
+        achieved_dt=np.asarray(record["dt"], dtype=np.float64),
+    )
+    files = {}
+    for path in sorted(candidate for candidate in write_dir.rglob("*") if candidate.is_file()):
+        if path.name == "artifact_manifest.json":
+            continue
+        files[str(path.relative_to(write_dir))] = {
+            "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+            "bytes": path.stat().st_size,
+        }
+    (write_dir / "artifact_manifest.json").write_text(json.dumps({
+        "episode_id": plan.episode_id,
+        "program_id": row["program_id"],
+        "outcome": result_class,
+        "files": files,
+    }, indent=2) + "\n")
 
 
 def load_task_class(spec):
@@ -192,8 +341,30 @@ def run_program(env, spec, plan=None) -> dict:
     sim_time = 0.0
     dt = 0.05
     timed_obs: list[dict] = []
+    robot_states: list[dict] = []
+    object_states: list[dict] = []
 
-    def snapshot_obs(grip: float) -> dict:
+    def _matrix_from_pose(pose) -> np.ndarray:
+        value = np.asarray(pose, dtype=np.float64)
+        if value.shape == (4, 4):
+            return value
+        if value.shape != (7,):
+            raise ValueError("gripper_pose must be [x,y,z,qx,qy,qz,qw]")
+        x, y, z, qx, qy, qz, qw = value
+        norm = float(np.linalg.norm([qx, qy, qz, qw]))
+        if norm <= 0:
+            raise ValueError("gripper_pose quaternion must be nonzero")
+        qx, qy, qz, qw = np.asarray([qx, qy, qz, qw]) / norm
+        matrix = np.eye(4, dtype=np.float64)
+        matrix[:3, :3] = np.asarray([
+            [1 - 2 * (qy*qy + qz*qz), 2 * (qx*qy - qz*qw), 2 * (qx*qz + qy*qw)],
+            [2 * (qx*qy + qz*qw), 1 - 2 * (qx*qx + qz*qz), 2 * (qy*qz - qx*qw)],
+            [2 * (qx*qz - qy*qw), 2 * (qy*qz + qx*qw), 1 - 2 * (qx*qx + qy*qy)],
+        ])
+        matrix[:3, 3] = value[:3]
+        return matrix
+
+    def snapshot_obs(raw_obs, grip: float) -> dict:
         tip = env._scene.robot.arm.get_tip()
         pos = np.asarray(tip.get_position(), dtype=np.float64)
         q = np.asarray(tip.get_quaternion(), dtype=np.float64)
@@ -205,15 +376,65 @@ def run_program(env, spec, plan=None) -> dict:
         T = np.eye(4, dtype=np.float64)
         T[:3, :3] = rot
         T[:3, 3] = pos
-        cloud = np.repeat(pos.reshape(1, 3), 8, axis=0).astype(np.float32)
-        return {
-            "points": np.asarray(cloud, dtype=np.float32),
+        measured_pose = getattr(raw_obs, "gripper_pose", None)
+        T = _matrix_from_pose(measured_pose) if measured_pose is not None else T
+        measured_points = getattr(raw_obs, "wrist_point_cloud", None)
+        cloud = np.asarray(measured_points, dtype=np.float32).reshape(-1, 3) if measured_points is not None else np.empty((0, 3), dtype=np.float32)
+        measured_grip = getattr(raw_obs, "gripper_open", None)
+        actual_grip = 0 if float(measured_grip if measured_grip is not None else grip) < 0.5 else 1
+        row = {
+            "points": cloud,
             "point_valid": np.ones((cloud.shape[0],), dtype=bool),
             "T_w_e": T,
-            "grip": 0 if grip < 0.5 else 1,
+            "grip": actual_grip,
         }
+        for key in ("joint_positions", "joint_velocities"):
+            value = getattr(raw_obs, key, None)
+            if value is not None:
+                row[key] = np.asarray(value, dtype=np.float64)
+        return row
 
-    timed_obs.append(snapshot_obs(1.0))
+    def capture_scene_state() -> dict:
+        objects = []
+        for name in spec.objects:
+            shape = find_shape(name)
+            if shape is None:
+                continue
+            item = {"name": name, "position": [float(v) for v in shape.get_position()], "valid": True}
+            try:
+                item["orientation_xyzw"] = [float(v) for v in shape.get_quaternion()]
+            except Exception:
+                pass
+            try:
+                velocity = shape.get_velocity()
+                item["linear_velocity"] = [float(v) for v in velocity[0]]
+                item["angular_velocity"] = [float(v) for v in velocity[1]]
+            except Exception:
+                pass
+            objects.append(item)
+        return {"objects": objects}
+
+    def advance(action, fallback_grip: float):
+        nonlocal sim_time, n_actions, n_obs
+        result = task.step(action)
+        raw = result[0] if isinstance(result, tuple) else result
+        sim_time += dt
+        n_actions += 1
+        n_obs += 1
+        observed = snapshot_obs(raw, fallback_grip)
+        timed_obs.append(observed)
+        robot_states.append({
+            "T_w_e": observed["T_w_e"],
+            "grip": observed["grip"],
+            "joint_positions": observed.get("joint_positions"),
+            "joint_velocities": observed.get("joint_velocities"),
+        })
+        object_states.append(capture_scene_state())
+        return raw
+    initial = snapshot_obs(obs, 1.0)
+    timed_obs.append(initial)
+    robot_states.append({"T_w_e": initial["T_w_e"], "grip": initial["grip"], "joint_positions": initial.get("joint_positions"), "joint_velocities": initial.get("joint_velocities")})
+    object_states.append(capture_scene_state())
 
     def _is_ik_error(exc: BaseException) -> bool:
         name = type(exc).__name__
@@ -231,11 +452,7 @@ def run_program(env, spec, plan=None) -> dict:
             if dist < 0.007:
                 action = np.concatenate([target, quat, [grip]])
                 try:
-                    task.step(action)
-                    sim_time += dt
-                    n_actions += 1
-                    n_obs += 1
-                    timed_obs.append(snapshot_obs(grip))
+                    advance(action, grip)
                 except Exception as exc:
                     if not _is_ik_error(exc):
                         raise
@@ -244,7 +461,7 @@ def run_program(env, spec, plan=None) -> dict:
             nxt = curr + delta * scale
             action = np.concatenate([nxt, quat, [grip]])
             try:
-                task.step(action)
+                advance(action, grip)
             except Exception as exc:
                 if not _is_ik_error(exc):
                     raise
@@ -252,10 +469,6 @@ def run_program(env, spec, plan=None) -> dict:
                 if max_step < 0.002:
                     return
                 continue
-            sim_time += dt
-            n_actions += 1
-            n_obs += 1
-            timed_obs.append(snapshot_obs(grip))
 
     def actuate(grip: float, obj=None) -> None:
         nonlocal sim_time, n_actions, n_obs
@@ -268,15 +481,11 @@ def run_program(env, spec, plan=None) -> dict:
                 pass
         for _ in range(grip_hold_steps):
             try:
-                task.step(action)
+                advance(action, grip)
             except Exception as exc:
                 if _is_ik_error(exc):
                     break
                 raise
-            sim_time += dt
-            n_actions += 1
-            n_obs += 1
-            timed_obs.append(snapshot_obs(grip))
         if grip < 0.5 and obj is not None:
             try:
                 env._scene.robot.gripper.grasp(obj)
@@ -343,14 +552,11 @@ def run_program(env, spec, plan=None) -> dict:
                     tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
                     for _ in range(8):
                         try:
-                            task.step(np.concatenate([tip, quat, [0.0]]))
+                            advance(np.concatenate([tip, quat, [0.0]]), 0.0)
                         except Exception as exc:
                             if _is_ik_error(exc):
                                 break
                             raise
-                        n_actions += 1
-                        n_obs += 1
-                        timed_obs.append(snapshot_obs(0.0))
                 obj = find_shape(str(motion["grasp_obj"])) if motion.get("grasp_obj") else None
                 actuate(float(motion["grip"]), obj)
                 if float(motion["grip"]) < 0.5 and obj is not None:
@@ -391,14 +597,11 @@ def run_program(env, spec, plan=None) -> dict:
                     move_ik(retreat, 1.0)
                     for _ in range(12):
                         try:
-                            task.step(np.concatenate([retreat, quat, [1.0]]))
+                            advance(np.concatenate([retreat, quat, [1.0]]), 1.0)
                         except Exception as exc:
                             if _is_ik_error(exc):
                                 break
                             raise
-                        n_actions += 1
-                        n_obs += 1
-                        timed_obs.append(snapshot_obs(1.0))
                     offset = np.zeros(3, dtype=np.float64)
                     grasped_name = None
             elif kind == "pause":
@@ -406,14 +609,11 @@ def run_program(env, spec, plan=None) -> dict:
                 hold = float(motion.get("grip", 1.0))
                 for _ in range(int(motion["intervals"]) * 5):
                     try:
-                        task.step(np.concatenate([tip, quat, [hold]]))
+                        advance(np.concatenate([tip, quat, [hold]]), hold)
                     except Exception as exc:
                         if _is_ik_error(exc):
                             break
                         raise
-                    n_actions += 1
-                    n_obs += 1
-                    timed_obs.append(snapshot_obs(hold))
             elif kind == "rotate":
                 tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
                 move_ik(tip, 0.0)
@@ -477,14 +677,11 @@ def run_program(env, spec, plan=None) -> dict:
     tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
     for _ in range(15):
         try:
-            task.step(np.concatenate([tip, quat, [1.0]]))
+            advance(np.concatenate([tip, quat, [1.0]]), 1.0)
         except Exception as exc:
             if _is_ik_error(exc):
                 break
             raise
-        n_actions += 1
-        n_obs += 1
-        timed_obs.append(snapshot_obs(1.0))
     for item in spec.conditions:
         obj_a, obj_b = item[0], item[1]
         dist = _condition_distance(obj_a, obj_b)
@@ -507,6 +704,13 @@ def run_program(env, spec, plan=None) -> dict:
         dist = float(np.linalg.norm(np.asarray(sa.get_position()) - np.asarray(sb.get_position())))
         distances.append({"a": obj_a, "b": obj_b, "distance_m": dist})
     timeline_ok = n_actions > 0 and n_obs == n_actions + 1
+    observation_valid = bool(timed_obs) and all(
+        np.asarray(item.get("points")).ndim == 2
+        and np.asarray(item.get("points")).shape[1] == 3
+        and len(item.get("points")) > 0
+        and np.isfinite(np.asarray(item.get("points"))).all()
+        for item in timed_obs
+    )
     intervention = None if plan is None or prepared is None else prepared.get("intervention")
     if isinstance(intervention, dict) and intervention.get("intervention_frame") is None:
         intervention = dict(intervention)
@@ -517,8 +721,8 @@ def run_program(env, spec, plan=None) -> dict:
         "program_id": spec.program_id,
         "family": spec.family,
         "description": desc,
-        "success": bool(success),
-        "result_class": "success" if success else "valid_failure",
+        "success": bool(success and observation_valid),
+        "result_class": "success" if success and observation_valid else ("valid_failure" if observation_valid else "invalid_observation"),
         "n_actions": n_actions,
         "n_obs": n_obs,
         "timeline_ok": timeline_ok,
@@ -532,6 +736,8 @@ def run_program(env, spec, plan=None) -> dict:
             if find_shape(name) is not None
         },
         "_timed_obs": timed_obs,
+        "_robot_states": robot_states,
+        "_object_states": object_states,
         "_plan": None if plan is None else plan.as_dict(),
         "episode_kind": None if plan is None else plan.episode_kind,
         "intervention": intervention,

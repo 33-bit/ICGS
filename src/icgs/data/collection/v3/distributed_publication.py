@@ -119,11 +119,16 @@ class HuggingFaceBatchPublisher:
             directory = self.queue.root / "ingested" / job_id
             result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
             result_root = Path(result["result_dir"])
+            program_id = str(result["program_id"])
+            if result.get("episode_id"):
+                record_prefix = f"episodes/{program_id}/{result['episode_id']}"
+            else:
+                record_prefix = f"attempts/{program_id}/{result['attempt_id']}"
             for path in sorted(result_root.rglob("*")):
                 if path.is_file():
                     relative = path.relative_to(result_root).as_posix()
                     operations.append(CommitOperationAdd(
-                        path_in_repo=f"{self.run.hf_subfolder}/results/{job_id}/{relative}",
+                        path_in_repo=f"{self.run.hf_subfolder}/{record_prefix}/{relative}",
                         path_or_fileobj=str(path),
                     ))
         manifest_path = self.queue.root / "publication_manifest.json"
@@ -131,6 +136,53 @@ class HuggingFaceBatchPublisher:
         operations.append(CommitOperationAdd(
             path_in_repo=f"{self.run.hf_subfolder}/dataset_manifest.json",
             path_or_fileobj=str(manifest_path),
+        ))
+        resume_path = self.queue.root / "resume_receipt.json"
+        counts: dict[str, dict[str, int]] = {}
+        for row in list(manifest.get("episodes") or []):
+            program = str(row.get("program_id")); outcome = str(row.get("outcome", "success"))
+            counts.setdefault(program, {}).setdefault(outcome, 0)
+            counts[program][outcome] += 1
+        resume_path.write_text(json.dumps({
+            "receipt_version": 1,
+            "status": "RUNNING",
+            "run_id": self.run.run_id,
+            "code_revision": self.run.code_revision,
+            "episodes": len(manifest.get("episodes") or []),
+            "failure_attempts": len(manifest.get("failure_attempts") or []),
+            "per_program_outcomes": counts,
+            "updated_at_s": time.time(),
+        }, indent=2) + "\n", encoding="utf-8")
+        operations.append(CommitOperationAdd(
+            path_in_repo=f"{self.run.hf_subfolder}/resume_receipt.json",
+            path_or_fileobj=str(resume_path),
+        ))
+        view_root = self.queue.root / "views"
+        for view in ("D_geom", "D_temporal", "D_dyn", "D_task"):
+            view_path = view_root / f"{view}.json"
+            view_path.parent.mkdir(parents=True, exist_ok=True)
+            view_path.write_text(json.dumps({
+                "view": view,
+                "schema_version": "icgs_episode_v2",
+                "episode_ids": [row.get("episode_id") for row in manifest.get("episodes") or []],
+                "pointers_only": True,
+            }, indent=2) + "\n", encoding="utf-8")
+            operations.append(CommitOperationAdd(
+                path_in_repo=f"{self.run.hf_subfolder}/views/{view}.json",
+                path_or_fileobj=str(view_path),
+            ))
+        publication_path = self.queue.root / "publication_receipt.json"
+        publication_path.write_text(json.dumps({
+            "receipt_version": 1,
+            "run_id": self.run.run_id,
+            "job_ids": list(job_ids),
+            "commit_oid": None,
+            "status": "COMMIT_PENDING",
+            "created_at_s": time.time(),
+        }, indent=2) + "\n", encoding="utf-8")
+        operations.append(CommitOperationAdd(
+            path_in_repo=f"{self.run.hf_subfolder}/publication_receipt.json",
+            path_or_fileobj=str(publication_path),
         ))
         return operations
 
@@ -163,6 +215,26 @@ class HuggingFaceBatchPublisher:
         oid = str(getattr(commit, "oid", getattr(commit, "commit_hash", "")))
         if not oid:
             raise RuntimeError("Hugging Face commit returned no revision")
+        publication_path = self.queue.root / "publication_receipt.json"
+        publication_path.write_text(json.dumps({
+            "receipt_version": 1,
+            "run_id": self.run.run_id,
+            "job_ids": list(job_ids),
+            "commit_oid": oid,
+            "status": "COMMITTED",
+            "created_at_s": time.time(),
+        }, indent=2) + "\n", encoding="utf-8")
+        final_commit = self.api.create_commit(
+            repo_id=self.run.hf_repo,
+            repo_type="dataset",
+            operations=[CommitOperationAdd(
+                path_in_repo=f"{self.run.hf_subfolder}/publication_receipt.json",
+                path_or_fileobj=str(publication_path),
+            )],
+            commit_message=f"Finalize primary v3 publication receipt ({len(job_ids)} results)",
+            token=self._token,
+        )
+        oid = str(getattr(final_commit, "oid", getattr(final_commit, "commit_hash", oid)))
         if self.remote_verify is not None:
             self.remote_verify(job_ids, oid, self._token)
         self.remote_manifest = dict(plan["manifest"])

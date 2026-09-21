@@ -61,6 +61,27 @@ class ExpertPlanningTests(unittest.TestCase):
         self.assertNotIn('exec_step["type"] = "pick_place"', text)
         self.assertIn('"type": "push"', text)
 
+    def test_pilot_writer_materializes_training_layout(self):
+        from pathlib import Path
+
+        text = Path("scripts/colab_v3_pilot_episodes_worker.py").read_text(encoding="utf-8")
+        self.assertIn("write_training_episode_layout", text)
+        self.assertIn('write_dir / "layout"', text)
+
+    def test_pilot_uses_measured_wrist_points_not_tip_repetition(self):
+        from pathlib import Path
+
+        text = Path("scripts/colab_v3_pilot_episodes_worker.py").read_text(encoding="utf-8")
+        self.assertIn("wrist_point_cloud", text)
+        self.assertNotIn("np.repeat(pos.reshape(1, 3), 8", text)
+
+    def test_distributed_worker_propagates_approved_binding(self):
+        from pathlib import Path
+
+        text = Path("scripts/colab_v3_distributed_worker.py").read_text(encoding="utf-8")
+        self.assertIn("ICGS_V3_BINDING_JSON", text)
+        self.assertIn("approved_manifest", text)
+
     def test_open_close_slide_along_axis_not_free_place(self):
         poses = {
             "drawer_handle": [0.25, 0.04, 0.775],

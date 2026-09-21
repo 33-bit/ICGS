@@ -117,6 +117,21 @@ def test_ingest_is_immutable_and_idempotent_for_equal_episode(tmp_path: Path):
     assert repeated == updated
 
 
+def test_episode_without_training_layout_is_rejected(tmp_path: Path):
+    import hashlib
+    import shutil
+    from dataclasses import replace
+
+    job, result = _closed(tmp_path, "success")
+    shutil.rmtree(Path(result.result_dir) / "layout")
+    hashes = {
+        str(path.relative_to(result.result_dir)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in Path(result.result_dir).rglob("*") if path.is_file()
+    }
+    with pytest.raises(ValueError, match="training layout"):
+        validate_closed_result(job, replace(result, file_sha256=hashes))
+
+
 def test_ingest_rejects_conflicting_episode_id_without_mutating_manifest(tmp_path: Path):
     job, result = _closed(tmp_path, "success")
     validated = validate_closed_result(job, result)

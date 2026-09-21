@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import time
 
-from huggingface_hub import HfApi
+from huggingface_hub import HfApi, hf_hub_download
 
 from icgs.data.collection.v3.distributed_contracts import RunConfig
 from icgs.data.collection.v3.distributed_planner import DistributedPlanner
@@ -52,6 +53,33 @@ def _manifest_from_closed_queue(queue: FilesystemJobQueue, states=("ingested", "
     return manifest
 
 
+def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tuple[str, ...], revision: str, token: str) -> None:
+    for job_id in job_ids:
+        directory = queue.root / "ingested" / job_id
+        result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
+        result_root = Path(result["result_dir"])
+        prefix = (
+            f"{run.hf_subfolder}/episodes/{result['program_id']}/{result['episode_id']}"
+            if result.get("episode_id")
+            else f"{run.hf_subfolder}/attempts/{result['program_id']}/{result['attempt_id']}"
+        )
+        for path in sorted(result_root.rglob("*")):
+            if not path.is_file():
+                continue
+            remote = hf_hub_download(
+                repo_id=run.hf_repo,
+                repo_type="dataset",
+                filename=f"{prefix}/{path.relative_to(result_root).as_posix()}",
+                revision=revision,
+                token=token,
+                force_download=True,
+            )
+            local_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+            remote_hash = hashlib.sha256(Path(remote).read_bytes()).hexdigest()
+            if local_hash != remote_hash:
+                raise ValueError(f"remote hash mismatch for {job_id}/{path.name}")
+
+
 class CoordinatorControlPlane:
     def __init__(self, run: RunConfig, queue: FilesystemJobQueue, planner: DistributedPlanner, publisher: HuggingFaceBatchPublisher, manifest=None):
         self.run = run
@@ -74,8 +102,23 @@ class CoordinatorControlPlane:
         planner = DistributedPlanner.from_manifest(run, rows, manifest, _inflight_jobs_from_queue(queue))
         api = api_factory()
         token = Path("/content/.icgs_hf_token").read_text(encoding="utf-8").strip()
-        publisher = HuggingFaceBatchPublisher(run, api, token, queue)
-        publisher.remote_manifest = _manifest_from_closed_queue(queue, states=("published",))
+        publisher = HuggingFaceBatchPublisher(
+            run, api, token, queue,
+            remote_verify=lambda job_ids, revision, _token: _verify_remote_batch(
+                queue, run, job_ids, revision, token
+            ),
+        )
+        try:
+            remote_path = hf_hub_download(
+                repo_id=run.hf_repo,
+                repo_type="dataset",
+                filename=f"{run.hf_subfolder}/dataset_manifest.json",
+                token=token,
+                force_download=True,
+            )
+            publisher.remote_manifest = json.loads(Path(remote_path).read_text(encoding="utf-8"))
+        except Exception:
+            publisher.remote_manifest = _manifest_from_closed_queue(queue, states=("published",))
         return cls(run, queue, planner, publisher, manifest)
 
     def _refill(self, target: int = 400) -> None:

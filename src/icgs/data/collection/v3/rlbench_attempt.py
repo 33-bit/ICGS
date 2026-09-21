@@ -300,6 +300,18 @@ def write_closed_attempt_result(
             timeline = None
             episode_id = None
 
+        artifact_files = {
+            str(path.relative_to(partial)): {"sha256": _sha256(path), "bytes": path.stat().st_size}
+            for path in sorted(partial.rglob("*")) if path.is_file()
+        }
+        _write_json(partial / "artifact_manifest.json", {
+            "attempt_id": job.attempt_id,
+            "episode_id": episode_id,
+            "program_id": job.program_id,
+            "outcome": materialized.outcome,
+            "files": artifact_files,
+        })
+
         file_sha256 = {
             str(path.relative_to(partial)): _sha256(path)
             for path in sorted(partial.rglob("*")) if path.is_file()
