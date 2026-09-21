@@ -86,7 +86,7 @@ def build_v3_models(program_ids: list[str] | None = None) -> dict:
                 waypoint.set_quaternion(tip_quaternion)
                 waypoint.set_parent(root, keep_in_place=True)
             root.set_model(True)
-            root.set_model_dynamic(False)
+            root.set_model_dynamic(True)
             ttm_path = TTM_DIR / f"{spec.module}.ttm"
             root.save_model(str(ttm_path))
             root.remove()
