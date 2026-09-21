@@ -22,7 +22,7 @@
 - Every episode has `T` transitions, `T+1` observations/states and `T` achieved durations. Do not fabricate missing modalities.
 - Use fixed X display `200 + worker_id`; never use `xvfb-run -a` for the 200-worker launch.
 - No training, preprocessing, model execution, robot motion or benchmark workload is part of this plan.
-- A fresh 36-program smoke, a 2-worker queue smoke, a 200-worker bounded smoke and a verified small publication must pass before full quota launch. SKIPPED never counts as PASS.
+- A fresh 36-program smoke, a 2-worker queue smoke, a 200-worker bounded smoke and a verified small publication must pass before full quota launch. The 36-program smoke accepts retained `success` and `valid_failure` episodes with valid timelines; crash, invalid observation and SKIPPED remain blocking.
 - Do not stop the Colab session after launch or completion; leave it allocated for owner inspection.
 
 ## File structure
@@ -789,8 +789,9 @@ capacity in the launch audit.
 
 - [ ] **Step 4: Run mandatory parity/build/36-program smoke**
 
-Run the launcher with `--preflight-only`. Record 36 PASS, zero FAIL/SKIPPED,
-timeline counts and place-predicate distances. If any gate fails, keep the
+Run the launcher with `--preflight-only`. Record 36 retained episode outcomes
+(`success` or `valid_failure`), zero crash/invalid/SKIPPED, timeline counts and
+place-predicate distances. If any gate fails, keep the
 session alive, record FAIL and stop before worker launch.
 
 - [ ] **Step 5: Run publication-disabled queue smokes**

@@ -53,12 +53,14 @@ VM that will perform collection:
 3. The v3 approved manifest has 36 `generation_authorized` rows and the frozen
    v3 protocol identities.
 4. All 36 procedural task models build under the pinned simulator stack.
-5. A fresh strict one-attempt-per-program simulator smoke has 36 PASS, zero
-   FAIL and zero SKIPPED, with valid `T` actions, `T+1` observations and `T`
-   achieved durations.
-6. The known place-height gate is measured on the fresh smoke. Every required
-   place predicate must be within `predicate_success_m = 0.01`; a historical
-   receipt is not sufficient to override a fresh failure.
+5. A fresh strict one-attempt-per-program simulator smoke has 36 retained
+   episode outcomes (`success` or `valid_failure`), zero `simulator_crash`, zero
+   `invalid_observation`, and zero SKIPPED, with valid `T` actions, `T+1`
+   observations and `T` achieved durations. A `valid_failure` remains a real
+   predicate failure and is never relabeled as success.
+6. The known place-height gate is measured on the fresh smoke. Predicate
+   failures outside `predicate_success_m = 0.01` must be classified and retained
+   as `valid_failure`; a historical receipt cannot relabel a fresh outcome.
 7. Hugging Face authentication succeeds and the existing `primary_v3`
    manifest, if any, validates before being used as resume input.
 8. The remote `primary_v2` subtree is unchanged by a dry-run commit plan.

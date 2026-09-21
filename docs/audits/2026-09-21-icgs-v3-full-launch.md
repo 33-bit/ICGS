@@ -92,9 +92,12 @@ revision `1ff4985`. Parity passed and all 36 procedural task models built. The
 fresh one-attempt-per-program smoke completed with 32 `success`, 4
 `valid_failure` (`T01`, `T06`, `V02`, `R3`), 0 simulator crashes, and valid
 `T+1` timelines for all 36 programs. T03 now passes at `0.00224 m` from its
-push target. Because the mandatory gate requires 36 PASS and zero failures or
-skips, zero workers, coordinator, watchdog, or HF publication processes were
-started. The TPU session remains allocated for bounded diagnosis.
+push target. The owner subsequently confirmed that a `valid_failure` is an
+accepted retained episode outcome rather than a launch blocker. This receipt
+therefore passes the revised gate because all 36 attempts produced retained
+episodes with valid timelines and there were zero crashes, invalid observations,
+or skips. Nominal `valid_failure` still does not count toward the nominal-success
+quota.
 
 ## Required publication contents
 
