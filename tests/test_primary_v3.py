@@ -31,6 +31,11 @@ from icgs.data.collection.v3.report import observed_semantics_report, program_pa
 from icgs.data.collection.v3.steps import PROGRAM_FAMILIES, structured_steps
 from icgs.data.datasets.v3_views import SUPPORTED_V3_VIEWS, build_v3_view
 from icgs.data.schemas.episodes_v2 import validate_episode_v2
+from icgs.data.collection.v3.task_labels import materialize_task_labels
+from icgs.data.collection.v3.simulator_randomization import (
+    SimulatorRandomizationError,
+    apply_sensor_randomization,
+)
 
 
 V2_MANIFEST = Path("artifacts/composition/approved_composition_manifest.json")
@@ -272,6 +277,72 @@ class PerturbationTests(unittest.TestCase):
 
 
 class CameraAndSchemaTests(unittest.TestCase):
+    def test_sensor_randomization_applies_camera_and_light_to_runtime_objects(self):
+        class Camera:
+            def __init__(self):
+                self.orientation = [0.0, 0.0, 0.0]
+            def get_orientation(self):
+                return list(self.orientation)
+            def set_orientation(self, value):
+                self.orientation = list(value)
+        class Light:
+            def __init__(self):
+                self.intensity = None
+                self.orientation = None
+            def set_intensity(self, value):
+                self.intensity = value
+            def set_orientation(self, value):
+                self.orientation = list(value)
+        class Ambient:
+            def __init__(self):
+                self.value = None
+            def set_ambient_intensity(self, value):
+                self.value = value
+        camera, light, ambient = Camera(), Light(), Ambient()
+        receipt = apply_sensor_randomization(
+            camera=camera, lights=[light], ambient_target=ambient,
+            camera_viewpoint={"d_yaw_deg": 5.0, "d_pitch_deg": -2.0},
+            lighting_profile={"lighting_profile_id": "test", "ambient": 0.5,
+                              "directional": 0.8, "azimuth_deg": 30.0, "elevation_deg": 60.0},
+        )
+        self.assertTrue(receipt["applied"])
+        self.assertAlmostEqual(camera.orientation[0], -0.034906585, places=6)
+        self.assertAlmostEqual(camera.orientation[1], 0.087266462, places=6)
+        self.assertEqual(light.intensity, 0.8)
+        self.assertEqual(ambient.value, 0.5)
+
+    def test_sensor_randomization_rejects_missing_runtime_objects(self):
+        with self.assertRaises(SimulatorRandomizationError):
+            apply_sensor_randomization(
+                camera=None, lights=[], ambient_target=None, camera_viewpoint={}, lighting_profile={
+                    "lighting_profile_id": "test", "ambient": 0.5,
+                    "directional": 0.8, "azimuth_deg": 30.0, "elevation_deg": 60.0,
+                },
+            )
+
+    def test_task_labels_use_measured_states_and_explicit_masks(self):
+        steps = [{
+            "object_role": "object_a", "target_role": "target_a",
+            "postcondition": "object_a_placed", "precondition": None,
+        }]
+        states = [
+            {"objects": [
+                {"name": "object_a", "position": [0.0, 0.0, 0.0]},
+                {"name": "target_a", "position": [0.2, 0.0, 0.0]},
+            ]},
+            {"objects": [
+                {"name": "object_a", "position": [0.2, 0.0, 0.0]},
+                {"name": "target_a", "position": [0.2, 0.0, 0.0]},
+            ]},
+        ]
+        labels = materialize_task_labels(steps, states)
+        self.assertEqual(labels["nu"].shape, (2, 1))
+        self.assertTrue(labels["nu_valid"][0, 0])
+        self.assertFalse(labels["nu"][0, 0])
+        self.assertTrue(labels["nu_valid"][1, 0])
+        self.assertTrue(labels["rho"][1, 0])
+        self.assertTrue(labels["epsilon_valid"].all())
+
     def test_held_out_provenance_is_materialized_for_eval_perturbation(self):
         bounds = {
             "translation_m": {"x": (-0.012, 0.012), "y": (-0.012, 0.012), "z": (0.0, 0.0)},

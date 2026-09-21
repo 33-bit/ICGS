@@ -152,6 +152,32 @@ def test_closed_valid_failure_writes_full_layout_and_hashes(tmp_path: Path):
     assert episode["provenance"]["outcome"] == "valid_failure"
 
 
+def test_materializer_writes_measured_task_labels_when_steps_are_bound(tmp_path: Path):
+    raw = _raw(predicates_ok=True)
+    states = tuple(
+        {"objects": [
+            {"name": "object_a", "position": [0.2 if index else 0.0, 0.0, 0.0]},
+            {"name": "target_a", "position": [0.2, 0.0, 0.0]},
+        ]}
+        for index in range(5)
+    )
+    raw = RawAttempt(
+        observations=raw.observations, actions=raw.actions, scene_states=states,
+        collision_events=raw.collision_events, sim_time_s=raw.sim_time_s,
+        predicates_ok=True, terminal_reason=raw.terminal_reason,
+    )
+    binding = {
+        **_binding(),
+        "structured_steps": [{
+            "object_role": "object_a", "target_role": "target_a",
+            "postcondition": "object_a_placed", "precondition": None,
+        }],
+    }
+    materialized = materialize_raw_attempt(raw, _job(), binding)
+    assert materialized.episode_record["nu_valid"].all()
+    assert materialized.episode_record["rho"][1][0] == 1.0
+
+
 def test_legacy_collector_exposes_opt_in_valid_failure_capture():
     from scripts.colab_g2_dataset_generator import collect_single_episode
 

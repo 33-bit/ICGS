@@ -85,6 +85,7 @@ def assemble_episode_v2(
     failure_type: str | None = None,
     terminal_reason: str | None = None,
     terminal_t: int | None = None,
+    task_labels: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     outcome = outcome or result_class
     if outcome is None:
@@ -161,6 +162,10 @@ def assemble_episode_v2(
     if merged_intervention:
         record["intervention"] = merged_intervention
         record["randomization"] = dict(plan.randomization)
+    if task_labels:
+        for name in ("rho", "rho_valid", "nu", "nu_valid", "epsilon", "epsilon_valid"):
+            if name in task_labels:
+                record[name] = task_labels[name]
     validate_episode_v2(record)
     return record
 

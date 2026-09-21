@@ -161,3 +161,19 @@ def validate_episode_v2(record: Mapping[str, Any]) -> None:
         points = np.asarray(observation["points"])
         if points.ndim != 2 or points.shape[1] != 3 or not np.isfinite(points).all():
             raise ValueError("observation points must be finite Nx3")
+
+    label_shapes = {}
+    for name in ("rho", "nu", "epsilon"):
+        if name in record:
+            value = np.asarray(record[name])
+            if value.ndim != 2 or value.shape[0] != n_actions + 1:
+                raise ValueError(f"{name} must align to T+1 boundaries")
+            if not np.isfinite(value).all() or np.any(value < 0.0) or np.any(value > 1.0):
+                raise ValueError(f"{name} must contain probabilities in [0,1]")
+            label_shapes[name] = value.shape
+    for name in ("rho", "nu", "epsilon"):
+        valid_name = f"{name}_valid"
+        if valid_name in record:
+            valid = np.asarray(record[valid_name])
+            if valid.dtype != np.bool_ or valid.shape != label_shapes.get(name):
+                raise ValueError(f"{valid_name} must be boolean and match {name}")

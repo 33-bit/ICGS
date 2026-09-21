@@ -321,6 +321,7 @@ def _collect_single_episode_legacy(
     desc, obs = task.reset()
     logger.info(f"Task reset: {desc}")
     prepared = spec.get("_prepared")
+    sensor_randomization = None
     if prepared and prepared.get("objects"):
         from pyrep.const import PrimitiveShape
         from pyrep.objects.shape import Shape
@@ -345,6 +346,33 @@ def _collect_single_episode_legacy(
                         pass
         spec = dict(spec)
         spec["routine"] = prepared.get("routine", spec.get("routine"))
+    if prepared and prepared.get("plan") is not None:
+        from icgs.data.collection.v3.simulator_randomization import apply_sensor_randomization
+        from pyrep.objects.light import Light
+        from pyrep.objects.vision_sensor import VisionSensor
+
+        def find_runtime_object(cls, names):
+            for name in names:
+                try:
+                    return cls(name)
+                except Exception:
+                    continue
+            return None
+
+        camera = find_runtime_object(VisionSensor, ("wrist_camera", "wrist_camera#0", "cam_wrist"))
+        lights = []
+        for name in ("DefaultLight", "defaultLight", "light", "light0", "Light"):
+            light = find_runtime_object(Light, (name,))
+            if light is not None and all(light is not item for item in lights):
+                lights.append(light)
+        plan_randomization = prepared["plan"].randomization
+        sensor_randomization = apply_sensor_randomization(
+            camera=camera,
+            lights=lights,
+            ambient_target=getattr(env, "_scene", None) or env,
+            camera_viewpoint=plan_randomization.get("camera_viewpoint_applied") or {},
+            lighting_profile=plan_randomization.get("lighting_applied") or {},
+        )
 
     quat = np.asarray(env._scene.robot.arm.get_tip().get_quaternion(), dtype=np.float64)
 
@@ -787,8 +815,14 @@ def _collect_single_episode_legacy(
             "predicate_protocol_id": approved_binding["predicates"]["protocol_id"],
             "terminal_success": bool(success),
             "terminal_reason": "predicate_satisfied" if success else "predicate_failed",
+            "sensor_randomization": sensor_randomization,
         },
     }
+    from icgs.data.collection.v3.task_labels import materialize_task_labels
+    structured_steps = approved_binding.get("structured_steps") or approved_binding.get("events") or ()
+    if structured_steps:
+        auxiliary["task_labels"] = materialize_task_labels(structured_steps, scene_state_by_boundary)
+    auxiliary["sensor_randomization"] = sensor_randomization
 
     return record, auxiliary
 
@@ -1486,7 +1520,11 @@ def main():
                             transitions=record["transitions"],
                             outcome="success",
                             intervention=prepared.get("intervention") if collect_spec.get("_prepared") else v3_plan.intervention,
+                            object_states=auxiliary.get("scene_state"),
+                            task_labels=auxiliary.get("task_labels"),
                         )
+                        if auxiliary.get("sensor_randomization") is not None:
+                            record["sensor_randomization"] = auxiliary["sensor_randomization"]
                         from icgs.data.collection.v3.quota import record_outcome
                         record_outcome(
                             v3_counts,

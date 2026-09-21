@@ -27,6 +27,7 @@ def online_observation_view(observation: Mapping[str, Any]) -> dict[str, Any]:
 
 from icgs.data.collection.v3.distributed_contracts import GenerationJob, WorkerResult
 from icgs.data.collection.v3.episode_record import assemble_attempt_record, assemble_episode_v2
+from icgs.data.collection.v3.task_labels import materialize_task_labels
 from icgs.data.collection.v3.perturbations import INVALID_OBSERVATION, SIMULATOR_CRASH, SUCCESS, VALID_FAILURE
 from icgs.data.training_layout import LAYOUT_VERSION, write_training_episode_layout
 
@@ -196,6 +197,8 @@ def materialize_raw_attempt(
     object_states = list(raw.scene_states)
     if len(object_states) != len(observations):
         object_states = [{} for _ in observations]
+    structured_steps = binding.get("structured_steps") or binding.get("events") or ()
+    task_labels = materialize_task_labels(structured_steps, object_states) if structured_steps else {}
     episode = assemble_episode_v2(
         plan=job.plan,
         binding=binding,
@@ -206,6 +209,7 @@ def materialize_raw_attempt(
         object_states=object_states,
         intervention=job.plan.intervention,
         terminal_reason=raw.terminal_reason,
+        task_labels=task_labels,
     )
     auxiliary = {
         "actions": np.stack(actions),
@@ -219,6 +223,7 @@ def materialize_raw_attempt(
         "gripper_states": np.asarray([item["grip"] for item in observations], dtype=np.float32),
         "collision_events": list(raw.collision_events),
         "sim_time_s": raw.sim_time_s,
+        "task_labels": task_labels,
     }
     return MaterializedAttempt(outcome, episode, None, observations, tuple(transitions), auxiliary)
 
@@ -277,6 +282,7 @@ def write_closed_attempt_result(
                 "task": {
                     "events": record.get("events", []),
                     "collisions": auxiliary["collision_events"],
+                    **(auxiliary.get("task_labels") or {}),
                 },
                 "result": {
                     "success": materialized.outcome == SUCCESS,

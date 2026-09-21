@@ -178,7 +178,10 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
         intervention=row.get("intervention"),
         robot_states=row.get("_robot_states"),
         object_states=row.get("_object_states"),
+        task_labels=row.get("_task_labels"),
     )
+    if row.get("_sensor_randomization") is not None:
+        record["sensor_randomization"] = row["_sensor_randomization"]
     (write_dir / "episode.json").write_text(json.dumps(_enc(record), indent=2) + "\n")
     execution = {
         k: v for k, v in row.items()
@@ -243,6 +246,7 @@ def _write_v3_episode(write_dir: Path, row: dict) -> None:
                 for index, primitive in enumerate(row.get("events") or ())
             ],
             "collisions": [],
+            **(row.get("_task_labels") or {}),
         },
         "result": {
             "success": result_class == "success",
@@ -336,6 +340,7 @@ def apply_prepared_layout(objects: dict) -> None:
 
 def run_program(env, spec, plan=None) -> dict:
     from icgs.data.collection.v3.attempt_prep import prepare_attempt
+    from icgs.data.collection.v3.simulator_randomization import apply_sensor_randomization
 
     task_cls = load_task_class(spec)
     task = env.get_task(task_cls)
@@ -346,6 +351,32 @@ def run_program(env, spec, plan=None) -> dict:
         prepared = prepare_attempt(plan, spec.objects, spec.routine)
         apply_prepared_layout(prepared["objects"])
         routine = list(prepared["routine"])
+    sensor_randomization = None
+    if plan is not None:
+        from pyrep.objects.light import Light
+        from pyrep.objects.vision_sensor import VisionSensor
+
+        def find_object(cls, names):
+            for name in names:
+                try:
+                    return cls(name)
+                except Exception:
+                    continue
+            return None
+
+        camera = find_object(VisionSensor, ("wrist_camera", "wrist_camera#0", "cam_wrist"))
+        lights = []
+        for name in ("DefaultLight", "defaultLight", "light", "light0", "Light"):
+            found = find_object(Light, (name,))
+            if found is not None and all(found is not item for item in lights):
+                lights.append(found)
+        sensor_randomization = apply_sensor_randomization(
+            camera=camera,
+            lights=lights,
+            ambient_target=getattr(env, "_scene", None) or env,
+            camera_viewpoint=plan.randomization.get("camera_viewpoint_applied") or {},
+            lighting_profile=plan.randomization.get("lighting_applied") or {},
+        )
     n_obs = 1
     n_actions = 0
     quat = np.asarray(env._scene.robot.arm.get_tip().get_quaternion(), dtype=np.float64)
@@ -724,6 +755,8 @@ def run_program(env, spec, plan=None) -> dict:
         and np.isfinite(np.asarray(item.get("points"))).all()
         for item in timed_obs
     )
+    from icgs.data.collection.v3.task_labels import materialize_task_labels
+    task_labels = materialize_task_labels(spec.events, object_states)
     intervention = None if plan is None or prepared is None else prepared.get("intervention")
     if isinstance(intervention, dict) and intervention.get("intervention_frame") is None:
         intervention = dict(intervention)
@@ -752,6 +785,8 @@ def run_program(env, spec, plan=None) -> dict:
         "_actions": actions_series,
         "_robot_states": robot_states,
         "_object_states": object_states,
+        "_task_labels": task_labels,
+        "_sensor_randomization": sensor_randomization,
         "_plan": None if plan is None else plan.as_dict(),
         "episode_kind": None if plan is None else plan.episode_kind,
         "intervention": intervention,

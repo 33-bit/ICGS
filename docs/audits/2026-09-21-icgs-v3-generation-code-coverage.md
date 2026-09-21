@@ -110,15 +110,17 @@ classification only.
 The following are explicit NOT-PASS items for a future simulator gate, rather
 than silently treated as covered:
 
-1. `lighting_applied` and `camera_viewpoint_applied` are sampled and retained
-   in the plan, but the current RLBench adapter does not yet demonstrate that
-   those lighting/camera changes are applied to the simulator. The fresh L3
-   smoke must either prove the physical application or authorize an explicit
-   unavailable-modality policy.
-2. `rho`, `nu`, and `epsilon` task-label arrays are not currently materialized;
-   D_task therefore emits event pointers and null label pointers. This is a
-   contract gap if the section-12 label tuple is mandatory and must be resolved
-   before claiming complete D_task coverage.
+1. `lighting_applied` and `camera_viewpoint_applied` now go through the shared
+   simulator adapter, which fails closed when the expected VisionSensor/Light
+   objects or setters are unavailable. A fresh L3 smoke must still verify the
+   named RLBench objects and record the returned application receipt; local
+   tests only cover the injected-object behavior.
+2. `rho`, `nu`, and `epsilon` task-label arrays are now materialized from
+   measured object states with explicit boolean masks. Geometric postconditions
+   are labeled when observable; grasp/articulation predicates remain
+   `valid=false` rather than being inferred from final success. A fresh L3
+   receipt must confirm the measured-state coverage is sufficient for each
+   authorized program.
 3. `V3_PROTOCOL.layout_version == 3` identifies the v3 dataset tree, while the
    approved portable training sidecar remains `training_layout.LAYOUT_VERSION ==
    2` under the 2026-09-19 design. These are currently separate namespaces, but
