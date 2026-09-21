@@ -126,6 +126,15 @@ def test_operations_use_meaningful_episode_path(tmp_path: Path):
     assert any("/views/" in path for path in paths)
 
 
+def test_publication_limits_large_lfs_commit_concurrency(tmp_path: Path):
+    queue, _job_value = _queue(tmp_path)
+    api = FakeApi()
+    publisher = HuggingFaceBatchPublisher(_run(), api, "secret", queue, last_success_s=0.0)
+    publisher.publish_due(now_s=300.0, force=False)
+    assert api.calls[0]["num_threads"] == 1
+    assert publisher.MAX_JOBS_PER_COMMIT == 1
+
+
 def test_conflicting_remote_manifest_refuses_before_api_call(tmp_path: Path):
     queue, job = _queue(tmp_path)
     api = FakeApi()

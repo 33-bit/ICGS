@@ -29,7 +29,10 @@ def _same_identity(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
 
 
 class HuggingFaceBatchPublisher:
-    MAX_JOBS_PER_COMMIT = 100
+    # Episode JSON contains dense point-cloud observations and can exceed 1 GB;
+    # serialize one result per commit and one LFS upload thread so an idle S3
+    # multipart connection cannot time out while other large uploads compete.
+    MAX_JOBS_PER_COMMIT = 1
     def __init__(
         self,
         run: RunConfig,
@@ -211,6 +214,7 @@ class HuggingFaceBatchPublisher:
             operations=operations,
             commit_message=f"Add primary v3 batch ({len(job_ids)} results)",
             token=self._token,
+            num_threads=1,
         )
         oid = str(getattr(commit, "oid", getattr(commit, "commit_hash", "")))
         if not oid:
