@@ -411,6 +411,7 @@ def provenance_from_plan(plan: AttemptPlan, *, binding: Mapping[str, Any]) -> di
         provenance["source_episode_id"] = plan.intervention.get("source_episode_id")
         provenance["base_episode_id"] = plan.intervention.get("base_episode_id")
         provenance["magnitude_bucket"] = plan.intervention.get("magnitude_bucket")
+        provenance["held_out"] = bool(plan.intervention.get("held_out", False))
         provenance["initial_scene_intervention_id"] = (
             plan.intervention.get("intervention_id")
             if plan.intervention.get("application_scope") == "initial_scene"

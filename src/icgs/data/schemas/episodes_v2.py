@@ -58,6 +58,7 @@ _OPTIONAL_PROVENANCE = (
     "source_episode_id",
     "base_episode_id",
     "magnitude_bucket",
+    "held_out",
     "failure_type",
     "terminal_reason",
     "terminal_t",

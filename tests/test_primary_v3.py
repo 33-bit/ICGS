@@ -9,6 +9,7 @@ import unittest
 from icgs.data.collection.programs import get_program, program_catalog
 from icgs.data.collection.v3.camera import CAMERA_PROFILES, get_camera_profile
 from icgs.data.collection.v3.compiler import compile_v3_catalog, events_from_steps
+from icgs.data.collection.v3.batch import AttemptPlanner, provenance_from_plan
 from icgs.data.collection.v3.diversity import (
     episode_seed,
     is_duplicate_episode,
@@ -271,6 +272,28 @@ class PerturbationTests(unittest.TestCase):
 
 
 class CameraAndSchemaTests(unittest.TestCase):
+    def test_held_out_provenance_is_materialized_for_eval_perturbation(self):
+        bounds = {
+            "translation_m": {"x": (-0.012, 0.012), "y": (-0.012, 0.012), "z": (0.0, 0.0)},
+            "yaw_deg": (-30.0, 30.0), "scale": (0.8, 1.2),
+            "camera_profile_id": "rlbench-wrist-depth-v1",
+        }
+        planner = AttemptPlanner("V01", bounds=bounds, n_perturbed=1)
+        nominal = planner.next_plan("nominal")
+        perturbed = planner.next_plan("perturbed")
+        binding = {"source_lineage_id": "v01-root", "asset_family_id": "v01-family"}
+        provenance = provenance_from_plan(perturbed, binding=binding)
+        self.assertTrue(perturbed.intervention["held_out"])
+        self.assertTrue(provenance["held_out"])
+        validate_episode_v2({**_episode_v2_record(n_actions=2), "provenance": {
+            **_episode_v2_record(n_actions=2)["provenance"],
+            **provenance,
+            "episode_id": perturbed.episode_id,
+            "program_id": perturbed.program_id,
+            "episode_kind": "perturbed",
+            "outcome": "success",
+        }})
+
     def test_camera_profile_declares_units_and_frames(self):
         profile = get_camera_profile("rlbench-wrist-depth-v1")
         self.assertEqual(profile["depth_unit"], "meter")
