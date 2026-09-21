@@ -37,8 +37,8 @@ def _job(job_id: str = "job-1", index: int = 17) -> GenerationJob:
     return GenerationJob.create(
         job_id=job_id,
         run_id="run-1",
-        attempt_id=f"attempt-{index}",
-        episode_id=f"episode-{index}",
+        attempt_id=f"att-{_plan(index).episode_id}",
+        episode_id=_plan(index).episode_id,
         program_id="T01",
         plan=_plan(index),
         code_revision="a" * 40,
@@ -71,6 +71,16 @@ def test_job_roundtrip_preserves_exact_attempt_plan():
     restored = GenerationJob.from_dict(job.as_dict())
     assert restored == job
     assert restored.plan == job.plan
+
+
+def test_job_rejects_attempt_identity_that_disagrees_with_plan():
+    with pytest.raises(ValueError, match="attempt_id must match"):
+        GenerationJob.create(
+            job_id="job-bad", run_id="run-1", attempt_id="different",
+            episode_id=_plan().episode_id, program_id="T01", plan=_plan(),
+            code_revision="a" * 40, manifest_sha256="b" * 64,
+            output_root="/content/run/staging",
+        )
 
 
 def test_attempt_outcome_requires_null_episode_id():

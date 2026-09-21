@@ -78,6 +78,10 @@ class GenerationJob:
         _sha(self.manifest_sha256, "manifest_sha256", (64,))
         if self.program_id != self.plan.program_id:
             raise ValueError("program_id must match plan.program_id")
+        if self.episode_id != self.plan.episode_id:
+            raise ValueError("episode_id must match plan.episode_id")
+        if self.attempt_id != f"att-{self.plan.episode_id}":
+            raise ValueError("attempt_id must match att-<plan.episode_id>")
         if self.retry_generation < 0:
             raise ValueError("retry_generation must be nonnegative")
 

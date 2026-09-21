@@ -52,7 +52,7 @@ def _job() -> GenerationJob:
         intervention=None,
     )
     return GenerationJob.create(
-        job_id="job-1", run_id="run-1", attempt_id="attempt-1",
+        job_id="job-1", run_id="run-1", attempt_id=f"att-{plan.episode_id}",
         episode_id=plan.episode_id, program_id="T01", plan=plan,
         code_revision="a" * 40, manifest_sha256="b" * 64,
         output_root="/content/run/staging",
