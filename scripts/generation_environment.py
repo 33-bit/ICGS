@@ -120,6 +120,7 @@ def provision_environment(
         [
             "apt-get", "install", "-y", "-qq", "libgl1", "libgl1-mesa-dri", "libglu1-mesa",
             "libxcb-xinerama0", "libxkbcommon-x11-0", "libxcb-cursor0",
+            "libxcb-icccm4", "libxcb-image0", "libxcb-keysyms1", "libxcb-render-util0",
             "libegl1", "xauth", "xvfb", "libxrender1", "libxi6", "libxrandr2",
         ],
         timeout=600,

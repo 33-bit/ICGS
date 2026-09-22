@@ -143,7 +143,18 @@ def test_provision_environment_records_configured_commands_without_external_exec
     assert receipt.python_executable == config.machine.python_executable
     assert receipt.simulator_root == config.machine.simulator_root
     assert any(command[:2] == ("apt-get", "update") for command in receipt.commands)
-    assert any("libgl1-mesa-dri" in command for command in receipt.commands)
+    apt_install = next(
+        command
+        for command in receipt.commands
+        if command[:3] == ("apt-get", "install", "-y")
+    )
+    assert {
+        "libxcb-icccm4",
+        "libxcb-image0",
+        "libxcb-keysyms1",
+        "libxcb-render-util0",
+    }.issubset(apt_install)
+    assert "libgl1-mesa-dri" in apt_install
     assert any(command[0] == "curl" for command in receipt.commands)
     assert any(command[:3] == ("uv", "pip", "install") for command in receipt.commands)
     assert any(config.machine.python_executable in command for command in receipt.commands)
