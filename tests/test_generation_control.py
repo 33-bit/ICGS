@@ -19,6 +19,7 @@ from scripts.generation_coordinator import (
 from scripts.generation_watchdog import (
     _coordinator_lock_is_free,
     _pid_matches,
+    heartbeat_health,
     reconcile_processes,
 )
 from icgs.data.collection.generation.distributed_contracts import (
@@ -256,11 +257,17 @@ def test_tick_quarantines_bad_result_and_ingests_following_valid_result(
             return SimpleNamespace(as_dict=lambda: {})
 
     class Publisher:
+        def __init__(self):
+            self.heartbeat_during_publish = []
+
         def publish_due(self, **kwargs):
+            heartbeat_path = run_root / "control" / "coordinator-heartbeat.json"
+            self.heartbeat_during_publish.append(json.loads(heartbeat_path.read_text()))
             return None
 
     planner = Planner()
-    control = CoordinatorControlPlane(run, queue, planner, Publisher())
+    publisher = Publisher()
+    control = CoordinatorControlPlane(run, queue, planner, publisher)
 
     def validate(job, result):
         if job.job_id == malformed_job.job_id:
@@ -306,6 +313,25 @@ def test_tick_quarantines_bad_result_and_ingests_following_valid_result(
     counts = queue.counts()
     assert counts.quarantined == 1
     assert counts.ingested == 1
+    heartbeat = json.loads(
+        (run_root / "control" / "coordinator-heartbeat.json").read_text(encoding="utf-8")
+    )
+    assert heartbeat["phase"] == "tick_end"
+    assert heartbeat["tick_started_at_s"] == 10.0
+    assert heartbeat["last_progress_at_s"] == 10.0
+    assert heartbeat["last_progress_kind"] == "result_ingested"
+    assert heartbeat["last_validation_error"]["job_id"] == malformed_job.job_id
+    assert heartbeat["publication"]["phase"] == "idle"
+    assert heartbeat["queue"]["quarantined"] == 1
+    assert heartbeat["planner"] == {}
+    assert publisher.heartbeat_during_publish[0]["phase"] == "publication_in_progress"
+    assert publisher.heartbeat_during_publish[0]["publication"]["phase"] == "publication_in_progress"
+    control.tick(now_s=20.0)
+    later_heartbeat = json.loads(
+        (run_root / "control" / "coordinator-heartbeat.json").read_text(encoding="utf-8")
+    )
+    assert later_heartbeat["last_progress_at_s"] == 10.0
+    assert later_heartbeat["last_progress_kind"] == "result_ingested"
     assert tuple(job.job_id for job in _inflight_jobs_from_queue(queue)) == (
         malformed_job.job_id,
     )
@@ -352,36 +378,279 @@ def test_pid_identity_requires_every_expected_cmdline_token():
     assert not _pid_matches(12, ("worker.py", "007", "/content/other"), cmdline_reader=reader)
 
 
-def test_watchdog_restarts_only_missing_slots_and_updates_receipt(tmp_path):
-    root = tmp_path / "run"
+@pytest.mark.parametrize(
+    ("payload", "now_s", "stale_after_s", "expected"),
+    [
+        (
+            {
+                "status": "RUNNING",
+                "phase": "tick_end",
+                "timestamp_s": 100.0,
+                "tick_started_at_s": 95.0,
+                "last_progress_at_s": 100.0,
+                "last_progress_kind": "result_ingested",
+                "last_validation_error": None,
+                "publication": {"phase": "idle"},
+            },
+            110.0,
+            30.0,
+            "healthy",
+        ),
+        (
+            {
+                "status": "RUNNING",
+                "phase": "publication_in_progress",
+                "timestamp_s": 100.0,
+                "tick_started_at_s": 95.0,
+                "last_progress_at_s": 80.0,
+                "last_progress_kind": "result_ingested",
+                "last_validation_error": None,
+                "publication": {"phase": "publication_in_progress"},
+            },
+            1005.0,
+            30.0,
+            "busy",
+        ),
+        (
+            {
+                "status": "RUNNING",
+                "phase": "tick_end",
+                "timestamp_s": 10.0,
+                "tick_started_at_s": 5.0,
+                "last_progress_at_s": 10.0,
+                "last_progress_kind": "result_ingested",
+                "last_validation_error": None,
+                "publication": {"phase": "idle"},
+            },
+            100.0,
+            30.0,
+            "stale",
+        ),
+        (
+            {
+                "status": "COMPLETE",
+                "phase": "terminal",
+                "timestamp_s": 10.0,
+                "tick_started_at_s": 5.0,
+                "last_progress_at_s": 10.0,
+                "last_progress_kind": "publication_complete",
+                "last_validation_error": None,
+                "publication": {"phase": "complete"},
+            },
+            100.0,
+            30.0,
+            "terminal",
+        ),
+    ],
+)
+def test_heartbeat_health_classifies_progress_and_publication(
+    payload, now_s, stale_after_s, expected
+):
+    assert heartbeat_health(payload, now_s=now_s, stale_after_s=stale_after_s) == expected
+
+
+def _write_watchdog_runtime_files(tmp_path: Path, *, heartbeat: dict, coordinator_pid: int = 900):
+    config = _runtime_config(tmp_path)
+    root = Path(config.run.run_root)
     control = root / "control"
-    control.mkdir(parents=True)
+    control.mkdir(parents=True, exist_ok=True)
+    runtime_path = control / "runtime_config.json"
+    runtime_path.write_text(json.dumps(config.as_dict()), encoding="utf-8")
     approved = tmp_path / "approved.json"
     approved.write_text("{}", encoding="utf-8")
     (control / "run.json").write_text(json.dumps({
-        "run": {"worker_count": 200},
+        "run": {"worker_count": config.run.worker_count},
         "approved_manifest": str(approved),
+        "runtime_config": config.as_dict(),
+        "runtime_config_path": str(runtime_path),
     }), encoding="utf-8")
-    worker_pids = {f"{index:03d}": 1000 + index for index in range(200)}
+    (control / "coordinator-heartbeat.json").write_text(
+        json.dumps(heartbeat), encoding="utf-8"
+    )
+    worker_pids = {f"{index:03d}": 1000 + index for index in range(config.run.worker_count)}
     launch = {
-        "workers": 200,
+        "workers": config.run.worker_count,
+        "worker_pids": worker_pids,
+        "coordinator_pid": coordinator_pid,
+        "watchdog_pid": os.getpid(),
+        "restart_counts": {
+            "coordinator": 0,
+            "workers": {worker_id: 0 for worker_id in worker_pids},
+        },
+    }
+    (control / "launch.json").write_text(json.dumps(launch), encoding="utf-8")
+    return config, root, control, worker_pids
+
+
+def test_watchdog_uses_runtime_config_and_restarts_stale_coordinator_with_reason(tmp_path: Path):
+    heartbeat = {
+        "status": "RUNNING",
+        "phase": "tick_end",
+        "timestamp_s": 10.0,
+        "tick_started_at_s": 5.0,
+        "last_progress_at_s": 10.0,
+        "last_progress_kind": "result_ingested",
+        "last_validation_error": None,
+        "publication": {"phase": "idle"},
+    }
+    config, root, control, worker_pids = _write_watchdog_runtime_files(
+        tmp_path, heartbeat=heartbeat
+    )
+
+    def reader(pid: int) -> bytes:
+        if pid == 900:
+            return (
+                f"python\0generation_coordinator.py\0--run-config\0{control / 'run.json'}\0"
+                f"--runtime-config\0{control / 'runtime_config.json'}\0"
+            ).encode()
+        worker_id = f"{pid - 1000:03d}"
+        return (
+            f"python\0generation_worker.py\0--worker-id\0{worker_id}\0"
+            f"--runtime-config\0{control / 'runtime_config.json'}\0"
+        ).encode()
+
+    class Process:
+        pid = 7777
+
+    calls = []
+
+    def popen(command, **kwargs):
+        calls.append((command, kwargs))
+        return Process()
+
+    updated = reconcile_processes(
+        root,
+        popen=popen,
+        cmdline_reader=reader,
+        now_s=100.0,
+        stale_after_s=30.0,
+    )
+
+    assert len(calls) == 1
+    command = calls[0][0]
+    assert command[command.index("--runtime-config") + 1] == str(control / "runtime_config.json")
+    assert all("/content" not in item for item in command)
+    assert updated["coordinator_pid"] == 7777
+    assert updated["restart_counts"]["coordinator"] == 1
+    assert updated["restart_history"][-1]["reason"] == "heartbeat_stale"
+    assert not list(control.glob("launch.json.partial-*"))
+    assert config.machine.python_executable in command
+    assert str(Path(config.machine.repo_root) / "scripts" / "generation_coordinator.py") in command
+
+
+def test_watchdog_does_not_replace_stale_coordinator_while_lock_is_held(tmp_path: Path):
+    heartbeat = {
+        "status": "RUNNING",
+        "phase": "tick_end",
+        "timestamp_s": 10.0,
+        "tick_started_at_s": 5.0,
+        "last_progress_at_s": 10.0,
+        "last_progress_kind": "result_ingested",
+        "last_validation_error": None,
+        "publication": {"phase": "idle"},
+    }
+    _, root, control, _ = _write_watchdog_runtime_files(tmp_path, heartbeat=heartbeat)
+    reader = lambda pid: (
+        f"python\0generation_coordinator.py\0--run-config\0{control / 'run.json'}\0"
+        f"--runtime-config\0{control / 'runtime_config.json'}\0"
+    ).encode()
+    calls = []
+    with CoordinatorLock(control / "coordinator.lock"):
+        updated = reconcile_processes(
+            root,
+            popen=lambda *args, **kwargs: calls.append((args, kwargs)),
+            cmdline_reader=reader,
+            now_s=100.0,
+            stale_after_s=30.0,
+        )
+    assert calls == []
+    assert updated["coordinator_pid"] == 900
+    assert updated["restart_counts"]["coordinator"] == 0
+
+
+def test_watchdog_enforces_bounded_coordinator_restarts(tmp_path: Path):
+    heartbeat = {
+        "status": "RUNNING",
+        "phase": "tick_end",
+        "timestamp_s": 10.0,
+        "tick_started_at_s": 5.0,
+        "last_progress_at_s": 10.0,
+        "last_progress_kind": "result_ingested",
+        "last_validation_error": None,
+        "publication": {"phase": "idle"},
+    }
+    _, root, control, _ = _write_watchdog_runtime_files(tmp_path, heartbeat=heartbeat)
+    launch_path = control / "launch.json"
+    launch = json.loads(launch_path.read_text(encoding="utf-8"))
+    launch["restart_counts"]["coordinator"] = 1
+    launch_path.write_text(json.dumps(launch), encoding="utf-8")
+    reader = lambda pid: (
+        f"python\0generation_coordinator.py\0--run-config\0{control / 'run.json'}\0"
+        f"--runtime-config\0{control / 'runtime_config.json'}\0"
+    ).encode()
+
+    with pytest.raises(RuntimeError, match="coordinator restart limit exceeded"):
+        reconcile_processes(
+            root,
+            popen=lambda *args, **kwargs: None,
+            cmdline_reader=reader,
+            now_s=100.0,
+            stale_after_s=30.0,
+            max_restarts=1,
+        )
+
+
+def test_watchdog_restarts_only_missing_slots_and_updates_receipt(tmp_path):
+    config = _runtime_config(tmp_path)
+    root = Path(config.run.run_root)
+    control = root / "control"
+    control.mkdir(parents=True, exist_ok=True)
+    runtime_path = control / "runtime_config.json"
+    runtime_path.write_text(json.dumps(config.as_dict()), encoding="utf-8")
+    approved = tmp_path / "approved.json"
+    approved.write_text("{}", encoding="utf-8")
+    (control / "run.json").write_text(json.dumps({
+        "run": {"worker_count": config.run.worker_count},
+        "approved_manifest": str(approved),
+        "runtime_config": config.as_dict(),
+        "runtime_config_path": str(runtime_path),
+    }), encoding="utf-8")
+    (control / "coordinator-heartbeat.json").write_text(json.dumps({
+        "status": "RUNNING",
+        "phase": "tick_end",
+        "timestamp_s": 100.0,
+        "tick_started_at_s": 95.0,
+        "last_progress_at_s": 100.0,
+        "last_progress_kind": "result_ingested",
+        "last_validation_error": None,
+        "publication": {"phase": "idle"},
+    }), encoding="utf-8")
+    worker_pids = {f"{index:03d}": 1000 + index for index in range(config.run.worker_count)}
+    launch = {
+        "workers": config.run.worker_count,
         "worker_pids": worker_pids,
         "coordinator_pid": 900,
         "watchdog_pid": os.getpid(),
         "restart_counts": {
             "coordinator": 0,
-            "workers": {f"{index:03d}": 0 for index in range(200)},
+            "workers": {f"{index:03d}": 0 for index in range(config.run.worker_count)},
         },
     }
     (control / "launch.json").write_text(json.dumps(launch), encoding="utf-8")
 
     def reader(pid: int) -> bytes:
         if pid == 900:
-            return f"python\0generation_coordinator.py\0--run-config\0{control / 'run.json'}\0".encode()
-        if pid == worker_pids["007"]:
+            return (
+                f"python\0generation_coordinator.py\0--run-config\0{control / 'run.json'}\0"
+                f"--runtime-config\0{runtime_path}\0"
+            ).encode()
+        if pid == worker_pids["001"]:
             return b""
         worker_id = f"{pid - 1000:03d}"
-        return f"python\0generation_worker.py\0--worker-id\0{worker_id}\0--run-root\0{root}\0".encode()
+        return (
+            f"python\0generation_worker.py\0--worker-id\0{worker_id}\0"
+            f"--runtime-config\0{runtime_path}\0"
+        ).encode()
 
     class Process:
         pid = 7777
@@ -391,13 +660,14 @@ def test_watchdog_restarts_only_missing_slots_and_updates_receipt(tmp_path):
         calls.append((command, kwargs))
         return Process()
 
-    updated = reconcile_processes(root, popen=popen, cmdline_reader=reader)
+    updated = reconcile_processes(root, popen=popen, cmdline_reader=reader, now_s=100.0)
     assert len(calls) == 1
     command = calls[0][0]
-    assert command[command.index("--worker-id") + 1] == "007"
-    assert command[command.index("--server-num") + 1] == "207"
-    assert updated["worker_pids"]["007"] == 7777
-    assert updated["restart_counts"]["workers"]["007"] == 1
+    assert command[command.index("--worker-id") + 1] == "001"
+    assert command[command.index("--server-num") + 1] == "42"
+    assert command[command.index("--runtime-config") + 1] == str(runtime_path)
+    assert updated["worker_pids"]["001"] == 7777
+    assert updated["restart_counts"]["workers"]["001"] == 1
     assert updated["coordinator_pid"] == 900
 
 

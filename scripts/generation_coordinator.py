@@ -14,7 +14,13 @@ from typing import Literal
 
 from huggingface_hub import HfApi, hf_hub_download
 
-from icgs.data.collection.generation.distributed_contracts import GenerationJob, RunConfig, WorkerResult
+from icgs.data.collection.generation.distributed_contracts import (
+    CoordinatorHeartbeat,
+    GenerationJob,
+    GenerationRuntimeConfig,
+    RunConfig,
+    WorkerResult,
+)
 from icgs.data.collection.generation.distributed_planner import DistributedPlanner
 from icgs.data.collection.generation.distributed_publication import HuggingFaceBatchPublisher
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue, MalformedReadyResult
@@ -147,6 +153,11 @@ class CoordinatorControlPlane:
         self.publisher = publisher
         self.manifest = dict(manifest or {"manifest_version": 3, "episodes": [], "failure_attempts": []})
         self.status = "PREFLIGHT"
+        self._tick_started_at_s: float | None = None
+        self._last_progress_at_s: float | None = None
+        self._last_progress_kind: str | None = None
+        self._last_validation_error: dict | None = None
+        self._publication: dict = {"phase": "idle"}
 
     @classmethod
     def open(cls, run_config_path: str | Path, *, api_factory):
@@ -180,20 +191,37 @@ class CoordinatorControlPlane:
             publisher.remote_manifest = _manifest_from_closed_queue(queue, states=("published",))
         return cls(run, queue, planner, publisher, manifest)
 
-    def _refill(self, target: int = 400) -> None:
+    def _refill(self, target: int = 400) -> int:
+        refilled = 0
         while self.queue.counts().pending + self.queue.counts().claimed < target:
             job = self.planner.next_job()
             if job is None:
                 break
             self.queue.enqueue(job)
+            refilled += 1
+        return refilled
+
+    def _record_progress(self, now_s: float, kind: str) -> None:
+        self._last_progress_at_s = now_s
+        self._last_progress_kind = kind
 
     def process_ready_result(
         self,
         result: WorkerResult | MalformedReadyResult,
+        *,
+        now_s: float | None = None,
     ) -> Literal["ingested", "quarantined"]:
+        now = (
+            time.time()
+            if now_s is None and self._tick_started_at_s is None
+            else self._tick_started_at_s
+            if now_s is None
+            else now_s
+        )
         source_path = self.queue.root / "ready" / result.job_id
         job = None
         inventory_root = source_path
+        self._write_heartbeat(now, phase="validation")
         try:
             job_path = source_path / "job.json"
             if job_path.is_symlink() or not job_path.is_file():
@@ -234,35 +262,82 @@ class CoordinatorControlPlane:
                 result_dir=inventory_root,
             )
             self.queue.quarantine_ready(result.job_id, failure)
+            self._last_validation_error = {
+                "job_id": failure.job_id,
+                "exception_type": failure.exception_type,
+                "exception_message": failure.exception_message,
+            }
+            self._write_heartbeat(now, phase="validation")
             return "quarantined"
 
         self.planner.record_result(result, validated.provenance)
         self.queue.mark_ingested(result)
         self.manifest = updated_manifest
+        self._record_progress(now, "result_ingested")
+        self._write_heartbeat(now, phase="validation")
         return "ingested"
 
     def tick(self, *, now_s: float | None = None) -> None:
         now = time.time() if now_s is None else now_s
+        self._tick_started_at_s = now
         self._write_heartbeat(now, phase="tick_start")
         self.queue.recover_stale(now_s=now, stale_after_s=1800.0)
         for result in self.queue.iter_ready()[:MAX_READY_PER_TICK]:
             self.process_ready_result(result)
-        self._refill()
+        self._write_heartbeat(now, phase="refill")
+        refilled = self._refill()
+        if refilled:
+            self._record_progress(now, "jobs_refilled")
+        self._write_heartbeat(now, phase="refill")
         complete = self.planner.quota_complete()
-        receipt = self.publisher.publish_due(
-            now_s=now, force=complete, complete=complete,
-            local_manifest=self.manifest,
-        )
+        self._publication = {"phase": "publication_in_progress", "started_at_s": now}
+        self._write_heartbeat(now, phase="publication_in_progress")
+        try:
+            receipt = self.publisher.publish_due(
+                now_s=now, force=complete, complete=complete,
+                local_manifest=self.manifest,
+            )
+        except Exception as error:
+            self._publication = {
+                "phase": "error",
+                "started_at_s": now,
+                "last_error": {
+                    "exception_type": type(error).__name__,
+                    "exception_message": str(error),
+                },
+            }
+            self._write_heartbeat(now, phase="publication_error")
+            raise
+        if receipt is None:
+            self._publication = {"phase": "idle", "last_attempt_at_s": now}
+        else:
+            self._publication = {
+                "phase": "complete",
+                "started_at_s": now,
+                "completed_at_s": getattr(receipt, "published_at_s", now),
+                "job_ids": list(getattr(receipt, "job_ids", ())),
+            }
+            self._record_progress(now, "publication_complete")
+        self._write_heartbeat(now, phase="publication")
         self.status = "COMPLETE" if complete and not self.queue.counts().claimed else "RUNNING"
         self._write_heartbeat(now, phase="tick_end")
 
     def _write_heartbeat(self, now: float, *, phase: str) -> None:
         control = self.queue.root.parent / "control"
-        _atomic_json(control / "coordinator-heartbeat.json", {
-            "status": self.status, "timestamp_s": now,
-            "phase": phase, "pid": os.getpid(),
-            "queue": self.queue.counts().__dict__, "planner": self.planner.snapshot().as_dict(),
-        })
+        heartbeat = CoordinatorHeartbeat(
+            status=self.status,
+            phase=phase,
+            timestamp_s=now,
+            pid=os.getpid(),
+            tick_started_at_s=self._tick_started_at_s,
+            last_progress_at_s=self._last_progress_at_s,
+            last_progress_kind=self._last_progress_kind,
+            last_validation_error=self._last_validation_error,
+            publication=dict(self._publication),
+            queue=dict(self.queue.counts().__dict__),
+            planner=dict(self.planner.snapshot().as_dict()),
+        )
+        _atomic_json(control / "coordinator-heartbeat.json", heartbeat.as_dict())
 
     def run_forever(self, *, poll_s: float = 1.0) -> int:
         control = self.queue.root.parent / "control"
@@ -285,7 +360,10 @@ class CoordinatorControlPlane:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-config", required=True)
+    parser.add_argument("--runtime-config")
     args = parser.parse_args()
+    if args.runtime_config:
+        GenerationRuntimeConfig.from_file(args.runtime_config, check_paths=False)
     api = HfApi(token=Path("/content/.icgs_hf_token").read_text(encoding="utf-8").strip())
     control = CoordinatorControlPlane.open(args.run_config, api_factory=lambda: api)
     return control.run_forever()

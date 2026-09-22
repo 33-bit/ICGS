@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 import json
+import math
 import os
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -414,9 +415,57 @@ class QueueCounts:
     published: int
 
 
+@dataclass(frozen=True)
+class CoordinatorHeartbeat:
+    status: str
+    phase: str
+    timestamp_s: float
+    pid: int
+    tick_started_at_s: float | None
+    last_progress_at_s: float | None
+    last_progress_kind: str | None
+    last_validation_error: dict[str, Any] | None
+    publication: dict[str, Any]
+    queue: dict[str, Any]
+    planner: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        for name in ("status", "phase"):
+            _nonblank(getattr(self, name), name)
+        for name in ("timestamp_s", "tick_started_at_s", "last_progress_at_s"):
+            value = getattr(self, name)
+            if value is not None and (
+                type(value) not in (int, float) or not math.isfinite(float(value))
+            ):
+                raise ValueError(f"{name} must be a finite number or null")
+        if type(self.pid) is not int or self.pid < 0:
+            raise ValueError("pid must be a nonnegative integer")
+        if self.last_progress_kind is not None:
+            _nonblank(self.last_progress_kind, "last_progress_kind")
+        if self.last_validation_error is not None and not isinstance(
+            self.last_validation_error, dict
+        ):
+            raise ValueError("last_validation_error must be an object or null")
+        for name in ("publication", "queue", "planner"):
+            if not isinstance(getattr(self, name), dict):
+                raise ValueError(f"{name} must be an object")
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "CoordinatorHeartbeat":
+        values = _mapping(payload, "coordinator heartbeat")
+        fields = frozenset(cls.__dataclass_fields__)
+        _reject_unknown(values, fields, "coordinator heartbeat")
+        _require_fields(values, fields, "coordinator heartbeat")
+        return cls(**values)
+
+
 __all__ = [
     "GenerationJob",
     "GenerationRuntimeConfig",
+    "CoordinatorHeartbeat",
     "MachineConfig",
     "QueueCounts",
     "RunConfig",
