@@ -505,6 +505,14 @@ class HuggingFaceBatchPublisher:
         self._validate_prefix()
         remote = self.remote_manifest if remote_manifest is None else dict(remote_manifest)
         local_receipt = self._read_publication_receipt()
+        if local_receipt is not None and local_receipt.status == "COMPLETE":
+            pending_ids = set(self.pending_job_ids())
+            completed_ids = set(local_receipt.job_ids)
+            if pending_ids - completed_ids:
+                # A COMPLETE receipt belongs to an earlier batch. Keep its
+                # immutable identity for reconciliation only when no newer
+                # ingested jobs are waiting; otherwise plan a fresh batch.
+                local_receipt = None
         if local_receipt is not None:
             reconciled = reconcile_publication(local_receipt, remote)
             if reconciled.status == "VERIFIED":

@@ -111,6 +111,63 @@ def test_publish_due_only_after_300_seconds_or_force(tmp_path: Path):
     assert publisher.remote_manifest["episodes"][0]["episode_id"] == job.episode_id
 
 
+def test_complete_receipt_does_not_block_the_next_ingested_batch(tmp_path: Path):
+    from dataclasses import replace
+    import hashlib
+
+    queue, first_job = _queue(tmp_path)
+    api = FakeApi()
+    publisher = HuggingFaceBatchPublisher(_run(), api, "secret", queue, last_success_s=0.0)
+    first_receipt = publisher.publish_due(now_s=300.0, force=False)
+    assert first_receipt is not None
+    assert queue.counts().published == 1
+
+    second_plan = replace(
+        first_job.plan,
+        episode_index=2,
+        episode_id="episode-t01-00002",
+        randomization={"scene_signature": "sig-2", "asset_instance_id": "asset-2"},
+    )
+    second_job = GenerationJob.create(
+        job_id="job-run-1-episode-t01-00002",
+        run_id="run-1",
+        attempt_id="att-episode-t01-00002",
+        episode_id=second_plan.episode_id,
+        program_id="T01",
+        plan=second_plan,
+        code_revision="a" * 40,
+        manifest_sha256="b" * 64,
+        output_root="/content/run/staging",
+    )
+    queue.enqueue(second_job)
+    assert queue.claim("000") == second_job
+    result_dir = tmp_path / "result-second"
+    result_dir.mkdir()
+    episode_path = result_dir / "episode.json"
+    episode_path.write_text(
+        '{"episode_id": "episode-t01-00002", "program_id": "T01", "outcome": "success"}\n',
+        encoding="utf-8",
+    )
+    second_result = WorkerResult(
+        job_id=second_job.job_id,
+        attempt_id=second_job.attempt_id,
+        episode_id=second_job.episode_id,
+        program_id=second_job.program_id,
+        outcome="success",
+        result_dir=str(result_dir),
+        file_sha256={"episode.json": hashlib.sha256(episode_path.read_bytes()).hexdigest()},
+        timeline={"actions": 0, "observations": 1, "durations": 0},
+    )
+    queue.publish_ready("000", second_result)
+    queue.mark_ingested(second_result)
+
+    second_receipt = publisher.publish_due(now_s=600.0, force=False)
+    assert second_receipt is not None
+    assert second_receipt.job_ids == (second_job.job_id,)
+    assert queue.counts().published == 2
+    assert len(api.calls) == 4
+
+
 def test_pending_job_limit_must_be_positive(tmp_path: Path):
     queue, _job_value = _queue(tmp_path)
     publisher = HuggingFaceBatchPublisher(_run(), FakeApi(), "secret", queue)
