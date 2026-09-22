@@ -14,6 +14,7 @@ from scripts.generation_launch import validate_smoke_receipt
 from scripts.generation_coordinator import (
     CoordinatorControlPlane,
     CoordinatorLock,
+    _credential_path,
     _inflight_jobs_from_queue,
 )
 from scripts.generation_watchdog import (
@@ -165,6 +166,19 @@ def test_no_stop_call_in_control_sources():
         "scripts/generation_watchdog.py",
     ):
         assert "colab stop" not in Path(name).read_text(encoding="utf-8")
+
+
+def test_coordinator_uses_configured_credential_path(tmp_path: Path):
+    token_path = tmp_path / "credentials" / "hf-token"
+    token_path.parent.mkdir()
+    token_path.write_text("secret", encoding="utf-8")
+
+    resolved = _credential_path(
+        tmp_path / "control" / "run.json",
+        {"hf_token_path": str(token_path)},
+    )
+
+    assert resolved == token_path
 
 
 def test_launcher_exports_pinned_simulator_environment_to_workers(tmp_path: Path):

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from icgs.data.collection.generation.distributed_contracts import GenerationJob, RunConfig, WorkerResult
-from icgs.data.collection.generation.distributed_publication import HuggingFaceBatchPublisher
+from icgs.data.collection.generation.distributed_publication import (
+    HuggingFaceBatchPublisher,
+    PublicationConfig,
+    PublicationReceipt,
+    reconcile_publication,
+)
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
 
 
@@ -36,6 +42,15 @@ class TransientTimeoutApi(FakeApi):
             "Error while uploading 'episode.json': "
             "<Error><Code>RequestTimeout</Code></Error>"
         )
+
+
+class DataCommitThenTimeoutApi(FakeApi):
+    def create_commit(self, **kwargs):
+        self.calls.append(kwargs)
+        if len(self.calls) == 1:
+            self.revision = "d" * 40
+            return type("Commit", (), {"oid": self.revision})()
+        raise RuntimeError("RequestTimeout while committing publication receipt")
 
 
 def _run() -> RunConfig:
@@ -103,13 +118,18 @@ def test_pending_job_limit_must_be_positive(tmp_path: Path):
         publisher.pending_job_ids(limit=0)
 
 
-def test_failed_commit_keeps_jobs_unpublished(tmp_path: Path):
+def test_rate_limit_commit_is_deferred_and_keeps_jobs_unpublished(tmp_path: Path, monkeypatch):
     queue, job = _queue(tmp_path)
+    monkeypatch.setattr(
+        "icgs.data.collection.generation.distributed_publication.time.sleep",
+        lambda _seconds: None,
+    )
     publisher = HuggingFaceBatchPublisher(_run(), FakeApi(fail_create_commit=True), "secret", queue, last_success_s=0.0)
-    with pytest.raises(RuntimeError, match="429"):
-        publisher.publish_due(now_s=300.0, force=False)
+    assert publisher.publish_due(now_s=300.0, force=False) is None
     assert publisher.pending_job_ids() == (job.job_id,)
     assert queue.counts().ingested == 1
+    receipt = json.loads((queue.root / "publication_receipt.json").read_text())
+    assert receipt["status"] == "DEFERRED"
 
 
 def test_transient_lfs_timeout_is_deferred_without_crashing_coordinator(tmp_path: Path, monkeypatch):
@@ -169,3 +189,192 @@ def test_conflicting_remote_manifest_refuses_before_api_call(tmp_path: Path):
             remote_manifest={"episodes": [{"episode_id": job.episode_id, "program_id": "other"}]},
         )
     assert not api.calls
+
+
+def test_publication_config_controls_upload_threads_and_retry_policy(tmp_path: Path):
+    queue, _job_value = _queue(tmp_path)
+    config = PublicationConfig(
+        batch_size=3,
+        upload_threads=4,
+        retry_attempts=2,
+        retry_cooldown_s=17.0,
+        rate_limit_cooldown_s=23.0,
+    )
+    api = FakeApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        publication_config=config,
+    )
+
+    publisher.publish_due(now_s=300.0, force=False)
+
+    assert publisher.publication_config == config
+    assert api.calls[0]["num_threads"] == 4
+    assert publisher._next_retry_s == 0.0
+
+
+def test_data_commit_timeout_persists_deferred_receipt_without_publishing(tmp_path: Path, monkeypatch):
+    queue, job = _queue(tmp_path)
+    monkeypatch.setattr(
+        "icgs.data.collection.generation.distributed_publication.time.sleep",
+        lambda _seconds: None,
+    )
+    api = DataCommitThenTimeoutApi()
+    config = PublicationConfig(
+        batch_size=1,
+        upload_threads=2,
+        retry_attempts=1,
+        retry_cooldown_s=31.0,
+        rate_limit_cooldown_s=47.0,
+    )
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        publication_config=config,
+    )
+
+    assert publisher.publish_due(now_s=300.0, force=False) is None
+    receipt = json.loads(
+        (queue.root / "publication_receipt.json").read_text(encoding="utf-8")
+    )
+    assert receipt["status"] == "DEFERRED"
+    assert receipt["data_commit_oid"] == "d" * 40
+    assert receipt["job_ids"] == [job.job_id]
+    assert queue.counts().ingested == 1
+    assert queue.counts().published == 0
+    assert len(api.calls) == 2
+
+
+def test_matching_remote_hashes_reconcile_deferred_receipt_without_reupload(tmp_path: Path, monkeypatch):
+    queue, job = _queue(tmp_path)
+    monkeypatch.setattr(
+        "icgs.data.collection.generation.distributed_publication.time.sleep",
+        lambda _seconds: None,
+    )
+    api = DataCommitThenTimeoutApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        publication_config=PublicationConfig(retry_attempts=1),
+    )
+    assert publisher.publish_due(now_s=300.0, force=False) is None
+    local = json.loads(
+        (queue.root / "publication_receipt.json").read_text(encoding="utf-8")
+    )
+    remote = {
+        "publication_receipt": {
+            "status": "DATA_COMMITTED",
+            "run_id": "run-1",
+            "job_ids": [job.job_id],
+            "data_commit_oid": "d" * 40,
+            "prefix": "generation",
+            "artifact_hashes": local["artifact_hashes"],
+        },
+        "artifact_hashes": local["artifact_hashes"],
+    }
+
+    receipt = publisher.publish_due(
+        now_s=400.0,
+        force=True,
+        remote_manifest=remote,
+    )
+
+    assert receipt is not None
+    assert receipt.status == "COMPLETE"
+    assert len(api.calls) == 2
+    assert queue.counts().ingested == 0
+    assert queue.counts().published == 1
+    resolved = json.loads(
+        (queue.root / "publication_receipt.json").read_text(encoding="utf-8")
+    )
+    assert resolved["status"] == "COMPLETE"
+
+
+def test_conflicting_remote_data_commit_fails_closed_without_retry(tmp_path: Path, monkeypatch):
+    queue, _job_value = _queue(tmp_path)
+    monkeypatch.setattr(
+        "icgs.data.collection.generation.distributed_publication.time.sleep",
+        lambda _seconds: None,
+    )
+    api = DataCommitThenTimeoutApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        publication_config=PublicationConfig(retry_attempts=1),
+    )
+    assert publisher.publish_due(now_s=300.0, force=False) is None
+    local = json.loads(
+        (queue.root / "publication_receipt.json").read_text(encoding="utf-8")
+    )
+    remote = {
+        "publication_receipt": {
+            "status": "DATA_COMMITTED",
+            "run_id": "run-1",
+            "job_ids": local["job_ids"],
+            "data_commit_oid": "x" * 40,
+            "prefix": "generation",
+            "artifact_hashes": local["artifact_hashes"],
+        },
+        "artifact_hashes": local["artifact_hashes"],
+    }
+
+    with pytest.raises(ValueError, match="immutable publication identity"):
+        publisher.publish_due(now_s=400.0, force=True, remote_manifest=remote)
+    assert len(api.calls) == 2
+    assert queue.counts().ingested == 1
+
+
+def test_validation_mode_publication_prefix_isolated_to_validation_cpu_run(tmp_path: Path):
+    queue, job = _queue(tmp_path)
+    run = RunConfig(
+        run_id="run-1", run_root="/content/run",
+        code_revision="a" * 40, approved_manifest_sha256="b" * 64,
+        hf_subfolder="validation/validation-cpu-20260922/run-1",
+        validation_mode=True,
+    )
+    api = FakeApi()
+    publisher = HuggingFaceBatchPublisher(run, api, "secret", queue, last_success_s=0.0)
+    publisher.publish_due(now_s=300.0, force=False)
+
+    paths = [operation.path_in_repo for operation in api.calls[0]["operations"]]
+    assert all(path.startswith("validation/validation-cpu-20260922/") for path in paths)
+    assert any(f"episodes/{job.program_id}/{job.episode_id}/" in path for path in paths)
+
+
+def test_validation_mode_rejects_historical_publication_prefix_before_api_call(tmp_path: Path):
+    queue, _job_value = _queue(tmp_path)
+    run = RunConfig(
+        run_id="run-1", run_root="/content/run",
+        code_revision="a" * 40, approved_manifest_sha256="b" * 64,
+        hf_subfolder="validation/old-run",
+        validation_mode=True,
+    )
+    api = FakeApi()
+    publisher = HuggingFaceBatchPublisher(run, api, "secret", queue, last_success_s=0.0)
+
+    with pytest.raises(ValueError, match="validation-cpu-20260922"):
+        publisher.publish_due(now_s=300.0, force=False)
+    assert api.calls == []
+
+
+def test_reconcile_publication_rejects_remote_job_identity_conflict():
+    receipt = PublicationReceipt.from_dict({
+        "receipt_version": 2,
+        "run_id": "run-1",
+        "job_ids": ["job-1"],
+        "status": "DATA_COMMITTED",
+        "data_commit_oid": "d" * 40,
+        "artifact_hashes": {"job-1/episode.json": "a" * 64},
+        "prefix": "generation",
+        "path_count": 1,
+        "updated_at_s": 300.0,
+    })
+    with pytest.raises(ValueError, match="immutable publication identity"):
+        reconcile_publication(receipt, {
+            "publication_receipt": {
+                "status": "DATA_COMMITTED",
+                "run_id": "run-1",
+                "job_ids": ["job-2"],
+                "data_commit_oid": "d" * 40,
+                "artifact_hashes": {"job-1/episode.json": "a" * 64},
+                "prefix": "generation",
+            },
+            "artifact_hashes": {"job-1/episode.json": "a" * 64},
+        })

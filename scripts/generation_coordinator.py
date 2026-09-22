@@ -38,6 +38,22 @@ def _atomic_json(path: Path, payload: dict) -> None:
     os.replace(temporary, path)
 
 
+def _credential_path(
+    run_config_path: str | Path,
+    payload: dict,
+    token_path: str | Path | None = None,
+) -> Path:
+    configured = token_path or payload.get("hf_token_path") or os.environ.get("ICGS_HF_TOKEN_PATH")
+    if not isinstance(configured, (str, Path)) or not str(configured).strip():
+        raise ValueError("an HF credential path must be configured")
+    path = Path(configured)
+    if not path.is_absolute():
+        path = Path(run_config_path).parent / path
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"HF credential path must be a regular file: {path}")
+    return path
+
+
 class CoordinatorLock:
     """Non-blocking filesystem lock held for the complete coordinator lifetime."""
 
@@ -160,7 +176,13 @@ class CoordinatorControlPlane:
         self._publication: dict = {"phase": "idle"}
 
     @classmethod
-    def open(cls, run_config_path: str | Path, *, api_factory):
+    def open(
+        cls,
+        run_config_path: str | Path,
+        *,
+        api_factory,
+        token_path: str | Path | None = None,
+    ):
         payload = json.loads(Path(run_config_path).read_text(encoding="utf-8"))
         run = RunConfig.from_dict(payload["run"])
         queue = FilesystemJobQueue(run.run_root + "/queue")
@@ -171,7 +193,9 @@ class CoordinatorControlPlane:
             manifest = payload.get("manifest", manifest)
         planner = DistributedPlanner.from_manifest(run, rows, manifest, _inflight_jobs_from_queue(queue))
         api = api_factory()
-        token = Path("/content/.icgs_hf_token").read_text(encoding="utf-8").strip()
+        token = _credential_path(run_config_path, payload, token_path).read_text(
+            encoding="utf-8"
+        ).strip()
         publisher = HuggingFaceBatchPublisher(
             run, api, token, queue,
             remote_verify=lambda job_ids, revision, _token: _verify_remote_batch(
@@ -310,6 +334,23 @@ class CoordinatorControlPlane:
             raise
         if receipt is None:
             self._publication = {"phase": "idle", "last_attempt_at_s": now}
+            try:
+                publication_receipt = json.loads(
+                    (self.queue.root / "publication_receipt.json").read_text(
+                        encoding="utf-8"
+                    )
+                )
+                state = str(publication_receipt.get("status", ""))
+                if state in {"PREPARED", "DATA_COMMITTED", "VERIFIED", "DEFERRED", "COMPLETE"}:
+                    self._publication = {
+                        "phase": state.lower(),
+                        "status": state,
+                        "last_error": publication_receipt.get("last_error"),
+                        "next_retry_s": publication_receipt.get("next_retry_s"),
+                        "data_commit_oid": publication_receipt.get("data_commit_oid"),
+                    }
+            except (OSError, TypeError, ValueError, json.JSONDecodeError):
+                pass
         else:
             self._publication = {
                 "phase": "complete",
@@ -361,11 +402,19 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--run-config", required=True)
     parser.add_argument("--runtime-config")
+    parser.add_argument("--hf-token-path")
     args = parser.parse_args()
     if args.runtime_config:
         GenerationRuntimeConfig.from_file(args.runtime_config, check_paths=False)
-    api = HfApi(token=Path("/content/.icgs_hf_token").read_text(encoding="utf-8").strip())
-    control = CoordinatorControlPlane.open(args.run_config, api_factory=lambda: api)
+    run_payload = json.loads(Path(args.run_config).read_text(encoding="utf-8"))
+    credential_path = _credential_path(args.run_config, run_payload, args.hf_token_path)
+    token = credential_path.read_text(encoding="utf-8").strip()
+    api = HfApi(token=token)
+    control = CoordinatorControlPlane.open(
+        args.run_config,
+        api_factory=lambda: api,
+        token_path=credential_path,
+    )
     return control.run_forever()
 
 
