@@ -111,7 +111,7 @@ class FilesystemJobQueue:
         return tuple(
             WorkerResult.from_dict(_read_json(directory / "result.json"))
             for directory in sorted((self.root / "ready").iterdir())
-            if directory.is_dir() and not directory.name.endswith(".partial")
+            if directory.is_dir() and ".partial-" not in directory.name
         )
 
     def mark_ingested(self, result: WorkerResult) -> Path:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -143,3 +144,27 @@ def test_ready_ingested_published_state_machine(tmp_path: Path):
     counts = queue.counts()
     assert counts.published == 1
     assert counts.ingested == 0
+
+
+def test_iter_ready_ignores_atomic_partial_directories(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path)
+    job = _job(job_id="job-closed")
+    result = WorkerResult(
+        job_id=job.job_id,
+        attempt_id=job.attempt_id,
+        episode_id=job.episode_id,
+        program_id=job.program_id,
+        outcome="valid_failure",
+        result_dir="/content/result",
+        file_sha256={"episode.json": "c" * 64},
+        timeline={"actions": 3, "observations": 4, "durations": 3},
+    )
+
+    partial = queue.root / "ready" / "job-in-flight.partial-123-456"
+    partial.mkdir(parents=True)
+    (partial / "job.json").write_text(json.dumps(job.as_dict()), encoding="utf-8")
+    closed = queue.root / "ready" / job.job_id
+    closed.mkdir()
+    (closed / "result.json").write_text(json.dumps(result.as_dict()), encoding="utf-8")
+
+    assert queue.iter_ready() == (result,)
