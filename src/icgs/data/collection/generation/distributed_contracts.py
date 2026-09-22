@@ -292,6 +292,7 @@ class RunConfig:
     hf_subfolder: str = "generation"
     publication_enabled: bool = False
     validation_mode: bool = False
+    validation_max_jobs: int | None = None
 
     def __post_init__(self) -> None:
         _nonblank(self.run_id, "run_id")
@@ -305,6 +306,11 @@ class RunConfig:
             raise ValueError("publication_enabled must be a boolean")
         if type(self.validation_mode) is not bool:
             raise ValueError("validation_mode must be a boolean")
+        if self.validation_max_jobs is not None:
+            if not self.validation_mode:
+                raise ValueError("validation_max_jobs requires validation_mode=true")
+            if type(self.validation_max_jobs) is not int or self.validation_max_jobs <= 0:
+                raise ValueError("validation_max_jobs must be a positive integer")
         _validate_hf_subfolder(self.hf_subfolder, validation_mode=self.validation_mode)
         if self.publication_enabled and not (self.hf_repo and self.hf_subfolder):
             raise ValueError("publication requires hf_repo and hf_subfolder")

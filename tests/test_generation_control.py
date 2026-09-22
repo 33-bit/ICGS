@@ -109,6 +109,7 @@ def test_launcher_persists_runtime_config_digest_before_starting_children(tmp_pa
     approved_manifest = tmp_path / "approved.json"
     approved_manifest.write_text("{}\n", encoding="utf-8")
     smoke_receipt = tmp_path / "smoke.json"
+    validation_plan = Path("tests/fixtures/generation_validation_config.json")
     from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
 
     smoke_receipt.write_text(json.dumps({
@@ -144,6 +145,7 @@ def test_launcher_persists_runtime_config_digest_before_starting_children(tmp_pa
         "--approved-manifest", str(approved_manifest),
         "--code-revision", "a" * 40,
         "--smoke-receipt", str(smoke_receipt),
+        "--validation-plan", str(validation_plan),
         "--detach",
     ]
     try:
@@ -157,6 +159,7 @@ def test_launcher_persists_runtime_config_digest_before_starting_children(tmp_pa
     assert len(calls) == 4
     stored = json.loads(run_json.read_text(encoding="utf-8"))
     assert stored["run"]["worker_count"] == 2
+    assert stored["run"]["validation_max_jobs"] == 7
     assert stored["runtime_config"] == config.as_dict()
 
 
@@ -771,3 +774,75 @@ def test_coordinator_resume_loads_pending_and_ready_jobs(tmp_path):
     assert queue.claim("000") == first
     loaded = _inflight_jobs_from_queue(queue)
     assert {job.job_id for job in loaded} == {first.job_id, second.job_id}
+
+
+def test_validation_mode_refill_never_enqueues_more_than_plan_max_jobs():
+    from types import SimpleNamespace
+
+    from icgs.data.collection.generation.distributed_contracts import QueueCounts
+    from scripts.generation_coordinator import CoordinatorControlPlane
+
+    class Queue:
+        def __init__(self):
+            self.jobs = []
+
+        def counts(self):
+            return QueueCounts(
+                pending=len(self.jobs),
+                claimed=0,
+                ready=0,
+                ingested=0,
+                published=0,
+            )
+
+        def enqueue(self, job):
+            self.jobs.append(job)
+
+    class Planner:
+        def __init__(self):
+            self.index = 0
+
+        def next_job(self):
+            self.index += 1
+            return f"job-{self.index}"
+
+    queue = Queue()
+    planner = Planner()
+    run = SimpleNamespace(validation_mode=True, validation_max_jobs=7)
+    coordinator = CoordinatorControlPlane(run, queue, planner, publisher=None, manifest={})
+
+    coordinator._refill()
+
+    assert len(queue.jobs) == 7
+
+
+def test_validation_max_jobs_persists_across_coordinator_restart_and_open(tmp_path):
+    manifest_path = Path("artifacts/composition/approved_composition_manifest.json")
+    config = _runtime_config(tmp_path)
+    run_path = generation_launch.persist_run_config(
+        config,
+        manifest_path,
+        code_revision="a" * 40,
+        validation_max_jobs=7,
+    )
+    token_path = Path(config.run.run_root) / "hf-token"
+    token_path.write_text("token\n", encoding="utf-8")
+
+    first = CoordinatorControlPlane.open(
+        run_path,
+        api_factory=lambda: object(),
+        token_path=token_path,
+    )
+    assert json.loads(run_path.read_text(encoding="utf-8"))["run"]["validation_max_jobs"] == 7
+    assert first._refill() == 7
+    assert first.queue.counts().pending == 7
+    assert first.queue.claim("000") is not None
+
+    restarted = CoordinatorControlPlane.open(
+        run_path,
+        api_factory=lambda: object(),
+        token_path=token_path,
+    )
+    assert restarted._refill() == 0
+    counts = restarted.queue.counts()
+    assert sum((counts.pending, counts.claimed, counts.ready, counts.ingested, counts.published)) == 7

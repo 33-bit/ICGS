@@ -216,8 +216,18 @@ class CoordinatorControlPlane:
         return cls(run, queue, planner, publisher, manifest)
 
     def _refill(self, target: int = 400) -> int:
+        validation_max_jobs = getattr(self.run, "validation_max_jobs", None)
+        bounded_validation = self.run.validation_mode and validation_max_jobs is not None
+        if bounded_validation:
+            target = min(target, validation_max_jobs)
         refilled = 0
-        while self.queue.counts().pending + self.queue.counts().claimed < target:
+        while True:
+            counts = self.queue.counts()
+            current_jobs = counts.pending + counts.claimed
+            if bounded_validation:
+                current_jobs += counts.ready + counts.ingested + counts.published
+            if current_jobs >= target:
+                break
             job = self.planner.next_job()
             if job is None:
                 break

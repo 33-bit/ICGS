@@ -103,6 +103,7 @@ def persist_run_config(
     approved_manifest: str | Path,
     *,
     code_revision: str,
+    validation_max_jobs: int | None = None,
 ) -> Path:
     """Persist the worker-readable config and its exact digest before launch."""
     if not isinstance(config, GenerationRuntimeConfig):
@@ -131,6 +132,7 @@ def persist_run_config(
         hf_subfolder=hf_subfolder,
         publication_enabled=config.run.publication_enabled,
         validation_mode=config.run.validation_mode,
+        validation_max_jobs=validation_max_jobs,
     )
     run_payload = {
         "run": run.as_dict(),
@@ -163,12 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("full launch requires publication_enabled in runtime config")
     validate_smoke_receipt(args.smoke_receipt, expected_program_ids=GENERATION_PROGRAMS)
 
-    run_config_path = persist_run_config(
-        config,
-        args.approved_manifest,
-        code_revision=args.code_revision,
-    )
-    root = Path(config.run.run_root)
+    plan = None
     if args.validation_plan:
         if not config.run.validation_mode:
             raise ValueError("--validation-plan requires validation_mode=true")
@@ -178,6 +175,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         if config.run.worker_count > plan.worker_count:
             raise ValueError("runtime config worker_count exceeds validation plan bound")
+
+    run_config_path = persist_run_config(
+        config,
+        args.approved_manifest,
+        code_revision=args.code_revision,
+        validation_max_jobs=plan.max_jobs if plan is not None else None,
+    )
+    root = Path(config.run.run_root)
+    if plan is not None:
         persist_validation_receipt(
             args.validation_plan,
             root / "control" / "validation_receipt.json",
