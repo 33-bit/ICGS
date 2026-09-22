@@ -214,13 +214,19 @@ class HuggingFaceBatchPublisher:
                 record_prefix = f"episodes/{program_id}/{result['episode_id']}"
             else:
                 record_prefix = f"attempts/{program_id}/{result['attempt_id']}"
-            for path in sorted(result_root.rglob("*")):
-                if path.is_file():
-                    relative = path.relative_to(result_root).as_posix()
-                    operations.append(CommitOperationAdd(
-                        path_in_repo=f"{self.run.hf_subfolder}/{record_prefix}/{relative}",
-                        path_or_fileobj=str(path),
-                    ))
+            # The queue result already carries the validated immutable file
+            # inventory. Reuse it instead of recursively stat'ing the entire
+            # overlay filesystem for every large episode during publication.
+            # Validation has already rejected missing/extra files before a job
+            # reaches ``ingested``.
+            for relative in sorted(result.get("file_sha256", {})):
+                path = result_root / relative
+                if not path.is_file():
+                    raise FileNotFoundError(f"ingested artifact is missing: {path}")
+                operations.append(CommitOperationAdd(
+                    path_in_repo=f"{self.run.hf_subfolder}/{record_prefix}/{relative}",
+                    path_or_fileobj=str(path),
+                ))
         manifest_path = self.queue.root / "publication_manifest.json"
         manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         operations.append(CommitOperationAdd(
