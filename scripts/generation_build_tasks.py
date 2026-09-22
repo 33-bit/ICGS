@@ -4,24 +4,23 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent if "__file__" in globals() else Path("/content/ICGS")
+_REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT / "src") not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT / "src"))
 
 from icgs.data.collection.generation.compiler import compile_generation_catalog
 from icgs.data.collection.generation.protocol import GENERATION_PROTOCOL
 
-ROOT = Path("/content/icgs-ephemeral")
-RLBench = ROOT / "RLBench"
-TASKS_DIR = RLBench / "rlbench" / "tasks"
-TTM_DIR = RLBench / "rlbench" / "task_ttms"
-OUT = ROOT / "generation-tasks"
-
-
-def build_models(program_ids: list[str] | None = None) -> dict:
+def build_models(
+    program_ids: list[str] | None = None,
+    *,
+    rlbench_root: str | Path | None = None,
+    output_root: str | Path | None = None,
+) -> dict:
     from pyrep import PyRep
     from pyrep.const import PrimitiveShape
     from pyrep.objects.dummy import Dummy
@@ -31,11 +30,30 @@ def build_models(program_ids: list[str] | None = None) -> dict:
     from rlbench.backend.const import TTT_FILE
     import numpy as np
 
+    installed_rlbench_root = Path(rl_environment.__file__).resolve().parent.parent
+    selected_rlbench_root = Path(
+        rlbench_root
+        or os.environ.get("ICGS_RLBENCH_ROOT")
+        or installed_rlbench_root
+    ).expanduser().resolve()
+    if not (selected_rlbench_root / "rlbench").is_dir():
+        raise ValueError(
+            "rlbench_root must contain the installed rlbench package: "
+            f"{selected_rlbench_root}"
+        )
+    selected_output_root = Path(
+        output_root
+        or os.environ.get("ICGS_GENERATION_BUILD_ROOT")
+        or (Path.cwd() / "generation-tasks")
+    ).expanduser().resolve()
+
     compiled = compile_generation_catalog()
     wanted = list(program_ids or list(compile_generation_catalog()))
-    TTM_DIR.mkdir(parents=True, exist_ok=True)
-    TASKS_DIR.mkdir(parents=True, exist_ok=True)
-    OUT.mkdir(parents=True, exist_ok=True)
+    tasks_dir = selected_rlbench_root / "rlbench" / "tasks"
+    ttm_dir = selected_rlbench_root / "rlbench" / "task_ttms"
+    ttm_dir.mkdir(parents=True, exist_ok=True)
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    selected_output_root.mkdir(parents=True, exist_ok=True)
 
     base_scene = Path(rl_environment.__file__).parent / TTT_FILE
     sim = PyRep()
@@ -87,25 +105,42 @@ def build_models(program_ids: list[str] | None = None) -> dict:
                 waypoint.set_parent(root, keep_in_place=True)
             root.set_model(True)
             root.set_model_dynamic(True)
-            ttm_path = TTM_DIR / f"{spec.module}.ttm"
+            ttm_path = ttm_dir / f"{spec.module}.ttm"
             root.save_model(str(ttm_path))
             root.remove()
-            py_path = TASKS_DIR / f"{spec.module}.py"
+            py_path = tasks_dir / f"{spec.module}.py"
             py_path.write_text(spec.py_source, encoding="utf-8")
             built[program_id] = {"module": spec.module, "ttm": str(ttm_path), "py": str(py_path)}
             print(f"[{program_id}] built {spec.module}", flush=True)
     finally:
         sim.stop()
         sim.shutdown()
-    (OUT / "built_suite_manifest.json").write_text(json.dumps({"tasks": built}, indent=2) + "\n", encoding="utf-8")
+    (selected_output_root / "built_suite_manifest.json").write_text(
+        json.dumps({"tasks": built}, indent=2) + "\n",
+        encoding="utf-8",
+    )
     return built
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--programs", nargs="+", default=list(GENERATION_PROTOCOL.pilot_program_ids))
+    parser.add_argument(
+        "--rlbench-root",
+        default=os.environ.get("ICGS_RLBENCH_ROOT"),
+        help="RLBench checkout root (defaults to the installed RLBench package)",
+    )
+    parser.add_argument(
+        "--output-root",
+        default=os.environ.get("ICGS_GENERATION_BUILD_ROOT"),
+        help="directory for the build manifest (defaults to ./generation-tasks)",
+    )
     args = parser.parse_args()
-    built = build_models(args.programs)
+    built = build_models(
+        args.programs,
+        rlbench_root=args.rlbench_root,
+        output_root=args.output_root,
+    )
     print("GENERATION_MODELS_BUILT", len(built), flush=True)
 
 
