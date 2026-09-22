@@ -77,6 +77,9 @@ def test_process_environment_uses_config_and_preserves_base(tmp_path: Path):
         [config.machine.simulator_root, "/opt/base-libraries"]
     )
     assert environment["QT_QPA_PLATFORM_PLUGIN_PATH"] == config.machine.simulator_root
+    assert environment["QT_QPA_PLATFORM"] == "xcb"
+    assert environment["QT_LOGGING_RULES"] == "*.debug=false"
+    assert environment["LIBGL_ALWAYS_SOFTWARE"] == "1"
     assert environment["PYTHONPATH"] == os.pathsep.join([
         str(Path(config.machine.repo_root) / "src"),
         config.machine.rlbench_root,
@@ -140,6 +143,7 @@ def test_provision_environment_records_configured_commands_without_external_exec
     assert receipt.python_executable == config.machine.python_executable
     assert receipt.simulator_root == config.machine.simulator_root
     assert any(command[:2] == ("apt-get", "update") for command in receipt.commands)
+    assert any("libgl1-mesa-dri" in command for command in receipt.commands)
     assert any(command[0] == "curl" for command in receipt.commands)
     assert any(command[:3] == ("uv", "pip", "install") for command in receipt.commands)
     assert any(config.machine.python_executable in command for command in receipt.commands)

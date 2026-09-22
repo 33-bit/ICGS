@@ -121,7 +121,10 @@ def _worker_command(
     return [
         "xvfb-run",
         "--server-num", str(config.machine.display_base + int(worker_id)),
-        "-s", f"-screen 0 {config.machine.display_width}x{config.machine.display_height}x24",
+        "-s", (
+            f"-screen 0 {config.machine.display_width}x{config.machine.display_height}x24 "
+            "+extension GLX +render -noreset"
+        ),
         config.machine.python_executable,
         "-B",
         str(Path(config.machine.repo_root) / "scripts" / "generation_worker.py"),

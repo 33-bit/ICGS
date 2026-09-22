@@ -87,7 +87,12 @@ def test_launcher_builds_workers_from_configured_limits_and_paths(tmp_path: Path
     assert len(commands) == 2
     assert [command[command.index("--worker-id") + 1] for command in commands] == ["000", "001"]
     assert [command[command.index("--server-num") + 1] for command in commands] == ["41", "42"]
-    assert all(command[command.index("-s") + 1] == "-screen 0 1366x768x24" for command in commands)
+    assert all(
+        command[command.index("-s") + 1].startswith("-screen 0 1366x768x24")
+        for command in commands
+    )
+    assert all("+extension GLX" in command[command.index("-s") + 1] for command in commands)
+    assert all("+render" in command[command.index("-s") + 1] for command in commands)
     assert all(config.machine.python_executable in command for command in commands)
     assert all(
         str(Path(config.machine.repo_root) / "scripts" / "generation_worker.py") in command
@@ -708,6 +713,9 @@ def test_watchdog_restarts_only_missing_slots_and_updates_receipt(tmp_path):
     command = calls[0][0]
     assert command[command.index("--worker-id") + 1] == "001"
     assert command[command.index("--server-num") + 1] == "42"
+    server_args = command[command.index("-s") + 1]
+    assert "+extension GLX" in server_args
+    assert "+render" in server_args
     assert command[command.index("--runtime-config") + 1] == str(runtime_path)
     assert updated["worker_pids"]["001"] == 7777
     assert updated["restart_counts"]["workers"]["001"] == 1

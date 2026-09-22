@@ -61,6 +61,13 @@ class ExpertPlanningTests(unittest.TestCase):
         self.assertNotIn('exec_step["type"] = "pick_place"', text)
         self.assertIn('"type": "push"', text)
 
+    def test_episode_worker_has_no_machine_specific_content_paths(self):
+        from pathlib import Path
+
+        text = Path("scripts/generation_episode_worker.py").read_text(encoding="utf-8")
+        self.assertNotIn("/content", text)
+        self.assertIn("Path(__file__).resolve()", text)
+
     def test_pilot_writer_materializes_training_layout(self):
         from pathlib import Path
 

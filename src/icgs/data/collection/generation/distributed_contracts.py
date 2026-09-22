@@ -266,6 +266,9 @@ class GenerationRuntimeConfig:
                 environment.get("LD_LIBRARY_PATH", ""),
             ))),
             "QT_QPA_PLATFORM_PLUGIN_PATH": simulator_root,
+            "QT_QPA_PLATFORM": "xcb",
+            "QT_LOGGING_RULES": "*.debug=false",
+            "LIBGL_ALWAYS_SOFTWARE": "1",
             "PYTHONPATH": pathsep.join(filter(None, (
                 str(Path(self.machine.repo_root) / "src"),
                 self.machine.rlbench_root,

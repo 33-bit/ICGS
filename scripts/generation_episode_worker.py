@@ -12,7 +12,12 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, "/content/ICGS/src")
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+_SOURCE_ROOT = _REPO_ROOT / "src"
+if _SOURCE_ROOT.is_dir() and str(_SOURCE_ROOT) not in sys.path:
+    sys.path.insert(0, str(_SOURCE_ROOT))
+
+_DEFAULT_MANIFEST = _REPO_ROOT / "artifacts" / "composition" / "approved_composition_manifest.json"
 
 from icgs.data.collection.generation.compiler import compile_generation_catalog
 from icgs.data.collection.generation.expert import plan_step
@@ -76,7 +81,7 @@ def _write_episode(write_dir: Path, row: dict) -> None:
     if binding is None:
         manifest_path = Path(os.environ.get(
             "ICGS_GENERATION_APPROVED_MANIFEST",
-            "/content/ICGS/artifacts/composition/approved_composition_manifest.json",
+            str(_DEFAULT_MANIFEST),
         ))
         if manifest_path.is_file():
             catalog = json.loads(manifest_path.read_text(encoding="utf-8")).get("catalog", [])
@@ -821,6 +826,7 @@ def main() -> int:
     )
     results = []
     env = None
+    write_root_value = os.environ.get("ICGS_GENERATION_WRITE_EPISODE")
     try:
         for program_id in wanted:
             spec = compiled[program_id]
@@ -856,9 +862,8 @@ def main() -> int:
             results.append(row)
             public = {k: v for k, v in row.items() if not k.startswith("_")}
             print(json.dumps(public), flush=True)
-            write_dir = Path(os.environ.get("ICGS_GENERATION_WRITE_EPISODE", ""))
-            if write_dir:
-                _write_episode(write_dir / program_id, row)
+            if write_root_value:
+                _write_episode(Path(write_root_value) / program_id, row)
     finally:
         if env is not None:
             try:
@@ -872,11 +877,13 @@ def main() -> int:
         "simulator_crash": [r["program_id"] for r in results if r.get("result_class") == "simulator_crash"],
     }
     print("SUMMARY", json.dumps(summary), flush=True)
-    Path("/content/pilot_episode_results.json").write_text(
-        json.dumps({"summary": summary, "results": [
-            {k: v for k, v in row.items() if not k.startswith("_")} for row in results
-        ]}, indent=2) + "\n"
-    )
+    if write_root_value:
+        Path(write_root_value).mkdir(parents=True, exist_ok=True)
+        (Path(write_root_value) / "pilot_episode_results.json").write_text(
+            json.dumps({"summary": summary, "results": [
+                {k: v for k, v in row.items() if not k.startswith("_")} for row in results
+            ]}, indent=2) + "\n"
+        )
     return 0
 
 

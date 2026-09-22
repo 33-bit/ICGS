@@ -118,7 +118,7 @@ def provision_environment(
     )
     _run(
         [
-            "apt-get", "install", "-y", "-qq", "libgl1", "libglu1-mesa",
+            "apt-get", "install", "-y", "-qq", "libgl1", "libgl1-mesa-dri", "libglu1-mesa",
             "libxcb-xinerama0", "libxkbcommon-x11-0", "libxcb-cursor0",
             "libegl1", "xauth", "xvfb", "libxrender1", "libxi6", "libxrandr2",
         ],

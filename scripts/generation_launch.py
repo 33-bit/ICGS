@@ -58,7 +58,10 @@ def build_worker_commands(
         commands.append([
             "xvfb-run",
             "--server-num", str(machine.display_base + index),
-            "-s", f"-screen 0 {machine.display_width}x{machine.display_height}x24",
+            "-s", (
+                f"-screen 0 {machine.display_width}x{machine.display_height}x24 "
+                "+extension GLX +render -noreset"
+            ),
             machine.python_executable,
             "-B",
             str(worker_script),
