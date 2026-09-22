@@ -149,6 +149,7 @@ def test_provision_environment_records_configured_commands_without_external_exec
         if command[:3] == ("apt-get", "install", "-y")
     )
     assert {
+        "libfontconfig1",
         "libxcb-icccm4",
         "libxcb-image0",
         "libxcb-keysyms1",
