@@ -1,0 +1,24 @@
+{
+  "status": "FAIL",
+  "plan_id": "generation-validation-cpu-20260922",
+  "runtime": {
+    "workers": 2,
+    "simulator_slots": 2,
+    "max_jobs": 7,
+    "pending_at_stop": 380,
+    "ingested": 9,
+    "ready": 18,
+    "published": 0,
+    "outcomes": {"simulator_crash": 27}
+  },
+  "gates": {
+    "success": "FAIL",
+    "valid_failure": "NOT_RUN",
+    "invalid_observation": "NOT_RUN",
+    "infrastructure_failure": "PASS",
+    "malformed_result": "NOT_RUN",
+    "coordinator_restart": "FAIL",
+    "publication": "NOT_RUN",
+    "resource_bound": "FAIL"
+  }
+}

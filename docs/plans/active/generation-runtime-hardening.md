@@ -52,3 +52,15 @@ publication reconciliation, and bounded receipt semantics without exercising a
 real simulator, worker process, coordinator restart, or remote repository.
 Those gates remain `NOT RUN` until Task 8 is explicitly authorized and its
 isolated receipts are recorded.
+
+## Task 8 first acceptance attempt — FAIL
+
+The first authorized CPU run is recorded in
+`docs/experiments/generation-validation/validation-cpu-20260922/`. Provisioning
+and 92 remote contract tests passed on a two-worker CPU session, but the run
+was stopped safely after the coordinator refilled 400 jobs despite the JSON
+plan's `max_jobs=7` bound. The receipt records 27 simulator-crash attempts,
+zero publication, and the watchdog's `pid_invalid` coordinator restart. The
+session was stopped and the server assignment list is empty. The active plan
+remains open until the refill bound is enforced and a new bounded acceptance
+run completes every required gate.
