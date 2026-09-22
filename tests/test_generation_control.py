@@ -4,11 +4,13 @@ from pathlib import Path
 import json
 import os
 import hashlib
+import shlex
 from types import SimpleNamespace
 
 import pytest
 
 from scripts import generation_launch
+from scripts import generation_watchdog
 from scripts import generation_coordinator as generation_coordinator_module
 from scripts import generation_launch
 from scripts.generation_launch import validate_smoke_receipt
@@ -426,6 +428,72 @@ def test_pid_identity_requires_every_expected_cmdline_token():
     assert not _pid_matches(12, ("worker.py", "007", "/content/other"), cmdline_reader=reader)
 
 
+def test_pid_identity_accepts_configured_xvfb_wrapper_command_line(tmp_path: Path):
+    python = str(tmp_path / "venv" / "bin" / "python")
+    worker = str(tmp_path / "repo" / "scripts" / "generation_worker.py")
+    runtime = str(tmp_path / "run" / "control" / "runtime_config.json")
+    manifest = str(tmp_path / "approved.json")
+    wrapper_command = (
+        "xvfb-run",
+        "--server-num",
+        "41",
+        "-s",
+        "-screen 0 1366x768x24 +extension GLX +render -noreset",
+    )
+    worker_command = (
+        python,
+        "-B",
+        worker,
+        "--worker-id",
+        "001",
+        "--runtime-config",
+        runtime,
+        "--approved-manifest",
+        manifest,
+    )
+    wrapped = ("/bin/sh", "/usr/bin/xvfb-run", *wrapper_command[1:], *worker_command)
+
+    assert _pid_matches(
+        12,
+        expected_command=worker_command,
+        wrapper_command=wrapper_command,
+        cmdline_reader=lambda pid: shlex.join(wrapped),
+    )
+
+
+def test_pid_identity_accepts_normal_worker_and_rejects_embedded_command(tmp_path: Path):
+    python = str(tmp_path / "venv" / "bin" / "python")
+    worker = str(tmp_path / "repo" / "scripts" / "generation_worker.py")
+    runtime = str(tmp_path / "run" / "control" / "runtime_config.json")
+    manifest = str(tmp_path / "approved.json")
+    worker_command = (
+        python,
+        "-B",
+        worker,
+        "--worker-id",
+        "001",
+        "--runtime-config",
+        runtime,
+        "--approved-manifest",
+        manifest,
+    )
+
+    assert _pid_matches(
+        12,
+        expected_command=worker_command,
+        wrapper_command=("xvfb-run", "--server-num", "41"),
+        cmdline_reader=lambda pid: shlex.join(worker_command),
+    )
+    assert not _pid_matches(
+        12,
+        expected_command=worker_command,
+        wrapper_command=("xvfb-run", "--server-num", "41"),
+        cmdline_reader=lambda pid: shlex.join(
+            (python, "-c", shlex.join(worker_command))
+        ),
+    )
+
+
 @pytest.mark.parametrize(
     ("payload", "now_s", "stale_after_s", "expected"),
     [
@@ -544,18 +612,23 @@ def test_watchdog_uses_runtime_config_and_restarts_stale_coordinator_with_reason
     config, root, control, worker_pids = _write_watchdog_runtime_files(
         tmp_path, heartbeat=heartbeat
     )
+    runtime_path = control / "runtime_config.json"
+    coordinator_command = generation_watchdog._coordinator_command(
+        config, runtime_path, control / "run.json"
+    )
+    approved_manifest = json.loads(
+        (control / "run.json").read_text(encoding="utf-8")
+    )["approved_manifest"]
 
     def reader(pid: int) -> bytes:
         if pid == 900:
-            return (
-                f"python\0generation_coordinator.py\0--run-config\0{control / 'run.json'}\0"
-                f"--runtime-config\0{control / 'runtime_config.json'}\0"
-            ).encode()
+            return b"\0".join(item.encode() for item in coordinator_command) + b"\0"
         worker_id = f"{pid - 1000:03d}"
-        return (
-            f"python\0generation_worker.py\0--worker-id\0{worker_id}\0"
-            f"--runtime-config\0{control / 'runtime_config.json'}\0"
-        ).encode()
+        worker_command = generation_watchdog._worker_command(
+            worker_id, config, runtime_path, approved_manifest
+        )
+        wrapped = ("/bin/sh", "/usr/bin/xvfb-run", *worker_command[1:])
+        return b"\0".join(item.encode() for item in wrapped) + b"\0"
 
     class Process:
         pid = 7777
@@ -598,10 +671,11 @@ def test_watchdog_does_not_replace_stale_coordinator_while_lock_is_held(tmp_path
         "publication": {"phase": "idle"},
     }
     _, root, control, _ = _write_watchdog_runtime_files(tmp_path, heartbeat=heartbeat)
-    reader = lambda pid: (
-        f"python\0generation_coordinator.py\0--run-config\0{control / 'run.json'}\0"
-        f"--runtime-config\0{control / 'runtime_config.json'}\0"
-    ).encode()
+    config = GenerationRuntimeConfig.from_file(control / "runtime_config.json", check_paths=False)
+    coordinator_command = generation_watchdog._coordinator_command(
+        config, control / "runtime_config.json", control / "run.json"
+    )
+    reader = lambda pid: b"\0".join(item.encode() for item in coordinator_command) + b"\0"
     calls = []
     with CoordinatorLock(control / "coordinator.lock"):
         updated = reconcile_processes(
@@ -632,10 +706,11 @@ def test_watchdog_enforces_bounded_coordinator_restarts(tmp_path: Path):
     launch = json.loads(launch_path.read_text(encoding="utf-8"))
     launch["restart_counts"]["coordinator"] = 1
     launch_path.write_text(json.dumps(launch), encoding="utf-8")
-    reader = lambda pid: (
-        f"python\0generation_coordinator.py\0--run-config\0{control / 'run.json'}\0"
-        f"--runtime-config\0{control / 'runtime_config.json'}\0"
-    ).encode()
+    config = GenerationRuntimeConfig.from_file(control / "runtime_config.json", check_paths=False)
+    coordinator_command = generation_watchdog._coordinator_command(
+        config, control / "runtime_config.json", control / "run.json"
+    )
+    reader = lambda pid: b"\0".join(item.encode() for item in coordinator_command) + b"\0"
 
     with pytest.raises(RuntimeError, match="coordinator restart limit exceeded"):
         reconcile_processes(
@@ -685,20 +760,22 @@ def test_watchdog_restarts_only_missing_slots_and_updates_receipt(tmp_path):
         },
     }
     (control / "launch.json").write_text(json.dumps(launch), encoding="utf-8")
+    approved_manifest = str(approved)
 
     def reader(pid: int) -> bytes:
         if pid == 900:
-            return (
-                f"python\0generation_coordinator.py\0--run-config\0{control / 'run.json'}\0"
-                f"--runtime-config\0{runtime_path}\0"
-            ).encode()
+            coordinator_command = generation_watchdog._coordinator_command(
+                config, runtime_path, control / "run.json"
+            )
+            return b"\0".join(item.encode() for item in coordinator_command) + b"\0"
         if pid == worker_pids["001"]:
             return b""
         worker_id = f"{pid - 1000:03d}"
-        return (
-            f"python\0generation_worker.py\0--worker-id\0{worker_id}\0"
-            f"--runtime-config\0{runtime_path}\0"
-        ).encode()
+        worker_command = generation_watchdog._worker_command(
+            worker_id, config, runtime_path, approved_manifest
+        )
+        wrapped = ("/bin/sh", "/usr/bin/xvfb-run", *worker_command[1:])
+        return b"\0".join(item.encode() for item in wrapped) + b"\0"
 
     class Process:
         pid = 7777

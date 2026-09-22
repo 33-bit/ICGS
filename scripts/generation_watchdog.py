@@ -7,9 +7,11 @@ import fcntl
 import json
 import os
 from pathlib import Path
+import shlex
+import shutil
 import subprocess
 import time
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Literal
 
 from icgs.data.collection.generation.distributed_contracts import GenerationRuntimeConfig
@@ -18,6 +20,7 @@ from icgs.data.collection.generation.distributed_contracts import GenerationRunt
 MAX_RESTARTS_DEFAULT = 20
 DEFAULT_STALE_AFTER_S = 900.0
 _TERMINAL_STATUSES = frozenset({"COMPLETE", "FAILED", "INCOMPLETE"})
+_SHELL_PROGRAMS = frozenset({"bash", "dash", "ksh", "sh", "zsh"})
 
 
 def _atomic_json(path: Path, payload: dict) -> None:
@@ -39,16 +42,139 @@ def _coordinator_lock_is_free(lock_path: str | Path) -> bool:
         return True
 
 
-def _pid_matches(pid: int, expected_tokens: tuple[str, ...], *, cmdline_reader=None) -> bool:
+def _read_process_cmdline(pid: int) -> bytes | str:
+    """Read a process command line on procfs hosts and POSIX fallbacks."""
+    proc_path = Path(f"/proc/{pid}/cmdline")
+    try:
+        raw = proc_path.read_bytes()
+        if raw:
+            return raw
+    except (FileNotFoundError, PermissionError, OSError):
+        pass
+
+    try:
+        result = subprocess.run(
+            ["ps", "-ww", "-p", str(pid), "-o", "command="],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    except (FileNotFoundError, OSError) as error:
+        raise OSError(f"cannot inspect process {pid}") from error
+    if result.returncode != 0 or not result.stdout:
+        raise OSError(f"process {pid} is not inspectable")
+    return result.stdout
+
+
+def _command_line_args(raw: object) -> tuple[str, ...]:
+    if isinstance(raw, bytes):
+        if b"\0" in raw:
+            return tuple(
+                item.decode("utf-8", errors="replace")
+                for item in raw.split(b"\0")
+                if item
+            )
+        raw = raw.decode("utf-8", errors="replace")
+    elif isinstance(raw, bytearray):
+        return _command_line_args(bytes(raw))
+    elif isinstance(raw, Sequence) and not isinstance(raw, str):
+        return tuple(str(item) for item in raw if str(item))
+    if not isinstance(raw, str) or not raw.strip():
+        return ()
+    try:
+        return tuple(shlex.split(raw))
+    except ValueError:
+        return ()
+
+
+def _flatten_command(command: Sequence[str]) -> tuple[str, ...]:
+    """Normalize procfs and ps forms of xvfb-run's grouped -s argument."""
+    flattened: list[str] = []
+    expand_next = False
+    for value in command:
+        text = str(value)
+        if expand_next:
+            try:
+                flattened.extend(shlex.split(text))
+            except ValueError:
+                flattened.append(text)
+            expand_next = False
+        else:
+            flattened.append(text)
+        if text == "-s":
+            expand_next = True
+    return tuple(flattened)
+
+
+def _program_matches(actual: str, expected: str) -> bool:
+    if actual == expected:
+        return True
+    if Path(expected).is_absolute():
+        return os.path.realpath(actual) == os.path.realpath(expected)
+    resolved = shutil.which(expected)
+    if resolved is not None:
+        return os.path.realpath(actual) == os.path.realpath(resolved)
+    return Path(actual).name == expected
+
+
+def _is_shell_program(value: str) -> bool:
+    return Path(value).name in _SHELL_PROGRAMS
+
+
+def _command_identity_matches(
+    actual: Sequence[str],
+    expected_command: Sequence[str],
+    wrapper_command: Sequence[str] | None,
+) -> bool:
+    actual_args = _flatten_command(actual)
+    expected_args = _flatten_command(expected_command)
+    if not expected_args:
+        return False
+    if (
+        len(actual_args) == len(expected_args)
+        and actual_args[1:] == expected_args[1:]
+        and _program_matches(actual_args[0], expected_args[0])
+    ):
+        return True
+    if wrapper_command is None:
+        return False
+
+    wrapper_args = _flatten_command(wrapper_command)
+    if not wrapper_args:
+        return False
+    wrapped_suffix = wrapper_args[1:] + expected_args
+    if (
+        len(actual_args) == len(wrapped_suffix) + 1
+        and _program_matches(actual_args[0], wrapper_args[0])
+        and actual_args[1:] == wrapped_suffix
+    ):
+        return True
+    return (
+        len(actual_args) == len(wrapped_suffix) + 2
+        and _is_shell_program(actual_args[0])
+        and _program_matches(actual_args[1], wrapper_args[0])
+        and actual_args[2:] == wrapped_suffix
+    )
+
+
+def _pid_matches(
+    pid: int,
+    expected_tokens: tuple[str, ...] = (),
+    *,
+    cmdline_reader=None,
+    expected_command: Sequence[str] | None = None,
+    wrapper_command: Sequence[str] | None = None,
+) -> bool:
     if pid <= 0:
         return False
-    reader = cmdline_reader or (lambda value: Path(f"/proc/{value}/cmdline").read_bytes())
+    reader = cmdline_reader or _read_process_cmdline
     try:
-        raw = reader(pid)
+        actual = _command_line_args(reader(pid))
     except (FileNotFoundError, PermissionError, OSError):
         return False
-    text = raw.replace(b"\0", b" ").decode("utf-8", errors="replace")
-    return all(token in text for token in expected_tokens)
+    if expected_command is not None:
+        return _command_identity_matches(actual, expected_command, wrapper_command)
+    return bool(actual) and all(token in actual for token in expected_tokens)
 
 
 def heartbeat_health(
@@ -200,12 +326,20 @@ def reconcile_processes(
         heartbeat = {}
     health = heartbeat_health(heartbeat, now_s=now, stale_after_s=stale_after_s)
     coordinator_pid = int(launch.get("coordinator_pid", 0) or 0)
+    coordinator_command = tuple(
+        _coordinator_command(config, runtime_config_path, control / "run.json")
+    )
     coordinator_tokens = (
-        "generation_coordinator.py",
+        str(Path(config.machine.repo_root) / "scripts" / "generation_coordinator.py"),
         str(control / "run.json"),
         str(runtime_config_path),
     )
-    pid_valid = _pid_matches(coordinator_pid, coordinator_tokens, cmdline_reader=cmdline_reader)
+    pid_valid = _pid_matches(
+        coordinator_pid,
+        coordinator_tokens,
+        cmdline_reader=cmdline_reader,
+        expected_command=coordinator_command,
+    )
     coordinator_reason = None
     if health != "terminal":
         if not pid_valid:
@@ -243,19 +377,31 @@ def reconcile_processes(
     for index in range(config.run.worker_count):
         worker_id = f"{index:03d}"
         pid = int(launch["worker_pids"].get(worker_id, 0) or 0)
+        worker_command = tuple(
+            _worker_command(worker_id, config, runtime_config_path, approved_manifest)
+        )
+        python_index = worker_command.index(config.machine.python_executable)
+        worker_wrapper = worker_command[:python_index]
+        worker_invocation = worker_command[python_index:]
         tokens = (
-            "generation_worker.py",
+            str(Path(config.machine.repo_root) / "scripts" / "generation_worker.py"),
             worker_id,
             "--runtime-config",
             str(runtime_config_path),
         )
-        if _pid_matches(pid, tokens, cmdline_reader=cmdline_reader):
+        if _pid_matches(
+            pid,
+            tokens,
+            cmdline_reader=cmdline_reader,
+            expected_command=worker_invocation,
+            wrapper_command=worker_wrapper,
+        ):
             continue
         count = int(launch["restart_counts"]["workers"][worker_id])
         if count >= max_restarts:
             raise RuntimeError(f"worker {worker_id} restart limit exceeded")
         process = popen(
-            _worker_command(worker_id, config, runtime_config_path, approved_manifest),
+            list(worker_command),
             start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
