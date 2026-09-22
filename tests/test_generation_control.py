@@ -667,6 +667,41 @@ def test_watchdog_uses_runtime_config_and_restarts_stale_coordinator_with_reason
     assert str(Path(config.machine.repo_root) / "scripts" / "generation_coordinator.py") in command
 
 
+def test_watchdog_waits_for_initial_coordinator_heartbeat(tmp_path: Path):
+    config, root, control, worker_pids = _write_watchdog_runtime_files(
+        tmp_path, heartbeat={}
+    )
+    runtime_path = control / "runtime_config.json"
+    coordinator_command = generation_watchdog._coordinator_command(
+        config, runtime_path, control / "run.json"
+    )
+    approved_manifest = json.loads(
+        (control / "run.json").read_text(encoding="utf-8")
+    )["approved_manifest"]
+
+    def reader(pid: int) -> bytes:
+        if pid == 900:
+            return b"\0".join(item.encode() for item in coordinator_command) + b"\0"
+        worker_id = f"{pid - 1000:03d}"
+        worker_command = generation_watchdog._worker_command(
+            worker_id, config, runtime_path, approved_manifest
+        )
+        wrapped = ("/bin/sh", "/usr/bin/xvfb-run", *worker_command[1:])
+        return b"\0".join(item.encode() for item in wrapped) + b"\0"
+
+    calls = []
+    updated = reconcile_processes(
+        root,
+        popen=lambda *args, **kwargs: calls.append((args, kwargs)),
+        cmdline_reader=reader,
+        now_s=100.0,
+    )
+
+    assert calls == []
+    assert updated["coordinator_pid"] == 900
+    assert updated["restart_counts"]["coordinator"] == 0
+
+
 def test_watchdog_does_not_replace_stale_coordinator_while_lock_is_held(tmp_path: Path):
     heartbeat = {
         "status": "RUNNING",

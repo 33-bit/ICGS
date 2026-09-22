@@ -344,7 +344,10 @@ def reconcile_processes(
     if health != "terminal":
         if not pid_valid:
             coordinator_reason = "pid_invalid"
-        elif health == "stale":
+        elif health == "stale" and heartbeat:
+            # The launcher starts the watchdog immediately after the coordinator.
+            # Give a valid coordinator time to publish its first heartbeat instead
+            # of creating a duplicate that will lose the coordinator lock.
             coordinator_reason = "heartbeat_stale"
 
     if coordinator_reason is not None:
