@@ -51,9 +51,17 @@ def build_models(
     wanted = list(program_ids or list(compile_generation_catalog()))
     tasks_dir = selected_rlbench_root / "rlbench" / "tasks"
     ttm_dir = selected_rlbench_root / "rlbench" / "task_ttms"
-    ttm_dir.mkdir(parents=True, exist_ok=True)
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-    selected_output_root.mkdir(parents=True, exist_ok=True)
+    for directory, name in (
+        (tasks_dir, "RLBench task directory"),
+        (ttm_dir, "RLBench task model directory"),
+        (selected_output_root, "build output directory"),
+    ):
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            raise ValueError(f"{name} cannot be created: {directory}") from exc
+        if not os.access(directory, os.W_OK):
+            raise ValueError(f"{name} must be writable: {directory}")
 
     base_scene = Path(rl_environment.__file__).parent / TTT_FILE
     sim = PyRep()
