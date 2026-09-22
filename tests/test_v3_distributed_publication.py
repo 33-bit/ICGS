@@ -29,6 +29,15 @@ class FakeApi:
         raise AssertionError("fake publisher must use injected verifier")
 
 
+class TransientTimeoutApi(FakeApi):
+    def create_commit(self, **kwargs):
+        self.calls.append(kwargs)
+        raise RuntimeError(
+            "Error while uploading 'episode.json': "
+            "<Error><Code>RequestTimeout</Code></Error>"
+        )
+
+
 def _run() -> RunConfig:
     return RunConfig(
         run_id="run-1", run_root="/content/run",
@@ -101,6 +110,21 @@ def test_failed_commit_keeps_jobs_unpublished(tmp_path: Path):
         publisher.publish_due(now_s=300.0, force=False)
     assert publisher.pending_job_ids() == (job.job_id,)
     assert queue.counts().ingested == 1
+
+
+def test_transient_lfs_timeout_is_deferred_without_crashing_coordinator(tmp_path: Path, monkeypatch):
+    queue, job = _queue(tmp_path)
+    api = TransientTimeoutApi()
+    publisher = HuggingFaceBatchPublisher(_run(), api, "secret", queue, last_success_s=0.0)
+    monkeypatch.setattr("icgs.data.collection.v3.distributed_publication.time.sleep", lambda _seconds: None)
+
+    assert publisher.publish_due(now_s=300.0, force=False) is None
+    assert len(api.calls) == publisher.MAX_TRANSIENT_ATTEMPTS
+    assert publisher.pending_job_ids() == (job.job_id,)
+    assert queue.counts().ingested == 1
+
+    assert publisher.publish_due(now_s=301.0, force=False) is None
+    assert len(api.calls) == publisher.MAX_TRANSIENT_ATTEMPTS
 
 
 def test_publish_uses_supplied_compact_manifest(tmp_path: Path):
