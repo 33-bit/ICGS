@@ -60,3 +60,39 @@ to completed until all required gates pass.
 
 The session was explicitly stopped and `colab sessions` returned no active
 assignments.
+
+## 2026-09-23 VPS follow-up (bounded, not full acceptance)
+
+The simulator stack was retested on `vps-a` instead of Colab using the GitHub
+checkout at commit `0b29eb724e6759bb207d4c05070359d4b1a7a664`. The dependency
+checkout was made writable before task-model generation; the portable builder
+then produced all 36 RLBench task Python/TTM pairs. A strict 36-program smoke
+receipt contained 34 `success` and 2 retained `valid_failure` results (`T01`,
+`T11`), zero simulator crashes, and valid `T+1` timelines for every program.
+
+The canonical distributed launcher was run with two workers, two simulator
+slots, `validation_max_jobs=7`, and a fresh run ID. The first VPS attempt
+exposed two runtime defects and was stopped without reusing its queue:
+
+- the launcher omitted `--runtime-config` for the coordinator, causing an
+  immediate watchdog `pid_invalid` duplicate attempt;
+- a `COMPLETE` publication receipt prevented later ingested jobs from opening a
+  new HF batch.
+
+Those defects are covered by commits `32471a0`, `a970ca2`, and `0b29eb7`. The
+corrected run `generation-validation-vps-b104-20260923` kept a stable
+coordinator/watchdog (`restart_history=[]`), never exceeded seven in-flight or
+closed jobs, and published three success episodes (`G1`, `G2`, `G3`) to the
+isolated prefix
+`validation/validation-cpu-20260922/vps-b104/`. The remote prefix contained 76
+files and a three-episode dataset manifest; data/final-receipt revisions were:
+`b80253d`/`c4a4e96` (G2), `a152045`/`1a525c5` (G1), and
+`3374bc1`/`7ca1c96` (G3). No production prefix was modified and the token was
+never committed.
+
+The bounded run was stopped intentionally after the third verified publication
+to avoid starting full collection. It is therefore evidence for renderer/task
+startup, bounded queueing, watchdog startup, multi-batch publication and remote
+artifact listing—not a PASS for the full validation plan. Distributed
+`valid_failure`, malformed-result, infrastructure-failure and controlled
+coordinator-restart gates remain NOT RUN in this VPS follow-up.
