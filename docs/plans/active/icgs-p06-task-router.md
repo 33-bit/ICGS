@@ -37,7 +37,7 @@ before runtime execution. Inspect Git state; preserve unrelated work and user as
 
 ## Configuration consumption addendum — 2026-09-09
 
-Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/method.json),
 with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
 Consumed sections for this plan: **tracker, router, event, memory, neural, losses,
 control, planning**.
@@ -1455,7 +1455,7 @@ phase if an FG fails and request a scoped protocol decision.
   final focused command returned to **PASS** 30/30 with 0 failures/errors/skips.
 - Task 3B.2a related regressions: `test_policy.py` **PASS** 6/6,
   `test_architecture.py` **PASS** 3/3, `test_config.py` **PASS** 5/5 and
-  `test_v5_config.py` **PASS** 4/4, totalling 18/18 with 0 skips. Direct
+  `test_runtime_config.py` **PASS** 4/4, totalling 18/18 with 0 skips. Direct
   `py_compile` and `git diff --check` both **PASS**. Profile resolution, artifact
   loading, outer session construction, context preparation and inference remain
   absent from this Task 3B.2a runtime change.
@@ -1478,7 +1478,7 @@ phase if an FG fails and request a scoped protocol decision.
   runtime negative fixtures that need the missing imports are defined but cannot
   all execute until GREEN; GREEN must exercise them before claiming the guards
   pass.
-- Task 3B.2b RED related regressions: `test_v5_config.py` **PASS** 4/4,
+- Task 3B.2b RED related regressions: `test_runtime_config.py` **PASS** 4/4,
   `test_composition.py` **PASS** 6/6, `test_loading.py` **PASS** 2/2 and
   `test_policy.py` **PASS** 6/6, totalling 18/18 with 0 skips. Direct
   `py_compile` and `git diff --check` both **PASS**. No profile, resolver, loader
@@ -1498,7 +1498,7 @@ phase if an FG fails and request a scoped protocol decision.
   Function-scoped allowed/forbidden guards and both loader pre-IO rejection
   subcases executed successfully. These synthetic collaborators prove ordering,
   lineage and ownership contracts, not real model loading or fidelity.
-- Task 3B.2b GREEN related regressions: `test_v5_config.py` **PASS** 4/4,
+- Task 3B.2b GREEN related regressions: `test_runtime_config.py` **PASS** 4/4,
   `test_composition.py` **PASS** 6/6, `test_checkpoints.py` **PASS** 13/13,
   `test_loading.py` **PASS** 2/2, `test_policy.py` **PASS** 6/6,
   `test_cli.py` **PASS** 7/7 and `test_architecture.py` **PASS** 3/3, totalling

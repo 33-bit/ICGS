@@ -14,6 +14,29 @@ ROOT = Path(__file__).resolve().parents[1]
 SURFACES = ("src/icgs", "scripts", "tests", "docs", ".agents")
 HARNESS_NAMES = {"docs", "scripts", "tests", ".agents", "AGENTS.md"}
 AUTHORITY = "docs/decisions/0001-harness-boundary.md"
+GENERATION_NAMING_AUTHORITY = "docs/decisions/0014-canonical-generation.md"
+
+# Source-layout spellings from the retired generation branches.  Keep this
+# deliberately narrower than payload text: serialized identifiers such as
+# ``icgs-primary-v3`` remain readable by decision, while Python path/module
+# surfaces must use semantic generation names.
+LEGACY_GENERATION_PATHS = (
+    re.compile(r"^src/icgs/data/collection/v\d+(?:/|$)"),
+    re.compile(r"^src/icgs/data/datasets/v\d+_views\.py$"),
+    re.compile(r"^src/icgs/data/schemas/episodes_v\d+\.py$"),
+    re.compile(r"^src/icgs/configuration/profiles/icgs_primary(?:_v\d+)?\.json$"),
+    re.compile(r"^(?:scripts|tests)/[^/]*(?:colab_v\d+|colab_g\d+|primary_v\d+)[^/]*\.py$"),
+    re.compile(
+        r"^tests/test_(?:v\d+_(?:batch|distributed|expert|rlbench|task_builder)|"
+        r"g\d+_strict_predicates)[^/]*\.py$"
+    ),
+)
+LEGACY_GENERATION_MODULES = (
+    re.compile(r"^icgs\.data\.collection\.v\d+(?:\.|$)"),
+    re.compile(r"^icgs\.data\.datasets\.v\d+_views(?:\.|$)"),
+    re.compile(r"^icgs\.data\.schemas\.episodes_v\d+(?:\.|$)"),
+    re.compile(r"^(?:scripts\.)?colab_(?:v\d+|g\d+)[A-Za-z0-9_.]*$"),
+)
 
 
 def files(root, suffix):
@@ -148,6 +171,63 @@ def check_boundary(root):
     return errors
 
 
+def legacy_generation_module(value):
+    """Return whether a literal denotes a retired generation module."""
+    return (
+        isinstance(value, str)
+        and not any(character.isspace() for character in value)
+        and any(pattern.match(value) for pattern in LEGACY_GENERATION_MODULES)
+    )
+
+
+def check_generation_naming(root):
+    """Reject retired generation file/module names, not serialized payload IDs."""
+    errors = []
+    if not (root / "src/icgs").is_dir():
+        return ["GENERATION_NAMING: missing src/icgs/ runtime tree; select the repository root"]
+
+    paths = []
+    for surface in ("src/icgs", "scripts", "tests"):
+        base = root / surface
+        if base.is_dir():
+            paths.extend(
+                path for path in base.rglob("*")
+                if path.is_file() and not path.is_symlink() and "__pycache__" not in path.parts
+            )
+
+    for path in sorted(paths):
+        relative = path.relative_to(root).as_posix()
+        if any(pattern.match(relative) for pattern in LEGACY_GENERATION_PATHS):
+            errors.append(
+                f"GENERATION_NAMING {relative}: retired version/track name; "
+                f"use a semantic generation filename ({GENERATION_NAMING_AUTHORITY})"
+            )
+
+        if path.suffix != ".py":
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeError, OSError) as error:
+            errors.append(f"GENERATION_NAMING {relative}: cannot inspect imports: {error}")
+            continue
+        for node in ast.walk(tree):
+            targets = []
+            if isinstance(node, ast.Import):
+                targets = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                targets = [node.module]
+            elif isinstance(node, ast.Constant) and legacy_generation_module(node.value):
+                targets = [node.value]
+            for target in targets:
+                if legacy_generation_module(target):
+                    errors.append(
+                        f"GENERATION_NAMING {relative}:{node.lineno}: {target!r}; "
+                        f"import the canonical semantic generation module "
+                        f"({GENERATION_NAMING_AUTHORITY})"
+                    )
+    return errors
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT, help="repository to inspect (default: script's repository)")
@@ -155,7 +235,8 @@ def main(argv=None):
     root = args.root.resolve()
     failed = False
     for label, check in (("Python syntax", check_syntax), ("Local documentation links", check_links),
-                         ("Static harness boundary", check_boundary)):
+                         ("Static harness boundary", check_boundary),
+                         ("Canonical generation naming", check_generation_naming)):
         try:
             errors = check(root)
         except (OSError, UnicodeError, ValueError) as error:

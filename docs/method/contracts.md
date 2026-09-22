@@ -161,7 +161,7 @@ mode, discrepancy measurements and protocol ID.
 ## Configuration, artifacts and failures
 
 **EI/AD:** `MethodConfig` now loads the added-method defaults from the packaged
-[primary JSON](../../src/icgs/configuration/profiles/icgs_primary.json), not Python
+[primary JSON](../../src/icgs/configuration/profiles/method.json), not Python
 numeric defaults; native `ExperimentConfig` remains unchanged. `build_method` is
 still a separate integration deliverable. The expanded immutable typed sections
 cover all model/training/collection/search/evaluation parameters; see the

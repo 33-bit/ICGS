@@ -1,8 +1,8 @@
-"""Explicit, immutable program skeletons for the P02 split protocol.
+"""Explicit, immutable program skeletons for canonical generation.
 
 The catalog preserves proposal IDs and task skeletons only.  It intentionally
 does not bind assets, ranges, seeds, controller settings, or predicate
-tolerances; those remain G2-dependent protocol inputs.
+tolerances; those remain manifest-owned protocol inputs.
 """
 
 from __future__ import annotations
@@ -94,4 +94,3 @@ def get_program(program_id: str) -> ProgramSpec:
 
 
 __all__ = ["PROGRAM_CATALOG", "ProgramSpec", "get_program", "program_catalog"]
-

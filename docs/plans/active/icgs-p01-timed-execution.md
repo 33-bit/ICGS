@@ -27,7 +27,7 @@ before runtime execution. Inspect Git state; preserve unrelated work and user as
 
 ## Configuration consumption addendum — 2026-09-09
 
-Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/method.json),
 with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
 Propagation scope for this follow-up: **planning.h, planning.r and control.dt0**
 only. Pass those scalars into `materialize_prefix`. `control.clock_track` and all
@@ -224,7 +224,7 @@ phase if an FG fails and request a scoped protocol decision.
 ### Configuration centralization follow-up — 2026-09-09
 
 - Baseline central commit: `782eb683d85757a8d2450f789024e7c6b8abff41`.
-  The canonical defaults remain `src/icgs/configuration/profiles/icgs_primary.json`;
+  The canonical defaults remain `src/icgs/configuration/profiles/method.json`;
   `MethodConfig` supplies the immutable typed sections and strict validation. No
   shared configuration/schema or P04/P13 file was changed by this follow-up.
 - The existing explicit seam is sufficient. Composition resolves configuration

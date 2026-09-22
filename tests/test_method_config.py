@@ -85,7 +85,7 @@ class MethodConfigTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "canonical|packaged|defaults"):
                     MethodConfig()
                 (root / "profiles").mkdir()
-                (root / "profiles/icgs_primary.json").write_text('{"config":{}}')
+                (root / "profiles/method.json").write_text('{"config":{}}')
                 with self.assertRaisesRegex(ValueError, "canonical|packaged|defaults"):
                     MethodConfig()
 
@@ -164,11 +164,11 @@ class MethodConfigTests(unittest.TestCase):
 
     def test_resource_edits_drive_defaults_and_invalid_source_fails_closed(self):
         document = json.loads(resources.files("icgs.configuration")
-                              .joinpath("profiles/icgs_primary.json").read_text())
+                              .joinpath("profiles/method.json").read_text())
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "profiles").mkdir()
-            path = root / "profiles/icgs_primary.json"
+            path = root / "profiles/method.json"
             document["config"]["optimizer"]["learning_rate"] = 0.0002
             path.write_text(json.dumps(document))
             with patch("importlib.resources.files", return_value=root):
@@ -180,11 +180,11 @@ class MethodConfigTests(unittest.TestCase):
 
     def test_packaged_schema_requires_all_keys_and_rejects_unknown_keys(self):
         original = json.loads(resources.files("icgs.configuration")
-                              .joinpath("profiles/icgs_primary.json").read_text())
+                              .joinpath("profiles/method.json").read_text())
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "profiles").mkdir()
-            path = root / "profiles/icgs_primary.json"
+            path = root / "profiles/method.json"
             for mutation in ("missing", "unknown", "wrong_type", "nonfinite"):
                 document = json.loads(json.dumps(original))
                 if mutation == "missing":

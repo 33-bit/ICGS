@@ -22,7 +22,7 @@ gates still do not authorize simulator collection. The
 [master roadmap](../../plans/active/icgs-method-implementation.md) owns phase
 ordering, feasibility gates and workload authorization.
 
-Prerequisites: P00–P01 contracts; [ADR0013](../../decisions/0013-g2-certification-authorization.md)
+Prerequisites: P00–P01 contracts; [ADR0014](../../decisions/0014-canonical-generation.md)
 authorizes G2 certification work, but measured assets/calibration and split
 manifest approval remain required before collection.
 Read [workflow](../../WORKFLOW.md), [architecture](../../ARCHITECTURE.md),
@@ -32,7 +32,7 @@ before runtime execution. Inspect Git state; preserve unrelated work and user as
 
 ## Configuration consumption addendum — 2026-09-09
 
-Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/method.json),
 with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
 Consumed sections for this plan: **dataset, collection, benchmark, sensors**.
 

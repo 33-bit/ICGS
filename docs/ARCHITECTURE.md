@@ -56,7 +56,7 @@ not import file IO, W&B or logging handlers.
 
 Authoritative native defaults live in configuration.schema/defaults. Added ICGS
 method defaults live in the packaged
-[primary JSON](../src/icgs/configuration/profiles/icgs_primary.json), with immutable
+[method profile](../src/icgs/configuration/profiles/method.json), with immutable
 typed validation in configuration.method. See [parameter ownership](method/parameters.md)
 for current versus planned consumers, shape locks and explicit overrides. Root JSON
 presets are explicit user inputs, not files implicitly read by an installed wheel.

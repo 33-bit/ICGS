@@ -8,7 +8,7 @@ validation, explicit override files and unchanged native IP behavior.
 
 ## Scope and decisions
 
-Primary source: `src/icgs/configuration/profiles/icgs_primary.json`.
+Primary source: `src/icgs/configuration/profiles/method.json`.
 Keep MethodConfig constructor/from_dict/from_file/to_dict and existing effective
 values/shape locks. Extend missing model/training/data/search/evaluation settings.
 Do not unlock architecture, migrate native IP, implement missing consumers or run
@@ -46,7 +46,7 @@ download/upgrade or external checkpoint/simulator workload occurred.
 | --- | --- | --- |
 | `.venv/bin/python -B -m unittest discover -s tests -p 'test_method*.py'` | PASS |39 executed:24 new config +15 existing method contracts;0 skips |
 | `.venv/bin/python -B -m unittest discover -s tests -p 'test_config.py'` | PASS |5/5;0 skips; native defaults/roundtrip |
-| `.venv/bin/python -B -m unittest discover -s tests -p 'test_v5_config.py'` | PASS |4/4;0 skips; native file/profile behavior |
+| `.venv/bin/python -B -m unittest discover -s tests -p 'test_runtime_config.py'` | PASS |4/4;0 skips; native file/profile behavior |
 | `.venv/bin/python -B -m unittest discover -s tests -p 'test_architecture.py'` | PASS |3/3;0 skips |
 | `.venv/bin/python -B -m unittest discover -s tests -p 'test_src_package.py'` | PASS |2/2;0 skips |
 | `python3 -B scripts/validate_fast.py` | PASS |syntax/links/boundaries and19/19 self-tests |

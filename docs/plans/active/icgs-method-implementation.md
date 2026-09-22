@@ -68,7 +68,7 @@ Read [ADR0006](../../decisions/0006-icgs-target-boundaries.md),
 ## Release phases and acceptance gates
 
 - [ ] Foundation: P00/P01/P02 synthetic tests; select supported Linux model environment;
-  G2 certification is authorized by [ADR0013](../../decisions/0013-g2-certification-authorization.md),
+  generation execution is governed by [ADR0014](../../decisions/0014-canonical-generation.md),
   but its physical gate remains pending measured evidence before any main collection.
 - [ ] Representation: P03/P04/P07 pilot model plus P11 A0/A1; pass G3 bridge,
   train P05/P06 B, pass G4 and freeze reference manifest.

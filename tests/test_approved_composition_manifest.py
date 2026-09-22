@@ -12,7 +12,7 @@ from icgs.data.collection.approved_manifest import (
 MANIFEST = Path("artifacts/composition/approved_composition_manifest.json")
 
 
-def test_manifest_has_exact_primary_cardinality():
+def test_manifest_has_exact_generation_cardinality():
     data = load_approved_manifest(MANIFEST)
     rows = data["catalog"]
     assert len(rows) == 36
@@ -24,9 +24,11 @@ def test_manifest_has_exact_primary_cardinality():
 def test_manifest_is_valid_and_excludes_exploratory_track():
     data = load_approved_manifest(MANIFEST)
     assert validate_approved_manifest(data) == ()
-    assert data["excluded_tracks"] == [
-        {"program_id": "E01", "track": "exploratory", "reason": "not part of primary 20/4/12 cardinality"}
-    ]
+    assert data["excluded_tracks"] == [{
+        "program_id": "E01",
+        "track": "exploratory",
+        "reason": "not part of generation 20/4/12 cardinality",
+    }]
 
 
 def test_every_entry_has_required_protocol_fields():

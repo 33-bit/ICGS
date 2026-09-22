@@ -37,7 +37,7 @@ acceptance job must run actual checkpoint tests and reference comparison.
 | test_harness.py | Syntax/link/boundary CLI positive/negative fixtures |
 | test_architecture.py | Direct/indirect core dependency direction, package initializers |
 | test_src_package.py | Actual canonical source exists, no old ip runtime imports/tree |
-| test_config.py / test_v5_config.py | Baseline values, frozen config, profiles, unknown IDs/types/paths/horizons |
+| test_config.py / test_runtime_config.py | Baseline values, frozen config, profiles, unknown IDs/types/paths/horizons |
 | test_method_config.py | Packaged ICGS defaults, strict typed overlays, immutable sequences, derived dimensions, resolved identity and setup declarations; no neural consumer claim |
 | test_geometry.py / test_cpu_smoke.py | Pose/rotation/SVD and normalization |
 | test_composition.py | Encoder/graph/stage replacement and real PyG forward/backward |

@@ -25,7 +25,7 @@ before runtime execution. Inspect Git state; preserve unrelated work and user as
 
 ## Configuration consumption addendum — 2026-09-09
 
-Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/icgs_primary.json),
+Default values now belong to the [packaged primary JSON](../../../src/icgs/configuration/profiles/method.json),
 with key/unit/restriction details in the [parameter reference](../../method/parameters.md).
 Consumed sections for this plan: **evaluator, neural, losses, calibration, numerics**.
 

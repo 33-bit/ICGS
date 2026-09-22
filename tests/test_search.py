@@ -2024,7 +2024,7 @@ class SearchTask3FixRound2Tests(unittest.TestCase):
     def setUp(self) -> None:
         from icgs.configuration.method import MethodConfig
         from pathlib import Path
-        primary_json = Path(__file__).resolve().parent.parent / "src/icgs/configuration/profiles/icgs_primary.json"
+        primary_json = Path(__file__).resolve().parent.parent / "src/icgs/configuration/profiles/method.json"
         self.cfg = MethodConfig.from_file(primary_json)
 
     def test_regression_1_completed_candidate_preserved_after_subsequent_model_error(self) -> None:

@@ -1,4 +1,4 @@
-"""Validation for the owner-approved primary composition manifest.
+"""Validation for the owner-approved generation composition manifest.
 
 This module is deliberately simulator-free.  It gates declarative protocol
 metadata before any RLBench process is launched.
@@ -14,7 +14,7 @@ from typing import Any
 from icgs.data.collection.programs import program_catalog
 
 
-PRIMARY_SPLITS = {"train", "development", "test"}
+GENERATION_SPLITS = {"train", "development", "test"}
 EXECUTION_STATUSES = {"planned", "generation_authorized", "pilot_certified", "generation_certified"}
 REQUIRED_FIELDS = {
     "program_id", "split", "family", "ordered_steps", "scene_id",
@@ -80,8 +80,8 @@ def validate_approved_manifest(data: Mapping[str, Any]) -> tuple[str, ...]:
     errors: list[str] = []
     if not isinstance(data, Mapping):
         return ("manifest must be a mapping",)
-    if data.get("manifest_version") != 1:
-        errors.append("manifest_version must be 1")
+    if data.get("manifest_version") != 3:
+        errors.append("manifest_version must be 3")
     rows = data.get("catalog")
     if isinstance(rows, (str, bytes)) or not isinstance(rows, Sequence):
         return tuple(errors + ["catalog must be a sequence"])
@@ -93,7 +93,7 @@ def validate_approved_manifest(data: Mapping[str, Any]) -> tuple[str, ...]:
     }
     expected_ids = set(expected)
     seen: set[str] = set()
-    split_counts = {split: 0 for split in PRIMARY_SPLITS}
+    split_counts = {split: 0 for split in GENERATION_SPLITS}
     asset_splits: dict[str, str] = {}
     lineage_splits: dict[str, str] = {}
 

@@ -97,11 +97,11 @@ def _checked_defaults(text: str, schema: type) -> dict[str, Any]:
 
 def defaults(schema: type) -> dict[str, Any]:
     try:
-        resource = resources.files("icgs.configuration").joinpath("profiles/icgs_primary.json")
+        resource = resources.files("icgs.configuration").joinpath("profiles/method.json")
         return _checked_defaults(resource.read_text(encoding="utf-8"), schema)
     except (OSError, ValueError, TypeError) as exc:
         raise ValueError("invalid or missing packaged canonical defaults "
-                         "icgs.configuration/profiles/icgs_primary.json; "
+                         "icgs.configuration/profiles/method.json; "
                          f"reinstall a complete ICGS package: {exc}") from exc
 
 

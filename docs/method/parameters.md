@@ -1,7 +1,7 @@
 # ICGS parameter reference
 
 The single authoritative default-value file is
-[icgs_primary.json](../../src/icgs/configuration/profiles/icgs_primary.json).
+[method.json](../../src/icgs/configuration/profiles/method.json).
 This page documents ownership and meaning, not a second copy of numeric defaults.
 The [override example](../../configs/icgs/example.json) changes only selected values.
 Native IP's Python defaults and hash-bound published profile are **unchanged**.

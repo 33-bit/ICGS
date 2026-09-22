@@ -1,17 +1,24 @@
 {
-  "manifest_version": 1,
-  "protocol_id": "icgs-composition-primary-v1",
+  "manifest_version": 3,
+  "composition_protocol_id": "icgs-composition-primary-v2",
+  "dataset_version": "icgs-primary-v3",
+  "episode_schema_version": "icgs_episode_v2",
+  "controller_protocol_id": "rlbench-timed-ik-v2",
+  "phase": "1",
+  "preserves": "primary_v2",
+  "excluded_tracks": [
+    {
+      "program_id": "E01",
+      "track": "exploratory",
+      "reason": "not part of generation 20/4/12 cardinality"
+    }
+  ],
   "generation_targets": {
     "train_successes_per_program": 200,
-    "development_successes_by_program": {
-      "V01": 63,
-      "V02": 63,
-      "V03": 62,
-      "V04": 62
-    },
+    "train_perturbed_attempts_per_program": 80,
     "test_contexts_per_composition": 100,
-    "retain_valid_failures": true,
-    "test_is_evaluation_only": true
+    "test_is_evaluation_only": true,
+    "retain_valid_failures": true
   },
   "catalog": [
     {
@@ -63,7 +70,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -81,7 +88,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -93,7 +100,36 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": "object_a_free",
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "lift",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_lifted",
+          "postcondition": "object_a_lifted",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T01",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T02",
@@ -144,7 +180,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -162,7 +198,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -174,7 +210,36 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": "object_a_free",
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T02",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T03",
@@ -225,7 +290,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -243,7 +308,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -255,7 +320,36 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "push",
+          "object_role": "blocker",
+          "target_role": "push_target",
+          "precondition": "blocker_blocking",
+          "success_predicate": "blocker_at_push_target",
+          "postcondition": "blocker_cleared",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "reach",
+          "object_role": null,
+          "target_role": "target_a",
+          "precondition": "blocker_cleared",
+          "success_predicate": "ee_at_target",
+          "postcondition": "target_reached",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T03",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T04",
@@ -306,7 +400,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -324,7 +418,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -336,7 +430,36 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "drawer_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "drawer_open",
+          "postcondition": "drawer_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "drawer_open",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T04",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T05",
@@ -387,7 +510,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -405,7 +528,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -417,7 +540,36 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "drawer_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "drawer_open",
+          "postcondition": "drawer_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "drawer_open",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T05",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T06",
@@ -468,7 +620,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -486,7 +638,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -498,7 +650,36 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "drawer_open",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "object_a_placed",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T06",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T07",
@@ -549,7 +730,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -567,7 +748,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -579,7 +760,36 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": null,
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_b",
+          "target_role": "target_b",
+          "precondition": "object_a_placed",
+          "success_predicate": "object_b_in_target",
+          "postcondition": "object_b_placed",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T07",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T08",
@@ -631,7 +841,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -649,7 +859,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -661,7 +871,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "place",
+          "object_role": "object_b",
+          "target_role": "target_b",
+          "precondition": null,
+          "success_predicate": "object_b_in_target",
+          "postcondition": "object_b_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_b_placed",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "object_a_placed",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T08",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T09",
@@ -712,7 +962,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -730,7 +980,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -742,7 +992,36 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": null,
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_fitted",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T09",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T10",
@@ -793,7 +1072,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -811,7 +1090,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -823,7 +1102,36 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "push_through_aperture",
+          "object_role": "object_a",
+          "target_role": "aperture_wp",
+          "precondition": null,
+          "success_predicate": "object_a_past_aperture",
+          "postcondition": "object_a_past_aperture",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_past_aperture",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T10",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T11",
@@ -875,7 +1183,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -893,7 +1201,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -905,7 +1213,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": null,
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "rotate",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_rotated",
+          "postcondition": "object_a_rotated",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_rotated",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T11",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T12",
@@ -957,7 +1305,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -975,7 +1323,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -987,12 +1335,52 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "gate_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "gate_open",
+          "postcondition": "gate_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "push_through_aperture",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "gate_open",
+          "success_predicate": "object_a_past_gate",
+          "postcondition": "object_a_past_gate",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "close",
+          "object_role": "gate_handle",
+          "target_role": "close_target",
+          "precondition": "object_a_past_gate",
+          "success_predicate": "gate_closed",
+          "postcondition": "gate_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T12",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T13",
       "split": "train",
-      "family": "park-retrieve-restore",
+      "family": "park-retrieve",
       "ordered_steps": [
         "park blocker",
         "retrieve A"
@@ -1038,7 +1426,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1056,7 +1444,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1068,12 +1456,41 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "park",
+          "object_role": "blocker",
+          "target_role": "park_target",
+          "precondition": null,
+          "success_predicate": "blocker_parked",
+          "postcondition": "blocker_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "blocker_parked",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T13",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T14",
       "split": "train",
-      "family": "park-retrieve-restore",
+      "family": "park-restore",
       "ordered_steps": [
         "park blocker",
         "restore blocker"
@@ -1119,7 +1536,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1137,7 +1554,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1149,12 +1566,41 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "park",
+          "object_role": "blocker",
+          "target_role": "park_target",
+          "precondition": null,
+          "success_predicate": "blocker_parked",
+          "postcondition": "blocker_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "restore",
+          "object_role": "blocker",
+          "target_role": "restore_target",
+          "precondition": "blocker_parked",
+          "success_predicate": "blocker_restored",
+          "postcondition": "blocker_restored",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T14",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T15",
       "split": "train",
-      "family": "park-retrieve-restore",
+      "family": "park-retrieve",
       "ordered_steps": [
         "park A",
         "park B",
@@ -1201,7 +1647,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1219,7 +1665,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1231,7 +1677,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "park",
+          "object_role": "blocker_a",
+          "target_role": "park_target_a",
+          "precondition": null,
+          "success_predicate": "blocker_a_parked",
+          "postcondition": "blocker_a_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "park",
+          "object_role": "blocker_b",
+          "target_role": "park_target_b",
+          "precondition": "blocker_a_parked",
+          "success_predicate": "blocker_b_parked",
+          "postcondition": "blocker_b_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "retrieve",
+          "object_role": "object_c",
+          "target_role": "target_c",
+          "precondition": "blocker_b_parked",
+          "success_predicate": "object_c_in_target",
+          "postcondition": "object_c_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T15",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T16",
@@ -1283,7 +1769,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1301,7 +1787,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1313,7 +1799,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "drawer_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "drawer_open",
+          "postcondition": "drawer_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "park",
+          "object_role": "blocker",
+          "target_role": "park_target",
+          "precondition": "drawer_open",
+          "success_predicate": "blocker_parked",
+          "postcondition": "blocker_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "blocker_parked",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T16",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T17",
@@ -1365,7 +1891,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1383,7 +1909,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1395,7 +1921,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": null,
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "temporary_place",
+          "object_role": "object_a",
+          "target_role": "temp_target",
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_temp_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "regrasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": "object_a_temp_placed",
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_regrasped",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T17",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T18",
@@ -1447,7 +2013,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1465,7 +2031,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1477,7 +2043,53 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": null,
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_retrieved",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "corridor_clear",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "retrieve",
+          "object_role": "object_b",
+          "target_role": "target_b",
+          "precondition": "corridor_clear",
+          "success_predicate": "object_b_in_target",
+          "postcondition": "object_b_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T18",
+      "future_dependency": {
+        "blocker_role": "object_a",
+        "blocked_role": "object_b",
+        "enabling_step_id": "s2",
+        "dependent_step_id": "s3",
+        "reason": "object_a occupies the shared retrieval corridor in front of object_b"
+      },
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T19",
@@ -1529,7 +2141,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1547,7 +2159,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1559,12 +2171,52 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "place",
+          "object_role": "spacer",
+          "target_role": "target_spacer",
+          "precondition": null,
+          "success_predicate": "spacer_in_target",
+          "postcondition": "spacer_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "spacer_placed",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "object_a_placed",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T19",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "T20",
       "split": "train",
-      "family": "park-retrieve-restore",
+      "family": "park-retrieve",
       "ordered_steps": [
         "park blocker",
         "retrieve A",
@@ -1611,7 +2263,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1629,7 +2281,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1641,7 +2293,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "park",
+          "object_role": "blocker",
+          "target_role": "park_target",
+          "precondition": null,
+          "success_predicate": "blocker_parked",
+          "postcondition": "blocker_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "blocker_parked",
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_retrieved",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/T20",
+      "future_dependency": null,
+      "training_eligible": true,
+      "deferred_reason": null
     },
     {
       "program_id": "V01",
@@ -1693,7 +2385,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1711,7 +2403,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1723,7 +2415,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "drawer_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "drawer_open",
+          "postcondition": "drawer_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "drawer_open",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "object_a_placed",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/V01",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "V02",
@@ -1775,7 +2507,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1793,7 +2525,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1805,7 +2537,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": null,
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "rotate",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_rotated",
+          "postcondition": "object_a_rotated",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_rotated",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_fitted",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/V02",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "V03",
@@ -1858,7 +2630,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1876,7 +2648,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1888,7 +2660,58 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "park",
+          "object_role": "blocker",
+          "target_role": "park_target",
+          "precondition": null,
+          "success_predicate": "blocker_parked",
+          "postcondition": "blocker_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "blocker_parked",
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_retrieved",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "restore",
+          "object_role": "blocker",
+          "target_role": "restore_target",
+          "precondition": "object_a_placed",
+          "success_predicate": "blocker_restored",
+          "postcondition": "blocker_restored",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/V03",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "V04",
@@ -1940,7 +2763,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -1958,7 +2781,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -1970,7 +2793,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "gate_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "gate_open",
+          "postcondition": "gate_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "gate_open",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "close",
+          "object_role": "gate_handle",
+          "target_role": "close_target",
+          "precondition": "object_a_retrieved",
+          "success_predicate": "gate_closed",
+          "postcondition": "gate_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/V04",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "P1",
@@ -2023,7 +2886,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2041,7 +2904,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2053,7 +2916,58 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "drawer_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "drawer_open",
+          "postcondition": "drawer_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "drawer_open",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "place",
+          "object_role": "object_b",
+          "target_role": "target_b",
+          "precondition": "object_a_placed",
+          "success_predicate": "object_b_in_target",
+          "postcondition": "object_b_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "object_b_placed",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/P1",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "P2",
@@ -2106,7 +3020,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2124,7 +3038,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2136,7 +3050,58 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "drawer_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "drawer_open",
+          "postcondition": "drawer_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_b",
+          "target_role": "target_b",
+          "precondition": "drawer_open",
+          "success_predicate": "object_b_in_target",
+          "postcondition": "object_b_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_b_placed",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "object_a_placed",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/P2",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "P3",
@@ -2190,7 +3155,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2208,7 +3173,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2220,7 +3185,69 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "drawer_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "drawer_open",
+          "postcondition": "drawer_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "drawer_open",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "place",
+          "object_role": "spacer",
+          "target_role": "target_spacer",
+          "precondition": "object_a_placed",
+          "success_predicate": "spacer_in_target",
+          "postcondition": "spacer_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "place",
+          "object_role": "object_b",
+          "target_role": "target_b",
+          "precondition": "spacer_placed",
+          "success_predicate": "object_b_in_target",
+          "postcondition": "object_b_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s5",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "object_b_placed",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/P3",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "P4",
@@ -2274,7 +3301,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2292,7 +3319,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2304,7 +3331,75 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "drawer_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "drawer_open",
+          "postcondition": "drawer_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "drawer_open",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "retrieve",
+          "object_role": "object_c",
+          "target_role": "target_c",
+          "precondition": "object_a_placed",
+          "success_predicate": "object_c_in_target",
+          "postcondition": "slot_b_clear",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "place",
+          "object_role": "object_b",
+          "target_role": "target_b",
+          "precondition": "slot_b_clear",
+          "success_predicate": "object_b_in_target",
+          "postcondition": "object_b_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s5",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "object_b_placed",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/P4",
+      "future_dependency": {
+        "blocker_role": "object_c",
+        "blocked_role": "object_b",
+        "enabling_step_id": "s3",
+        "dependent_step_id": "s4",
+        "reason": "object_c occupies target_b until retrieved"
+      },
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "G1",
@@ -2356,7 +3451,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2374,7 +3469,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2386,7 +3481,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": null,
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "transport_through_aperture",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_past_aperture",
+          "postcondition": "object_a_past_aperture",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_past_aperture",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_fitted",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/G1",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "G2",
@@ -2439,7 +3574,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2457,7 +3592,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2469,7 +3604,58 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": null,
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "rotate",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_rotated",
+          "postcondition": "object_a_rotated",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "transport_through_aperture",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_rotated",
+          "success_predicate": "object_a_past_aperture",
+          "postcondition": "object_a_past_aperture",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_past_aperture",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/G2",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "G3",
@@ -2523,7 +3709,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2541,7 +3727,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2553,7 +3739,69 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "gate_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "gate_open",
+          "postcondition": "gate_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": "gate_open",
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "transport_through_aperture",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_past_gate",
+          "postcondition": "object_a_past_gate",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_past_gate",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s5",
+          "primitive": "close",
+          "object_role": "gate_handle",
+          "target_role": "close_target",
+          "precondition": "object_a_placed",
+          "success_predicate": "gate_closed",
+          "postcondition": "gate_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/G3",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "G4",
@@ -2607,7 +3855,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2625,7 +3873,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2637,7 +3885,69 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "grasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": null,
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_grasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "temporary_place",
+          "object_role": "object_a",
+          "target_role": "temp_target",
+          "precondition": "object_a_grasped",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_temp_placed",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "regrasp",
+          "object_role": "object_a",
+          "target_role": null,
+          "precondition": "object_a_temp_placed",
+          "success_predicate": "object_a_grasped",
+          "postcondition": "object_a_regrasped",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "transport_through_aperture",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_regrasped",
+          "success_predicate": "object_a_transported",
+          "postcondition": "object_a_transported",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s5",
+          "primitive": "place",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "object_a_transported",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_fitted",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/G4",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "R1",
@@ -2689,7 +3999,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2707,7 +4017,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2719,7 +4029,47 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "park",
+          "object_role": "blocker",
+          "target_role": "park_target",
+          "precondition": null,
+          "success_predicate": "blocker_parked",
+          "postcondition": "blocker_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "blocker_parked",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "restore",
+          "object_role": "blocker",
+          "target_role": "restore_target",
+          "precondition": "object_a_retrieved",
+          "success_predicate": "blocker_restored",
+          "postcondition": "blocker_restored",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/R1",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "R2",
@@ -2773,7 +4123,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2791,7 +4141,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2803,7 +4153,69 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "park",
+          "object_role": "blocker_a",
+          "target_role": "park_target_a",
+          "precondition": null,
+          "success_predicate": "blocker_a_parked",
+          "postcondition": "blocker_a_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "park",
+          "object_role": "blocker_b",
+          "target_role": "park_target_b",
+          "precondition": "blocker_a_parked",
+          "success_predicate": "blocker_b_parked",
+          "postcondition": "blocker_b_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "blocker_b_parked",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "restore",
+          "object_role": "blocker_b",
+          "target_role": "restore_target_b",
+          "precondition": "object_a_retrieved",
+          "success_predicate": "blocker_b_restored",
+          "postcondition": "blocker_b_restored",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s5",
+          "primitive": "restore",
+          "object_role": "blocker_a",
+          "target_role": "restore_target_a",
+          "precondition": "blocker_b_restored",
+          "success_predicate": "blocker_a_restored",
+          "postcondition": "blocker_a_restored",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/R2",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "R3",
@@ -2857,7 +4269,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2875,7 +4287,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2887,7 +4299,69 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "open",
+          "object_role": "drawer_handle",
+          "target_role": "open_target",
+          "precondition": null,
+          "success_predicate": "drawer_open",
+          "postcondition": "drawer_open",
+          "articulation": "open",
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "park",
+          "object_role": "blocker",
+          "target_role": "park_target",
+          "precondition": "drawer_open",
+          "success_predicate": "blocker_parked",
+          "postcondition": "blocker_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "blocker_parked",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "restore",
+          "object_role": "blocker",
+          "target_role": "restore_target",
+          "precondition": "object_a_retrieved",
+          "success_predicate": "blocker_restored",
+          "postcondition": "blocker_restored",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s5",
+          "primitive": "close",
+          "object_role": "drawer_handle",
+          "target_role": "close_target",
+          "precondition": "blocker_restored",
+          "success_predicate": "drawer_closed",
+          "postcondition": "drawer_closed",
+          "articulation": "closed",
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/R3",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     },
     {
       "program_id": "R4",
@@ -2940,7 +4414,7 @@
           0.8,
           1.2
         ],
-        "camera_profile_id": "rlbench-base-cameras-v1",
+        "camera_profile_id": "rlbench-wrist-depth-v1",
         "lighting_profile_id": "rlbench-base-lighting-v1",
         "waypoint_delta_m": [
           -0.01,
@@ -2958,7 +4432,7 @@
         "scripted_waypoint_v1"
       ],
       "controller": {
-        "protocol_id": "rlbench-timed-ik-v1",
+        "protocol_id": "rlbench-timed-ik-v2",
         "quaternion_hemisphere_continuity": true,
         "joint_branch_continuity": true,
         "step_s": 0.05
@@ -2970,20 +4444,58 @@
         "hold_intervals": 5,
         "unsafe_penetration_m": 0.002
       },
-      "execution_status": "generation_authorized"
-    }
-  ],
-  "asset_split": {
-    "train_ratio": 0.7,
-    "development_ratio": 0.15,
-    "test_ratio": 0.15,
-    "closed_by": "asset_family_id"
-  },
-  "excluded_tracks": [
-    {
-      "program_id": "E01",
-      "track": "exploratory",
-      "reason": "not part of primary 20/4/12 cardinality"
+      "execution_status": "generation_authorized",
+      "structured_steps": [
+        {
+          "step_id": "s1",
+          "primitive": "park",
+          "object_role": "blocker",
+          "target_role": "park_target",
+          "precondition": null,
+          "success_predicate": "blocker_parked",
+          "postcondition": "blocker_parked",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s2",
+          "primitive": "retrieve",
+          "object_role": "object_a",
+          "target_role": "target_a",
+          "precondition": "blocker_parked",
+          "success_predicate": "object_a_in_target",
+          "postcondition": "object_a_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s3",
+          "primitive": "retrieve",
+          "object_role": "object_b",
+          "target_role": "target_b",
+          "precondition": "object_a_retrieved",
+          "success_predicate": "object_b_in_target",
+          "postcondition": "object_b_retrieved",
+          "articulation": null,
+          "kind": "nominal"
+        },
+        {
+          "step_id": "s4",
+          "primitive": "restore",
+          "object_role": "blocker",
+          "target_role": "restore_target",
+          "precondition": "object_b_retrieved",
+          "success_predicate": "blocker_restored",
+          "postcondition": "blocker_restored",
+          "articulation": null,
+          "kind": "nominal"
+        }
+      ],
+      "semantic_status": "authorized",
+      "compiler_routine_id": "stepparse-v3/R4",
+      "future_dependency": null,
+      "training_eligible": false,
+      "deferred_reason": null
     }
   ]
 }

@@ -12,7 +12,7 @@ local constants. Native configuration/checkpoint identity must not change.
 
 ## Decision
 
-Use one packaged `configuration/profiles/icgs_primary.json` as the authoritative
+Use one packaged `configuration/profiles/method.json` as the authoritative
 default source for the new ICGS method. Python defines immutable types, ranges,
 compatibility checks and derived values, not an independent numerical fallback.
 Missing/malformed resource fails explicitly. Explicit experiment JSON overlays

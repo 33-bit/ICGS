@@ -18,15 +18,16 @@ _DOTENV_KEYS = {
 }
 
 
-def _load_project_dotenv() -> None:
-    """Load the limited user-local CLI settings without executing shell syntax."""
+def _load_project_dotenv() -> dict[str, str]:
+    """Read limited user-local CLI settings without executing shell syntax."""
+    values: dict[str, str] = {}
     path = Path.cwd() / ".env"
     try:
         if not path.is_file() or path.stat().st_size > _DOTENV_MAX_BYTES:
-            return
+            return values
         text = path.read_text(encoding="utf-8")
     except OSError:
-        return
+        return values
     for raw_line in text.splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -34,11 +35,17 @@ def _load_project_dotenv() -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         if key in _DOTENV_KEYS:
-            os.environ.setdefault(key, value.strip().strip('"').strip("'"))
+            values[key] = value.strip().strip('"').strip("'")
+    # Preserve the historical convenience for the credential only, while
+    # keeping non-secret settings local to this config load.  This prevents a
+    # prior command's cwd from contaminating later commands/tests.
+    if "WANDB_API_KEY" not in os.environ and "WANDB_API_KEY" in values:
+        os.environ["WANDB_API_KEY"] = values["WANDB_API_KEY"]
+    return values
 
 
 def _dotenv_observability_overrides() -> dict:
-    _load_project_dotenv()
+    dotenv = _load_project_dotenv()
     mapping = {
         "ICGS_WANDB_ENABLED": ("enabled", lambda value: _parse_bool(value, "ICGS_WANDB_ENABLED")),
         "ICGS_WANDB_MODE": ("mode", str),
@@ -48,8 +55,11 @@ def _dotenv_observability_overrides() -> dict:
         "ICGS_WANDB_SEND_CONFIG": ("send_config", lambda value: _parse_bool(value, "ICGS_WANDB_SEND_CONFIG")),
         "ICGS_WANDB_UPLOAD_ARTIFACTS": ("upload_artifacts", lambda value: _parse_bool(value, "ICGS_WANDB_UPLOAD_ARTIFACTS")),
     }
-    wandb = {target: convert(os.environ[source]) for source, (target, convert) in mapping.items()
-             if source in os.environ}
+    wandb = {
+        target: convert(os.environ.get(source, dotenv[source]))
+        for source, (target, convert) in mapping.items()
+        if source in os.environ or source in dotenv
+    }
     return {"wandb": wandb} if wandb else {}
 
 

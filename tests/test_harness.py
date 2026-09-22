@@ -110,6 +110,38 @@ class HarnessTests(unittest.TestCase):
                  'open("AGENTS.md")\n')
         self.assertEqual(len(self.guard.check_boundary(self.root)), 2)
 
+    def test_generation_naming_accepts_canonical_paths_and_payload_identity(self):
+        self.put(
+            "src/icgs/data/collection/generation/protocol.py",
+            'DATASET_VERSION = "icgs-primary-v3"\n',
+        )
+        self.put(
+            "scripts/generation_worker.py",
+            "from icgs.data.collection.generation import protocol\n",
+        )
+        self.put("tests/test_generation_worker.py", "")
+        self.assertEqual(self.guard.check_generation_naming(self.root), [])
+
+    def test_generation_naming_rejects_legacy_paths_with_actionable_owner(self):
+        self.put("src/icgs/data/collection/v3/protocol.py", "")
+        self.put("src/icgs/data/schemas/episodes_v2.py", "")
+        self.put("scripts/colab_g2_dataset_generator.py", "")
+        errors = self.guard.check_generation_naming(self.root)
+        self.assertEqual(len(errors), 3)
+        self.assertTrue(all("GENERATION_NAMING" in error for error in errors))
+        self.assertTrue(all("0014-canonical-generation.md" in error for error in errors))
+
+    def test_generation_naming_rejects_static_and_dynamic_legacy_imports(self):
+        self.put(
+            "scripts/generation_worker.py",
+            "from icgs.data.collection.v3 import protocol\n"
+            "import importlib\n"
+            'importlib.import_module("icgs.data.datasets.v3_views")\n',
+        )
+        errors = self.guard.check_generation_naming(self.root)
+        self.assertEqual(len(errors), 2)
+        self.assertTrue(all("import the canonical semantic generation module" in error for error in errors))
+
     def test_empty_root_is_not_a_successful_validation(self):
         with tempfile.TemporaryDirectory(prefix="ip-empty-") as directory:
             self.assertTrue(self.guard.check_syntax(Path(directory)))
@@ -133,6 +165,7 @@ class HarnessTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("PASS: Python syntax", result.stdout)
+        self.assertIn("PASS: Canonical generation naming", result.stdout)
         self.assertIn("NOT RUN: harness self-tests", result.stdout)
 
     def test_cli_reports_boundary_failure_for_valid_python(self):
