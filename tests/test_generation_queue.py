@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 import json
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from icgs.data.collection.generation.distributed_contracts import (
     WorkerResult,
 )
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+from icgs.data.collection.generation import distributed_validation as validation
 
 
 def _plan(index: int = 17, kind: str = "perturbed") -> AttemptPlan:
@@ -46,6 +48,41 @@ def _job(job_id: str = "job-1", index: int = 17) -> GenerationJob:
         manifest_sha256="b" * 64,
         output_root="/content/run/staging",
     )
+
+
+def _result(job: GenerationJob, result_dir: Path) -> WorkerResult:
+    return WorkerResult(
+        job_id=job.job_id,
+        attempt_id=job.attempt_id,
+        episode_id=job.episode_id,
+        program_id=job.program_id,
+        outcome="success",
+        result_dir=str(result_dir),
+        file_sha256={},
+        timeline={"actions": 0, "observations": 1, "durations": 0},
+    )
+
+
+def _failure(
+    job: GenerationJob,
+    result: WorkerResult,
+    source_path: Path,
+    message: str = "bad result",
+    *,
+    allowed_result_root: Path | None = None,
+):
+    assert hasattr(validation, "ValidationFailure"), "ValidationFailure is required"
+    failure_type = validation.ValidationFailure
+    try:
+        raise ValueError(message)
+    except ValueError as exc:
+        return failure_type.capture(
+            job,
+            result,
+            exc,
+            source_path=source_path,
+            allowed_result_root=allowed_result_root,
+        )
 
 
 def test_run_config_accepts_configurable_worker_count_and_publish_interval():
@@ -170,3 +207,96 @@ def test_iter_ready_ignores_atomic_partial_directories(tmp_path: Path):
     (closed / "result.json").write_text(json.dumps(result.as_dict()), encoding="utf-8")
 
     assert queue.iter_ready() == (result,)
+
+
+def test_quarantine_ready_moves_result_writes_diagnostic_and_counts_state(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path / "queue")
+    job = _job(job_id="job-quarantined")
+    result_dir = tmp_path / "artifacts" / job.job_id
+    result_dir.mkdir(parents=True)
+    (result_dir / "broken.bin").write_bytes(b"corrupt payload")
+    queue.enqueue(job)
+    assert queue.claim("000") == job
+    result = _result(job, result_dir)
+    ready_path = queue.publish_ready("000", result)
+    failure = _failure(job, result, ready_path, allowed_result_root=tmp_path)
+
+    quarantined = queue.quarantine_ready(job.job_id, failure)
+
+    assert quarantined == queue.root / "quarantined" / job.job_id
+    assert not ready_path.exists()
+    assert (quarantined / "job.json").is_file()
+    assert (quarantined / "result.json").is_file()
+    diagnostic = json.loads((quarantined / "validation_failure.json").read_text(encoding="utf-8"))
+    assert diagnostic["job_identity"]["job_id"] == job.job_id
+    assert diagnostic["result_identity"]["outcome"] == "success"
+    assert diagnostic["source_path"] == str(ready_path)
+    assert diagnostic["actual_file_inventory"]["broken.bin"]["bytes"] == len(b"corrupt payload")
+    assert queue.iter_ready() == ()
+    assert queue._find_job("quarantined", job.job_id) == quarantined
+    assert queue.enqueue(job) == quarantined
+    counts = queue.counts()
+    assert hasattr(counts, "quarantined")
+    assert counts.quarantined == 1
+    assert counts.ready == 0
+
+
+def test_quarantine_ready_is_idempotent_for_equal_failure_and_rejects_conflicts(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path / "queue")
+    job = _job(job_id="job-idempotent")
+    result_dir = tmp_path / "artifacts"
+    result_dir.mkdir()
+    queue.enqueue(job)
+    assert queue.claim("000") == job
+    result = _result(job, result_dir)
+    ready_path = queue.publish_ready("000", result)
+    failure = _failure(job, result, ready_path, allowed_result_root=tmp_path)
+
+    first = queue.quarantine_ready(job.job_id, failure)
+    repeated = queue.quarantine_ready(job.job_id, failure)
+
+    assert repeated == first
+    conflicting = replace(failure, exception_message="different validation error")
+    with pytest.raises(ValueError, match="quarantine conflict"):
+        queue.quarantine_ready(job.job_id, conflicting)
+
+
+def test_quarantine_ready_rejects_path_traversal_job_ids(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path / "queue")
+    job = _job()
+    result = _result(job, tmp_path / "missing-result")
+    failure = _failure(job, result, queue.root / "ready" / job.job_id)
+
+    with pytest.raises(ValueError, match="job_id"):
+        queue.quarantine_ready("../escape", failure)
+
+    assert not (queue.root.parent / "escape").exists()
+
+
+def test_quarantine_ready_rejects_dangling_symlink_target_without_moving_ready(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path / "queue")
+    job = _job(job_id="job-symlink-target")
+    result_dir = tmp_path / "artifacts"
+    result_dir.mkdir()
+    queue.enqueue(job)
+    assert queue.claim("000") == job
+    result = _result(job, result_dir)
+    ready_path = queue.publish_ready("000", result)
+    failure = _failure(job, result, ready_path, allowed_result_root=tmp_path)
+    target = queue.root / "quarantined" / job.job_id
+    target.symlink_to(tmp_path / "missing-target", target_is_directory=True)
+
+    with pytest.raises(ValueError, match="quarantine target"):
+        queue.quarantine_ready(job.job_id, failure)
+
+    assert ready_path.is_dir()
+    assert target.is_symlink()
+
+
+def test_claimed_job_lookup_treats_glob_characters_as_literal(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path / "queue")
+    job = _job(job_id="job-one")
+    queue.enqueue(job)
+    assert queue.claim("worker") == job
+
+    assert queue._find_job("claimed", "job-*") is None

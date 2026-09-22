@@ -4,12 +4,18 @@ from pathlib import Path
 import json
 import os
 import hashlib
+from types import SimpleNamespace
 
 import pytest
 
 from scripts import generation_launch
+from scripts import generation_coordinator as generation_coordinator_module
 from scripts.generation_launch import validate_smoke_receipt
-from scripts.generation_coordinator import CoordinatorLock, _inflight_jobs_from_queue
+from scripts.generation_coordinator import (
+    CoordinatorControlPlane,
+    CoordinatorLock,
+    _inflight_jobs_from_queue,
+)
 from scripts.generation_watchdog import (
     _coordinator_lock_is_free,
     _pid_matches,
@@ -19,9 +25,12 @@ from icgs.data.collection.generation.distributed_contracts import (
     GenerationJob,
     GenerationRuntimeConfig,
     RunConfig,
+    WorkerResult,
 )
+from icgs.data.collection.generation.batch import AttemptPlan
 from icgs.data.collection.generation.distributed_planner import DistributedPlanner
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+from icgs.data.collection.generation.distributed_validation import ValidatedResult
 
 
 def _runtime_config(tmp_path: Path, *, publication_enabled: bool = False):
@@ -170,6 +179,147 @@ def test_coordinator_bounds_ingestion_per_tick():
     text = Path("scripts/generation_coordinator.py").read_text(encoding="utf-8")
     assert "MAX_READY_PER_TICK = 100" in text
     assert "self.queue.iter_ready()[:MAX_READY_PER_TICK]" in text
+
+
+@pytest.mark.parametrize(
+    "malformed_result_json",
+    [False, True],
+    ids=["validation-failure", "malformed-result-json"],
+)
+def test_tick_quarantines_bad_result_and_ingests_following_valid_result(
+    tmp_path: Path,
+    monkeypatch,
+    malformed_result_json: bool,
+):
+    run_root = tmp_path / "run"
+    run_root.mkdir()
+    run = RunConfig(
+        run_id="quarantine-run",
+        run_root=str(run_root),
+        code_revision="a" * 40,
+        approved_manifest_sha256="b" * 64,
+        worker_count=2,
+    )
+    queue = FilesystemJobQueue(run_root / "queue")
+
+    def make_job(job_id: str, index: int) -> GenerationJob:
+        plan = AttemptPlan(
+            program_id="T01", split="train", episode_index=index,
+            episode_id=f"episode-t01-{index:06d}", episode_kind="nominal",
+            scene_seed=index, collection_seed=20260920,
+            randomization={"scene_signature": f"sig-{index}", "asset_instance_id": f"asset-{index}"},
+            intervention=None,
+        )
+        return GenerationJob.create(
+            job_id=job_id, run_id=run.run_id, attempt_id=f"att-{plan.episode_id}",
+            episode_id=plan.episode_id, program_id="T01", plan=plan,
+            code_revision="a" * 40, manifest_sha256="b" * 64,
+            output_root=str(run_root / "staging"),
+        )
+
+    malformed_job = make_job("job-a-malformed", 1)
+    valid_job = make_job("job-b-valid", 2)
+    ready_results = []
+    for worker_id, job, content in (
+        ("000", malformed_job, b"malformed artifact"),
+        ("001", valid_job, b"valid artifact"),
+    ):
+        result_dir = run_root / "staging" / "worker-results" / job.job_id / "T01"
+        result_dir.mkdir(parents=True)
+        (result_dir / "artifact.bin").write_bytes(content)
+        queue.enqueue(job)
+        assert queue.claim(worker_id) == job
+        result = WorkerResult(
+            job_id=job.job_id, attempt_id=job.attempt_id, episode_id=job.episode_id,
+            program_id=job.program_id, outcome="success", result_dir=str(result_dir),
+            file_sha256={}, timeline={"actions": 0, "observations": 1, "durations": 0},
+        )
+        ready_path = queue.publish_ready(worker_id, result)
+        if malformed_result_json and job.job_id == malformed_job.job_id:
+            (ready_path / "result.json").write_text("{ malformed", encoding="utf-8")
+        ready_results.append(result)
+
+    class Planner:
+        def __init__(self):
+            self.recorded = []
+
+        def next_job(self):
+            return None
+
+        def record_result(self, result, provenance):
+            self.recorded.append((result, provenance))
+
+        def quota_complete(self):
+            return False
+
+        def snapshot(self):
+            return SimpleNamespace(as_dict=lambda: {})
+
+    class Publisher:
+        def publish_due(self, **kwargs):
+            return None
+
+    planner = Planner()
+    control = CoordinatorControlPlane(run, queue, planner, Publisher())
+
+    def validate(job, result):
+        if job.job_id == malformed_job.job_id:
+            raise ValueError("invalid artifact inventory")
+        return ValidatedResult(
+            job=job,
+            result=result,
+            provenance={"episode_kind": "nominal"},
+            episode_entry={
+                "attempt_id": job.attempt_id,
+                "episode_id": job.episode_id,
+                "program_id": job.program_id,
+                "outcome": "success",
+            },
+            attempt_entry=None,
+        )
+
+    def ingest(manifest, validated):
+        updated = dict(manifest)
+        updated["episodes"] = list(updated.get("episodes") or []) + [validated.episode_entry]
+        updated["failure_attempts"] = list(updated.get("failure_attempts") or [])
+        return updated
+
+    monkeypatch.setattr(generation_coordinator_module, "validate_closed_result", validate)
+    monkeypatch.setattr(generation_coordinator_module, "ingest_validated_result", ingest)
+    assert hasattr(control, "process_ready_result"), "process_ready_result is required"
+    process_ready_result = control.process_ready_result
+    outcomes = []
+
+    def record_processing(result):
+        outcome = process_ready_result(result)
+        outcomes.append(outcome)
+        return outcome
+
+    monkeypatch.setattr(control, "process_ready_result", record_processing)
+    control.tick(now_s=10.0)
+
+    assert outcomes == ["quarantined", "ingested"]
+    assert control.status == "RUNNING"
+    assert [result.job_id for result, _ in planner.recorded] == [valid_job.job_id]
+    assert [row["episode_id"] for row in control.manifest["episodes"]] == [valid_job.episode_id]
+    assert control.manifest["failure_attempts"] == []
+    counts = queue.counts()
+    assert counts.quarantined == 1
+    assert counts.ingested == 1
+    assert tuple(job.job_id for job in _inflight_jobs_from_queue(queue)) == (
+        malformed_job.job_id,
+    )
+    failure = json.loads((queue.root / "quarantined" / malformed_job.job_id / "validation_failure.json").read_text())
+    if malformed_result_json:
+        assert failure["result_identity"]["job_id"] == malformed_job.job_id
+        assert failure["result_identity"]["result_json_sha256"] == hashlib.sha256(
+            b"{ malformed"
+        ).hexdigest()
+        assert failure["exception_type"] == "JSONDecodeError"
+        assert "artifact.bin" in failure["actual_file_inventory"]
+    else:
+        assert failure["result_identity"]["outcome"] == "success"
+        assert failure["exception_message"] == "invalid artifact inventory"
 
 
 def test_launcher_requires_real_code_revision_for_run_contract():

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+import hashlib
 import json
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from icgs.data.collection.generation.distributed_validation import (
     ingest_validated_result,
     validate_closed_result,
 )
+from icgs.data.collection.generation import distributed_validation as validation
 from icgs.data.collection.generation.rlbench_attempt import RawAttempt, materialize_raw_attempt, write_closed_attempt_result
 
 
@@ -144,3 +146,73 @@ def test_ingest_rejects_conflicting_episode_id_without_mutating_manifest(tmp_pat
     with pytest.raises(ValueError, match="immutable episode conflict"):
         ingest_validated_result(manifest, validated)
     assert json.dumps(manifest, sort_keys=True) == before
+
+
+def test_validation_failure_captures_identities_trace_source_and_actual_files(tmp_path: Path):
+    job, result = _closed(tmp_path, "success")
+    source_path = tmp_path / "queue" / "ready" / job.job_id
+    try:
+        raise ValueError("malformed closed episode")
+    except ValueError as exc:
+        assert hasattr(validation, "ValidationFailure"), "ValidationFailure is required"
+        job = replace(job, output_root=str(tmp_path))
+        failure = validation.ValidationFailure.capture(
+            job,
+            result,
+            exc,
+            source_path=source_path,
+            allowed_result_root=tmp_path,
+        )
+
+    diagnostic = failure.as_dict()
+    episode_path = Path(result.result_dir) / "episode.json"
+    assert diagnostic["job_identity"]["job_id"] == job.job_id
+    assert diagnostic["result_identity"]["attempt_id"] == result.attempt_id
+    assert diagnostic["result_identity"]["outcome"] == "success"
+    assert diagnostic["exception_type"] == "ValueError"
+    assert diagnostic["exception_message"] == "malformed closed episode"
+    assert "ValueError: malformed closed episode" in diagnostic["traceback"]
+    assert diagnostic["source_path"] == str(source_path)
+    assert diagnostic["actual_file_inventory"]["episode.json"]["sha256"] == hashlib.sha256(
+        episode_path.read_bytes()
+    ).hexdigest()
+
+
+def test_validation_failure_inventory_does_not_follow_symlinks(tmp_path: Path):
+    from dataclasses import replace
+
+    job, result = _closed(tmp_path, "success")
+    job = replace(job, output_root=str(tmp_path))
+    outside_file = tmp_path / "outside-secret.txt"
+    outside_file.write_text("outside", encoding="utf-8")
+    link = Path(result.result_dir) / "outside-link"
+    try:
+        link.symlink_to(outside_file)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not available")
+    try:
+        raise ValueError("inventory test")
+    except ValueError as exc:
+        assert hasattr(validation, "ValidationFailure"), "ValidationFailure is required"
+        failure = validation.ValidationFailure.capture(
+            job,
+            result,
+            exc,
+            source_path=tmp_path / "ready" / job.job_id,
+            allowed_result_root=tmp_path,
+        )
+
+    assert failure.actual_file_inventory["outside-link"]["kind"] == "symlink"
+    assert "bytes" not in failure.actual_file_inventory["outside-link"]
+
+
+def test_closed_result_rejects_dangling_symlink_artifact(tmp_path: Path):
+    job, result = _closed(tmp_path, "success")
+    link = Path(result.result_dir) / "dangling-artifact"
+    try:
+        link.symlink_to(tmp_path / "missing-outside-file")
+    except (OSError, NotImplementedError):
+        pytest.skip("symlinks are not available")
+
+    with pytest.raises(ValueError, match="symlink"):
+        validate_closed_result(job, result)

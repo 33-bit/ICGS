@@ -8,15 +8,18 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
 import time
+from typing import Literal
 
 from huggingface_hub import HfApi, hf_hub_download
 
-from icgs.data.collection.generation.distributed_contracts import RunConfig
+from icgs.data.collection.generation.distributed_contracts import GenerationJob, RunConfig, WorkerResult
 from icgs.data.collection.generation.distributed_planner import DistributedPlanner
 from icgs.data.collection.generation.distributed_publication import HuggingFaceBatchPublisher
-from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue, MalformedReadyResult
 from icgs.data.collection.generation.distributed_validation import ingest_validated_result, validate_closed_result
+from icgs.data.collection.generation.distributed_validation import ValidationFailure
 
 
 MAX_READY_PER_TICK = 100
@@ -68,11 +71,27 @@ def _inflight_jobs_from_queue(queue: FilesystemJobQueue):
         path for path in (queue.root / "claimed").glob("*/*.json")
         if not path.name.endswith(".claim.json")
     )
-    paths.extend(
-        path / "job.json" for path in (queue.root / "ready").iterdir()
-        if path.is_dir() and ".partial-" not in path.name
-    )
     jobs = [GenerationJob.from_dict(json.loads(path.read_text(encoding="utf-8"))) for path in paths]
+    for state in ("ready", "quarantined"):
+        state_root = queue.root / state
+        if state_root.is_symlink() or not state_root.is_dir():
+            raise ValueError(f"queue state must be a real directory: {state_root}")
+        for directory in sorted(state_root.iterdir()):
+            if ".partial-" in directory.name:
+                continue
+            try:
+                if not stat.S_ISDIR(directory.lstat().st_mode):
+                    continue
+                job_path = directory / "job.json"
+                if job_path.is_symlink() or not job_path.is_file():
+                    continue
+                jobs.append(
+                    GenerationJob.from_dict(
+                        json.loads(job_path.read_text(encoding="utf-8"))
+                    )
+                )
+            except (OSError, TypeError, ValueError, KeyError):
+                continue
     by_id = {job.job_id: job for job in jobs}
     if len(by_id) != len(jobs):
         raise ValueError("duplicate in-flight jobs while resuming coordinator")
@@ -168,18 +187,66 @@ class CoordinatorControlPlane:
                 break
             self.queue.enqueue(job)
 
+    def process_ready_result(
+        self,
+        result: WorkerResult | MalformedReadyResult,
+    ) -> Literal["ingested", "quarantined"]:
+        source_path = self.queue.root / "ready" / result.job_id
+        job = None
+        inventory_root = source_path
+        try:
+            job_path = source_path / "job.json"
+            if job_path.is_symlink() or not job_path.is_file():
+                raise ValueError("ready job.json must be a regular file")
+            job = GenerationJob.from_dict(json.loads(job_path.read_text(encoding="utf-8")))
+            if job.job_id != result.job_id:
+                raise ValueError("ready job/result identity mismatch")
+            if isinstance(result, MalformedReadyResult):
+                inventory_root = (
+                    Path(job.output_root)
+                    / "worker-results"
+                    / job.job_id
+                    / job.program_id
+                )
+                raise result.error
+            inventory_root = Path(result.result_dir)
+            allowed_result_root = self.queue.root.parent.resolve()
+            if (
+                inventory_root.is_symlink()
+                or not inventory_root.resolve().is_relative_to(allowed_result_root)
+            ):
+                raise ValueError("result_dir must be contained within the run root")
+            validated = validate_closed_result(job, result)
+            updated_manifest = ingest_validated_result(self.manifest, validated)
+        except Exception as error:
+            failure = ValidationFailure.capture(
+                job,
+                result if isinstance(result, WorkerResult) else None,
+                error,
+                source_path=source_path,
+                allowed_result_root=self.queue.root.parent,
+                job_id=result.job_id,
+                result_identity=(
+                    result.result_identity
+                    if isinstance(result, MalformedReadyResult)
+                    else None
+                ),
+                result_dir=inventory_root,
+            )
+            self.queue.quarantine_ready(result.job_id, failure)
+            return "quarantined"
+
+        self.planner.record_result(result, validated.provenance)
+        self.queue.mark_ingested(result)
+        self.manifest = updated_manifest
+        return "ingested"
+
     def tick(self, *, now_s: float | None = None) -> None:
         now = time.time() if now_s is None else now_s
         self._write_heartbeat(now, phase="tick_start")
         self.queue.recover_stale(now_s=now, stale_after_s=1800.0)
         for result in self.queue.iter_ready()[:MAX_READY_PER_TICK]:
-            job_path = self.queue.root / "ready" / result.job_id / "job.json"
-            from icgs.data.collection.generation.distributed_contracts import GenerationJob
-            job = GenerationJob.from_dict(json.loads(job_path.read_text(encoding="utf-8")))
-            validated = validate_closed_result(job, result)
-            self.manifest = ingest_validated_result(self.manifest, validated)
-            self.planner.record_result(result, validated.provenance)
-            self.queue.mark_ingested(result)
+            self.process_ready_result(result)
         self._refill()
         complete = self.planner.quota_complete()
         receipt = self.publisher.publish_due(

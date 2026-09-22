@@ -6,7 +6,10 @@ from copy import deepcopy
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
+import stat
+import traceback as traceback_module
 from typing import Any, Mapping
 
 from icgs.data.collection.generation.distributed_contracts import GenerationJob, WorkerResult
@@ -27,19 +30,163 @@ class ValidatedResult:
         return self.result.outcome
 
 
+@dataclass(frozen=True)
+class ValidationFailure:
+    job_id: str
+    job_identity: dict[str, Any] | None
+    result_identity: dict[str, Any]
+    exception_type: str
+    exception_message: str
+    traceback: str
+    actual_file_inventory: dict[str, dict[str, Any]]
+    source_path: str
+
+    @classmethod
+    def capture(
+        cls,
+        job: GenerationJob | None,
+        result: WorkerResult | None,
+        error: BaseException,
+        *,
+        source_path: str | Path,
+        allowed_result_root: str | Path | None = None,
+        job_id: str | None = None,
+        result_identity: Mapping[str, Any] | None = None,
+        result_dir: str | Path | None = None,
+    ) -> "ValidationFailure":
+        identity = dict(result_identity) if result_identity is not None else (
+            result.as_dict() if result is not None else None
+        )
+        identity_job_id = result.job_id if result is not None else job_id
+        if identity is None or identity_job_id is None:
+            raise ValueError("result identity and job_id are required for validation failure")
+        allowed_root = allowed_result_root
+        if allowed_root is None:
+            allowed_root = job.output_root if job is not None else source_path
+        inventory_root = result_dir
+        if inventory_root is None:
+            inventory_root = result.result_dir if result is not None else source_path
+        return cls(
+            job_id=identity_job_id,
+            job_identity=job.as_dict() if job is not None else None,
+            result_identity=identity,
+            exception_type=type(error).__name__,
+            exception_message=str(error),
+            traceback="".join(
+                traceback_module.format_exception(type(error), error, error.__traceback__)
+            ),
+            actual_file_inventory=_safe_file_inventory(
+                Path(inventory_root),
+                allowed_root=Path(allowed_root),
+            ),
+            source_path=str(source_path),
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "job_id": self.job_id,
+            "job_identity": self.job_identity,
+            "result_identity": self.result_identity,
+            "exception_type": self.exception_type,
+            "exception_message": self.exception_message,
+            "traceback": self.traceback,
+            "actual_file_inventory": self.actual_file_inventory,
+            "source_path": self.source_path,
+        }
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1 << 20), b""):
-            digest.update(chunk)
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            raise ValueError(f"result inventory entry must be a regular file: {path}")
+        stream = os.fdopen(descriptor, "rb")
+        descriptor = -1
+        with stream:
+            for chunk in iter(lambda: stream.read(1 << 20), b""):
+                digest.update(chunk)
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
     return digest.hexdigest()
 
 
 def _actual_files(root: Path) -> dict[str, str]:
-    return {
-        str(path.relative_to(root)): _sha256(path)
-        for path in sorted(root.rglob("*")) if path.is_file()
-    }
+    actual: dict[str, str] = {}
+    for path in sorted(root.rglob("*")):
+        info = path.lstat()
+        relative = str(path.relative_to(root))
+        if stat.S_ISLNK(info.st_mode):
+            raise ValueError(f"result inventory contains symlink: {relative}")
+        if stat.S_ISDIR(info.st_mode):
+            continue
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError(f"result inventory entry is not a regular file: {relative}")
+        actual[relative] = _sha256(path)
+    return actual
+
+
+def _safe_file_inventory(root: Path, *, allowed_root: Path) -> dict[str, dict[str, Any]]:
+    try:
+        root_info = root.lstat()
+    except OSError:
+        return {}
+    if stat.S_ISLNK(root_info.st_mode):
+        return {".": {"kind": "symlink", "target": os.readlink(root)}}
+    if not stat.S_ISDIR(root_info.st_mode):
+        return {".": {"kind": "not_directory"}}
+
+    allowed = allowed_root.resolve()
+    resolved_root = root.resolve()
+    if not resolved_root.is_relative_to(allowed):
+        return {".": {"kind": "outside_allowed_root", "path": str(root)}}
+
+    inventory: dict[str, dict[str, Any]] = {}
+    for current, directories, files in os.walk(root, followlinks=False):
+        current_path = Path(current)
+        for name in list(directories):
+            path = current_path / name
+            relative = path.relative_to(root).as_posix()
+            try:
+                info = path.lstat()
+            except OSError as exc:
+                directories.remove(name)
+                inventory[relative] = {"kind": "unreadable", "error": str(exc)}
+                continue
+            if stat.S_ISLNK(info.st_mode):
+                directories.remove(name)
+                inventory[relative] = {"kind": "symlink", "target": os.readlink(path)}
+
+        for name in files:
+            path = current_path / name
+            relative = path.relative_to(root).as_posix()
+            try:
+                info = path.lstat()
+                if stat.S_ISLNK(info.st_mode):
+                    inventory[relative] = {"kind": "symlink", "target": os.readlink(path)}
+                    continue
+                if not stat.S_ISREG(info.st_mode):
+                    inventory[relative] = {"kind": "not_regular_file"}
+                    continue
+                flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+                descriptor = os.open(path, flags)
+                digest = hashlib.sha256()
+                with os.fdopen(descriptor, "rb") as stream:
+                    opened = os.fstat(stream.fileno())
+                    if not stat.S_ISREG(opened.st_mode):
+                        inventory[relative] = {"kind": "not_regular_file"}
+                        continue
+                    for chunk in iter(lambda: stream.read(1 << 20), b""):
+                        digest.update(chunk)
+                inventory[relative] = {
+                    "kind": "file",
+                    "bytes": opened.st_size,
+                    "sha256": digest.hexdigest(),
+                }
+            except OSError as exc:
+                inventory[relative] = {"kind": "unreadable", "error": str(exc)}
+    return inventory
 
 
 def _verify_identity(job: GenerationJob, result: WorkerResult) -> None:
@@ -219,4 +366,9 @@ def ingest_validated_result(
     return updated
 
 
-__all__ = ["ValidatedResult", "ingest_validated_result", "validate_closed_result"]
+__all__ = [
+    "ValidatedResult",
+    "ValidationFailure",
+    "ingest_validated_result",
+    "validate_closed_result",
+]
