@@ -164,6 +164,14 @@ def test_launcher_persists_runtime_config_digest_before_starting_children(tmp_pa
 
     assert result == 0
     assert len(calls) == 4
+    coordinator_calls = [
+        command
+        for command in calls
+        if "generation_coordinator.py" in " ".join(command)
+    ]
+    assert len(coordinator_calls) == 1
+    coordinator_command = coordinator_calls[0]
+    assert coordinator_command[coordinator_command.index("--runtime-config") + 1] == str(runtime_snapshot)
     stored = json.loads(run_json.read_text(encoding="utf-8"))
     assert stored["run"]["worker_count"] == 2
     assert stored["run"]["validation_max_jobs"] == 7

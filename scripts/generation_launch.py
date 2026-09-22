@@ -220,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
         "-B",
         str(Path(machine.repo_root) / "scripts" / "generation_coordinator.py"),
         "--run-config", str(run_config_path),
+        "--runtime-config", str(Path(config.run.run_root) / "control" / "runtime_config.json"),
     ]
     coordinator_log = root / "control" / "coordinator.log"
     coordinator_stream = coordinator_log.open("a", encoding="utf-8")
