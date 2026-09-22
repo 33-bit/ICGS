@@ -10,6 +10,7 @@ import pytest
 
 from scripts import generation_launch
 from scripts import generation_coordinator as generation_coordinator_module
+from scripts import generation_launch
 from scripts.generation_launch import validate_smoke_receipt
 from scripts.generation_coordinator import (
     CoordinatorControlPlane,
@@ -179,6 +180,31 @@ def test_coordinator_uses_configured_credential_path(tmp_path: Path):
     )
 
     assert resolved == token_path
+
+
+def test_validation_plan_is_persisted_as_machine_readable_receipt(tmp_path: Path):
+    plan_path = Path("tests/fixtures/generation_validation_config.json")
+    receipt_path = tmp_path / "control" / "validation_receipt.json"
+
+    assert hasattr(generation_launch, "persist_validation_receipt")
+    receipt = generation_launch.persist_validation_receipt(plan_path, receipt_path)
+
+    assert receipt_path.is_file()
+    payload = json.loads(receipt_path.read_text(encoding="utf-8"))
+    assert payload["status"] == "NOT_RUN"
+    assert payload["plan_id"] == "generation-validation-cpu-20260922"
+    assert set(payload["gates"]) == {
+        "success",
+        "valid_failure",
+        "invalid_observation",
+        "infrastructure_failure",
+        "malformed_result",
+        "coordinator_restart",
+        "publication",
+    }
+    assert all(row["status"] == "NOT_RUN" for row in payload["gates"].values())
+    assert all(row["reason"] for row in payload["gates"].values())
+    assert receipt.status == "NOT_RUN"
 
 
 def test_launcher_exports_pinned_simulator_environment_to_workers(tmp_path: Path):

@@ -35,6 +35,16 @@ _RUNTIME_RUN_FIELDS = frozenset({
     "publication_enabled",
     "validation_mode",
 })
+_VALIDATION_GATE_NAMES = (
+    "success",
+    "valid_failure",
+    "invalid_observation",
+    "infrastructure_failure",
+    "malformed_result",
+    "coordinator_restart",
+    "publication",
+)
+_VALIDATION_STATUSES = frozenset({"PASS", "FAIL", "NOT_RUN"})
 
 
 def _nonblank(value: str, name: str) -> str:
@@ -462,7 +472,189 @@ class CoordinatorHeartbeat:
         return cls(**values)
 
 
+@dataclass(frozen=True)
+class ValidationGateSpec:
+    name: str
+    required: bool = True
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "ValidationGateSpec":
+        values = _mapping(payload, "validation gate")
+        _reject_unknown(values, frozenset({"name", "required"}), "validation gate")
+        _require_fields(values, frozenset({"name", "required"}), "validation gate")
+        if values["name"] not in _VALIDATION_GATE_NAMES:
+            raise ValueError(f"unknown validation gate: {values['name']}")
+        if type(values["required"]) is not bool:
+            raise ValueError("validation gate required must be a boolean")
+        return cls(name=str(values["name"]), required=values["required"])
+
+
+@dataclass(frozen=True)
+class ValidationPlan:
+    plan_id: str
+    validation_mode: bool
+    worker_count: int
+    max_jobs: int
+    max_episodes: int
+    max_attempts: int
+    hf_subfolder: str
+    gates: tuple[ValidationGateSpec, ...]
+    fault_injection: dict[str, bool]
+
+    def __post_init__(self) -> None:
+        _nonblank(self.plan_id, "plan_id")
+        if self.validation_mode is not True:
+            raise ValueError("validation plan must set validation_mode=true")
+        if type(self.worker_count) is not int or not 1 <= self.worker_count <= 2:
+            raise ValueError("worker_count must be bounded to 1..2")
+        for name, maximum in (("max_jobs", 8), ("max_episodes", 2), ("max_attempts", 4)):
+            value = getattr(self, name)
+            if type(value) is not int or not 1 <= value <= maximum:
+                raise ValueError(f"{name} must be bounded to 1..{maximum}")
+        if self.max_attempts > self.max_jobs:
+            raise ValueError("max_attempts cannot exceed max_jobs")
+        _validate_hf_subfolder(self.hf_subfolder, validation_mode=True)
+        if not self.hf_subfolder.startswith("validation/validation-cpu-20260922/"):
+            raise ValueError(
+                "validation plan hf_subfolder must remain under "
+                "validation/validation-cpu-20260922/"
+            )
+        names = tuple(gate.name for gate in self.gates)
+        if names != _VALIDATION_GATE_NAMES:
+            raise ValueError("validation plan must name the required gates exactly once")
+        if any(type(value) is not bool for value in self.fault_injection.values()):
+            raise ValueError("fault_injection values must be booleans")
+        allowed_faults = frozenset(_VALIDATION_GATE_NAMES) - {"publication", "success", "valid_failure", "invalid_observation"}
+        if set(self.fault_injection) - allowed_faults:
+            raise ValueError("fault_injection contains an unsupported gate")
+
+    @property
+    def gate_names(self) -> tuple[str, ...]:
+        return tuple(gate.name for gate in self.gates)
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "ValidationPlan":
+        values = _mapping(payload, "validation plan")
+        allowed = frozenset({
+            "plan_id", "validation_mode", "worker_count", "max_jobs",
+            "max_episodes", "max_attempts", "hf_subfolder", "gates",
+            "fault_injection",
+        })
+        _reject_unknown(values, allowed, "validation plan")
+        _require_fields(values, allowed, "validation plan")
+        gates = values["gates"]
+        if not isinstance(gates, list):
+            raise ValueError("validation plan gates must be a list")
+        fault_injection = values["fault_injection"]
+        if not isinstance(fault_injection, Mapping):
+            raise ValueError("fault_injection must be an object")
+        return cls(
+            plan_id=str(values["plan_id"]),
+            validation_mode=values["validation_mode"],
+            worker_count=values["worker_count"],
+            max_jobs=values["max_jobs"],
+            max_episodes=values["max_episodes"],
+            max_attempts=values["max_attempts"],
+            hf_subfolder=str(values["hf_subfolder"]),
+            gates=tuple(ValidationGateSpec.from_dict(item) for item in gates),
+            fault_injection=dict(fault_injection),
+        )
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "plan_id": self.plan_id,
+            "validation_mode": self.validation_mode,
+            "worker_count": self.worker_count,
+            "max_jobs": self.max_jobs,
+            "max_episodes": self.max_episodes,
+            "max_attempts": self.max_attempts,
+            "hf_subfolder": self.hf_subfolder,
+            "gates": [{"name": gate.name, "required": gate.required} for gate in self.gates],
+            "fault_injection": dict(self.fault_injection),
+        }
+
+
+@dataclass(frozen=True)
+class ValidationGateResult:
+    status: str
+    reason: str
+    evidence: dict[str, Any]
+
+    def __post_init__(self) -> None:
+        if self.status not in _VALIDATION_STATUSES:
+            raise ValueError(f"unsupported validation gate status: {self.status}")
+        if not isinstance(self.reason, str):
+            raise ValueError("validation gate reason must be a string")
+        if not isinstance(self.evidence, dict):
+            raise ValueError("validation gate evidence must be an object")
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class ValidationReceipt:
+    plan_id: str
+    status: str
+    gates: dict[str, ValidationGateResult]
+    created_at_s: float | None = None
+    updated_at_s: float | None = None
+    runtime: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        if self.status not in _VALIDATION_STATUSES:
+            raise ValueError(f"unsupported validation receipt status: {self.status}")
+        if not isinstance(self.gates, dict):
+            raise ValueError("validation receipt gates must be an object")
+        if any(not isinstance(value, ValidationGateResult) for value in self.gates.values()):
+            raise ValueError("validation receipt gates must contain ValidationGateResult values")
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "receipt_version": 1,
+            "plan_id": self.plan_id,
+            "status": self.status,
+            "gates": {name: value.as_dict() for name, value in self.gates.items()},
+            "created_at_s": self.created_at_s,
+            "updated_at_s": self.updated_at_s,
+            "runtime": dict(self.runtime or {}),
+        }
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "ValidationReceipt":
+        values = _mapping(payload, "validation receipt")
+        _reject_unknown(
+            values,
+            frozenset({"receipt_version", "plan_id", "status", "gates", "created_at_s", "updated_at_s", "runtime"}),
+            "validation receipt",
+        )
+        gates = values.get("gates")
+        if not isinstance(gates, Mapping):
+            raise ValueError("validation receipt gates must be an object")
+        parsed_gates: dict[str, ValidationGateResult] = {}
+        for name, item in gates.items():
+            if not isinstance(item, Mapping):
+                raise ValueError(f"validation receipt gate must be an object: {name}")
+            parsed_gates[str(name)] = ValidationGateResult(
+                status=str(item.get("status")),
+                reason=item.get("reason", ""),
+                evidence=dict(item.get("evidence") or {}),
+            )
+        return cls(
+            plan_id=str(values["plan_id"]),
+            status=str(values["status"]),
+            gates=parsed_gates,
+            created_at_s=values.get("created_at_s"),
+            updated_at_s=values.get("updated_at_s"),
+            runtime=dict(values.get("runtime") or {}),
+        )
+
+
 __all__ = [
+    "ValidationGateResult",
+    "ValidationGateSpec",
+    "ValidationPlan",
+    "ValidationReceipt",
     "GenerationJob",
     "GenerationRuntimeConfig",
     "CoordinatorHeartbeat",

@@ -14,6 +14,11 @@ from icgs.data.collection.generation.distributed_contracts import (
     GenerationRuntimeConfig,
     RunConfig,
 )
+from icgs.data.collection.generation.distributed_validation import (
+    build_validation_receipt,
+    load_validation_plan,
+    write_validation_receipt,
+)
 from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
 
 
@@ -71,6 +76,19 @@ def build_process_environment(
     if not isinstance(config, GenerationRuntimeConfig):
         raise TypeError("config must be a GenerationRuntimeConfig")
     return config.resolved_environment(base=base)
+
+
+def persist_validation_receipt(
+    validation_plan_path: str | Path,
+    receipt_path: str | Path,
+    *,
+    runtime: dict | None = None,
+) -> "ValidationReceipt":
+    """Create the explicit NOT_RUN receipt for a JSON validation plan."""
+    plan = load_validation_plan(validation_plan_path)
+    receipt = build_validation_receipt(plan, runtime=runtime)
+    write_validation_receipt(receipt_path, receipt, plan)
+    return receipt
 
 
 def _atomic_write(path: Path, content: bytes) -> None:
@@ -134,6 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--approved-manifest", required=True)
     parser.add_argument("--code-revision", required=True)
     parser.add_argument("--smoke-receipt", required=True)
+    parser.add_argument("--validation-plan")
     parser.add_argument("--detach", action="store_true")
     args = parser.parse_args(argv)
 
@@ -150,6 +169,26 @@ def main(argv: list[str] | None = None) -> int:
         code_revision=args.code_revision,
     )
     root = Path(config.run.run_root)
+    if args.validation_plan:
+        if not config.run.validation_mode:
+            raise ValueError("--validation-plan requires validation_mode=true")
+        plan = load_validation_plan(
+            args.validation_plan,
+            validation_mode=config.run.validation_mode,
+        )
+        if config.run.worker_count > plan.worker_count:
+            raise ValueError("runtime config worker_count exceeds validation plan bound")
+        persist_validation_receipt(
+            args.validation_plan,
+            root / "control" / "validation_receipt.json",
+            runtime={
+                "worker_count": config.run.worker_count,
+                "max_jobs": plan.max_jobs,
+                "max_episodes": plan.max_episodes,
+                "max_attempts": plan.max_attempts,
+                "hf_subfolder": config.run.hf_subfolder,
+            },
+        )
     commands = build_worker_commands(config, args.approved_manifest)
     environment = build_process_environment(config)
     processes = []

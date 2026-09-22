@@ -1,0 +1,23 @@
+{
+  "plan_id": "generation-validation-cpu-20260922",
+  "validation_mode": true,
+  "worker_count": 2,
+  "max_jobs": 7,
+  "max_episodes": 2,
+  "max_attempts": 4,
+  "hf_subfolder": "validation/validation-cpu-20260922/generation-validation-cpu-20260922",
+  "gates": [
+    {"name": "success", "required": true},
+    {"name": "valid_failure", "required": true},
+    {"name": "invalid_observation", "required": true},
+    {"name": "infrastructure_failure", "required": true},
+    {"name": "malformed_result", "required": true},
+    {"name": "coordinator_restart", "required": true},
+    {"name": "publication", "required": true}
+  ],
+  "fault_injection": {
+    "malformed_result": true,
+    "coordinator_restart": true,
+    "infrastructure_failure": true
+  }
+}

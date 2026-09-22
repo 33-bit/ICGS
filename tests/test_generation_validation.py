@@ -10,8 +10,15 @@ import pytest
 
 from icgs.data.collection.generation.batch import AttemptPlan
 from icgs.data.collection.generation.distributed_contracts import GenerationJob
+from icgs.data.collection.generation.distributed_contracts import (
+    ValidationGateResult,
+    ValidationPlan,
+    ValidationReceipt,
+)
 from icgs.data.collection.generation.distributed_validation import (
     ingest_validated_result,
+    load_validation_plan,
+    validate_validation_receipt,
     validate_closed_result,
 )
 from icgs.data.collection.generation import distributed_validation as validation
@@ -216,3 +223,82 @@ def test_closed_result_rejects_dangling_symlink_artifact(tmp_path: Path):
 
     with pytest.raises(ValueError, match="symlink"):
         validate_closed_result(job, result)
+
+
+def test_bounded_validation_plan_fixture_parses_with_required_gates():
+    plan = load_validation_plan(Path("tests/fixtures/generation_validation_config.json"))
+
+    assert plan.validation_mode is True
+    assert plan.worker_count == 2
+    assert plan.max_jobs <= 8
+    assert plan.max_episodes <= 2
+    assert plan.max_attempts <= 4
+    assert plan.hf_subfolder.startswith("validation/validation-cpu-20260922/")
+    assert plan.gate_names == (
+        "success",
+        "valid_failure",
+        "invalid_observation",
+        "infrastructure_failure",
+        "malformed_result",
+        "coordinator_restart",
+        "publication",
+    )
+
+
+def test_validation_plan_rejects_unbounded_or_production_fault_injection(tmp_path: Path):
+    payload = json.loads(Path("tests/fixtures/generation_validation_config.json").read_text())
+    payload["max_jobs"] = 9
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="max_jobs"):
+        load_validation_plan(path)
+
+    payload = json.loads(Path("tests/fixtures/generation_validation_config.json").read_text())
+    payload["validation_mode"] = False
+    payload["fault_injection"] = {"malformed_result": True}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="fault_injection"):
+        load_validation_plan(path, validation_mode=False)
+
+
+def test_validation_receipt_requires_evidence_for_pass_and_reason_for_not_run():
+    plan = ValidationPlan.from_dict({
+        "plan_id": "bounded",
+        "validation_mode": True,
+        "worker_count": 2,
+        "max_jobs": 2,
+        "max_episodes": 1,
+        "max_attempts": 2,
+        "hf_subfolder": "validation/validation-cpu-20260922/bounded",
+        "gates": [
+            {"name": name, "required": True}
+            for name in (
+                "success", "valid_failure", "invalid_observation",
+                "infrastructure_failure", "malformed_result",
+                "coordinator_restart", "publication",
+            )
+        ],
+        "fault_injection": {},
+    })
+    receipt = ValidationReceipt(
+        plan_id=plan.plan_id,
+        status="NOT_RUN",
+        gates={
+            "success": ValidationGateResult(status="PASS", reason="", evidence={}),
+            "valid_failure": ValidationGateResult(status="NOT_RUN", reason="not exercised", evidence={}),
+            "invalid_observation": ValidationGateResult(status="NOT_RUN", reason="not exercised", evidence={}),
+            "infrastructure_failure": ValidationGateResult(status="NOT_RUN", reason="not exercised", evidence={}),
+            "malformed_result": ValidationGateResult(status="NOT_RUN", reason="not exercised", evidence={}),
+            "coordinator_restart": ValidationGateResult(status="NOT_RUN", reason="not exercised", evidence={}),
+            "publication": ValidationGateResult(status="NOT_RUN", reason="not exercised", evidence={}),
+        },
+    )
+    with pytest.raises(ValueError, match="evidence"):
+        validate_validation_receipt(receipt, plan)
+
+    receipt = ValidationReceipt(
+        plan_id=plan.plan_id,
+        status="NOT_RUN",
+        gates={name: ValidationGateResult(status="NOT_RUN", reason="blocked", evidence={}) for name in plan.gate_names},
+    )
+    assert validate_validation_receipt(receipt, plan).status == "NOT_RUN"

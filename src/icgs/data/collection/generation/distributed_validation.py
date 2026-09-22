@@ -9,10 +9,17 @@ import json
 import os
 from pathlib import Path
 import stat
+import time
 import traceback as traceback_module
 from typing import Any, Mapping
 
-from icgs.data.collection.generation.distributed_contracts import GenerationJob, WorkerResult
+from icgs.data.collection.generation.distributed_contracts import (
+    GenerationJob,
+    ValidationGateResult,
+    ValidationPlan,
+    ValidationReceipt,
+    WorkerResult,
+)
 from icgs.data.collection.generation.report import split_disjointness_report
 from icgs.data.schemas.episode_records import validate_episode
 
@@ -93,6 +100,137 @@ class ValidationFailure:
             "actual_file_inventory": self.actual_file_inventory,
             "source_path": self.source_path,
         }
+
+
+def load_validation_plan(
+    path: str | Path,
+    *,
+    validation_mode: bool | None = None,
+) -> ValidationPlan:
+    """Load a bounded JSON validation plan; never import or execute plan content."""
+    payload = _read_strict_json_object(path)
+    if validation_mode is False and payload.get("fault_injection"):
+        raise ValueError("fault_injection is only allowed in validation_mode")
+    return ValidationPlan.from_dict(payload)
+
+
+def _read_strict_json_object(path: str | Path) -> dict[str, Any]:
+    def reject_duplicate(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError(f"duplicate JSON field: {key}")
+            result[key] = value
+        return result
+
+    def reject_constant(value: str) -> None:
+        raise ValueError(f"invalid JSON constant: {value}")
+
+    payload = json.loads(
+        Path(path).read_text(encoding="utf-8"),
+        object_pairs_hook=reject_duplicate,
+        parse_constant=reject_constant,
+    )
+    if not isinstance(payload, dict):
+        raise ValueError("validation plan must be a JSON object")
+    return payload
+
+
+def validate_validation_receipt(
+    receipt: ValidationReceipt,
+    plan: ValidationPlan,
+) -> ValidationReceipt:
+    """Validate explicit PASS/FAIL/NOT_RUN states and their evidence contract."""
+    if not isinstance(receipt, ValidationReceipt):
+        raise TypeError("receipt must be a ValidationReceipt")
+    if not isinstance(plan, ValidationPlan):
+        raise TypeError("plan must be a ValidationPlan")
+    if receipt.plan_id != plan.plan_id:
+        raise ValueError("validation receipt plan_id does not match plan")
+    if tuple(receipt.gates) != plan.gate_names:
+        raise ValueError("validation receipt gates do not match plan")
+
+    failures = []
+    not_run = []
+    for name in plan.gate_names:
+        result = receipt.gates[name]
+        if result.status == "PASS":
+            if not result.evidence:
+                raise ValueError(f"validation PASS requires evidence: {name}")
+        elif result.status in {"FAIL", "NOT_RUN"}:
+            if not result.reason.strip():
+                raise ValueError(f"validation {result.status} requires a reason: {name}")
+            if result.status == "FAIL":
+                failures.append(name)
+            else:
+                not_run.append(name)
+
+    expected_status = "FAIL" if failures else "NOT_RUN" if not_run else "PASS"
+    if receipt.status != expected_status:
+        raise ValueError(
+            f"validation receipt status {receipt.status} does not match gate states {expected_status}"
+        )
+    if receipt.status == "PASS":
+        runtime = receipt.runtime or {}
+        required_runtime = {"worker_count", "max_jobs", "max_episodes", "max_attempts", "hf_subfolder"}
+        missing = sorted(required_runtime - set(runtime))
+        if missing:
+            raise ValueError("validation PASS requires runtime evidence: " + ", ".join(missing))
+        if runtime["worker_count"] > plan.worker_count:
+            raise ValueError("validation receipt exceeds worker bound")
+        if runtime["max_jobs"] > plan.max_jobs or runtime["max_episodes"] > plan.max_episodes:
+            raise ValueError("validation receipt exceeds bounded plan")
+        if not str(runtime["hf_subfolder"]).startswith(
+            "validation/validation-cpu-20260922/"
+        ):
+            raise ValueError("validation receipt escapes isolated HF prefix")
+    return receipt
+
+
+def build_validation_receipt(
+    plan: ValidationPlan,
+    *,
+    gates: Mapping[str, ValidationGateResult] | None = None,
+    runtime: Mapping[str, Any] | None = None,
+    now_s: float | None = None,
+) -> ValidationReceipt:
+    timestamp = time.time() if now_s is None else float(now_s)
+    gate_results = dict(gates or {
+        name: ValidationGateResult(
+            status="NOT_RUN",
+            reason="validation execution was not run",
+            evidence={},
+        )
+        for name in plan.gate_names
+    })
+    statuses = {result.status for result in gate_results.values()}
+    status = "FAIL" if "FAIL" in statuses else "NOT_RUN" if "NOT_RUN" in statuses else "PASS"
+    receipt = ValidationReceipt(
+        plan_id=plan.plan_id,
+        status=status,
+        gates=gate_results,
+        created_at_s=timestamp,
+        updated_at_s=timestamp,
+        runtime=dict(runtime or {}),
+    )
+    return validate_validation_receipt(receipt, plan)
+
+
+def write_validation_receipt(
+    path: str | Path,
+    receipt: ValidationReceipt,
+    plan: ValidationPlan,
+) -> Path:
+    validate_validation_receipt(receipt, plan)
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + f".partial-{os.getpid()}-{time.time_ns()}")
+    temporary.write_text(
+        json.dumps(receipt.as_dict(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, target)
+    return target
 
 
 def _sha256(path: Path) -> str:
@@ -369,6 +507,13 @@ def ingest_validated_result(
 __all__ = [
     "ValidatedResult",
     "ValidationFailure",
+    "ValidationGateResult",
+    "ValidationPlan",
+    "ValidationReceipt",
+    "build_validation_receipt",
     "ingest_validated_result",
+    "load_validation_plan",
+    "validate_validation_receipt",
     "validate_closed_result",
+    "write_validation_receipt",
 ]

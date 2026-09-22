@@ -59,6 +59,14 @@ may be reconciled during an explicit resume.
 - Publication rate limits and transient upload timeouts defer work; they do not
   authorize dropping queue entries.
 
+Bounded validation is data-driven. `tests/fixtures/generation_validation_config.json`
+is a JSON plan consumed by the existing launcher and validation modules; it is not
+an executable validation program. Plans are limited to at most two workers, eight
+jobs, two episodes and four attempts, and validation receipts use explicit
+`PASS`, `FAIL` or `NOT_RUN` states. A `PASS` requires gate evidence, while a
+`FAIL` or `NOT_RUN` requires a reason. Validation receipts remain isolated under
+the `validation/validation-cpu-20260922/` publication prefix.
+
 Historical generation audits under `docs/audits/` record what happened during
 earlier launches. They are evidence, not current commands.
 
