@@ -3,35 +3,149 @@ from __future__ import annotations
 from pathlib import Path
 import json
 import os
+import hashlib
 
-from scripts.generation_launch import build_worker_commands, validate_smoke_receipt
+import pytest
+
+from scripts import generation_launch
+from scripts.generation_launch import validate_smoke_receipt
 from scripts.generation_coordinator import CoordinatorLock, _inflight_jobs_from_queue
 from scripts.generation_watchdog import (
     _coordinator_lock_is_free,
     _pid_matches,
     reconcile_processes,
 )
-from icgs.data.collection.generation.distributed_contracts import GenerationJob, RunConfig
+from icgs.data.collection.generation.distributed_contracts import (
+    GenerationJob,
+    GenerationRuntimeConfig,
+    RunConfig,
+)
 from icgs.data.collection.generation.distributed_planner import DistributedPlanner
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
 
 
-def test_launcher_builds_exactly_200_fixed_display_workers():
-    commands = build_worker_commands(
-        workers=200,
-        run_root="/content/run",
-        approved_manifest="/content/manifest.json",
+def _runtime_config(tmp_path: Path, *, publication_enabled: bool = False):
+    repo_root = tmp_path / "repo"
+    simulator_root = tmp_path / "simulator"
+    rlbench_root = tmp_path / "rlbench"
+    run_root = tmp_path / "run"
+    python_executable = tmp_path / "venv" / "bin" / "python"
+    for directory in (repo_root, simulator_root, rlbench_root, run_root, python_executable.parent):
+        directory.mkdir(parents=True, exist_ok=True)
+    python_executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    python_executable.chmod(0o755)
+    return GenerationRuntimeConfig.from_dict({
+        "machine": {
+            "repo_root": str(repo_root),
+            "python_executable": str(python_executable),
+            "simulator_root": str(simulator_root),
+            "rlbench_root": str(rlbench_root),
+            "display_base": 41,
+            "display_width": 1366,
+            "display_height": 768,
+            "simulator_slots": 2,
+            "worker_timeout_s": 47,
+        },
+        "run": {
+            "run_id": "control-test",
+            "run_root": str(run_root),
+            "worker_count": 2,
+            "publish_interval_s": 91,
+            "hf_repo": "33bit/icgs",
+            "hf_subfolder": "validation/control-test",
+            "publication_enabled": publication_enabled,
+            "validation_mode": True,
+        },
+    })
+
+
+def _required_api(name: str):
+    assert hasattr(generation_launch, name), f"generation_launch.{name} is required"
+    return getattr(generation_launch, name)
+
+
+def test_launcher_builds_workers_from_configured_limits_and_paths(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    approved_manifest = str(tmp_path / "approved.json")
+    try:
+        commands = _required_api("build_worker_commands")(config, approved_manifest)
+    except TypeError as exc:
+        pytest.fail(f"build_worker_commands must accept a runtime config: {exc}")
+
+    assert len(commands) == 2
+    assert [command[command.index("--worker-id") + 1] for command in commands] == ["000", "001"]
+    assert [command[command.index("--server-num") + 1] for command in commands] == ["41", "42"]
+    assert all(command[command.index("-s") + 1] == "-screen 0 1366x768x24" for command in commands)
+    assert all(config.machine.python_executable in command for command in commands)
+    assert all(
+        str(Path(config.machine.repo_root) / "scripts" / "generation_worker.py") in command
+        for command in commands
     )
-    assert len(commands) == 200
-    assert commands[0][commands[0].index("--server-num") + 1] == "200"
-    assert commands[-1][commands[-1].index("--server-num") + 1] == "399"
-    assert all("-a" not in command for command in commands)
+    assert all(
+        command[command.index("--runtime-config") + 1]
+        == str(Path(config.run.run_root) / "control" / "runtime_config.json")
+        for command in commands
+    )
+    assert all(command[command.index("--approved-manifest") + 1] == approved_manifest for command in commands)
+    assert all("/content" not in " ".join(command) for command in commands)
 
 
-def test_launcher_rejects_non_200_workers():
-    import pytest
-    with pytest.raises(ValueError, match="workers must be 200"):
-        build_worker_commands(workers=199, run_root="/content/run", approved_manifest="/content/manifest.json")
+def test_launcher_persists_runtime_config_digest_before_starting_children(tmp_path: Path, monkeypatch):
+    config = _runtime_config(tmp_path, publication_enabled=True)
+    runtime_config_path = tmp_path / "runtime.json"
+    runtime_config_path.write_text(json.dumps(config.as_dict()), encoding="utf-8")
+    approved_manifest = tmp_path / "approved.json"
+    approved_manifest.write_text("{}\n", encoding="utf-8")
+    smoke_receipt = tmp_path / "smoke.json"
+    from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
+
+    smoke_receipt.write_text(json.dumps({
+        "results": [
+            {"program_id": program_id, "result_class": "success", "timeline_ok": True}
+            for program_id in GENERATION_PROGRAMS
+        ],
+    }), encoding="utf-8")
+    run_json = Path(config.run.run_root) / "control" / "run.json"
+    runtime_snapshot = run_json.parent / "runtime_config.json"
+    calls = []
+
+    class Process:
+        def __init__(self, pid: int):
+            self.pid = pid
+
+        def wait(self):
+            return 0
+
+    def popen(command, **kwargs):
+        assert run_json.is_file()
+        assert runtime_snapshot.is_file()
+        payload = json.loads(run_json.read_text(encoding="utf-8"))
+        snapshot_bytes = runtime_snapshot.read_bytes()
+        assert payload["runtime_config"] == json.loads(snapshot_bytes)
+        assert payload["runtime_config_sha256"] == hashlib.sha256(snapshot_bytes).hexdigest()
+        calls.append(command)
+        return Process(1000 + len(calls))
+
+    monkeypatch.setattr(generation_launch.subprocess, "Popen", popen)
+    args = [
+        "--runtime-config", str(runtime_config_path),
+        "--approved-manifest", str(approved_manifest),
+        "--code-revision", "a" * 40,
+        "--smoke-receipt", str(smoke_receipt),
+        "--detach",
+    ]
+    try:
+        result = generation_launch.main(args)
+    except TypeError as exc:
+        pytest.fail(f"generation_launch.main must accept runtime-config arguments: {exc}")
+    except SystemExit as exc:
+        pytest.fail(f"generation_launch rejected runtime-config arguments: {exc}")
+
+    assert result == 0
+    assert len(calls) == 4
+    stored = json.loads(run_json.read_text(encoding="utf-8"))
+    assert stored["run"]["worker_count"] == 2
+    assert stored["runtime_config"] == config.as_dict()
 
 
 def test_no_stop_call_in_control_sources():
@@ -43,12 +157,13 @@ def test_no_stop_call_in_control_sources():
         assert "colab stop" not in Path(name).read_text(encoding="utf-8")
 
 
-def test_launcher_exports_pinned_simulator_environment_to_workers():
-    text = Path("scripts/generation_launch.py").read_text(encoding="utf-8")
-    assert "COPPELIASIM_ROOT" in text
-    assert "LD_LIBRARY_PATH" in text
-    assert "QT_QPA_PLATFORM_PLUGIN_PATH" in text
-    assert "PYTHONPATH" in text
+def test_launcher_exports_pinned_simulator_environment_to_workers(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    environment = _required_api("build_process_environment")(config, base={})
+    assert environment["COPPELIASIM_ROOT"] == config.machine.simulator_root
+    assert environment["LD_LIBRARY_PATH"] == config.machine.simulator_root
+    assert environment["QT_QPA_PLATFORM_PLUGIN_PATH"] == config.machine.simulator_root
+    assert str(Path(config.machine.repo_root) / "src") in environment["PYTHONPATH"]
 
 
 def test_coordinator_bounds_ingestion_per_tick():

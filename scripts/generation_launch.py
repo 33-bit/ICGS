@@ -1,15 +1,19 @@
-"""Preflight and launch exactly 200 generation workers plus one coordinator."""
+"""Preflight and launch the configured generation workers and coordinator."""
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from pathlib import Path
 import subprocess
 import time
 
-from icgs.data.collection.generation.distributed_contracts import RunConfig
+from icgs.data.collection.generation.distributed_contracts import (
+    GenerationRuntimeConfig,
+    RunConfig,
+)
 from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
 
 
@@ -32,108 +36,171 @@ def validate_smoke_receipt(path: str | Path, *, expected_program_ids) -> None:
         raise ValueError("blocking smoke outcomes: " + ", ".join(sorted(blocking)))
 
 
-def build_worker_commands(*, workers: int, run_root: str, approved_manifest: str) -> list[list[str]]:
-    if workers != 200:
-        raise ValueError("workers must be 200")
+def build_worker_commands(
+    config: GenerationRuntimeConfig,
+    approved_manifest: str | Path,
+) -> list[list[str]]:
+    if not isinstance(config, GenerationRuntimeConfig):
+        raise TypeError("config must be a GenerationRuntimeConfig")
+    machine = config.machine
+    worker_count = config.run.worker_count
+    worker_id_width = max(3, len(str(worker_count - 1)))
+    runtime_config_path = Path(config.run.run_root) / "control" / "runtime_config.json"
+    worker_script = Path(machine.repo_root) / "scripts" / "generation_worker.py"
     commands = []
-    for index in range(workers):
-        worker_id = f"{index:03d}"
+    for index in range(worker_count):
+        worker_id = f"{index:0{worker_id_width}d}"
         commands.append([
-            "xvfb-run", "--server-num", str(200 + index),
-            "-s", "-screen 0 1280x1024x24",
-            "/content/icgs-data-env/bin/python", "-B",
-            "/content/ICGS/scripts/generation_worker.py",
-            "--worker-id", worker_id, "--run-root", run_root,
-            "--approved-manifest", approved_manifest,
+            "xvfb-run",
+            "--server-num", str(machine.display_base + index),
+            "-s", f"-screen 0 {machine.display_width}x{machine.display_height}x24",
+            machine.python_executable,
+            "-B",
+            str(worker_script),
+            "--worker-id", worker_id,
+            "--runtime-config", str(runtime_config_path),
+            "--approved-manifest", str(approved_manifest),
         ])
     return commands
 
 
-def main() -> int:
+def build_process_environment(
+    config: GenerationRuntimeConfig,
+    base: dict[str, str] | None = None,
+) -> dict[str, str]:
+    if not isinstance(config, GenerationRuntimeConfig):
+        raise TypeError("config must be a GenerationRuntimeConfig")
+    return config.resolved_environment(base=base)
+
+
+def _atomic_write(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + f".partial-{os.getpid()}")
+    temporary.write_bytes(content)
+    os.replace(temporary, path)
+
+
+def persist_run_config(
+    config: GenerationRuntimeConfig,
+    approved_manifest: str | Path,
+    *,
+    code_revision: str,
+) -> Path:
+    """Persist the worker-readable config and its exact digest before launch."""
+    if not isinstance(config, GenerationRuntimeConfig):
+        raise TypeError("config must be a GenerationRuntimeConfig")
+    control_root = Path(config.run.run_root) / "control"
+    runtime_payload = config.as_dict()
+    runtime_bytes = (
+        json.dumps(runtime_payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    runtime_digest = hashlib.sha256(runtime_bytes).hexdigest()
+    runtime_path = control_root / "runtime_config.json"
+    _atomic_write(runtime_path, runtime_bytes)
+
+    manifest_path = Path(approved_manifest)
+    manifest_digest = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    hf_repo = config.run.hf_repo or "33bit/icgs"
+    hf_subfolder = config.run.hf_subfolder or "generation"
+    run = RunConfig(
+        run_id=config.run.run_id,
+        run_root=config.run.run_root,
+        code_revision=code_revision,
+        approved_manifest_sha256=manifest_digest,
+        worker_count=config.run.worker_count,
+        publish_interval_s=config.run.publish_interval_s,
+        hf_repo=hf_repo,
+        hf_subfolder=hf_subfolder,
+        publication_enabled=config.run.publication_enabled,
+        validation_mode=config.run.validation_mode,
+    )
+    run_payload = {
+        "run": run.as_dict(),
+        "approved_manifest": str(manifest_path),
+        "manifest": {"manifest_version": 3, "episodes": [], "failure_attempts": []},
+        "runtime_config": runtime_payload,
+        "runtime_config_path": str(runtime_path),
+        "runtime_config_sha256": runtime_digest,
+    }
+    run_path = control_root / "run.json"
+    serialized_run = (json.dumps(run_payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
+    _atomic_write(run_path, serialized_run)
+    return run_path
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run-root", required=True)
-    parser.add_argument("--workers", type=int, default=200)
-    parser.add_argument("--publish-interval-s", type=int, default=300)
-    parser.add_argument("--hf-repo", default="33bit/icgs")
-    parser.add_argument("--hf-subfolder", default="generation")
+    parser.add_argument("--runtime-config", required=True)
     parser.add_argument("--approved-manifest", required=True)
     parser.add_argument("--code-revision", required=True)
     parser.add_argument("--smoke-receipt", required=True)
-    parser.add_argument("--publication-enabled", action="store_true")
     parser.add_argument("--detach", action="store_true")
-    args = parser.parse_args()
-    if args.publish_interval_s != 300:
-        raise ValueError("publish interval must be 300 seconds")
-    if not args.publication_enabled:
-        raise ValueError("full launch requires --publication-enabled")
-    if not Path("/content/.icgs_hf_token").is_file():
-        raise RuntimeError("/content/.icgs_hf_token is required for coordinator")
+    args = parser.parse_args(argv)
+
+    unchecked = GenerationRuntimeConfig.from_file(args.runtime_config, check_paths=False)
+    Path(unchecked.run.run_root).mkdir(parents=True, exist_ok=True)
+    config = GenerationRuntimeConfig.from_file(args.runtime_config, check_paths=True)
+    if not config.run.publication_enabled:
+        raise ValueError("full launch requires publication_enabled in runtime config")
     validate_smoke_receipt(args.smoke_receipt, expected_program_ids=GENERATION_PROGRAMS)
-    root = Path(args.run_root)
-    (root / "control").mkdir(parents=True, exist_ok=True)
-    commands = build_worker_commands(workers=args.workers, run_root=str(root), approved_manifest=args.approved_manifest)
-    env = os.environ.copy()
-    simulator_root = "/content/icgs-ephemeral/CoppeliaSim"
-    rlbench_root = "/content/icgs-ephemeral/RLBench"
-    env.update({
-        "ICGS_HF_REPO": args.hf_repo,
-        "ICGS_HF_SUBFOLDER": args.hf_subfolder,
-        "COPPELIASIM_ROOT": simulator_root,
-        "LD_LIBRARY_PATH": simulator_root + (":" + env["LD_LIBRARY_PATH"] if env.get("LD_LIBRARY_PATH") else ""),
-        "QT_QPA_PLATFORM_PLUGIN_PATH": simulator_root,
-        "PYTHONPATH": ":".join(filter(None, ["/content/ICGS/src", rlbench_root, env.get("PYTHONPATH")])),
-    })
-    coordinator = [
-        "/content/icgs-data-env/bin/python", "-B",
-        "/content/ICGS/scripts/generation_coordinator.py",
-        "--run-config", str(root / "control" / "run.json"),
-    ]
-    import hashlib
-    approved_digest = hashlib.sha256(Path(args.approved_manifest).read_bytes()).hexdigest()
-    run_id = root.name
-    run_config = RunConfig(
-        run_id=run_id,
-        run_root=str(root),
+
+    run_config_path = persist_run_config(
+        config,
+        args.approved_manifest,
         code_revision=args.code_revision,
-        approved_manifest_sha256=approved_digest,
-        worker_count=args.workers,
-        publish_interval_s=args.publish_interval_s,
-        hf_repo=args.hf_repo,
-        hf_subfolder=args.hf_subfolder,
     )
-    (root / "control" / "run.json").write_text(json.dumps({
-        "run": run_config.as_dict(),
-        "approved_manifest": args.approved_manifest,
-        "manifest": {"manifest_version": 3, "episodes": [], "failure_attempts": []},
-    }, indent=2) + "\n", encoding="utf-8")
+    root = Path(config.run.run_root)
+    commands = build_worker_commands(config, args.approved_manifest)
+    environment = build_process_environment(config)
     processes = []
     worker_pids = {}
     for command in commands:
         process = subprocess.Popen(
-            command, env=env, start_new_session=True,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            command,
+            env=environment,
+            start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
         )
-        worker_pids[command[command.index("--worker-id") + 1]] = process.pid
+        worker_id = command[command.index("--worker-id") + 1]
+        worker_pids[worker_id] = process.pid
         processes.append(process)
+
+    machine = config.machine
+    coordinator = [
+        machine.python_executable,
+        "-B",
+        str(Path(machine.repo_root) / "scripts" / "generation_coordinator.py"),
+        "--run-config", str(run_config_path),
+    ]
     coordinator_log = root / "control" / "coordinator.log"
     coordinator_stream = coordinator_log.open("a", encoding="utf-8")
     coordinator_process = subprocess.Popen(
-        coordinator, env=env, start_new_session=True,
-        stdout=coordinator_stream, stderr=subprocess.STDOUT,
+        coordinator,
+        env=environment,
+        start_new_session=True,
+        stdout=coordinator_stream,
+        stderr=subprocess.STDOUT,
     )
     processes.append(coordinator_process)
+
     watchdog = [
-        "/content/icgs-data-env/bin/python", "-B",
-        "/content/ICGS/scripts/generation_watchdog.py",
+        machine.python_executable,
+        "-B",
+        str(Path(machine.repo_root) / "scripts" / "generation_watchdog.py"),
         "--run-root", str(root),
     ]
     watchdog_process = subprocess.Popen(
-        watchdog, env=env, start_new_session=True,
-        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        watchdog,
+        env=environment,
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
     processes.append(watchdog_process)
+
     launch_receipt = {
-        "workers": 200,
+        "workers": config.run.worker_count,
         "worker_pids": worker_pids,
         "coordinator_pid": coordinator_process.pid,
         "watchdog_pid": watchdog_process.pid,

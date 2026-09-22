@@ -6,20 +6,28 @@ import argparse
 import fcntl
 import hashlib
 import json
-import os
 from pathlib import Path
 import shutil
 import subprocess
 import time
-from icgs.data.collection.generation.distributed_contracts import GenerationJob, WorkerResult
+from icgs.data.collection.generation.distributed_contracts import (
+    GenerationJob,
+    GenerationRuntimeConfig,
+    WorkerResult,
+)
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
 
 
-def display_number(worker_id: str) -> int:
-    if worker_id not in {f"{index:03d}" for index in range(200)}:
-        raise ValueError("worker_id must be 000..199")
-    # The launcher maps each slot to display 200 + worker_id.
-    return 200 + int(worker_id)
+def display_number(worker_id: str, config: GenerationRuntimeConfig) -> int:
+    if not isinstance(config, GenerationRuntimeConfig):
+        raise TypeError("config must be a GenerationRuntimeConfig")
+    width = max(3, len(str(config.run.worker_count - 1)))
+    if not worker_id.isdecimal():
+        raise ValueError("worker_id must be a zero-padded worker index")
+    index = int(worker_id)
+    if index >= config.run.worker_count or worker_id != f"{index:0{width}d}":
+        raise ValueError(f"worker_id must identify a worker in 0..{config.run.worker_count - 1}")
+    return config.machine.display_base + index
 
 
 def _file_hashes(root: Path) -> dict[str, str]:
@@ -34,20 +42,14 @@ def _file_hashes(root: Path) -> dict[str, str]:
 class SimulatorSlotPool:
     """Cross-process semaphore for memory-heavy simulator launches.
 
-    The worker count remains 200, but a VM can configure a smaller number of
-    simultaneous CoppeliaSim processes with ``ICGS_SIMULATOR_SLOTS``. POSIX
-    flock releases a slot automatically if a worker is killed, so recovery
-    never depends on stale lease metadata.
+    POSIX flock releases a slot automatically if a worker is killed, so
+    recovery never depends on stale lease metadata.
     """
 
-    def __init__(self, run_root: str | Path):
-        try:
-            slot_count = int(os.environ.get("ICGS_SIMULATOR_SLOTS", "200"))
-        except ValueError as exc:
-            raise ValueError("ICGS_SIMULATOR_SLOTS must be an integer") from exc
-        if slot_count <= 0:
-            raise ValueError("ICGS_SIMULATOR_SLOTS must be positive")
-        self.slot_count = slot_count
+    def __init__(self, run_root: str | Path, config: GenerationRuntimeConfig):
+        if not isinstance(config, GenerationRuntimeConfig):
+            raise TypeError("config must be a GenerationRuntimeConfig")
+        self.slot_count = config.machine.simulator_slots
         self.root = Path(run_root) / "control" / "simulator-slots"
         self.root.mkdir(parents=True, exist_ok=True)
         self._stream = None
@@ -81,11 +83,13 @@ def run_worker(
     worker_id: str,
     queue: FilesystemJobQueue,
     *,
-    approved_manifest: str = "/content/ICGS/artifacts/composition/approved_composition_manifest.json",
+    config: GenerationRuntimeConfig,
+    approved_manifest: str,
     once: bool = False,
     idle_poll_s: float = 1.0,
+    runner=subprocess.run,
 ) -> int:
-    display_number(worker_id)
+    display_number(worker_id, config)
     while True:
         queue.write_heartbeat(worker_id, None)
         job = queue.claim(worker_id)
@@ -104,7 +108,7 @@ def run_worker(
             binding_path = Path(job.output_root) / "plans" / f"{job.job_id}.binding.json"
             binding_path.write_text(json.dumps(binding, indent=2) + "\n", encoding="utf-8")
             output_root = Path(job.output_root) / "worker-results" / job.job_id
-            env = os.environ.copy()
+            env = config.resolved_environment()
             env.update({
                 "ICGS_GENERATION_ATTEMPT_JSON": str(plan_path),
                 "ICGS_GENERATION_WRITE_EPISODE": str(output_root),
@@ -113,11 +117,19 @@ def run_worker(
                 "PYTHONUNBUFFERED": "1",
             })
             command = [
-                "/content/icgs-data-env/bin/python", "-B",
-                "/content/ICGS/scripts/generation_episode_worker.py", job.program_id,
+                config.machine.python_executable,
+                "-B",
+                str(Path(config.machine.repo_root) / "scripts" / "generation_episode_worker.py"),
+                job.program_id,
             ]
-            with SimulatorSlotPool(Path(job.output_root).parent):
-                process = subprocess.run(command, env=env, text=True, capture_output=True, timeout=1200)
+            with SimulatorSlotPool(Path(job.output_root).parent, config):
+                process = runner(
+                    command,
+                    env=env,
+                    text=True,
+                    capture_output=True,
+                    timeout=config.machine.worker_timeout_s,
+                )
             log_path = output_root / "worker.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text((process.stdout or "") + (process.stderr or ""), encoding="utf-8")
@@ -216,15 +228,22 @@ def run_worker(
             return 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--worker-id", required=True)
-    parser.add_argument("--run-root", required=True)
+    parser.add_argument("--runtime-config", required=True)
     parser.add_argument("--approved-manifest", required=True)
     parser.add_argument("--once", action="store_true")
-    args = parser.parse_args()
-    queue = FilesystemJobQueue(Path(args.run_root) / "queue")
-    return run_worker(args.worker_id, queue, approved_manifest=args.approved_manifest, once=args.once)
+    args = parser.parse_args(argv)
+    config = GenerationRuntimeConfig.from_file(args.runtime_config)
+    queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
+    return run_worker(
+        args.worker_id,
+        queue,
+        config=config,
+        approved_manifest=args.approved_manifest,
+        once=args.once,
+    )
 
 
 if __name__ == "__main__":
