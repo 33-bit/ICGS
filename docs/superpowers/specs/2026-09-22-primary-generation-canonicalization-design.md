@@ -1,8 +1,8 @@
-# Canonical Primary Generation Design
+# Canonical Generation Design
 
 ## Goal
 
-Make one semantic, resumable primary data-generation system the only supported
+Make one semantic, resumable data-generation system the only supported
 generation path, while preserving serialized artifact compatibility and
 historical provenance.
 
@@ -16,7 +16,7 @@ published data deletion.
 
 ## Architecture
 
-`icgs.data.collection.primary` owns protocol, planning, task compilation,
+`icgs.data.collection.generation` owns protocol, planning, task compilation,
 execution materialization, queueing, validation and publication. `scripts/` holds
 only thin semantic operational entry points. No primary worker may import a
 legacy collector or a script whose name encodes an obsolete generation version.
