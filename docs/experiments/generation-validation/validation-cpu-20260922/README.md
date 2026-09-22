@@ -39,6 +39,13 @@ jobs plus one quarantined malformed result. It also recorded PASS for
 recovery. The required success and valid-failure episodes were not produced;
 publication was therefore NOT_RUN.
 
+After r3, commit `231d8f3` hardened the headless renderer contract with
+`QT_QPA_PLATFORM=xcb`, software GL/Mesa DRI, GLX-enabled Xvfb and portable
+episode-worker paths. Local generation tests (183) and L0 pass. A final CPU
+provision attempt was stopped because the canonical environment provisioning
+command produced no completion log for an extended period; no workers or
+generation were started in that attempt.
+
 The queue reached 380 pending jobs after the safe stop. Workers and the
 coordinator/watchdog were terminated before unbounded generation could
 continue. The validation receipt and launch/heartbeat summaries are stored
