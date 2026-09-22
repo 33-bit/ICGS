@@ -45,6 +45,7 @@ class HuggingFaceBatchPublisher:
     MAX_TRANSIENT_ATTEMPTS = 3
     TRANSIENT_RETRY_BASE_S = 5.0
     TRANSIENT_RETRY_COOLDOWN_S = 300.0
+    RATE_LIMIT_COOLDOWN_S = 3600.0
     def __init__(
         self,
         run: RunConfig,
@@ -89,7 +90,9 @@ class HuggingFaceBatchPublisher:
         os.replace(temporary, self._retry_state_path)
 
     def _defer_transient_failure(self, now_s: float, error: BaseException) -> None:
-        self._next_retry_s = now_s + self.TRANSIENT_RETRY_COOLDOWN_S
+        status = getattr(getattr(error.__cause__, "response", None), "status_code", None)
+        cooldown_s = self.RATE_LIMIT_COOLDOWN_S if status == 429 else self.TRANSIENT_RETRY_COOLDOWN_S
+        self._next_retry_s = now_s + cooldown_s
         self._write_retry_state(next_retry_s=self._next_retry_s, error=str(error))
 
     def _clear_retry_state(self) -> None:
@@ -102,7 +105,7 @@ class HuggingFaceBatchPublisher:
         if isinstance(error, (TimeoutError, ConnectionError)):
             return True
         status = getattr(getattr(error, "response", None), "status_code", None)
-        if status in {500, 502, 503, 504}:
+        if status in {429, 500, 502, 503, 504}:
             return True
         message = str(error).lower().replace("_", "")
         return any(marker in message for marker in (
