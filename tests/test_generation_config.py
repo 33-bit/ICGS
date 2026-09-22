@@ -95,6 +95,26 @@ def test_runtime_config_rejects_nonexistent_python_executable(tmp_path: Path):
         _load_payload(tmp_path, payload)
 
 
+def test_runtime_config_rejects_nonexistent_run_root_when_checking_paths(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    payload["run"]["run_root"] = str(tmp_path / "runs" / "not-created")
+
+    with pytest.raises(ValueError, match="run_root.*directory"):
+        _load_payload(tmp_path, payload)
+
+
+def test_nonexistent_run_root_is_allowed_without_path_checks(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    payload["run"]["run_root"] = str(tmp_path / "runs" / "not-created")
+
+    config_type = _config_api("GenerationRuntimeConfig")
+    from_dict = config_type.from_dict(payload)
+    from_file = _load_payload(tmp_path, payload, check_paths=False)
+
+    assert from_dict.run.run_root == payload["run"]["run_root"]
+    assert from_file.run.run_root == payload["run"]["run_root"]
+
+
 def test_runtime_config_rejects_non_executable_python_file(tmp_path: Path):
     payload = _portable_payload(tmp_path)
     executable = Path(payload["machine"]["python_executable"])
@@ -234,6 +254,17 @@ def test_run_config_accepts_configurable_publication_and_validation_fields():
     assert run.publish_interval_s == 45
     assert run.publication_enabled is True
     assert run.validation_mode is True
+
+
+def test_run_config_from_dict_preserves_default_worker_count_when_omitted():
+    run = contracts.RunConfig.from_dict({
+        "run_id": "legacy-run",
+        "run_root": "/tmp/legacy-run",
+        "code_revision": "a" * 40,
+        "approved_manifest_sha256": "b" * 64,
+    })
+
+    assert run.worker_count == 200
 
 
 def test_run_config_rejects_validation_subfolder_parent_traversal():

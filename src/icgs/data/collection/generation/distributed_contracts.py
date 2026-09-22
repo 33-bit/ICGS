@@ -230,6 +230,9 @@ class GenerationRuntimeConfig:
         config = cls.from_dict(_read_json_object(path))
         if check_paths:
             config.machine.validate_paths()
+            run_root = Path(config.run.run_root)
+            if not run_root.is_dir():
+                raise ValueError(f"run_root must be an existing directory: {run_root}")
         return config
 
     def as_dict(self) -> dict[str, Any]:
@@ -272,7 +275,7 @@ class RunConfig:
     run_root: str
     code_revision: str
     approved_manifest_sha256: str
-    worker_count: int = 1
+    worker_count: int = 200
     publish_interval_s: int = 300
     hf_repo: str = "33bit/icgs"
     hf_subfolder: str = "generation"
