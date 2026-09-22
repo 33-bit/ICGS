@@ -1,0 +1,23 @@
+{
+  "machine": {
+    "repo_root": "/workspace/ICGS",
+    "python_executable": "/workspace/venv/bin/python",
+    "simulator_root": "/workspace/CoppeliaSim",
+    "rlbench_root": "/workspace/RLBench",
+    "display_base": 200,
+    "display_width": 1280,
+    "display_height": 1024,
+    "simulator_slots": 2,
+    "worker_timeout_s": 1200
+  },
+  "run": {
+    "run_id": "validation-example",
+    "run_root": "/workspace/runs/validation-example",
+    "worker_count": 2,
+    "publish_interval_s": 300,
+    "hf_repo": "33bit/icgs",
+    "hf_subfolder": "validation/validation-example",
+    "publication_enabled": false,
+    "validation_mode": true
+  }
+}

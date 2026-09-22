@@ -48,22 +48,24 @@ def _job(job_id: str = "job-1", index: int = 17) -> GenerationJob:
     )
 
 
-def test_run_config_freezes_worker_count_and_publish_interval():
+def test_run_config_accepts_configurable_worker_count_and_publish_interval():
     run = RunConfig(
         run_id="run-1",
         run_root="/content/run",
         code_revision="a" * 40,
         approved_manifest_sha256="b" * 64,
+        worker_count=2,
+        publish_interval_s=45,
     )
-    assert run.worker_count == 200
-    assert run.publish_interval_s == 300
-    with pytest.raises(ValueError, match="worker_count must be 200"):
+    assert run.worker_count == 2
+    assert run.publish_interval_s == 45
+    with pytest.raises(ValueError, match="worker_count must be a positive integer"):
         RunConfig(
             run_id="run-1",
             run_root="/content/run",
             code_revision="a" * 40,
             approved_manifest_sha256="b" * 64,
-            worker_count=199,
+            worker_count=0,
         )
 
 
