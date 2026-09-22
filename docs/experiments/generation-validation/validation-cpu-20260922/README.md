@@ -1,11 +1,13 @@
 # CPU generation validation — 2026-09-22
 
-Status: **FAIL — bounded acceptance stopped safely**
+Status: **FAIL — bounded acceptance completed with simulator failures**
 
-This was the first remote acceptance attempt for the portable generation
-runtime. It used the canonical environment, launch, worker, coordinator and
-watchdog owners on a disposable CPU Colab session with two workers. No
-production dataset prefix was modified and no HF publication was performed.
+Two remote attempts were made. The first exposed an unbounded refill and was
+stopped safely. The corrected third run used commit `ba88ecd` and proved the
+validation bound, quarantine and coordinator resume behavior, but the CPU
+simulator produced only infrastructure crashes, so the overall receipt remains
+FAIL. No production dataset prefix was modified and no HF publication was
+performed.
 
 ## Environment and commands
 
@@ -29,6 +31,13 @@ production dataset prefix was modified and no HF publication was performed.
 | coordinator_restart | FAIL | Watchdog restarted coordinator on `pid_invalid`; controlled restart gate was not completed |
 | publication | NOT RUN | Zero published jobs; no HF commit or remote hash verification |
 | resource bound | FAIL | Coordinator refilled to 400 jobs despite validation plan `max_jobs=7` |
+
+The corrected r3 run changed the resource-bound result to PASS: `run.json`
+carried `validation_max_jobs=7` and the queue ended at exactly seven ingested
+jobs plus one quarantined malformed result. It also recorded PASS for
+`infrastructure_failure`, `malformed_result`, and manual coordinator restart
+recovery. The required success and valid-failure episodes were not produced;
+publication was therefore NOT_RUN.
 
 The queue reached 380 pending jobs after the safe stop. Workers and the
 coordinator/watchdog were terminated before unbounded generation could

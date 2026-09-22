@@ -5,20 +5,21 @@
     "workers": 2,
     "simulator_slots": 2,
     "max_jobs": 7,
-    "pending_at_stop": 380,
-    "ingested": 9,
-    "ready": 18,
+    "pending_at_stop": 0,
+    "ingested": 7,
+    "ready": 0,
+    "quarantined": 1,
     "published": 0,
-    "outcomes": {"simulator_crash": 27}
+    "outcomes": {"simulator_crash": 7}
   },
   "gates": {
     "success": "FAIL",
     "valid_failure": "NOT_RUN",
     "invalid_observation": "NOT_RUN",
     "infrastructure_failure": "PASS",
-    "malformed_result": "NOT_RUN",
-    "coordinator_restart": "FAIL",
+    "malformed_result": "PASS",
+    "coordinator_restart": "PASS",
     "publication": "NOT_RUN",
-    "resource_bound": "FAIL"
+    "resource_bound": "PASS"
   }
 }

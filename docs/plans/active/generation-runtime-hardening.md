@@ -64,3 +64,10 @@ zero publication, and the watchdog's `pid_invalid` coordinator restart. The
 session was stopped and the server assignment list is empty. The active plan
 remains open until the refill bound is enforced and a new bounded acceptance
 run completes every required gate.
+
+The corrected r3 attempt used `ba88ecd` and passed the queue bound (seven total
+jobs), malformed-result quarantine, infrastructure-attempt materialization,
+and manual coordinator restart recovery. It still failed overall because all
+seven simulator attempts were `simulator_crash`; success and valid-failure
+episodes were not reached, so publication remained `NOT_RUN`. The CPU session
+was stopped and `colab sessions` is empty.
