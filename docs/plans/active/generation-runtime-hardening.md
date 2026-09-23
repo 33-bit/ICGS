@@ -1,6 +1,6 @@
 # Generation runtime hardening — local verification record
 
-Status: **Task 7 local verification complete; Task 8 remote acceptance pending**.
+Status: **Bounded VPS acceptance closed; production and invalid-observation live gates remain open**.
 This record covers the committed hardening work through `ff04104` and is the
 local evidence checkpoint before any separately authorized CPU/simulator/HF
 validation run.
@@ -71,3 +71,9 @@ and manual coordinator restart recovery. It still failed overall because all
 seven simulator attempts were `simulator_crash`; success and valid-failure
 episodes were not reached, so publication remained `NOT_RUN`. The CPU session
 was stopped and `colab sessions` is empty.
+
+The fresh VPS closure record is
+`docs/experiments/generation-validation/validation-vps-20260924/`. It combines
+the later bounded publication/resume evidence with the corrected r3 failure and
+restart evidence. Invalid-observation live simulator execution, production
+quota generation and L4 remain explicitly `NOT RUN`.

@@ -45,8 +45,10 @@ filesystem.
 - [x] HF bootstrap: launcher preflight before child spawn, manifest validation,
   cached revision/SHA receipt and coordinator reuse of the pinned revision.
 - [x] Documentation and no-secret profile example.
-- [ ] Live acceptance on a provisioned VPS with two hosts and an HF resume
-  after deleting local `run_root`; must be recorded separately as evidence.
+- [x] Bounded VPS acceptance with HF resume, pinned manifest, disjoint run ID and
+  workers-only host attach is recorded in
+  `docs/experiments/generation-validation/validation-vps-20260924/`.
+  A true simultaneous multi-host production run remains outside bounded scope.
 
 ## Validation and experiment strategy
 

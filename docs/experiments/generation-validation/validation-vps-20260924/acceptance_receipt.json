@@ -1,0 +1,31 @@
+{
+  "status": "PASS_BOUNDED_NOT_PRODUCTION_READY",
+  "revision": "f3ef53c2faa9adaeaa5409116d562581610ac1c6",
+  "environment": {
+    "python": "3.10.21",
+    "torch": "2.2.0+cpu",
+    "pyg": "2.5.0",
+    "simulator": "512de3a7347387fcc1b12fa675195a912265753f7901808382865bbf51a2a7f8",
+    "pyrep": "8f420be8064b1970aae18a9cfbc978dfb15747ef",
+    "rlbench": "02720bba4c73fe02eb75df946b8791b806028a9d"
+  },
+  "checks": {
+    "environment_verifier": "PASS",
+    "generation_environment_tests": "PASS: 243 passed",
+    "full_repository_tests": "PASS: 915 passed, 9 skipped, 3 warnings",
+    "l0": "PASS: 22 harness tests",
+    "simulator_readiness": "PASS: 2 steps, finite 128x128x3 cloud",
+    "success": "PASS: vps-6341777 bounded smoke",
+    "valid_failure": "PASS: vps-6341777 bounded smoke",
+    "malformed_result": "PASS: corrected bounded r3 receipt and control tests",
+    "infrastructure_failure": "PASS: corrected bounded r3 receipt",
+    "coordinator_restart": "PASS: corrected bounded r3 receipt",
+    "publication": "PASS: vps-6341777 isolated HF prefix",
+    "resume_from_hf": "PASS: pinned revision and manifest SHA",
+    "workers_only_attach": "PASS: host-scoped lease heartbeat",
+    "invalid_observation_live": "NOT_RUN",
+    "full_production_generation": "NOT_RUN",
+    "l4_benchmark": "NOT_RUN"
+  },
+  "production_authorization": false
+}
