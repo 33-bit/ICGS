@@ -45,9 +45,13 @@ python3 scripts/setup_environment.py --profile generation \
   --provision-simulator --runtime-config /srv/icgs/runtime.json
 ```
 
-The installer is idempotent: an existing virtual environment, simulator archive,
-simulator marker and checked-out source tree are reused after their paths are
-validated. It never starts a simulator, worker, coordinator or full generation.
+For a generation host, keep both flags on every rerun. The command first performs
+the locked `uv sync`, then reapplies the pinned PyRep/RLBench editable installs;
+this ordering restores simulator dependencies that `uv sync` may remove as
+unmanaged packages. The installer is idempotent: an existing virtual environment,
+simulator archive, simulator marker and checked-out source tree are reused after
+their paths are validated. It never starts a simulator, worker, coordinator or
+full generation.
 
 ## Credentials
 

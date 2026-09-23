@@ -201,7 +201,11 @@ def verify_environment(
                     cwd=rlbench,
                     environment=probe_environment,
                 )
-                checks["rlbench_pyrep"] = _status("PASS" if ok else "FAIL", output or "PyRep/RLBench imports failed")
+                detail = output if not ok else "PyRep and RLBench imports succeeded"
+                checks["rlbench_pyrep"] = _status(
+                    "PASS" if ok else "FAIL",
+                    detail or "PyRep/RLBench imports failed",
+                )
     else:
         checks["renderer"] = _status("NOT_RUN", "generation profile not selected")
         checks["simulator"] = _status("NOT_RUN", "generation profile not selected")

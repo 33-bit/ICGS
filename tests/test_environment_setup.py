@@ -237,7 +237,12 @@ def test_generation_verifier_passes_renderer_environment_to_probes(
         if environment is not None:
             environments.append(environment)
         normalized = tuple(str(part) for part in command)
-        stdout = "/usr/bin/Xvfb\n" if normalized[0] == "sh" else "3.11.0\n"
+        if normalized[0] == "sh":
+            stdout = "/usr/bin/Xvfb\n"
+        elif any("sys.version" in part for part in normalized):
+            stdout = "3.11.0\n"
+        else:
+            stdout = ""
         return subprocess.CompletedProcess(normalized, 0, stdout=stdout, stderr="")
 
     result = verify.verify_environment(
@@ -260,3 +265,46 @@ def test_generation_verifier_passes_renderer_environment_to_probes(
         assert environment["QT_QPA_PLATFORM"] == "xcb"
         assert str(tmp_path / "src") in environment["PYTHONPATH"]
         assert str(rlbench_root) in environment["PYTHONPATH"]
+    assert result["checks"]["rlbench_pyrep"]["detail"] == "PyRep and RLBench imports succeeded"
+
+
+def test_generation_setup_reapplies_provisioning_after_locked_sync(tmp_path: Path):
+    setup = _setup_module()
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    venv_root = tmp_path / ".venv"
+    runtime_config = tmp_path / "runtime.json"
+    receipt_path = tmp_path / ".icgs" / "setup_receipt.json"
+    calls: list[tuple[str, ...]] = []
+
+    def runner(command, **kwargs):
+        calls.append(tuple(str(part) for part in command))
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    first = setup.setup_environment(
+        "generation",
+        repo_root=repo_root,
+        venv_root=venv_root,
+        runtime_config=runtime_config,
+        provision_simulator=True,
+        receipt_path=receipt_path,
+        runner=runner,
+    )
+    first_commands = first.commands
+    assert first_commands[-1][2:4] == ("scripts/generation_environment.py", "--runtime-config")
+    assert first_commands.index(next(command for command in first_commands if command[:2] == ("uv", "sync"))) < len(first_commands) - 1
+
+    calls.clear()
+    second = setup.setup_environment(
+        "generation",
+        repo_root=repo_root,
+        venv_root=venv_root,
+        runtime_config=runtime_config,
+        provision_simulator=True,
+        receipt_path=receipt_path,
+        runner=runner,
+    )
+
+    assert second.commands[-1] == first_commands[-1]
+    assert calls[-1] == first_commands[-1]
+    assert calls[-2][:2] == ("uv", "sync")
