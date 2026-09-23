@@ -5,6 +5,8 @@ import json
 import os
 import hashlib
 import shlex
+import subprocess
+import sys
 from types import SimpleNamespace
 
 import pytest
@@ -122,6 +124,18 @@ def test_launcher_worker_commands_can_use_host_local_runtime_snapshot(tmp_path: 
         command[command.index("--runtime-config") + 1] == str(host_runtime_path)
         for command in commands
     )
+
+
+def test_launcher_script_runs_as_portable_repository_entrypoint():
+    result = subprocess.run(
+        [sys.executable, "-B", "scripts/generation_launch.py", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "--runtime-config" in result.stdout
 
 
 def test_worker_environment_does_not_receive_hf_credentials(tmp_path: Path):

@@ -22,7 +22,10 @@ from icgs.data.collection.generation.distributed_validation import (
     write_validation_receipt,
 )
 from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
-from scripts.generation_coordinator import _validate_resume_manifest
+try:
+    from scripts.generation_coordinator import _validate_resume_manifest
+except ModuleNotFoundError:  # direct ``python scripts/generation_launch.py`` entrypoint
+    from generation_coordinator import _validate_resume_manifest
 
 
 def validate_smoke_receipt(path: str | Path, *, expected_program_ids) -> None:
