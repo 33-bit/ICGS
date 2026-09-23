@@ -19,6 +19,8 @@ from scripts.generation_coordinator import (
     CoordinatorLock,
     _credential_path,
     _inflight_jobs_from_queue,
+    _merge_manifests,
+    _validate_resume_manifest,
 )
 from scripts.generation_watchdog import (
     _coordinator_lock_is_free,
@@ -109,6 +111,31 @@ def test_launcher_builds_workers_from_configured_limits_and_paths(tmp_path: Path
     assert all("/content" not in " ".join(command) for command in commands)
 
 
+def test_launcher_worker_commands_can_use_host_local_runtime_snapshot(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    host_runtime_path = tmp_path / "worker-a-runtime.json"
+    commands = _required_api("build_worker_commands")(
+        config, tmp_path / "approved.json", runtime_config_path=host_runtime_path,
+    )
+
+    assert all(
+        command[command.index("--runtime-config") + 1] == str(host_runtime_path)
+        for command in commands
+    )
+
+
+def test_worker_environment_does_not_receive_hf_credentials(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    environment = _required_api("build_process_environment")(
+        config,
+        base={"ICGS_HF_TOKEN_PATH": "/secret/token", "HF_TOKEN": "secret", "KEEP": "yes"},
+    )
+
+    assert "ICGS_HF_TOKEN_PATH" not in environment
+    assert "HF_TOKEN" not in environment
+    assert environment["KEEP"] == "yes"
+
+
 def test_launcher_persists_runtime_config_digest_before_starting_children(tmp_path: Path, monkeypatch):
     config = _runtime_config(tmp_path, publication_enabled=True)
     runtime_config_path = tmp_path / "runtime.json"
@@ -176,6 +203,323 @@ def test_launcher_persists_runtime_config_digest_before_starting_children(tmp_pa
     assert stored["run"]["worker_count"] == 2
     assert stored["run"]["validation_max_jobs"] == 7
     assert stored["runtime_config"] == config.as_dict()
+
+
+def test_launcher_resume_preflight_reads_manifest_before_starting_workers(tmp_path: Path, monkeypatch):
+    config = _runtime_config(tmp_path, publication_enabled=True)
+    payload = config.as_dict()
+    payload["run"]["resume_from_hf"] = True
+    config = GenerationRuntimeConfig.from_dict(payload)
+    runtime_path = tmp_path / "runtime.json"
+    runtime_path.write_text(json.dumps(config.as_dict()), encoding="utf-8")
+    approved_manifest = tmp_path / "approved.json"
+    approved_manifest.write_text(
+        Path("artifacts/composition/approved_composition_manifest.json").read_text(),
+        encoding="utf-8",
+    )
+    smoke_receipt = tmp_path / "smoke.json"
+    from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
+    smoke_receipt.write_text(json.dumps({"results": [
+        {"program_id": item, "result_class": "success", "timeline_ok": True}
+        for item in GENERATION_PROGRAMS
+    ]}), encoding="utf-8")
+    token = tmp_path / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    remote = tmp_path / "dataset_manifest.json"
+    remote.write_text(json.dumps({
+        "manifest_version": 3,
+        "source_run_ids": ["old-run"],
+        "episodes": [],
+        "failure_attempts": [],
+    }), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(generation_launch, "hf_hub_download", lambda **kwargs: str(remote))
+    monkeypatch.setattr(
+        generation_launch.subprocess,
+        "Popen",
+        lambda command, **kwargs: calls.append(command) or SimpleNamespace(pid=9000, wait=lambda: 0),
+    )
+
+    result = generation_launch.main([
+        "--runtime-config", str(runtime_path),
+        "--approved-manifest", str(approved_manifest),
+        "--code-revision", "a" * 40,
+        "--smoke-receipt", str(smoke_receipt),
+        "--hf-token-path", str(token),
+        "--detach",
+    ])
+
+    assert result == 0
+    assert calls
+    bootstrap = json.loads(
+        (Path(config.run.run_root) / "control" / "resume_bootstrap.json").read_text()
+    )
+    assert bootstrap["source_run_ids"] == ["old-run"]
+
+
+def test_launcher_resume_preflight_fails_before_spawning_workers(tmp_path: Path, monkeypatch):
+    config = _runtime_config(tmp_path, publication_enabled=True)
+    payload = config.as_dict()
+    payload["run"]["resume_from_hf"] = True
+    config = GenerationRuntimeConfig.from_dict(payload)
+    runtime_path = tmp_path / "runtime.json"
+    runtime_path.write_text(json.dumps(config.as_dict()), encoding="utf-8")
+    approved_manifest = tmp_path / "approved.json"
+    approved_manifest.write_text(
+        Path("artifacts/composition/approved_composition_manifest.json").read_text(),
+        encoding="utf-8",
+    )
+    smoke_receipt = tmp_path / "smoke.json"
+    from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
+    smoke_receipt.write_text(json.dumps({"results": [
+        {"program_id": item, "result_class": "success", "timeline_ok": True}
+        for item in GENERATION_PROGRAMS
+    ]}), encoding="utf-8")
+    token = tmp_path / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(
+        generation_launch,
+        "hf_hub_download",
+        lambda **kwargs: (_ for _ in ()).throw(OSError("manifest unavailable")),
+    )
+    monkeypatch.setattr(
+        generation_launch.subprocess,
+        "Popen",
+        lambda command, **kwargs: calls.append(command),
+    )
+
+    with pytest.raises(RuntimeError, match="resume_from_hf"):
+        generation_launch.main([
+            "--runtime-config", str(runtime_path),
+            "--approved-manifest", str(approved_manifest),
+            "--code-revision", "a" * 40,
+            "--smoke-receipt", str(smoke_receipt),
+            "--hf-token-path", str(token),
+            "--detach",
+        ])
+    assert calls == []
+
+
+def test_workers_only_launcher_starts_host_scope_without_coordinator(tmp_path: Path, monkeypatch):
+    config = _runtime_config(tmp_path)
+    payload = config.as_dict()
+    payload["machine"].update({"host_id": "worker-a", "worker_ids": ["000"]})
+    payload["machine"]["simulator_slots"] = 1
+    payload["run"].update({"worker_count": 2, "distribution_mode": "shared_filesystem"})
+    config = GenerationRuntimeConfig.from_dict(payload)
+    runtime_path = tmp_path / "runtime.json"
+    runtime_path.write_text(json.dumps(config.as_dict()), encoding="utf-8")
+    run_config = Path(config.run.run_root) / "control" / "run.json"
+    run_config.parent.mkdir(parents=True, exist_ok=True)
+    run_config.write_text(json.dumps({
+        "run": {"run_root": config.run.run_root},
+        "coordinator_worker_ids": ["001"],
+    }), encoding="utf-8")
+    approved = tmp_path / "approved.json"
+    approved.write_text("{}\n", encoding="utf-8")
+    calls = []
+
+    class Process:
+        def __init__(self, pid):
+            self.pid = pid
+
+    monkeypatch.setattr(
+        generation_launch.subprocess,
+        "Popen",
+        lambda command, **kwargs: (calls.append(command) or Process(5000 + len(calls))),
+    )
+    result = generation_launch.main([
+        "--runtime-config", str(runtime_path),
+        "--approved-manifest", str(approved),
+        "--run-config", str(run_config),
+        "--workers-only",
+    ])
+
+    assert result == 0
+    assert len(calls) == 2
+    assert all("generation_coordinator.py" not in " ".join(command) for command in calls)
+    receipt = json.loads(
+        (Path(config.run.run_root) / "control" / "worker-launch-worker-a.json").read_text()
+    )
+    assert receipt["worker_ids"] == ["000"]
+    assert receipt["runtime_config_path"] == str(
+        Path(config.run.run_root) / "control" / "runtime_config-worker-a.json"
+    )
+    assert Path(receipt["runtime_config_path"]).is_file()
+
+
+def test_remote_resume_manifest_merge_rejects_immutable_conflict():
+    remote = {"manifest_version": 3, "episodes": [{"episode_id": "e1", "program_id": "T01"}], "failure_attempts": []}
+    local = {"manifest_version": 3, "episodes": [{"episode_id": "e1", "program_id": "T02"}], "failure_attempts": []}
+
+    with pytest.raises(ValueError, match="immutable conflict"):
+        _merge_manifests(remote, local)
+
+
+def test_resume_manifest_rejects_source_run_collision_and_duplicate_ids():
+    run = RunConfig(
+        run_id="resume-run",
+        run_root="/tmp/resume-run",
+        code_revision="a" * 40,
+        approved_manifest_sha256="b" * 64,
+    )
+    with pytest.raises(ValueError, match="disjoint"):
+        _validate_resume_manifest(
+            {"manifest_version": 3, "run_id": "resume-run", "episodes": [], "failure_attempts": []},
+            run,
+        )
+    with pytest.raises(ValueError, match="duplicate"):
+        _validate_resume_manifest(
+            {
+                "manifest_version": 3,
+                "episodes": [
+                    {"episode_id": "e1", "program_id": "T01", "outcome": "success"},
+                    {"episode_id": "e1", "program_id": "T01", "outcome": "success"},
+                ],
+                "failure_attempts": [],
+            },
+            run,
+        )
+
+
+def test_coordinator_resume_requires_and_consumes_remote_manifest(tmp_path: Path, monkeypatch):
+    config = _runtime_config(tmp_path, publication_enabled=True)
+    payload = config.as_dict()
+    payload["run"]["resume_from_hf"] = True
+    config = GenerationRuntimeConfig.from_dict(payload)
+    approved = Path("artifacts/composition/approved_composition_manifest.json")
+    run_json = generation_launch.persist_run_config(
+        config,
+        approved,
+        code_revision="a" * 40,
+    )
+    token = tmp_path / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    remote = tmp_path / "remote-manifest.json"
+    remote.write_text(json.dumps({
+        "manifest_version": 3,
+        "source_run_ids": ["previous-run"],
+        "episodes": [{
+            "episode_id": "remote-t01-00000",
+            "attempt_id": "att-remote-t01-00000",
+            "program_id": "T01",
+            "episode_kind": "nominal",
+            "outcome": "success",
+            "scene_signature": "remote-signature",
+            "scene_seed": 99,
+            "episode_index": 0,
+        }],
+        "failure_attempts": [],
+    }), encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+
+    monkeypatch.setattr(
+        generation_coordinator_module,
+        "hf_hub_download",
+        lambda **kwargs: str(remote),
+    )
+    control = CoordinatorControlPlane.open(
+        run_json,
+        api_factory=lambda: object(),
+        token_path=token,
+    )
+
+    assert control.planner.counts("T01").nominal_successes == 1
+
+
+def test_coordinator_resume_reuses_launcher_pinned_revision(tmp_path: Path, monkeypatch):
+    config = _runtime_config(tmp_path, publication_enabled=True)
+    payload = config.as_dict()
+    payload["run"].update({"resume_from_hf": True, "run_id": "resume-pinned"})
+    config = GenerationRuntimeConfig.from_dict(payload)
+    approved = Path("artifacts/composition/approved_composition_manifest.json")
+    run_json = generation_launch.persist_run_config(config, approved, code_revision="a" * 40)
+    token = tmp_path / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+    remote = tmp_path / "remote-manifest.json"
+    remote.write_text(json.dumps({
+        "manifest_version": 3,
+        "source_run_ids": ["old-run"],
+        "episodes": [],
+        "failure_attempts": [],
+    }), encoding="utf-8")
+    bootstrap = Path(config.run.run_root) / "control" / "resume_bootstrap.json"
+    bootstrap.write_text(json.dumps({
+        "run_id": config.run.run_id,
+        "remote_revision": "pinned-revision",
+    }), encoding="utf-8")
+    revisions = []
+
+    def download(**kwargs):
+        revisions.append(kwargs.get("revision"))
+        return str(remote)
+
+    monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
+    CoordinatorControlPlane.open(run_json, api_factory=lambda: object(), token_path=token)
+
+    assert revisions == ["pinned-revision"]
+    assert json.loads(bootstrap.read_text())["remote_revision"] == "pinned-revision"
+
+
+def test_coordinator_resume_fails_closed_when_remote_manifest_is_unavailable(tmp_path: Path, monkeypatch):
+    config = _runtime_config(tmp_path, publication_enabled=True)
+    payload = config.as_dict()
+    payload["run"]["resume_from_hf"] = True
+    config = GenerationRuntimeConfig.from_dict(payload)
+    approved = Path("artifacts/composition/approved_composition_manifest.json")
+    run_json = generation_launch.persist_run_config(config, approved, code_revision="a" * 40)
+    token = tmp_path / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+    monkeypatch.setattr(
+        generation_coordinator_module,
+        "hf_hub_download",
+        lambda **kwargs: (_ for _ in ()).throw(OSError("remote unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="resume_from_hf"):
+        CoordinatorControlPlane.open(
+            run_json,
+            api_factory=lambda: object(),
+            token_path=token,
+        )
+
+
+def test_coordinator_open_rejects_tampered_runtime_snapshot(tmp_path: Path, monkeypatch):
+    config = _runtime_config(tmp_path, publication_enabled=True)
+    run_json = generation_launch.persist_run_config(
+        config,
+        Path("artifacts/composition/approved_composition_manifest.json"),
+        code_revision="a" * 40,
+    )
+    token = tmp_path / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+    runtime_path = Path(run_payload["runtime_config_path"])
+    runtime_path.write_text(runtime_path.read_text(encoding="utf-8").replace("control-test", "tampered"), encoding="utf-8")
+    monkeypatch.setattr(
+        generation_coordinator_module,
+        "hf_hub_download",
+        lambda **kwargs: (_ for _ in ()).throw(OSError("remote unavailable")),
+    )
+
+    with pytest.raises(ValueError, match="runtime config digest"):
+        CoordinatorControlPlane.open(
+            run_json,
+            api_factory=lambda: object(),
+            token_path=token,
+            runtime_config_path=runtime_path,
+        )
 
 
 def test_no_stop_call_in_control_sources():
@@ -667,6 +1011,38 @@ def test_watchdog_uses_runtime_config_and_restarts_stale_coordinator_with_reason
     assert str(Path(config.machine.repo_root) / "scripts" / "generation_coordinator.py") in command
 
 
+def test_watchdog_coordinator_restart_preserves_coordinator_only_token_path(tmp_path: Path):
+    heartbeat = {
+        "status": "RUNNING", "phase": "tick_end", "timestamp_s": 10.0,
+        "last_progress_at_s": 10.0, "publication": {"phase": "idle"},
+    }
+    config, root, control, _ = _write_watchdog_runtime_files(tmp_path, heartbeat=heartbeat)
+    token = tmp_path / "hf-token"
+    token.write_text("secret", encoding="utf-8")
+    launch_path = control / "launch.json"
+    launch = json.loads(launch_path.read_text())
+    launch["hf_token_path"] = str(token)
+    launch_path.write_text(json.dumps(launch), encoding="utf-8")
+    runtime_path = control / "runtime_config.json"
+    command = generation_watchdog._coordinator_command(
+        config, runtime_path, control / "run.json", token,
+    )
+
+    calls = []
+    class Process:
+        pid = 7002
+    updated = reconcile_processes(
+        root,
+        popen=lambda item, **kwargs: (calls.append(item) or Process()),
+        cmdline_reader=lambda pid: b"",
+        now_s=100.0,
+        stale_after_s=30.0,
+    )
+
+    assert updated["coordinator_pid"] == 7002
+    assert calls[0] == command
+
+
 def test_watchdog_waits_for_initial_coordinator_heartbeat(tmp_path: Path):
     config, root, control, worker_pids = _write_watchdog_runtime_files(
         tmp_path, heartbeat={}
@@ -700,6 +1076,98 @@ def test_watchdog_waits_for_initial_coordinator_heartbeat(tmp_path: Path):
     assert calls == []
     assert updated["coordinator_pid"] == 900
     assert updated["restart_counts"]["coordinator"] == 0
+
+
+def test_worker_only_watchdog_replaces_only_its_host_worker(tmp_path: Path):
+    heartbeat = {
+        "status": "RUNNING",
+        "phase": "tick_end",
+        "timestamp_s": 10.0,
+        "last_progress_at_s": 10.0,
+        "publication": {"phase": "idle"},
+    }
+    config, root, control, _ = _write_watchdog_runtime_files(tmp_path, heartbeat=heartbeat)
+    runtime_payload = json.loads((control / "runtime_config.json").read_text())
+    runtime_payload["machine"].update({"host_id": "worker-a", "worker_ids": ["000"], "simulator_slots": 1})
+    runtime_payload["run"].update({"distribution_mode": "shared_filesystem"})
+    (control / "runtime_config.json").write_text(json.dumps(runtime_payload))
+    worker_launch = {
+        "host_id": "worker-a",
+        "worker_pids": {"000": 1000},
+        "restart_counts": {"workers": {"000": 0}},
+        "restart_history": [],
+    }
+    (control / "worker-launch-worker-a.json").write_text(json.dumps(worker_launch))
+    calls = []
+
+    class Process:
+        pid = 7000
+
+    updated = reconcile_processes(
+        root,
+        workers_only=True,
+        host_id="worker-a",
+        popen=lambda command, **kwargs: (calls.append(command) or Process()),
+        cmdline_reader=lambda pid: b"",
+        now_s=100.0,
+        stale_after_s=30.0,
+    )
+
+    assert len(calls) == 1
+    assert "generation_coordinator.py" not in " ".join(calls[0])
+    assert updated["worker_pids"]["000"] == 7000
+    assert all(item["component"] == "worker:000" for item in updated["restart_history"])
+
+
+def test_worker_only_watchdog_uses_host_runtime_snapshot_not_coordinator_config(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    root = Path(config.run.run_root)
+    control = root / "control"
+    control.mkdir(parents=True, exist_ok=True)
+    coordinator_runtime = control / "runtime_config.json"
+    coordinator_runtime.write_text(json.dumps(config.as_dict()), encoding="utf-8")
+    host_payload = config.as_dict()
+    host_payload["machine"].update({"host_id": "worker-a", "worker_ids": ["001"], "simulator_slots": 1})
+    host_payload["run"]["distribution_mode"] = "shared_filesystem"
+    host_config = GenerationRuntimeConfig.from_dict(host_payload)
+    host_runtime = control / "runtime_config-worker-a.json"
+    host_runtime.write_text(json.dumps(host_config.as_dict()), encoding="utf-8")
+    host_digest = hashlib.sha256(host_runtime.read_bytes()).hexdigest()
+    approved = tmp_path / "approved.json"
+    approved.write_text("{}", encoding="utf-8")
+    (control / "run.json").write_text(json.dumps({
+        "run": {"run_root": config.run.run_root},
+        "approved_manifest": str(approved),
+        "runtime_config_path": str(coordinator_runtime),
+    }), encoding="utf-8")
+    (control / "worker-launch-worker-a.json").write_text(json.dumps({
+        "host_id": "worker-a",
+        "runtime_config_path": str(host_runtime),
+        "runtime_config_sha256": host_digest,
+        "approved_manifest": str(approved),
+        "worker_pids": {"001": 1000},
+        "restart_counts": {"workers": {"001": 0}},
+        "restart_history": [],
+    }), encoding="utf-8")
+    calls = []
+
+    class Process:
+        pid = 7001
+
+    updated = reconcile_processes(
+        root,
+        workers_only=True,
+        host_id="worker-a",
+        popen=lambda command, **kwargs: (calls.append(command) or Process()),
+        cmdline_reader=lambda pid: b"",
+        now_s=100.0,
+        stale_after_s=30.0,
+    )
+
+    assert len(calls) == 1
+    assert calls[0][calls[0].index("--worker-id") + 1] == "001"
+    assert calls[0][calls[0].index("--runtime-config") + 1] == str(host_runtime)
+    assert updated["worker_pids"]["001"] == 7001
 
 
 def test_watchdog_does_not_replace_stale_coordinator_while_lock_is_held(tmp_path: Path):

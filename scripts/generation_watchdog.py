@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -220,8 +221,10 @@ def _load_runtime_config(
     run_payload: Mapping[str, object],
     *,
     root: Path,
+    runtime_config_path: str | Path | None = None,
+    expected_sha256: str | None = None,
 ) -> tuple[GenerationRuntimeConfig, Path]:
-    runtime_value = run_payload.get("runtime_config_path")
+    runtime_value = runtime_config_path or run_payload.get("runtime_config_path")
     if not isinstance(runtime_value, str) or not runtime_value.strip():
         raise ValueError("run receipt must contain runtime_config_path")
     runtime_path = Path(runtime_value)
@@ -229,6 +232,10 @@ def _load_runtime_config(
         runtime_path = (root / "control" / runtime_path).resolve()
     if runtime_path.is_symlink() or not runtime_path.is_file():
         raise ValueError(f"runtime config must be a regular file: {runtime_path}")
+    if expected_sha256 is not None:
+        actual_sha256 = hashlib.sha256(runtime_path.read_bytes()).hexdigest()
+        if actual_sha256 != expected_sha256:
+            raise ValueError(f"runtime config digest mismatch: {runtime_path}")
     config = GenerationRuntimeConfig.from_file(runtime_path, check_paths=False)
     if Path(config.run.run_root).resolve() != root.resolve():
         raise ValueError("runtime config run_root does not match watchdog run root")
@@ -255,6 +262,7 @@ def _worker_command(
         "-B",
         str(Path(config.machine.repo_root) / "scripts" / "generation_worker.py"),
         "--worker-id", worker_id,
+        "--host-id", config.machine.host_id,
         "--runtime-config", str(runtime_config_path),
         "--approved-manifest", approved_manifest,
     ]
@@ -264,14 +272,18 @@ def _coordinator_command(
     config: GenerationRuntimeConfig,
     runtime_config_path: Path,
     run_config_path: Path,
+    token_path: str | Path | None = None,
 ) -> list[str]:
-    return [
+    command = [
         config.machine.python_executable,
         "-B",
         str(Path(config.machine.repo_root) / "scripts" / "generation_coordinator.py"),
         "--run-config", str(run_config_path),
         "--runtime-config", str(runtime_config_path),
     ]
+    if token_path:
+        command.extend(["--hf-token-path", str(token_path)])
+    return command
 
 
 def _record_restart(
@@ -300,24 +312,65 @@ def reconcile_processes(
     max_restarts: int = MAX_RESTARTS_DEFAULT,
     now_s: float | None = None,
     stale_after_s: float = DEFAULT_STALE_AFTER_S,
+    workers_only: bool = False,
+    host_id: str | None = None,
 ) -> dict:
     """Replace mis-owned slots and stale coordinators, then atomically persist receipt."""
     if max_restarts < 0:
         raise ValueError("max_restarts must be nonnegative")
     root = Path(run_root)
     control = root / "control"
-    launch_path = control / "launch.json"
+    selected_host = host_id or "local"
+    launch_path = (
+        control / f"worker-launch-{selected_host}.json"
+        if workers_only
+        else control / "launch.json"
+    )
     launch = json.loads(launch_path.read_text(encoding="utf-8"))
     run_payload = json.loads((control / "run.json").read_text(encoding="utf-8"))
-    config, runtime_config_path = _load_runtime_config(run_payload, root=root)
-    approved_manifest = str(run_payload["approved_manifest"])
+    launch_runtime_path = launch.get("runtime_config_path") if workers_only else None
+    launch_runtime_digest = (
+        launch.get("runtime_config_sha256")
+        if workers_only
+        else run_payload.get("runtime_config_sha256")
+    )
+    config, runtime_config_path = _load_runtime_config(
+        run_payload,
+        root=root,
+        runtime_config_path=launch_runtime_path,
+        expected_sha256=launch_runtime_digest,
+    )
+    if workers_only and config.machine.host_id != selected_host:
+        raise ValueError("worker launch host_id does not match runtime config")
+    if workers_only and config.run.distribution_mode != "shared_filesystem":
+        raise ValueError("worker-only watchdog requires shared_filesystem distribution")
+    if workers_only and launch.get("run_id") is not None and launch["run_id"] != config.run.run_id:
+        raise ValueError("worker launch run_id does not match runtime config")
+    approved_manifest = str(
+        launch.get("approved_manifest") or run_payload.get("approved_manifest") or ""
+    )
+    if not approved_manifest:
+        raise ValueError("run receipt must contain approved_manifest")
+    approved_path = Path(approved_manifest)
+    if approved_path.is_symlink() or not approved_path.is_file():
+        raise ValueError(f"approved manifest must be a regular file: {approved_path}")
+    expected_manifest_sha = launch.get("approved_manifest_sha256")
+    if expected_manifest_sha is None:
+        expected_manifest_sha = (run_payload.get("run") or {}).get("approved_manifest_sha256")
+    if expected_manifest_sha is not None:
+        actual_manifest_sha = hashlib.sha256(approved_path.read_bytes()).hexdigest()
+        if actual_manifest_sha != expected_manifest_sha:
+            raise ValueError("approved manifest digest does not match launch receipt")
     now = time.time() if now_s is None else now_s
-    launch.setdefault("restart_counts", {"coordinator": 0, "workers": {}})
+    if workers_only:
+        launch.setdefault("restart_counts", {"workers": {}})
+    else:
+        launch.setdefault("restart_counts", {"coordinator": 0, "workers": {}})
     launch["restart_counts"].setdefault("workers", {})
     launch.setdefault("worker_pids", {})
     launch.setdefault("restart_history", [])
-    for index in range(config.run.worker_count):
-        launch["restart_counts"]["workers"].setdefault(f"{index:03d}", 0)
+    for worker_id in config.machine.worker_ids:
+        launch["restart_counts"]["workers"].setdefault(worker_id, 0)
 
     heartbeat_path = control / "coordinator-heartbeat.json"
     try:
@@ -327,7 +380,12 @@ def reconcile_processes(
     health = heartbeat_health(heartbeat, now_s=now, stale_after_s=stale_after_s)
     coordinator_pid = int(launch.get("coordinator_pid", 0) or 0)
     coordinator_command = tuple(
-        _coordinator_command(config, runtime_config_path, control / "run.json")
+        _coordinator_command(
+            config,
+            runtime_config_path,
+            control / "run.json",
+            launch.get("hf_token_path") if not workers_only else None,
+        )
     )
     coordinator_tokens = (
         str(Path(config.machine.repo_root) / "scripts" / "generation_coordinator.py"),
@@ -341,7 +399,7 @@ def reconcile_processes(
         expected_command=coordinator_command,
     )
     coordinator_reason = None
-    if health != "terminal":
+    if not workers_only and health != "terminal":
         if not pid_valid:
             coordinator_reason = "pid_invalid"
         elif health == "stale" and heartbeat:
@@ -359,7 +417,12 @@ def reconcile_processes(
         log_stream = (control / "coordinator.log").open("a")
         try:
             process = popen(
-                _coordinator_command(config, runtime_config_path, control / "run.json"),
+                _coordinator_command(
+                    config,
+                    runtime_config_path,
+                    control / "run.json",
+                    launch.get("hf_token_path"),
+                ),
                 start_new_session=True,
                 stdout=log_stream,
                 stderr=subprocess.STDOUT,
@@ -377,8 +440,7 @@ def reconcile_processes(
             now_s=now,
         )
 
-    for index in range(config.run.worker_count):
-        worker_id = f"{index:03d}"
+    for worker_id in config.machine.worker_ids:
         pid = int(launch["worker_pids"].get(worker_id, 0) or 0)
         worker_command = tuple(
             _worker_command(worker_id, config, runtime_config_path, approved_manifest)
@@ -430,6 +492,8 @@ def main() -> int:
     parser.add_argument("--interval-s", type=float, default=30.0)
     parser.add_argument("--stale-after-s", type=float, default=DEFAULT_STALE_AFTER_S)
     parser.add_argument("--max-restarts", type=int, default=MAX_RESTARTS_DEFAULT)
+    parser.add_argument("--workers-only", action="store_true")
+    parser.add_argument("--host-id")
     args = parser.parse_args()
     root = Path(args.run_root)
     while True:
@@ -443,6 +507,8 @@ def main() -> int:
                 root,
                 max_restarts=args.max_restarts,
                 stale_after_s=args.stale_after_s,
+                workers_only=args.workers_only,
+                host_id=args.host_id,
             )
         except FileNotFoundError:
             # Launcher writes run/launch receipts immediately after spawning;

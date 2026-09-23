@@ -372,6 +372,18 @@ class HuggingFaceBatchPublisher:
                 by_id[identity] = dict(row)
             merged[key] = [by_id[key] for key in sorted(by_id)]
         merged["manifest_version"] = local.get("manifest_version", remote.get("manifest_version", 3))
+        source_run_ids = {
+            str(value)
+            for source in (remote, local)
+            for value in (source.get("source_run_ids") or ())
+            if isinstance(value, str) and value.strip()
+        }
+        for source in (remote, local):
+            value = source.get("run_id") or source.get("source_run_id")
+            if isinstance(value, str) and value.strip():
+                source_run_ids.add(value)
+        source_run_ids.add(self.run.run_id)
+        merged["source_run_ids"] = sorted(source_run_ids)
         merged["total_episodes"] = len(merged["episodes"])
         merged["total_failure_attempts"] = len(merged["failure_attempts"])
         return merged

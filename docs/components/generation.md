@@ -49,6 +49,62 @@ updates quota state and publishes. Temporary directories containing `.partial-`
 are not queue entries. Remote conflicts fail closed; matching immutable hashes
 may be reconciled during an explicit resume.
 
+### Resume after losing local state
+
+Set `run.resume_from_hf` to `true` in the runtime profile and choose a new
+`run_id` that is not present in the remote manifest's `source_run_ids`. The
+coordinator reads `<hf_subfolder>/dataset_manifest.json` before constructing
+the planner; the launcher performs the same read before starting any worker.
+The manifest must be schema version 3, identify its source run(s), contain
+unique immutable `episode_id`/`attempt_id` rows, and preserve any serialized
+`attempt_plan`. Missing, malformed, conflicting, or unavailable remote state
+fails closed. The fetched revision and SHA256 are written to
+`control/resume_bootstrap.json` and reused by the coordinator.
+
+The resume command requires a coordinator-only credential path:
+
+```bash
+python3 -B scripts/generation_launch.py \
+  --runtime-config /runs/resume/runtime.json \
+  --approved-manifest artifacts/composition/approved_composition_manifest.json \
+  --code-revision "$(git rev-parse HEAD)" \
+  --smoke-receipt /runs/resume/smoke.json \
+  --hf-token-path /secure/credentials/hf-token \
+  --detach
+```
+
+The token path is never placed in worker command lines or worker environments.
+The coordinator persists queue and publication receipts so a process restart
+continues from immutable queue/HF state rather than resetting quota.
+
+### Multiple hosts on one shared filesystem
+
+Use `run.distribution_mode: "shared_filesystem"`, an absolute `run_root` visible
+on every host, a safe explicit `machine.host_id`, and a disjoint explicit
+`machine.worker_ids` subset. The coordinator host launches normally. Each
+additional host receives its own host-local runtime profile and attaches with:
+
+```bash
+python3 -B scripts/generation_launch.py \
+  --runtime-config /shared/run/control/worker-a-runtime.json \
+  --approved-manifest artifacts/composition/approved_composition_manifest.json \
+  --run-config /shared/run/control/run.json \
+  --workers-only
+```
+
+`--workers-only` writes `control/worker-launch-<host_id>.json`, starts no
+coordinator, and starts a watchdog that reconciles only that host's worker
+scope. POSIX `flock` serializes claim, lease, heartbeat, publish, recovery and
+state transitions. A worker lease contains host and process-instance identity;
+an active duplicate is rejected, an expired lease can be replaced, and a late
+result from the old instance is fenced. Stale claims increment
+`retry_generation`; retry artifacts use a disjoint staging directory, so an old
+subprocess cannot overwrite a replacement attempt.
+
+The coordinator remains the only planner, validator and HF publisher. Do not
+run multiple coordinators for one `run_root`, and do not use shared-filesystem
+mode when hosts cannot provide atomic rename and POSIX locking.
+
 ## Operational rules
 
 - Use a new disjoint run ID after a dead Colab assignment.

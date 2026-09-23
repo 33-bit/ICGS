@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
-from icgs.data.collection.generation.batch import AttemptPlanner, bounds_from_row
+from icgs.data.collection.generation.batch import AttemptPlanner, attempt_from_dict, bounds_from_row
 from icgs.data.collection.generation.distributed_contracts import GenerationJob, RunConfig, WorkerResult
 from icgs.data.collection.generation.quota import (
     QuotaCounts,
@@ -58,7 +58,11 @@ class DistributedPlanner:
             )
             for existing in list(manifest.get("episodes") or []) + list(manifest.get("failure_attempts") or []):
                 if isinstance(existing, Mapping) and existing.get("program_id") == program_id:
-                    planner.remember_row(existing)
+                    attempt_plan = existing.get("attempt_plan")
+                    if isinstance(attempt_plan, Mapping):
+                        planner.remember_plan(attempt_from_dict(attempt_plan))
+                    else:
+                        planner.remember_row(existing)
             self._planners[program_id] = planner
         self._inflight: dict[str, GenerationJob] = {}
         for job in inflight_jobs:

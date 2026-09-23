@@ -6,10 +6,12 @@ import argparse
 import fcntl
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
 import time
+import uuid
 from icgs.data.collection.generation.distributed_contracts import (
     GenerationJob,
     GenerationRuntimeConfig,
@@ -39,6 +41,28 @@ def _file_hashes(root: Path) -> dict[str, str]:
     return hashes
 
 
+def _attempt_output_root(job: GenerationJob) -> Path:
+    """Return a retry-fenced staging directory for one immutable job."""
+    return (
+        Path(job.output_root)
+        / "worker-results"
+        / job.job_id
+        / f"retry-{job.retry_generation}"
+    )
+
+
+def _credential_free_environment(config: GenerationRuntimeConfig) -> dict[str, str]:
+    environment = config.resolved_environment()
+    for key in (
+        "ICGS_HF_TOKEN_PATH",
+        "HF_TOKEN",
+        "HUGGINGFACE_HUB_TOKEN",
+        "HF_ACCESS_TOKEN",
+    ):
+        environment.pop(key, None)
+    return environment
+
+
 class SimulatorSlotPool:
     """Cross-process semaphore for memory-heavy simulator launches.
 
@@ -51,6 +75,8 @@ class SimulatorSlotPool:
             raise TypeError("config must be a GenerationRuntimeConfig")
         self.slot_count = config.machine.simulator_slots
         self.root = Path(run_root) / "control" / "simulator-slots"
+        if config.run.distribution_mode == "shared_filesystem":
+            self.root /= config.machine.host_id
         self.root.mkdir(parents=True, exist_ok=True)
         self._stream = None
         self.acquired_slot: Path | None = None
@@ -79,6 +105,46 @@ class SimulatorSlotPool:
         return False
 
 
+def _run_generation_process(
+    command: list[str],
+    *,
+    env: dict[str, str],
+    timeout_s: int,
+    heartbeat,
+    heartbeat_interval_s: float,
+):
+    """Run one simulator process while renewing the owning worker lease."""
+    process = subprocess.Popen(
+        command,
+        env=env,
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    started = time.monotonic()
+    next_heartbeat = started
+    while True:
+        now = time.monotonic()
+        if now >= next_heartbeat:
+            heartbeat()
+            next_heartbeat = now + heartbeat_interval_s
+        returncode = process.poll()
+        if returncode is not None:
+            heartbeat()
+            stdout, stderr = process.communicate()
+            return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+        if now - started >= timeout_s:
+            process.kill()
+            stdout, stderr = process.communicate()
+            raise subprocess.TimeoutExpired(
+                command,
+                timeout_s,
+                output=stdout,
+                stderr=stderr,
+            )
+        time.sleep(min(heartbeat_interval_s, max(0.01, timeout_s - (now - started))))
+
+
 def run_worker(
     worker_id: str,
     queue: FilesystemJobQueue,
@@ -87,28 +153,58 @@ def run_worker(
     approved_manifest: str,
     once: bool = False,
     idle_poll_s: float = 1.0,
-    runner=subprocess.run,
+    runner=None,
+    worker_instance_id: str | None = None,
 ) -> int:
     display_number(worker_id, config)
+    if worker_id not in config.machine.worker_ids:
+        raise ValueError(f"worker_id is outside host worker scope: {worker_id}")
+    worker_instance_id = worker_instance_id or (
+        f"{config.machine.host_id}:{worker_id}:{os.getpid()}:{uuid.uuid4().hex}"
+    )
+    lease_s = float(config.machine.worker_timeout_s) + 600.0
+    queue.register_worker(
+        worker_id,
+        config.machine.host_id,
+        worker_instance_id,
+        lease_s=lease_s,
+    )
     while True:
-        queue.write_heartbeat(worker_id, None)
-        job = queue.claim(worker_id)
+        queue.write_heartbeat(
+            worker_id,
+            None,
+            host_id=config.machine.host_id,
+            worker_instance_id=worker_instance_id,
+            lease_s=lease_s,
+        )
+        job = queue.claim(
+            worker_id,
+            worker_instance_id=worker_instance_id,
+            host_id=config.machine.host_id,
+            lease_s=lease_s,
+        )
         if job is None:
             if once:
                 return 0
             time.sleep(idle_poll_s)
             continue
-        queue.write_heartbeat(worker_id, job.job_id)
+        queue.write_heartbeat(
+            worker_id,
+            job.job_id,
+            host_id=config.machine.host_id,
+            worker_instance_id=worker_instance_id,
+            lease_s=lease_s,
+        )
         try:
-            plan_path = Path(job.output_root) / "plans" / f"{job.job_id}.json"
+            plan_path = Path(job.output_root) / "plans" / f"{job.job_id}.retry-{job.retry_generation}.json"
             plan_path.parent.mkdir(parents=True, exist_ok=True)
             plan_path.write_text(json.dumps(job.plan.as_dict(), indent=2) + "\n", encoding="utf-8")
             approved = json.loads(Path(approved_manifest).read_text(encoding="utf-8"))
             binding = next(row for row in approved["catalog"] if row["program_id"] == job.program_id)
-            binding_path = Path(job.output_root) / "plans" / f"{job.job_id}.binding.json"
+            binding_path = Path(job.output_root) / "plans" / f"{job.job_id}.retry-{job.retry_generation}.binding.json"
             binding_path.write_text(json.dumps(binding, indent=2) + "\n", encoding="utf-8")
-            output_root = Path(job.output_root) / "worker-results" / job.job_id
-            env = config.resolved_environment()
+            output_root = _attempt_output_root(job)
+            env = _credential_free_environment(config)
             env.update({
                 "ICGS_GENERATION_ATTEMPT_JSON": str(plan_path),
                 "ICGS_GENERATION_WRITE_EPISODE": str(output_root),
@@ -123,13 +219,32 @@ def run_worker(
                 job.program_id,
             ]
             with SimulatorSlotPool(Path(job.output_root).parent, config):
-                process = runner(
-                    command,
-                    env=env,
-                    text=True,
-                    capture_output=True,
-                    timeout=config.machine.worker_timeout_s,
-                )
+                if runner is None:
+                    heartbeat_job_id = job.job_id
+                    process = _run_generation_process(
+                        command,
+                        env=env,
+                        timeout_s=config.machine.worker_timeout_s,
+                        heartbeat=lambda: queue.write_heartbeat(
+                            worker_id,
+                            heartbeat_job_id,
+                            host_id=config.machine.host_id,
+                            worker_instance_id=worker_instance_id,
+                            lease_s=lease_s,
+                        ),
+                        heartbeat_interval_s=max(
+                            1.0,
+                            min(30.0, lease_s / 3.0),
+                        ),
+                    )
+                else:
+                    process = runner(
+                        command,
+                        env=env,
+                        text=True,
+                        capture_output=True,
+                        timeout=config.machine.worker_timeout_s,
+                    )
             log_path = output_root / "worker.log"
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text((process.stdout or "") + (process.stderr or ""), encoding="utf-8")
@@ -175,9 +290,9 @@ def run_worker(
                     program_id=job.program_id, outcome=outcome, result_dir=str(candidate),
                     file_sha256=_file_hashes(candidate), timeline=None,
                 )
-            queue.publish_ready(worker_id, result)
+            queue.publish_ready(worker_id, result, worker_instance_id=worker_instance_id)
         except Exception as exc:
-            result_dir = Path(job.output_root) / "worker-results" / job.job_id / job.program_id
+            result_dir = _attempt_output_root(job) / job.program_id
             episode_path = result_dir / "episode.json"
             artifact_manifest_path = result_dir / "artifact_manifest.json"
             # A subprocess timeout can happen after the pilot has atomically
@@ -201,7 +316,7 @@ def run_worker(
                                 "observations": len(payload.get("online_observations", [])),
                                 "durations": len(payload.get("dt", [])),
                             },
-                        ))
+                        ), worker_instance_id=worker_instance_id)
                         if once:
                             return 0
                         continue
@@ -223,7 +338,7 @@ def run_worker(
                 program_id=job.program_id, outcome="simulator_crash", result_dir=str(result_dir),
                 file_sha256=_file_hashes(result_dir), timeline=None,
             )
-            queue.publish_ready(worker_id, result)
+            queue.publish_ready(worker_id, result, worker_instance_id=worker_instance_id)
         if once:
             return 0
 
@@ -234,8 +349,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--runtime-config", required=True)
     parser.add_argument("--approved-manifest", required=True)
     parser.add_argument("--once", action="store_true")
+    parser.add_argument("--host-id")
+    parser.add_argument("--worker-instance-id")
     args = parser.parse_args(argv)
     config = GenerationRuntimeConfig.from_file(args.runtime_config)
+    if args.host_id is not None and args.host_id != config.machine.host_id:
+        raise ValueError("--host-id does not match runtime config host_id")
     queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
     return run_worker(
         args.worker_id,
@@ -243,6 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         config=config,
         approved_manifest=args.approved_manifest,
         once=args.once,
+        worker_instance_id=args.worker_instance_id,
     )
 
 

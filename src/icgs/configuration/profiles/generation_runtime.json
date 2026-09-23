@@ -8,7 +8,9 @@
     "display_width": 1280,
     "display_height": 1024,
     "simulator_slots": 2,
-    "worker_timeout_s": 1200
+    "worker_timeout_s": 1200,
+    "host_id": "validation-host",
+    "worker_ids": ["000", "001"]
   },
   "run": {
     "run_id": "validation-example",
@@ -18,6 +20,8 @@
     "hf_repo": "33bit/icgs",
     "hf_subfolder": "validation/validation-example",
     "publication_enabled": false,
-    "validation_mode": true
+    "validation_mode": true,
+    "distribution_mode": "single_host",
+    "resume_from_hf": false
   }
 }

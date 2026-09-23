@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -64,6 +65,18 @@ def test_simulator_slot_pool_uses_runtime_config(tmp_path, monkeypatch):
         assert pool.acquired_slot.is_file()
 
 
+def test_shared_filesystem_slot_pool_is_host_local(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    payload = config.as_dict()
+    payload["machine"].update({"host_id": "host-a", "worker_ids": ["000"], "simulator_slots": 1})
+    payload["run"]["distribution_mode"] = "shared_filesystem"
+    host_config = GenerationRuntimeConfig.from_dict(payload)
+
+    pool = generation_worker.SimulatorSlotPool(tmp_path, host_config)
+
+    assert pool.root == tmp_path / "control" / "simulator-slots" / "host-a"
+
+
 def test_worker_source_has_no_hf_token_or_api_access():
     text = Path("scripts/generation_worker.py").read_text(encoding="utf-8")
     assert ".icgs_hf_token" not in text
@@ -81,6 +94,21 @@ def test_worker_display_number_uses_configured_base_and_worker_limit(tmp_path: P
         generation_worker.display_number("002", config)
 
 
+def test_worker_rejects_id_outside_host_scope_before_claim(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    payload = config.as_dict()
+    payload["machine"].update({"host_id": "host-a", "worker_ids": ["001"], "simulator_slots": 1})
+    payload["run"]["distribution_mode"] = "shared_filesystem"
+    host_config = GenerationRuntimeConfig.from_dict(payload)
+    queue = FilesystemJobQueue(Path(host_config.run.run_root) / "queue")
+
+    with pytest.raises(ValueError, match="host worker scope"):
+        generation_worker.run_worker(
+            "000", queue, config=host_config,
+            approved_manifest=str(tmp_path / "approved.json"), once=True,
+        )
+
+
 def test_worker_cli_requires_runtime_config(monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", [
         "generation_worker.py",
@@ -96,8 +124,10 @@ def test_worker_cli_requires_runtime_config(monkeypatch, capsys):
     assert "--runtime-config" in capsys.readouterr().err
 
 
-def test_worker_subprocess_uses_configured_paths_timeout_and_slots(tmp_path: Path):
+def test_worker_subprocess_uses_configured_paths_timeout_and_slots(tmp_path: Path, monkeypatch):
     config = _runtime_config(tmp_path, worker_timeout_s=33)
+    monkeypatch.setenv("ICGS_HF_TOKEN_PATH", "/secret/token")
+    monkeypatch.setenv("HF_TOKEN", "secret")
     queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
     plan = AttemptPlan(
         program_id="T01", split="train", episode_index=1,
@@ -143,7 +173,68 @@ def test_worker_subprocess_uses_configured_paths_timeout_and_slots(tmp_path: Pat
     ]
     assert kwargs["timeout"] == 33
     assert kwargs["env"]["ICGS_SIMULATOR_SLOTS"] == "2"
+    assert "ICGS_HF_TOKEN_PATH" not in kwargs["env"]
+    assert "HF_TOKEN" not in kwargs["env"]
     assert queue.counts().ready == 1
+
+
+def test_worker_stages_recovered_retry_in_a_disjoint_result_directory(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1,
+        episode_id="episode-t01-000001", episode_kind="nominal", scene_seed=7,
+        collection_seed=20260920,
+        randomization={"scene_signature": "signature-1", "asset_instance_id": "asset-1"},
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id="job-retry", run_id=config.run.run_id, attempt_id=f"att-{plan.episode_id}",
+        episode_id=plan.episode_id, program_id="T01", plan=plan,
+        code_revision="a" * 40, manifest_sha256="b" * 64,
+        output_root=str(Path(config.run.run_root) / "staging"), retry_generation=1,
+    )
+    queue.enqueue(job)
+    approved_manifest = Path(config.run.run_root) / "approved.json"
+    approved_manifest.write_text(json.dumps({"catalog": [{"program_id": "T01"}]}), encoding="utf-8")
+
+    generation_worker.run_worker(
+        "000", queue, config=config, approved_manifest=str(approved_manifest), once=True,
+        runner=lambda command, **kwargs: SimpleNamespace(returncode=1, stdout="failed", stderr=""),
+    )
+
+    result = json.loads((queue.root / "ready" / "job-retry" / "result.json").read_text())
+    assert "/worker-results/job-retry/retry-1/T01" in result["result_dir"]
+
+
+def test_generation_subprocess_refreshes_heartbeat_until_exit(monkeypatch):
+    events = []
+
+    class Process:
+        def __init__(self):
+            self.poll_count = 0
+
+        def poll(self):
+            self.poll_count += 1
+            return None if self.poll_count == 1 else 0
+
+        def communicate(self):
+            return "stdout", "stderr"
+
+        def kill(self):
+            self.poll_count = 2
+
+    process = Process()
+    monkeypatch.setattr(generation_worker.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(generation_worker.time, "sleep", lambda _: None)
+
+    result = generation_worker._run_generation_process(
+        ["python", "episode.py"], env={}, timeout_s=10,
+        heartbeat=lambda: events.append("heartbeat"), heartbeat_interval_s=1,
+    )
+
+    assert result.returncode == 0
+    assert len(events) >= 2
 
 
 def test_worker_invalid_result_hashes_the_candidate_directory():

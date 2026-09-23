@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import json
 import math
 import os
@@ -24,6 +24,8 @@ _MACHINE_FIELDS = frozenset({
     "display_height",
     "simulator_slots",
     "worker_timeout_s",
+    "host_id",
+    "worker_ids",
 })
 _RUNTIME_RUN_FIELDS = frozenset({
     "run_id",
@@ -34,6 +36,8 @@ _RUNTIME_RUN_FIELDS = frozenset({
     "hf_subfolder",
     "publication_enabled",
     "validation_mode",
+    "distribution_mode",
+    "resume_from_hf",
 })
 _VALIDATION_GATE_NAMES = (
     "success",
@@ -138,6 +142,8 @@ class MachineConfig:
     display_height: int
     simulator_slots: int
     worker_timeout_s: int
+    host_id: str = "local"
+    worker_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for name in ("repo_root", "python_executable", "simulator_root", "rlbench_root"):
@@ -146,12 +152,29 @@ class MachineConfig:
             raise ValueError("display_base must be a nonnegative integer")
         for name in ("display_width", "display_height", "simulator_slots", "worker_timeout_s"):
             _positive_int(getattr(self, name), name)
+        _nonblank(self.host_id, "host_id")
+        if self.host_id in {".", ".."} or any(
+            character not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"
+            for character in self.host_id
+        ):
+            raise ValueError("host_id must be a safe identifier using letters, digits, - or _")
+        if not isinstance(self.worker_ids, tuple):
+            raise ValueError("worker_ids must be a tuple")
+        if len(set(self.worker_ids)) != len(self.worker_ids):
+            raise ValueError("worker_ids must be unique")
+        for worker_id in self.worker_ids:
+            _nonblank(worker_id, "worker_id")
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "MachineConfig":
         values = _mapping(payload, "machine")
         _reject_unknown(values, _MACHINE_FIELDS, "machine")
-        _require_fields(values, _MACHINE_FIELDS, "machine")
+        _require_fields(values, _MACHINE_FIELDS - {"host_id", "worker_ids"}, "machine")
+        if "worker_ids" in values:
+            worker_ids = values["worker_ids"]
+            if not isinstance(worker_ids, (list, tuple)):
+                raise ValueError("machine.worker_ids must be a list")
+            values["worker_ids"] = tuple(str(item) for item in worker_ids)
         return cls(**values)
 
     def validate_paths(self) -> None:
@@ -177,6 +200,8 @@ class RuntimeRunConfig:
     hf_subfolder: str | None = None
     publication_enabled: bool = False
     validation_mode: bool = False
+    distribution_mode: str = "single_host"
+    resume_from_hf: bool = False
 
     def __post_init__(self) -> None:
         _nonblank(self.run_id, "run_id")
@@ -187,6 +212,10 @@ class RuntimeRunConfig:
             raise ValueError("publication_enabled must be a boolean")
         if type(self.validation_mode) is not bool:
             raise ValueError("validation_mode must be a boolean")
+        if self.distribution_mode not in {"single_host", "shared_filesystem"}:
+            raise ValueError("distribution_mode must be single_host or shared_filesystem")
+        if type(self.resume_from_hf) is not bool:
+            raise ValueError("resume_from_hf must be a boolean")
         if self.hf_repo is not None:
             _nonblank(self.hf_repo, "hf_repo")
         if self.hf_subfolder is not None:
@@ -215,8 +244,26 @@ class GenerationRuntimeConfig:
             raise ValueError("machine must be a MachineConfig")
         if not isinstance(self.run, RuntimeRunConfig):
             raise ValueError("run must be a RuntimeRunConfig")
-        if self.machine.simulator_slots > self.run.worker_count:
-            raise ValueError("simulator_slots must be within 1..worker_count")
+        width = max(3, len(str(self.run.worker_count - 1)))
+        worker_ids = self.machine.worker_ids or tuple(
+            f"{index:0{width}d}" for index in range(self.run.worker_count)
+        )
+        expected = {f"{index:0{width}d}" for index in range(self.run.worker_count)}
+        if any(worker_id not in expected for worker_id in worker_ids):
+            raise ValueError("worker_ids must identify workers in 0..worker_count-1")
+        if self.run.distribution_mode == "single_host" and set(worker_ids) != expected:
+            raise ValueError("partial worker_ids require distribution_mode=shared_filesystem")
+        if self.run.distribution_mode == "shared_filesystem" and not self.machine.worker_ids:
+            raise ValueError("shared_filesystem requires explicit machine.worker_ids")
+        if self.run.distribution_mode == "shared_filesystem" and self.machine.host_id == "local":
+            raise ValueError("shared_filesystem requires an explicit machine.host_id")
+        if self.machine.simulator_slots > len(worker_ids):
+            raise ValueError("simulator_slots must be within the host worker scope")
+        # Keep the input MachineConfig value object immutable.  Normalization
+        # belongs to the runtime config, not to an object that may be shared by
+        # another host/profile in the caller.
+        if self.machine.worker_ids != tuple(worker_ids):
+            object.__setattr__(self, "machine", replace(self.machine, worker_ids=tuple(worker_ids)))
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "GenerationRuntimeConfig":
@@ -247,7 +294,9 @@ class GenerationRuntimeConfig:
         return config
 
     def as_dict(self) -> dict[str, Any]:
-        return {"machine": asdict(self.machine), "run": asdict(self.run)}
+        machine = asdict(self.machine)
+        machine["worker_ids"] = list(self.machine.worker_ids)
+        return {"machine": machine, "run": asdict(self.run)}
 
     def resolved_environment(self, base: Mapping[str, str] | None = None) -> dict[str, str]:
         if base is None:
@@ -296,6 +345,8 @@ class RunConfig:
     publication_enabled: bool = False
     validation_mode: bool = False
     validation_max_jobs: int | None = None
+    distribution_mode: str = "single_host"
+    resume_from_hf: bool = False
 
     def __post_init__(self) -> None:
         _nonblank(self.run_id, "run_id")
@@ -309,6 +360,10 @@ class RunConfig:
             raise ValueError("publication_enabled must be a boolean")
         if type(self.validation_mode) is not bool:
             raise ValueError("validation_mode must be a boolean")
+        if self.distribution_mode not in {"single_host", "shared_filesystem"}:
+            raise ValueError("distribution_mode must be single_host or shared_filesystem")
+        if type(self.resume_from_hf) is not bool:
+            raise ValueError("resume_from_hf must be a boolean")
         if self.validation_max_jobs is not None:
             if not self.validation_mode:
                 raise ValueError("validation_max_jobs requires validation_mode=true")

@@ -86,6 +86,41 @@ def test_resume_never_reuses_remote_or_inflight_signature():
     assert second.plan.episode_index > first.plan.episode_index
 
 
+def test_resume_restores_serialized_nominal_plan_for_perturbation_source():
+    rows = {"T01": _rows()["T01"]}
+    initial = DistributedPlanner.from_manifest(_run(), rows, {"episodes": [], "failure_attempts": []})
+    nominal = initial.next_job()
+    assert nominal is not None
+    manifest = {
+        "episodes": [{
+            "episode_id": nominal.episode_id,
+            "attempt_id": nominal.attempt_id,
+            "program_id": nominal.program_id,
+            "outcome": "success",
+            "episode_kind": "nominal",
+            "attempt_plan": nominal.plan.as_dict(),
+        }] + [{
+            "episode_id": f"old-{index}",
+            "attempt_id": f"att-old-{index}",
+            "program_id": "T01",
+            "outcome": "success",
+            "episode_kind": "nominal",
+            "scene_signature": f"old-signature-{index}",
+            "scene_seed": index,
+            "episode_index": index,
+        } for index in range(1, 200)],
+        "failure_attempts": [],
+    }
+
+    resumed = DistributedPlanner.from_manifest(_run(), rows, manifest)
+    perturbed = resumed.next_job()
+
+    assert perturbed is not None
+    assert perturbed.plan.episode_kind == "perturbed"
+    assert perturbed.plan.intervention is not None
+    assert perturbed.plan.intervention["source_episode_id"] == nominal.episode_id
+
+
 def test_inflight_jobs_bound_optimistic_quota_overplanning():
     rows = {"T01": _rows()["T01"]}
     manifest = {

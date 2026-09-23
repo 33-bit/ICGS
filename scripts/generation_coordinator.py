@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 import stat
 import time
-from typing import Literal
+from typing import Literal, Mapping
 
 from huggingface_hub import HfApi, hf_hub_download
 
@@ -134,6 +134,108 @@ def _manifest_from_closed_queue(queue: FilesystemJobQueue, states=("ingested", "
     return manifest
 
 
+def _merge_manifests(remote: Mapping[str, object], local: Mapping[str, object]) -> dict:
+    """Merge immutable remote and surviving local rows for a resumed planner."""
+    merged = {
+        "manifest_version": local.get("manifest_version", remote.get("manifest_version", 3)),
+        "episodes": [],
+        "failure_attempts": [],
+    }
+    all_identities: set[str] = set()
+    for key in ("episodes", "failure_attempts"):
+        by_id: dict[str, dict] = {}
+        for source in (remote, local):
+            for row in list(source.get(key) or []):
+                if not isinstance(row, Mapping):
+                    raise ValueError(f"remote resume {key} row must be an object")
+                identity = str(row.get("episode_id") or row.get("attempt_id") or "")
+                if not identity:
+                    raise ValueError(f"remote resume {key} row has no immutable identity")
+                if identity in all_identities and identity not in by_id:
+                    raise ValueError(f"remote resume duplicate immutable identity: {identity}")
+                previous = by_id.get(identity)
+                current = dict(row)
+                if previous is not None and previous != current:
+                    raise ValueError(f"remote resume immutable conflict: {identity}")
+                by_id[identity] = current
+                all_identities.add(identity)
+        merged[key] = [by_id[key] for key in sorted(by_id)]
+    source_run_ids = {
+        str(value)
+        for source in (remote, local)
+        for value in (source.get("source_run_ids") or ())
+        if isinstance(value, str) and value.strip()
+    }
+    for source in (remote, local):
+        value = source.get("run_id") or source.get("source_run_id")
+        if isinstance(value, str) and value.strip():
+            source_run_ids.add(value)
+    if source_run_ids:
+        merged["source_run_ids"] = sorted(source_run_ids)
+    return merged
+
+
+def _validate_resume_manifest(
+    manifest: Mapping[str, object],
+    run: RunConfig,
+    *,
+    approved_program_ids: set[str] | None = None,
+) -> dict:
+    """Validate the immutable portion of a remote manifest before planning."""
+    if not isinstance(manifest, Mapping):
+        raise ValueError("remote resume manifest must be an object")
+    if manifest.get("manifest_version", 3) != 3:
+        raise ValueError("remote resume manifest_version must be 3")
+    source_ids: set[str] = set()
+    for key in ("run_id", "source_run_id"):
+        value = manifest.get(key)
+        if value is not None:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"remote resume {key} must be a nonblank string")
+            source_ids.add(value)
+    for value in manifest.get("source_run_ids", ()) or ():
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("remote resume source_run_ids must contain strings")
+        source_ids.add(value)
+    if run.resume_from_hf and not source_ids:
+        raise ValueError("remote resume manifest must identify its source run")
+    if run.run_id in source_ids:
+        raise ValueError("resumed run_id must be disjoint from remote source runs")
+
+    identities: set[str] = set()
+    validated = dict(manifest)
+    for collection, identity_key in (("episodes", "episode_id"), ("failure_attempts", "attempt_id")):
+        rows = manifest.get(collection, [])
+        if not isinstance(rows, list):
+            raise ValueError(f"remote resume {collection} must be a list")
+        for row in rows:
+            if not isinstance(row, Mapping):
+                raise ValueError(f"remote resume {collection} row must be an object")
+            identity = row.get(identity_key)
+            if not isinstance(identity, str) or not identity.strip():
+                raise ValueError(f"remote resume {collection} row missing {identity_key}")
+            if identity in identities:
+                raise ValueError(f"remote resume duplicate immutable identity: {identity}")
+            identities.add(identity)
+            for required in ("program_id", "outcome"):
+                if not isinstance(row.get(required), str) or not str(row[required]).strip():
+                    raise ValueError(f"remote resume {collection} row missing {required}")
+            if approved_program_ids is not None and str(row["program_id"]) not in approved_program_ids:
+                raise ValueError(f"remote resume row uses unapproved program: {row['program_id']}")
+            row_run_id = row.get("run_id")
+            if row_run_id is not None and row_run_id == run.run_id:
+                raise ValueError("resumed row run_id must be disjoint from current run")
+            attempt_plan = row.get("attempt_plan")
+            if attempt_plan is not None:
+                if not isinstance(attempt_plan, Mapping):
+                    raise ValueError("remote resume attempt_plan must be an object")
+                if attempt_plan.get("episode_id") != row.get("episode_id"):
+                    raise ValueError("remote resume attempt_plan episode identity mismatch")
+                if attempt_plan.get("program_id") != row.get("program_id"):
+                    raise ValueError("remote resume attempt_plan program identity mismatch")
+    return validated
+
+
 def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tuple[str, ...], revision: str, token: str) -> None:
     for job_id in job_ids:
         directory = queue.root / "ingested" / job_id
@@ -182,26 +284,52 @@ class CoordinatorControlPlane:
         *,
         api_factory,
         token_path: str | Path | None = None,
+        runtime_config_path: str | Path | None = None,
     ):
         payload = json.loads(Path(run_config_path).read_text(encoding="utf-8"))
         run = RunConfig.from_dict(payload["run"])
+        configured_runtime_path = runtime_config_path or payload.get("runtime_config_path")
+        if configured_runtime_path is None:
+            raise ValueError("run receipt must contain runtime_config_path")
+        configured_runtime_path = Path(configured_runtime_path)
+        if configured_runtime_path.is_symlink() or not configured_runtime_path.is_file():
+            raise ValueError(f"runtime config must be a regular file: {configured_runtime_path}")
+        expected_runtime_sha = payload.get("runtime_config_sha256")
+        if expected_runtime_sha is not None:
+            actual_runtime_sha = hashlib.sha256(configured_runtime_path.read_bytes()).hexdigest()
+            if actual_runtime_sha != expected_runtime_sha:
+                raise ValueError("runtime config digest mismatch")
+        runtime = GenerationRuntimeConfig.from_file(configured_runtime_path, check_paths=False)
+        if runtime.run.run_root != run.run_root or runtime.run.run_id != run.run_id:
+            raise ValueError("runtime config run identity does not match run config")
+        if runtime.run.distribution_mode != run.distribution_mode:
+            raise ValueError("runtime config distribution mode does not match run config")
+        if runtime.run.resume_from_hf != run.resume_from_hf:
+            raise ValueError("runtime config resume mode does not match run config")
         queue = FilesystemJobQueue(run.run_root + "/queue")
         approved = json.loads(Path(payload["approved_manifest"]).read_text(encoding="utf-8"))
+        approved_bytes = Path(payload["approved_manifest"]).read_bytes()
+        if hashlib.sha256(approved_bytes).hexdigest() != run.approved_manifest_sha256:
+            raise ValueError("approved manifest digest does not match run config")
         rows = {row["program_id"]: row for row in approved["catalog"]}
-        manifest = _manifest_from_closed_queue(queue)
-        if not manifest["episodes"] and not manifest["failure_attempts"]:
-            manifest = payload.get("manifest", manifest)
-        planner = DistributedPlanner.from_manifest(run, rows, manifest, _inflight_jobs_from_queue(queue))
-        api = api_factory()
         token = _credential_path(run_config_path, payload, token_path).read_text(
             encoding="utf-8"
         ).strip()
-        publisher = HuggingFaceBatchPublisher(
-            run, api, token, queue,
-            remote_verify=lambda job_ids, revision, _token: _verify_remote_batch(
-                queue, run, job_ids, revision, token
-            ),
-        )
+        local_manifest = _manifest_from_closed_queue(queue)
+        if not local_manifest["episodes"] and not local_manifest["failure_attempts"]:
+            local_manifest = payload.get("manifest", local_manifest)
+        remote_manifest: dict = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
+        remote_manifest_sha256: str | None = None
+        remote_error: Exception | None = None
+        bootstrap_path = Path(run.run_root) / "control" / "resume_bootstrap.json"
+        remote_revision = None
+        bootstrap_manifest_sha256 = None
+        if bootstrap_path.is_file():
+            bootstrap = json.loads(bootstrap_path.read_text(encoding="utf-8"))
+            if bootstrap.get("run_id") != run.run_id:
+                raise ValueError("resume bootstrap run_id does not match run config")
+            remote_revision = bootstrap.get("remote_revision")
+            bootstrap_manifest_sha256 = bootstrap.get("remote_manifest_sha256")
         try:
             remote_path = hf_hub_download(
                 repo_id=run.hf_repo,
@@ -209,9 +337,49 @@ class CoordinatorControlPlane:
                 filename=f"{run.hf_subfolder}/dataset_manifest.json",
                 token=token,
                 force_download=True,
+                revision=remote_revision,
             )
-            publisher.remote_manifest = json.loads(Path(remote_path).read_text(encoding="utf-8"))
-        except Exception:
+            remote_bytes = Path(remote_path).read_bytes()
+            remote_manifest_sha256 = hashlib.sha256(remote_bytes).hexdigest()
+            if bootstrap_manifest_sha256 and remote_manifest_sha256 != bootstrap_manifest_sha256:
+                raise ValueError("remote resume manifest digest changed after preflight")
+            remote_manifest = _validate_resume_manifest(
+                json.loads(remote_bytes),
+                run,
+                approved_program_ids=set(rows),
+            )
+        except Exception as error:
+            remote_error = error
+        if run.resume_from_hf:
+            if remote_error is not None:
+                raise RuntimeError(
+                    "resume_from_hf requires a readable remote dataset manifest"
+                ) from remote_error
+            manifest = _merge_manifests(remote_manifest, local_manifest)
+        else:
+            manifest = local_manifest
+        if remote_error is None:
+            _atomic_json(
+                Path(run.run_root) / "control" / "resume_bootstrap.json",
+                {
+                    "run_id": run.run_id,
+                    "remote_manifest_sha256": remote_manifest_sha256,
+                    "remote_revision": remote_revision,
+                    "source_run_ids": list(remote_manifest.get("source_run_ids") or ()),
+                    "fetched_at_s": time.time(),
+                },
+            )
+        planner = DistributedPlanner.from_manifest(run, rows, manifest, _inflight_jobs_from_queue(queue))
+        api = api_factory()
+        publisher = HuggingFaceBatchPublisher(
+            run, api, token, queue,
+            remote_verify=lambda job_ids, revision, _token: _verify_remote_batch(
+                queue, run, job_ids, revision, token
+            ),
+        )
+        if remote_error is None:
+            publisher.remote_manifest = remote_manifest
+        else:
             publisher.remote_manifest = _manifest_from_closed_queue(queue, states=("published",))
         return cls(run, queue, planner, publisher, manifest)
 
@@ -424,6 +592,7 @@ def main() -> int:
         args.run_config,
         api_factory=lambda: api,
         token_path=credential_path,
+        runtime_config_path=args.runtime_config,
     )
     return control.run_forever()
 

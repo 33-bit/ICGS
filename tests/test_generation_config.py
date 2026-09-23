@@ -70,6 +70,44 @@ def test_portable_config_accepts_two_workers_and_two_simulator_slots(tmp_path: P
     assert runtime.machine.python_executable.endswith("/venv/bin/python")
 
 
+def test_runtime_config_normalization_does_not_mutate_frozen_machine_input(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    machine_type = _config_api("MachineConfig")
+    run_type = _config_api("RuntimeRunConfig")
+    machine = machine_type.from_dict(payload["machine"])
+    run = run_type.from_dict(payload["run"])
+
+    runtime = _config_api("GenerationRuntimeConfig")(machine=machine, run=run)
+
+    assert machine.worker_ids == ()
+    assert runtime.machine.worker_ids == ("000", "001")
+
+
+def test_shared_filesystem_config_accepts_host_scoped_worker_ids_and_hf_resume(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    payload["machine"].update({"host_id": "worker-a", "worker_ids": ["000", "002"]})
+    payload["run"].update({
+        "worker_count": 4,
+        "distribution_mode": "shared_filesystem",
+        "resume_from_hf": True,
+    })
+
+    runtime = _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+    assert runtime.machine.host_id == "worker-a"
+    assert runtime.machine.worker_ids == ("000", "002")
+    assert runtime.run.distribution_mode == "shared_filesystem"
+    assert runtime.run.resume_from_hf is True
+
+
+def test_single_host_config_rejects_partial_worker_scope(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    payload["machine"]["worker_ids"] = ["000"]
+
+    with pytest.raises(ValueError, match="distribution_mode"):
+        _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+
 def test_machine_config_rejects_relative_paths(tmp_path: Path):
     payload = _portable_payload(tmp_path)["machine"]
     payload["repo_root"] = "relative/repo"

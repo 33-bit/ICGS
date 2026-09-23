@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import fcntl
 import json
+import multiprocessing as multiprocessing
 from pathlib import Path
+import queue as queue_module
+import time
 
 import pytest
 
@@ -14,6 +18,17 @@ from icgs.data.collection.generation.distributed_contracts import (
 )
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
 from icgs.data.collection.generation import distributed_validation as validation
+
+
+def _register_worker_blocked_by_queue_lock(root: str, results) -> None:
+    queue = FilesystemJobQueue(root)
+    results.put("started")
+    try:
+        queue.register_worker("000", "host-a", "instance-a", now_s=10.0, lease_s=120.0)
+    except Exception as error:  # pragma: no cover - assertion reports the child error
+        results.put(("error", type(error).__name__, str(error)))
+    else:
+        results.put("done")
 
 
 def _plan(index: int = 17, kind: str = "perturbed") -> AttemptPlan:
@@ -147,6 +162,48 @@ def test_two_workers_cannot_claim_same_job(tmp_path: Path):
     assert queue.counts().claimed == 1
 
 
+def test_active_worker_lease_rejects_duplicate_host_instance(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path)
+    queue.enqueue(_job())
+
+    queue.register_worker("000", "host-a", "instance-a", now_s=10.0, lease_s=120.0)
+    with pytest.raises(RuntimeError, match="worker lease"):
+        queue.register_worker("000", "host-b", "instance-b", now_s=20.0, lease_s=120.0)
+
+
+def test_worker_lease_registration_serializes_with_other_queue_operations(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path)
+    context = multiprocessing.get_context("fork")
+    results = context.Queue()
+    lock_path = queue.root / "control" / "queue.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_stream = lock_path.open("a+")
+    fcntl.flock(lock_stream.fileno(), fcntl.LOCK_EX)
+    process = context.Process(
+        target=_register_worker_blocked_by_queue_lock,
+        args=(str(queue.root), results),
+    )
+    process.start()
+    assert results.get(timeout=5.0) == "started"
+    with pytest.raises(queue_module.Empty):
+        results.get(timeout=0.2)
+    fcntl.flock(lock_stream.fileno(), fcntl.LOCK_UN)
+    lock_stream.close()
+    assert results.get(timeout=5.0) == "done"
+    process.join(timeout=5.0)
+    assert process.exitcode == 0
+
+
+def test_expired_worker_lease_can_be_replaced(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path)
+    queue.register_worker("000", "host-a", "instance-a", now_s=10.0, lease_s=20.0)
+
+    queue.register_worker("000", "host-b", "instance-b", now_s=31.0, lease_s=20.0)
+    heartbeat = json.loads((queue.root / "heartbeats" / "worker-000.json").read_text())
+    assert heartbeat["host_id"] == "host-b"
+    assert heartbeat["worker_instance_id"] == "instance-b"
+
+
 def test_stale_claim_requeues_without_changing_job_identity(tmp_path: Path):
     queue = FilesystemJobQueue(tmp_path)
     queue.enqueue(_job())
@@ -154,10 +211,57 @@ def test_stale_claim_requeues_without_changing_job_identity(tmp_path: Path):
     assert claimed is not None
     recovered = queue.recover_stale(now_s=71.0, stale_after_s=60.0)
     assert recovered == ["job-1"]
+    recovered_payload = json.loads((queue.root / "pending" / "job-1.json").read_text())
+    assert recovered_payload["retry_generation"] == 1
     reclaimed = queue.claim("001", now_s=72.0)
     assert reclaimed is not None
     assert reclaimed.attempt_id == claimed.attempt_id
     assert reclaimed.plan == claimed.plan
+
+
+def test_fresh_worker_heartbeat_prevents_stale_claim_recovery(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path)
+    queue.enqueue(_job())
+    claimed = queue.claim("000", now_s=10.0)
+    assert claimed is not None
+    queue.register_worker("000", "host-a", "instance-a", now_s=10.0, lease_s=120.0)
+    queue.write_heartbeat(
+        "000", claimed.job_id, now_s=65.0, host_id="host-a",
+        worker_instance_id="instance-a", lease_s=120.0,
+    )
+
+    assert queue.recover_stale(now_s=71.0, stale_after_s=60.0) == []
+
+
+def test_expired_worker_lease_allows_claim_recovery_even_before_stale_timeout(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path)
+    queue.enqueue(_job())
+    claimed = queue.claim(
+        "000", now_s=10.0, host_id="host-a", worker_instance_id="instance-a", lease_s=20.0,
+    )
+    assert claimed is not None
+    queue.write_heartbeat(
+        "000", claimed.job_id, now_s=10.0, host_id="host-a",
+        worker_instance_id="instance-a", lease_s=20.0,
+    )
+
+    assert queue.recover_stale(now_s=31.0, stale_after_s=60.0) == ["job-1"]
+
+
+def test_late_result_from_replaced_worker_lease_is_fenced(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path)
+    job = _job(job_id="job-fenced")
+    queue.enqueue(job)
+    claimed = queue.claim(
+        "000", now_s=10.0, host_id="host-a", worker_instance_id="instance-a", lease_s=20.0,
+    )
+    assert claimed is not None
+    queue.recover_stale(now_s=31.0, stale_after_s=10.0)
+    queue.register_worker("000", "host-b", "instance-b", now_s=31.0, lease_s=120.0)
+    with pytest.raises(RuntimeError, match="another instance|expired"):
+        queue.publish_ready(
+            "000", _result(job, tmp_path / "result"), worker_instance_id="instance-a",
+        )
 
 
 def test_ready_ingested_published_state_machine(tmp_path: Path):

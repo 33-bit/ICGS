@@ -40,6 +40,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Onboarding audit](audits/harness-onboarding.md) | Dated evidence, design approval, adoption choices and discovered debt |
 | [Generation contract audit](audits/2026-09-20-generation-contract.md) | Historical collection quota, splits, schema, perturbations and views |
 | [Generation launch record](audits/2026-09-21-generation-launch.md) | Historical distributed launch evidence and publication receipts |
+| [Resumable multi-host generation](plans/active/resumable-multihost-generation.md) | Current HF resume, shared-filesystem worker leases and host-scoped launch contract |
 | [Third-party notices](third-party-notices.md) | Attribution and license for adapted guidance |
 
 Source code owns implementation detail; tests establish only the behavior they
