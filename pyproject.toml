@@ -17,6 +17,9 @@ cpu = [
 cuda118 = [
     "torch==2.2.0",
     "torch-geometric==2.5.0",
+    "pyg-lib==0.4.0+pt22cu118",
+    "torch-cluster==1.6.3+pt22cu118",
+    "torch-scatter==2.1.2+pt22cu118",
 ]
 generation = [
     "cffi",
@@ -42,6 +45,9 @@ torch = [
     { index = "pytorch-cpu", extra = "cpu" },
     { index = "pytorch-cu118", extra = "cuda118" },
 ]
+pyg-lib = { index = "pyg-cu118", extra = "cuda118" }
+torch-cluster = { index = "pyg-cu118", extra = "cuda118" }
+torch-scatter = { index = "pyg-cu118", extra = "cuda118" }
 
 [tool.uv]
 conflicts = [
@@ -59,6 +65,12 @@ explicit = true
 [[tool.uv.index]]
 name = "pytorch-cu118"
 url = "https://download.pytorch.org/whl/cu118"
+explicit = true
+
+[[tool.uv.index]]
+name = "pyg-cu118"
+url = "https://data.pyg.org/whl/torch-2.2.0+cu118.html"
+format = "flat"
 explicit = true
 
 [project.scripts]

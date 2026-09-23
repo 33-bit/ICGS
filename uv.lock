@@ -757,8 +757,11 @@ cpu = [
     { name = "torch-geometric" },
 ]
 cuda118 = [
+    { name = "pyg-lib" },
     { name = "torch", version = "2.2.0+cu118", source = { registry = "https://download.pytorch.org/whl/cu118" } },
+    { name = "torch-cluster", version = "1.6.3+pt22cu118", source = { registry = "https://data.pyg.org/whl/torch-2.2.0+cu118.html" } },
     { name = "torch-geometric" },
+    { name = "torch-scatter", version = "2.1.2+pt22cu118", source = { registry = "https://data.pyg.org/whl/torch-2.2.0+cu118.html" } },
 ]
 generation = [
     { name = "cffi" },
@@ -769,8 +772,10 @@ generation = [
     { name = "transforms3d" },
 ]
 native-extensions = [
-    { name = "torch-cluster" },
-    { name = "torch-scatter" },
+    { name = "torch-cluster", version = "1.6.3", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-icgs-cpu' or extra != 'extra-4-icgs-cuda118'" },
+    { name = "torch-cluster", version = "1.6.3+pt22cu118", source = { registry = "https://data.pyg.org/whl/torch-2.2.0+cu118.html" }, marker = "extra == 'extra-4-icgs-cuda118'" },
+    { name = "torch-scatter", version = "2.1.2", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-4-icgs-cpu' or extra != 'extra-4-icgs-cuda118'" },
+    { name = "torch-scatter", version = "2.1.2+pt22cu118", source = { registry = "https://data.pyg.org/whl/torch-2.2.0+cu118.html" }, marker = "extra == 'extra-4-icgs-cuda118'" },
 ]
 test = [
     { name = "pytest" },
@@ -793,6 +798,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26,<2" },
     { name = "open3d", specifier = "==0.18.0" },
     { name = "pillow", marker = "extra == 'generation'" },
+    { name = "pyg-lib", marker = "extra == 'cuda118'", specifier = "==0.4.0+pt22cu118", index = "https://data.pyg.org/whl/torch-2.2.0+cu118.html", conflict = { package = "icgs", extra = "cuda118" } },
     { name = "pyquaternion", marker = "extra == 'generation'" },
     { name = "pytest", marker = "extra == 'test'", specifier = "==8.4.2" },
     { name = "pytorch-lightning", marker = "extra == 'training'", specifier = "==2.4.0" },
@@ -800,9 +806,11 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.14,<1.15" },
     { name = "torch", marker = "extra == 'cpu'", specifier = "==2.2.0", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "icgs", extra = "cpu" } },
     { name = "torch", marker = "extra == 'cuda118'", specifier = "==2.2.0", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "icgs", extra = "cuda118" } },
+    { name = "torch-cluster", marker = "extra == 'cuda118'", specifier = "==1.6.3+pt22cu118", index = "https://data.pyg.org/whl/torch-2.2.0+cu118.html", conflict = { package = "icgs", extra = "cuda118" } },
     { name = "torch-cluster", marker = "extra == 'native-extensions'", specifier = "==1.6.3" },
     { name = "torch-geometric", marker = "extra == 'cpu'", specifier = "==2.5.0" },
     { name = "torch-geometric", marker = "extra == 'cuda118'", specifier = "==2.5.0" },
+    { name = "torch-scatter", marker = "extra == 'cuda118'", specifier = "==2.1.2+pt22cu118", index = "https://data.pyg.org/whl/torch-2.2.0+cu118.html", conflict = { package = "icgs", extra = "cuda118" } },
     { name = "torch-scatter", marker = "extra == 'native-extensions'", specifier = "==2.1.2" },
     { name = "torchmetrics", marker = "extra == 'training'", specifier = "==1.5.2" },
     { name = "tqdm", specifier = ">=4.66" },
@@ -2002,6 +2010,16 @@ wheels = [
 ]
 
 [[package]]
+name = "pyg-lib"
+version = "0.4.0+pt22cu118"
+source = { registry = "https://data.pyg.org/whl/torch-2.2.0+cu118.html" }
+wheels = [
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/pyg_lib-0.4.0%2Bpt22cu118-cp310-cp310-linux_x86_64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/pyg_lib-0.4.0%2Bpt22cu118-cp311-cp311-linux_x86_64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/pyg_lib-0.4.0%2Bpt22cu118-cp312-cp312-linux_x86_64.whl" },
+]
+
+[[package]]
 name = "pygments"
 version = "2.21.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2795,10 +2813,52 @@ wheels = [
 name = "torch-cluster"
 version = "1.6.3"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "(python_full_version >= '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118') or (python_full_version >= '3.11' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118')",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118') or (python_full_version < '3.11' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118')",
+    "python_full_version >= '3.11' and sys_platform == 'win32' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'emscripten' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'linux' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and sys_platform == 'linux' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'win32' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'emscripten' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and sys_platform != 'linux' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+]
 dependencies = [
-    { name = "scipy" },
+    { name = "scipy", marker = "extra == 'extra-4-icgs-cpu' or extra != 'extra-4-icgs-cuda118'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/54/31/e7f7a28253cd907404eb652607613b35779140b326d15d0636511b7b9438/torch_cluster-1.6.3.tar.gz", hash = "sha256:78d5a930a5bbd0d8788df8c6d66addd68d6dd292fe3edb401e3dacba26308152", size = 54550, upload-time = "2023-10-12T06:52:43.728Z" }
+
+[[package]]
+name = "torch-cluster"
+version = "1.6.3+pt22cu118"
+source = { registry = "https://data.pyg.org/whl/torch-2.2.0+cu118.html" }
+resolution-markers = [
+    "python_full_version >= '3.11' and sys_platform == 'linux'",
+    "python_full_version < '3.11' and sys_platform == 'linux'",
+    "python_full_version >= '3.11' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.11' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32'",
+    "python_full_version < '3.11' and sys_platform != 'linux'",
+]
+dependencies = [
+    { name = "scipy", marker = "extra == 'extra-4-icgs-cuda118'" },
+]
+wheels = [
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_cluster-1.6.3%2Bpt22cu118-cp310-cp310-linux_x86_64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_cluster-1.6.3%2Bpt22cu118-cp310-cp310-win_amd64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_cluster-1.6.3%2Bpt22cu118-cp311-cp311-linux_x86_64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_cluster-1.6.3%2Bpt22cu118-cp311-cp311-win_amd64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_cluster-1.6.3%2Bpt22cu118-cp312-cp312-linux_x86_64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_cluster-1.6.3%2Bpt22cu118-cp312-cp312-win_amd64.whl" },
+]
 
 [[package]]
 name = "torch-geometric"
@@ -2826,7 +2886,46 @@ wheels = [
 name = "torch-scatter"
 version = "2.1.2"
 source = { registry = "https://pypi.org/simple" }
+resolution-markers = [
+    "(python_full_version >= '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118') or (python_full_version >= '3.11' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118')",
+    "(python_full_version < '3.11' and platform_machine != 'aarch64' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118') or (python_full_version < '3.11' and platform_python_implementation != 'CPython' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118')",
+    "python_full_version >= '3.11' and sys_platform == 'win32' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'emscripten' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and sys_platform != 'darwin' and sys_platform != 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and platform_machine == 'aarch64' and platform_python_implementation == 'CPython' and sys_platform == 'linux' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'darwin' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and sys_platform == 'darwin' and extra == 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'linux' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and sys_platform == 'linux' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'win32' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform == 'emscripten' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version >= '3.11' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+    "python_full_version < '3.11' and sys_platform != 'linux' and extra != 'extra-4-icgs-cpu' and extra != 'extra-4-icgs-cuda118'",
+]
 sdist = { url = "https://files.pythonhosted.org/packages/f5/ab/2a44ecac0f891dd0d765fc59ac8d277c6283a31907626560e72685df2ed6/torch_scatter-2.1.2.tar.gz", hash = "sha256:69b3aa435f2424ac6a1bfb6ff702da6eb73b33ca0db38fb26989c74159258e47", size = 108045, upload-time = "2023-10-06T08:49:07.081Z" }
+
+[[package]]
+name = "torch-scatter"
+version = "2.1.2+pt22cu118"
+source = { registry = "https://data.pyg.org/whl/torch-2.2.0+cu118.html" }
+resolution-markers = [
+    "python_full_version >= '3.11' and sys_platform == 'linux'",
+    "python_full_version < '3.11' and sys_platform == 'linux'",
+    "python_full_version >= '3.11' and sys_platform == 'win32'",
+    "python_full_version >= '3.11' and sys_platform == 'emscripten'",
+    "python_full_version >= '3.11' and sys_platform != 'emscripten' and sys_platform != 'linux' and sys_platform != 'win32'",
+    "python_full_version < '3.11' and sys_platform != 'linux'",
+]
+wheels = [
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_scatter-2.1.2%2Bpt22cu118-cp310-cp310-linux_x86_64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_scatter-2.1.2%2Bpt22cu118-cp310-cp310-win_amd64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_scatter-2.1.2%2Bpt22cu118-cp311-cp311-linux_x86_64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_scatter-2.1.2%2Bpt22cu118-cp311-cp311-win_amd64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_scatter-2.1.2%2Bpt22cu118-cp312-cp312-linux_x86_64.whl" },
+    { url = "https://data.pyg.org/whl/torch-2.2.0%2Bcu118/torch_scatter-2.1.2%2Bpt22cu118-cp312-cp312-win_amd64.whl" },
+]
 
 [[package]]
 name = "torchmetrics"

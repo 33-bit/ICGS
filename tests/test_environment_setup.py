@@ -27,12 +27,21 @@ def test_project_declares_portable_profiles_and_python_floor():
     assert {"cpu", "cuda118", "generation"}.issubset(extras)
     assert any("torch" in requirement for requirement in extras["cpu"])
     assert any("torch" in requirement for requirement in extras["cuda118"])
+    assert {
+        "pyg-lib==0.4.0+pt22cu118",
+        "torch-cluster==1.6.3+pt22cu118",
+        "torch-scatter==2.1.2+pt22cu118",
+    }.issubset(extras["cuda118"])
     assert any("gymnasium" in requirement for requirement in extras["generation"])
     assert "torch" not in payload["project"]["dependencies"]
     assert payload["tool"]["uv"]["sources"]["torch"] == [
         {"index": "pytorch-cpu", "extra": "cpu"},
         {"index": "pytorch-cu118", "extra": "cuda118"},
     ]
+    assert payload["tool"]["uv"]["sources"]["torch-scatter"] == {
+        "index": "pyg-cu118",
+        "extra": "cuda118",
+    }
 
 
 def test_stale_conda_export_is_not_a_canonical_environment():
