@@ -109,6 +109,7 @@ def test_provision_environment_records_configured_commands_without_external_exec
     tmp_path: Path, monkeypatch
 ):
     environment = _environment_module()
+    monkeypatch.setattr(environment.os, "geteuid", lambda: 0)
     config = _runtime_config(tmp_path, create_python=False)
     Path(config.machine.rlbench_root).rmdir()
     archive_bytes = b"test simulator archive"
@@ -166,6 +167,7 @@ def test_provision_environment_records_configured_commands_without_external_exec
 
 def test_provision_commands_do_not_receive_credential_environment(tmp_path: Path, monkeypatch):
     environment = _environment_module()
+    monkeypatch.setattr(environment.os, "geteuid", lambda: 0)
     config = _runtime_config(tmp_path, create_python=False)
     Path(config.machine.rlbench_root).rmdir()
     archive_bytes = b"test simulator archive"
@@ -197,3 +199,43 @@ def test_provision_commands_do_not_receive_credential_environment(tmp_path: Path
     monkeypatch.setenv("HF_TOKEN", "hf_do_not_leak")
     monkeypatch.setenv("WANDB_API_KEY", "wandb_do_not_leak")
     _required_api(environment, "provision_environment")(config, runner=runner)
+
+
+def test_provision_uses_noninteractive_sudo_for_non_root_apt(tmp_path: Path, monkeypatch):
+    environment = _environment_module()
+    config = _runtime_config(tmp_path, create_python=False)
+    Path(config.machine.rlbench_root).rmdir()
+    archive_bytes = b"test simulator archive"
+    monkeypatch.setattr(
+        environment,
+        "COPPELIASIM_SHA256",
+        hashlib.sha256(archive_bytes).hexdigest(),
+    )
+    monkeypatch.setattr(environment.os, "geteuid", lambda: 1000)
+    calls: list[tuple[str, ...]] = []
+
+    def runner(command, **kwargs):
+        normalized = tuple(str(part) for part in command)
+        calls.append(normalized)
+        if normalized[:2] == ("uv", "venv"):
+            python = Path(config.machine.python_executable)
+            python.parent.mkdir(parents=True, exist_ok=True)
+            python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            python.chmod(0o755)
+        if normalized[0] == "curl":
+            archive = Path(normalized[normalized.index("--output") + 1])
+            archive.write_bytes(archive_bytes)
+        if normalized[:3] == ("git", "clone", "--no-checkout"):
+            Path(normalized[-1]).mkdir(parents=True)
+        if normalized[:2] == ("git", "-C") and normalized[-2:] == ("rev-parse", "HEAD"):
+            source_name = Path(normalized[2]).name
+            return SimpleNamespace(stdout=environment.UPSTREAM[source_name] + "\n")
+        return SimpleNamespace(stdout="")
+
+    _required_api(environment, "provision_environment")(config, runner=runner)
+
+    assert ("sudo", "-n", "apt-get", "update", "-qq") in calls
+    assert any(
+        command[:4] == ("sudo", "-n", "apt-get", "install")
+        for command in calls
+    )

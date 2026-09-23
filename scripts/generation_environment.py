@@ -37,6 +37,13 @@ def _credential_free_environment(base: dict[str, str]) -> dict[str, str]:
     }
 
 
+def _apt_command(*arguments: str) -> list[str]:
+    """Build an apt command for root or a passwordless sudo user."""
+    geteuid = getattr(os, "geteuid", None)
+    prefix = [] if geteuid is None or geteuid() == 0 else ["sudo", "-n"]
+    return [*prefix, "apt-get", *arguments]
+
+
 @dataclass(frozen=True)
 class ProvisionReceipt:
     repo_root: str
@@ -121,19 +128,19 @@ def provision_environment(
         raise ValueError(f"python_executable must be executable: {python_executable}")
 
     _run(
-        ["apt-get", "update", "-qq"],
+        _apt_command("update", "-qq"),
         timeout=300,
         env=environment,
         runner=runner,
         commands=commands,
     )
     _run(
-        [
-            "apt-get", "install", "-y", "-qq", "libfontconfig1", "libgl1", "libgl1-mesa-dri", "libglu1-mesa",
+        _apt_command(
+            "install", "-y", "-qq", "libfontconfig1", "libgl1", "libgl1-mesa-dri", "libglu1-mesa",
             "libxcb-xinerama0", "libxkbcommon-x11-0", "libxcb-cursor0",
             "libxcb-icccm4", "libxcb-image0", "libxcb-keysyms1", "libxcb-render-util0",
             "libegl1", "xauth", "xvfb", "libxrender1", "libxi6", "libxrandr2",
-        ],
+        ),
         timeout=600,
         env=environment,
         runner=runner,
