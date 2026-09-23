@@ -132,8 +132,8 @@ def test_provision_environment_records_configured_commands_without_external_exec
             archive.write_bytes(archive_bytes)
         if normalized[:3] == ("git", "clone", "--no-checkout"):
             Path(normalized[-1]).mkdir(parents=True)
-        if normalized[:2] == ("git", "-C") and normalized[-2:] == ("rev-parse", "HEAD"):
-            source_name = Path(normalized[2]).name
+        if normalized[0] == "git" and normalized[-2:] == ("rev-parse", "HEAD"):
+            source_name = Path(normalized[normalized.index("-C") + 1]).name
             return SimpleNamespace(stdout=environment.UPSTREAM[source_name] + "\n")
         return SimpleNamespace(stdout="")
 
@@ -194,8 +194,8 @@ def test_provision_reuses_existing_coppeliasim_marker(
             raise AssertionError(f"existing simulator must not run {normalized[0]}")
         if normalized[:3] == ("git", "clone", "--no-checkout"):
             Path(normalized[-1]).mkdir(parents=True)
-        if normalized[:2] == ("git", "-C") and normalized[-2:] == ("rev-parse", "HEAD"):
-            source_name = Path(normalized[2]).name
+        if normalized[0] == "git" and normalized[-2:] == ("rev-parse", "HEAD"):
+            source_name = Path(normalized[normalized.index("-C") + 1]).name
             return SimpleNamespace(stdout=environment.UPSTREAM[source_name] + "\n")
         return SimpleNamespace(stdout="")
 
@@ -206,6 +206,52 @@ def test_provision_reuses_existing_coppeliasim_marker(
 
     assert receipt.simulator_sha256 == hashlib.sha256(archive_bytes).hexdigest()
     assert all(command[0] not in {"curl", "tar"} for command in calls)
+
+
+def test_provision_marks_existing_git_sources_safe_for_fetch_and_checkout(
+    tmp_path: Path, monkeypatch
+):
+    environment = _environment_module()
+    monkeypatch.setattr(environment.os, "geteuid", lambda: 0)
+    config = _runtime_config(tmp_path)
+    simulator_root = Path(config.machine.simulator_root)
+    (simulator_root / "coppeliaSim").write_text("existing\n", encoding="utf-8")
+    archive_bytes = b"existing simulator archive"
+    archive = simulator_root.parent / "CoppeliaSim_Edu_V4_1_0_Ubuntu20_04.tar.xz"
+    archive.write_bytes(archive_bytes)
+    monkeypatch.setattr(
+        environment,
+        "COPPELIASIM_SHA256",
+        hashlib.sha256(archive_bytes).hexdigest(),
+    )
+    pyrep_root = simulator_root.parent / "PyRep"
+    pyrep_root.mkdir()
+    rlbench_root = Path(config.machine.rlbench_root)
+    calls: list[tuple[str, ...]] = []
+
+    def runner(command, **kwargs):
+        normalized = tuple(str(part) for part in command)
+        calls.append(normalized)
+        if normalized[:2] == ("git", "-c") and normalized[-2:] == ("rev-parse", "HEAD"):
+            source = Path(normalized[normalized.index("-C") + 1])
+            return SimpleNamespace(stdout=environment.UPSTREAM[source.name] + "\n")
+        if normalized[:3] == ("git", "clone", "--no-checkout"):
+            raise AssertionError("existing checkouts must not be cloned")
+        return SimpleNamespace(stdout="")
+
+    receipt = _required_api(environment, "provision_environment")(
+        config,
+        runner=runner,
+    )
+
+    expected_sources = (pyrep_root, rlbench_root)
+    git_commands = [command for command in receipt.commands if command[0] == "git"]
+    assert git_commands
+    for source in expected_sources:
+        prefix = ("git", "-c", f"safe.directory={source}", "-C", str(source))
+        assert any(command[:5] == prefix and command[5] == "fetch" for command in git_commands)
+        assert any(command[:5] == prefix and command[5] == "checkout" for command in git_commands)
+        assert any(command[:5] == prefix and command[5:] == ("rev-parse", "HEAD") for command in git_commands)
 
 
 def test_provision_commands_do_not_receive_credential_environment(tmp_path: Path, monkeypatch):

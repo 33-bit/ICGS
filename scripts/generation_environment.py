@@ -50,6 +50,14 @@ def _simulator_is_provisioned(simulator_root: Path) -> bool:
     return any((simulator_root / marker).is_file() for marker in SIMULATOR_MARKERS)
 
 
+def _git_command(source: Path, *arguments: str, safe_directory: bool) -> list[str]:
+    """Build a git command, fencing existing operator-owned checkouts."""
+    prefix = ["git"]
+    if safe_directory:
+        prefix.extend(("-c", f"safe.directory={source}"))
+    return [*prefix, "-C", str(source), *arguments]
+
+
 @dataclass(frozen=True)
 class ProvisionReceipt:
     repo_root: str
@@ -196,7 +204,8 @@ def provision_environment(
     source_root.mkdir(parents=True, exist_ok=True)
     for name, revision in UPSTREAM.items():
         source = source_root / name if name == "PyRep" else rlbench_root
-        if not source.is_dir():
+        source_preexisting = source.is_dir()
+        if not source_preexisting:
             _run(
                 ["git", "clone", "--no-checkout", f"https://github.com/stepjam/{name}.git", str(source)],
                 timeout=600,
@@ -205,21 +214,21 @@ def provision_environment(
                 commands=commands,
             )
         _run(
-            ["git", "-C", str(source), "fetch", "--depth", "1", "origin", revision],
+            _git_command(source, "fetch", "--depth", "1", "origin", revision, safe_directory=source_preexisting),
             timeout=600,
             env=environment,
             runner=runner,
             commands=commands,
         )
         _run(
-            ["git", "-C", str(source), "checkout", "--detach", revision],
+            _git_command(source, "checkout", "--detach", revision, safe_directory=source_preexisting),
             timeout=120,
             env=environment,
             runner=runner,
             commands=commands,
         )
         result = _run(
-            ["git", "-C", str(source), "rev-parse", "HEAD"],
+            _git_command(source, "rev-parse", "HEAD", safe_directory=source_preexisting),
             timeout=120,
             env=environment,
             runner=runner,
