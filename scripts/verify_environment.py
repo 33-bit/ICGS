@@ -120,7 +120,11 @@ def verify_environment(
 
     if profile == "cuda118":
         ok, output = _probe(
-            [python, "-c", "import torch; raise SystemExit(0 if torch.cuda.is_available() else 1)"],
+            [
+                python,
+                "-c",
+                "import torch; raise SystemExit(0 if torch.cuda.is_available() and torch.version.cuda == '11.8' else 1)",
+            ],
             runner=runner,
         )
         checks["cuda"] = _status("PASS" if ok else "FAIL", output or "CUDA 11.8 runtime is unavailable")

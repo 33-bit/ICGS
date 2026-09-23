@@ -191,3 +191,22 @@ def test_verifier_accepts_matching_redacted_receipt(tmp_path: Path):
         receipt_path=receipt,
     )
     assert result["checks"]["setup_receipt"]["status"] == "PASS"
+
+
+def test_cuda_profile_probe_requires_cuda_11_8(tmp_path: Path):
+    verify = _verify_module()
+    calls: list[tuple[str, ...]] = []
+
+    def runner(command, **kwargs):
+        normalized = tuple(str(part) for part in command)
+        calls.append(normalized)
+        return subprocess.CompletedProcess(normalized, 0, stdout="Python 3.11.0\n", stderr="")
+
+    result = verify.verify_environment(
+        "cuda118",
+        repo_root=tmp_path,
+        python_executable=sys.executable,
+        runner=runner,
+    )
+    assert result["checks"]["cuda"]["status"] == "PASS"
+    assert any("torch.version.cuda == '11.8'" in " ".join(command) for command in calls)
