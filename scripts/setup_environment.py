@@ -139,7 +139,7 @@ def plan_setup(
         raise ValueError(f"repo_root must be an existing directory: {root}")
     python_version = _validate_python_version(python_version)
     commands: list[tuple[str, ...]] = [
-        ("uv", "venv", "--python", python_version, str(venv)),
+        ("uv", "venv", "--allow-existing", "--python", python_version, str(venv)),
     ]
     sync_command: list[str] = ["uv", "sync", "--locked"]
     for extra in PROFILE_EXTRAS[profile]:

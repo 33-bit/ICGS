@@ -110,7 +110,7 @@ def test_profile_command_plan_is_dry_run_safe(tmp_path: Path):
     setup = _setup_module()
     commands = setup.plan_setup("cpu", repo_root=tmp_path, venv_root=tmp_path / ".venv")
     assert commands
-    assert commands[0][:3] == ("uv", "venv", "--python")
+    assert commands[0][:4] == ("uv", "venv", "--allow-existing", "--python")
     assert any(command[:3] == ("uv", "sync", "--locked") for command in commands)
     assert all("environment.yml" not in " ".join(command) for command in commands)
     assert all("conda" not in " ".join(command).lower() for command in commands)
