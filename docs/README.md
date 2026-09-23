@@ -12,6 +12,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Original baseline](baselines/instant_policy.md) | Historical source/defaults, entry-point overrides, assets and reproduction limits |
 | [Policy data contract](components/policy-data-contract.md) | Current data, graph, frame, action and normalization semantics |
 | [Data generation](components/generation.md) | Canonical generation modules, lifecycle, record classes and operations |
+| [Environment setup](components/environment.md) | Portable CPU/CUDA/generation profiles, verification and credential boundary |
 | [Composition examples](components/composition-examples.md) | Current component replacement APIs and future extension boundaries |
 | [Boundary decision](decisions/0001-harness-boundary.md) | Runtime independence from repository harness |
 | [Runtime composition decision](decisions/0002-runtime-composition.md) | Accepted core dependency direction and composition/config strategy |

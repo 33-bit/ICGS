@@ -17,7 +17,8 @@ produce a false-green check by disappearing from discovery.
 ```bash
 python3 -B scripts/validate_fast.py
 python3 -B -S scripts/validate_fast.py
-/content/icgs-check-env/bin/python -B -m unittest discover -s tests -p 'test_*.py' -v
+python3 -B -m pytest -q tests/test_environment_setup.py tests/test_generation_environment.py
+python3 -B -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
 The package must be installed; tests no longer inject repository roots into sys.path.
@@ -64,7 +65,7 @@ standalone scripts, not silently undiscovered unittest suites. L0 counts its sel
 After setup in [README](../README.md), with trusted assets:
 
 ```bash
-ICGS_RUN_PUBLISHED=1 ICGS_CHECKPOINT=/content/icgs-artifacts/model.pt ICGS_FIXTURE=/content/icgs-evidence/input.npz /content/icgs-check-env/bin/python -B -m unittest discover -s tests -p test_model_integration.py -v
+ICGS_RUN_PUBLISHED=1 ICGS_CHECKPOINT="$ICGS_ARTIFACT_ROOT/model.pt" ICGS_FIXTURE="$ICGS_EVIDENCE_ROOT/input.npz" python3 -B -m unittest discover -s tests -p test_model_integration.py -v
 ```
 
 Reference comparison uses the exact command in
@@ -75,7 +76,7 @@ PYTHONPATH or imports instant_policy/ip.
 
 Original source differential:
 ```bash
-IP_LEGACY_SOURCE_ROOT=/content/source-reference /content/icgs-check-env/bin/python -B -m unittest discover -s tests -p test_differential.py -v
+IP_LEGACY_SOURCE_ROOT="$ICGS_REFERENCE_ROOT" python3 -B -m unittest discover -s tests -p test_differential.py -v
 ```
 
 Source hashes are checked before selected original definitions execute. These

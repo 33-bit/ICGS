@@ -7,11 +7,59 @@ name = "icgs"
 version = "0.2.0"
 description = "Unified ICGS research components and Instant Policy baseline"
 requires-python = ">=3.10,<3.13"
-dependencies = ["numpy>=1.26,<2", "scipy>=1.14,<1.15", "torch==2.2.0", "torch-geometric==2.5.0", "diffusers==0.31.0", "huggingface-hub==0.26.2", "open3d==0.18.0", "tqdm>=4.66", "regex"]
+dependencies = ["numpy>=1.26,<2", "scipy>=1.14,<1.15", "diffusers==0.31.0", "huggingface-hub==0.26.2", "open3d==0.18.0", "tqdm>=4.66", "regex"]
 
 [project.optional-dependencies]
+cpu = [
+    "torch==2.2.0",
+    "torch-geometric==2.5.0",
+]
+cuda118 = [
+    "torch==2.2.0",
+    "torch-geometric==2.5.0",
+]
+generation = [
+    "cffi",
+    "gymnasium==1.2.3",
+    "natsort",
+    "pillow",
+    "pyquaternion",
+    "transforms3d",
+]
+test = [
+    "pytest==8.4.2",
+]
 training = ["lightning==2.4.0", "pytorch-lightning==2.4.0", "torchmetrics==1.5.2", "wandb==0.18.7"]
 native-extensions = ["torch-cluster==1.6.3", "torch-scatter==2.1.2"]
+
+[tool.icgs.environment]
+python = ">=3.10,<3.13"
+profiles = ["cpu", "cuda118", "generation"]
+credential_variables = ["HF_TOKEN", "HF_ACCESS_TOKEN", "HUGGINGFACE_HUB_TOKEN", "WANDB_API_KEY"]
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", extra = "cpu" },
+    { index = "pytorch-cu118", extra = "cuda118" },
+]
+
+[tool.uv]
+conflicts = [
+    [
+        { extra = "cpu" },
+        { extra = "cuda118" },
+    ],
+]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu118"
+url = "https://download.pytorch.org/whl/cu118"
+explicit = true
 
 [project.scripts]
 icgs = "icgs.cli.main:main"

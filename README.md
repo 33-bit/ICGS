@@ -7,27 +7,33 @@ planners remain [designed/deferred](docs/components/v5-foundations.md).
 Start with [AGENTS](AGENTS.md), the [documentation map](docs/README.md),
 [architecture](docs/ARCHITECTURE.md), and [checkpoint evidence](docs/experiments/vv19-validation/README.md).
 
-## Validated inference environment
+## Portable environments
 
-Linux x86_64, Python3.10, NVIDIA CUDA11.8 wheels. These commands match the isolated
-Colab environment used for acceptance; no full Conda export or host Python3.14 is
-assumed compatible.
+The canonical installer is `uv` with the locked project metadata. It works from a
+fresh clone without Conda or a fixed filesystem prefix. Python 3.10, 3.11 and 3.12
+are supported.
 
 ```bash
-uv venv --python 3.10 /content/icgs-check-env
-uv pip install --python /content/icgs-check-env/bin/python -r requirements-inference-cu118.txt
-uv pip install --python /content/icgs-check-env/bin/python --no-deps .
-mkdir -p /content/icgs-artifacts
-/content/icgs-check-env/bin/python -m gdown --no-cookies https://drive.google.com/uc?id=1TM_zU1pVOqPuWZL3E9knNp4w-p7EBwwt -O /content/icgs-artifacts/model.pt
-/content/icgs-check-env/bin/python tests/fixtures/generate_smoke.py --output /content/icgs-evidence/input.npz
-cd /tmp
-/content/icgs-check-env/bin/icgs infer --checkpoint /content/icgs-artifacts/model.pt --input /content/icgs-evidence/input.npz --output /content/icgs-evidence/actions.npz --device cuda --seed 17
+python3 scripts/setup_environment.py --profile cpu
+python3 scripts/verify_environment.py --profile cpu --json
 ```
 
-Run installation commands from the checkout, then the last inference command works
-from any directory. For an existing wheel, install its absolute path instead of dot.
-torch-cluster/scatter/pyg-lib must match torch/CUDA ABI; they are explicitly pinned
-in the requirements file, not silently replaced with Python mocks.
+Use `--profile cuda118` on a Linux host with the NVIDIA CUDA 11.8 runtime. Use
+`--profile generation` for the pinned Xvfb/Mesa/RLBench/CoppeliaSim setup, then add
+`--provision-simulator --runtime-config <absolute-runtime-config>` when simulator
+assets are explicitly wanted. Setup is idempotent and writes a redacted receipt to
+`.icgs/setup_receipt.json`.
+
+The historical published inference stack is still available in
+`requirements-inference-cu118.txt`; the exact C1–C5 command and artifact checksums
+remain documented in [published validation evidence](docs/experiments/vv19-validation/README.md).
+The PyTorch/PyG ABI must match the selected profile; setup never substitutes fake
+modules.
+
+Credentials stay outside Git. Set a coordinator-only token path or an environment
+variable when a command explicitly needs publication. Setup and worker processes
+remove credential variables from child environments, and receipts contain only
+redacted command metadata.
 
 The published checkpoint is 471777552 bytes, SHA256
 `119fa871091c7082b98d8a795dd80eca38295c4b7ab454e1f88549194bd4a4a5`.
@@ -54,7 +60,8 @@ No training, full benchmark or physical robot execution is automatic.
 
 ```bash
 python3 -B scripts/validate_fast.py
-/content/icgs-check-env/bin/python -B -m unittest discover -s tests -p 'test_*.py'
+python3 -B -m pytest -q tests/test_environment_setup.py tests/test_generation_environment.py
+python3 -B -m unittest discover -s tests -p 'test_*.py'
 ```
 
 L0 includes canonical src/package/import-boundary checks and negative fixtures.

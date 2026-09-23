@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass
 import hashlib
 import json
 import os
-from pathlib import Path
 import subprocess
 import sys
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-from icgs.data.collection.generation.distributed_contracts import GenerationRuntimeConfig
-
+from icgs.data.collection.generation.distributed_contracts import (
+    GenerationRuntimeConfig,
+)
 
 COPPELIASIM_SHA256 = "512de3a7347387fcc1b12fa675195a912265753f7901808382865bbf51a2a7f8"
 COPPELIASIM_URL = (
@@ -24,6 +25,16 @@ UPSTREAM = {
     "PyRep": "8f420be8064b1970aae18a9cfbc978dfb15747ef",
     "RLBench": "02720bba4c73fe02eb75df946b8791b806028a9d",
 }
+
+
+def _credential_free_environment(base: dict[str, str]) -> dict[str, str]:
+    """Remove credential values before invoking any provisioning subprocess."""
+    secret_names = ("TOKEN", "SECRET", "PASSWORD", "API_KEY", "ACCESS_KEY")
+    return {
+        str(key): str(value)
+        for key, value in base.items()
+        if not any(marker in str(key).upper() for marker in secret_names)
+    }
 
 
 @dataclass(frozen=True)
@@ -90,7 +101,7 @@ def provision_environment(
         raise ValueError(f"python_executable must be executable: {python_executable}")
 
     commands: list[tuple[str, ...]] = []
-    environment = config.resolved_environment(base=os.environ)
+    environment = _credential_free_environment(config.resolved_environment(base=os.environ))
     environment.update({
         "DEBIAN_FRONTEND": "noninteractive",
         "GIT_TERMINAL_PROMPT": "0",
@@ -143,40 +154,43 @@ def provision_environment(
 
     archive = simulator_root.parent / "CoppeliaSim_Edu_V4_1_0_Ubuntu20_04.tar.xz"
     archive.parent.mkdir(parents=True, exist_ok=True)
-    _run(
-        [
-            "curl", "--fail", "--location", "--retry", "2", "--max-time", "900",
-            "--output", str(archive), COPPELIASIM_URL,
-        ],
-        timeout=1000,
-        env=environment,
-        runner=runner,
-        commands=commands,
-    )
+    if not archive.is_file():
+        _run(
+            [
+                "curl", "--fail", "--location", "--retry", "2", "--max-time", "900",
+                "--output", str(archive), COPPELIASIM_URL,
+            ],
+            timeout=1000,
+            env=environment,
+            runner=runner,
+            commands=commands,
+        )
     simulator_digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     if simulator_digest != COPPELIASIM_SHA256:
         raise RuntimeError(f"CoppeliaSim checksum mismatch: {simulator_digest}")
 
     simulator_root.mkdir(parents=True, exist_ok=True)
-    _run(
-        ["tar", "-xJf", str(archive), "-C", str(simulator_root), "--strip-components=1"],
-        timeout=300,
-        env=environment,
-        runner=runner,
-        commands=commands,
-    )
+    if not (simulator_root / "simStart").is_file():
+        _run(
+            ["tar", "-xJf", str(archive), "-C", str(simulator_root), "--strip-components=1"],
+            timeout=300,
+            env=environment,
+            runner=runner,
+            commands=commands,
+        )
 
     source_root = rlbench_root.parent
     source_root.mkdir(parents=True, exist_ok=True)
     for name, revision in UPSTREAM.items():
         source = source_root / name if name == "PyRep" else rlbench_root
-        _run(
-            ["git", "clone", "--no-checkout", f"https://github.com/stepjam/{name}.git", str(source)],
-            timeout=600,
-            env=environment,
-            runner=runner,
-            commands=commands,
-        )
+        if not source.is_dir():
+            _run(
+                ["git", "clone", "--no-checkout", f"https://github.com/stepjam/{name}.git", str(source)],
+                timeout=600,
+                env=environment,
+                runner=runner,
+                commands=commands,
+            )
         _run(
             ["git", "-C", str(source), "fetch", "--depth", "1", "origin", revision],
             timeout=600,

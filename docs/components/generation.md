@@ -4,6 +4,10 @@ ICGS has one supported data-generation system. Runtime owners live under
 `src/icgs/data/collection/generation`; operational entry points use the
 `scripts/generation_*` prefix.
 
+Install and verify the host with the portable `generation` profile described in
+[Environment setup](environment.md). Simulator provisioning is explicit and
+idempotent; generation setup never starts a worker or coordinator by itself.
+
 ## Ownership
 
 | Owner | Responsibility |
