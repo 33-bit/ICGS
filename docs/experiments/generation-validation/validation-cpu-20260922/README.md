@@ -96,3 +96,44 @@ startup, bounded queueing, watchdog startup, multi-batch publication and remote
 artifact listing—not a PASS for the full validation plan. Distributed
 `valid_failure`, malformed-result, infrastructure-failure and controlled
 coordinator-restart gates remain NOT RUN in this VPS follow-up.
+
+## 2026-09-24 VPS acceptance for resumable/multi-host hardening
+
+The GitHub checkout was fast-forwarded to `e31df1f` (the resumable/multi-host
+implementation at `6341777` plus the direct launcher-entrypoint fix). The VPS
+environment used Python 3.12.14, the pinned CoppeliaSim checkout, PyRep and
+RLBench. No credential was committed; the HF token was installed temporarily
+as a mode-600 file and removed after the run.
+
+### Gate evidence
+
+| Gate | Status | Evidence / reason |
+| --- | --- | --- |
+| generation contract suite on VPS | PASS | `PYTHONPATH=src /home/huy2325/icgs-vps-env/bin/python -B -m pytest -q tests/test_generation*.py` — 218 passed |
+| simulator readiness | PASS | `generation_simulator_probe.py --worker` under Xvfb; 2 physics steps, advancing clock, finite 128×128×3 cloud |
+| current-commit success episode | PASS | G1, 273 actions / 274 observations, valid timeline |
+| current-commit valid failures | PASS | T01 and T11, valid `T+1` timelines, no simulator crash |
+| current-commit additional smoke | PASS | T02–T09 completed; 8 success and T01 valid-failure in the bounded smoke before safe stop |
+| bounded distributed queue | PASS | 2 workers + coordinator + watchdog; queue target remained 7; no restart history |
+| HF publication and remote verification | PASS | 4 verified data/final commits under `validation/validation-cpu-20260922/vps-6341777`; public manifest contains 4 episodes and source run `generation-validation-vps-6341777-20260923` |
+| HF resume preflight | PASS | New disjoint run downloaded the remote manifest, pinned revision `5dd492641f32e2822755a70690860d60bc5e5140`, and recorded manifest SHA in `resume_bootstrap.json` |
+| shared-filesystem worker-only attach | PASS | Host `host-b`, worker scope `001`, host-local runtime snapshot and lease heartbeat verified; worker/watchdog stopped immediately after attach check |
+| malformed-result quarantine | NOT RUN live | Unit coverage PASS; no malformed artifact injected into this VPS run |
+| infrastructure-failure materialization | NOT RUN live | Unit coverage PASS; no forced simulator crash injected |
+| controlled coordinator restart | NOT RUN live | Watchdog remained stable (`restart_history=[]`); no forced restart was injected |
+| full generation | NOT RUN | Bounded run was stopped with two slow claimed jobs remaining; no production prefix was touched |
+
+The bounded run was stopped safely after four verified publications. Its queue
+and receipts remain under `/home/huy2325/icgs-vps-run-6341777` for inspection;
+the temporary credential file was removed. The acceptance result is evidence
+for the hardening paths and isolated publication prefix, not a PASS for the
+complete production generation plan.
+
+### VPS environment limits
+
+The focused generation suite passed, but the full repository suite was **FAIL
+at collection** because the VPS environment has no `torch` (20 test modules
+could not import it). `python3 -B scripts/validate_fast.py` ran the 22 harness
+tests but was **FAIL** on five historical `vv19-validation` log links absent
+from the clean checkout; these are documentation evidence files, not runtime
+code failures. L1/L2 model execution and L4 benchmark remain NOT RUN.
