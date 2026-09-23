@@ -139,7 +139,8 @@ active plan, useful independently verified work and precise INCOMPLETE handoff.
 - Final wheel SHA2567509bcdb66f7da26b3a7bfebf414b410d7e3b9a25b6b34d0dca0e8abf3625d49.
   Final source .py bytes match that wheel; subsequent changes are documentation only.
 - All C1–C5 PASS: [acceptance](../../experiments/vv19-validation/acceptance.json).
-  Full actual output: [commands](../../experiments/vv19-validation/all-commands.log).
+  The checkout retains the machine-readable receipt; historical raw command logs
+  are not included.
 
 ### Validation
 - Full installed-wheel discovery on Colab: 88 selected, 87 PASS, 1 SKIPPED

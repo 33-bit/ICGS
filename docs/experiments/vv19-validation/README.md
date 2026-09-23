@@ -20,10 +20,11 @@ config/normalizer/scheduler, not guessed tensor shapes. See
   outputs, cold/warm/reset and no gradients PASS.
 - C4: matched reference/native input, checkpoint/settings, seeds17/29/41 PASS.
   Tolerance is calculated from reference repeatability before native comparison;
-  exact report in [final-gates.log](final-gates.log).
+  exact report is recorded in [acceptance.json](acceptance.json).
 - C5: installed wheel executed from /tmp with no old ip/instant_policy imports,
   reference checkout absent from import path, no unused training/environment/model
-  components loaded: [standalone.log](standalone.log) PASS.
+  components loaded; the machine-readable result is recorded in
+  [acceptance.json](acceptance.json).
 
 These claims concern the tested synthetic fixture/settings only. No RLBench task
 success, broad benchmark, optimizer resume, whole-object old pickle or complete v5
@@ -34,8 +35,9 @@ tolerance was widened to fit that mismatch.
 Final fresh-session acceptance: native matrix error up to2.2352e-7, translation
 up to6.7056e-8, rotation up to2.6573e-7 radians, grips exactly equal. Full suite:
 88 selected, 87 PASS, 1 SKIPPED (RLBench task-class import); zero failures/errors.
-L0: 19 PASS. [acceptance.json](acceptance.json) and
-[all-commands.log](all-commands.log) contain actual final command output.
+L0: 19 PASS. [acceptance.json](acceptance.json) contains the retained
+machine-readable final receipt. The original raw command logs are not part of
+this checkout.
 Validated wheel SHA256: 7509bcdb66f7da26b3a7bfebf414b410d7e3b9a25b6b34d0dca0e8abf3625d49.
 
 ## Fixture and reproduction
@@ -79,8 +81,8 @@ official cu118 wheel corrected the ABI mismatch. A later idle Colab session lost
 its proxy; recorded execution evidence was recovered from CLI history, and a fresh
 named T4 session is used for final rerun/download and cleanup.
 
-[unit-tests.log](unit-tests.log) records focused actual-stack tests. Simulator task
-resolution may be SKIPPED because RLBench is not installed; it is not C1–C5 proof.
+Focused actual-stack test counts are retained in the acceptance receipt. Simulator
+task resolution may be SKIPPED because RLBench is not installed; it is not C1–C5 proof.
 Runtime schema/root/RNG/context issues found in independent review were fixed with
 regressions before final wheel verification.
 
