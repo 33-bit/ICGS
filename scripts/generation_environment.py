@@ -25,6 +25,7 @@ UPSTREAM = {
     "PyRep": "8f420be8064b1970aae18a9cfbc978dfb15747ef",
     "RLBench": "02720bba4c73fe02eb75df946b8791b806028a9d",
 }
+SIMULATOR_MARKERS = ("coppeliaSim", "coppeliaSim.sh", "simStart")
 
 
 def _credential_free_environment(base: dict[str, str]) -> dict[str, str]:
@@ -42,6 +43,11 @@ def _apt_command(*arguments: str) -> list[str]:
     geteuid = getattr(os, "geteuid", None)
     prefix = [] if geteuid is None or geteuid() == 0 else ["sudo", "-n"]
     return [*prefix, "apt-get", *arguments]
+
+
+def _simulator_is_provisioned(simulator_root: Path) -> bool:
+    """Recognize the executable names shipped by supported CoppeliaSim builds."""
+    return any((simulator_root / marker).is_file() for marker in SIMULATOR_MARKERS)
 
 
 @dataclass(frozen=True)
@@ -177,7 +183,7 @@ def provision_environment(
         raise RuntimeError(f"CoppeliaSim checksum mismatch: {simulator_digest}")
 
     simulator_root.mkdir(parents=True, exist_ok=True)
-    if not (simulator_root / "simStart").is_file():
+    if not _simulator_is_provisioned(simulator_root):
         _run(
             ["tar", "-xJf", str(archive), "-C", str(simulator_root), "--strip-components=1"],
             timeout=300,

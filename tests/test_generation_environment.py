@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from icgs.data.collection.generation.distributed_contracts import (
     GenerationRuntimeConfig,
 )
@@ -163,6 +165,47 @@ def test_provision_environment_records_configured_commands_without_external_exec
     assert any(command[:3] == ("uv", "pip", "install") for command in receipt.commands)
     assert any(config.machine.python_executable in command for command in receipt.commands)
     assert all("/content" not in " ".join(command) for command in receipt.commands)
+
+
+@pytest.mark.parametrize("marker", ("coppeliaSim", "coppeliaSim.sh"))
+def test_provision_reuses_existing_coppeliasim_marker(
+    tmp_path: Path, monkeypatch, marker: str
+):
+    environment = _environment_module()
+    monkeypatch.setattr(environment.os, "geteuid", lambda: 0)
+    config = _runtime_config(tmp_path)
+    (Path(config.machine.simulator_root) / marker).write_text("existing\n", encoding="utf-8")
+    archive_bytes = b"existing simulator archive"
+    archive = Path(config.machine.simulator_root).parent / (
+        "CoppeliaSim_Edu_V4_1_0_Ubuntu20_04.tar.xz"
+    )
+    archive.write_bytes(archive_bytes)
+    monkeypatch.setattr(
+        environment,
+        "COPPELIASIM_SHA256",
+        hashlib.sha256(archive_bytes).hexdigest(),
+    )
+    calls: list[tuple[str, ...]] = []
+
+    def runner(command, **kwargs):
+        normalized = tuple(str(part) for part in command)
+        calls.append(normalized)
+        if normalized[0] in {"curl", "tar"}:
+            raise AssertionError(f"existing simulator must not run {normalized[0]}")
+        if normalized[:3] == ("git", "clone", "--no-checkout"):
+            Path(normalized[-1]).mkdir(parents=True)
+        if normalized[:2] == ("git", "-C") and normalized[-2:] == ("rev-parse", "HEAD"):
+            source_name = Path(normalized[2]).name
+            return SimpleNamespace(stdout=environment.UPSTREAM[source_name] + "\n")
+        return SimpleNamespace(stdout="")
+
+    receipt = _required_api(environment, "provision_environment")(
+        config,
+        runner=runner,
+    )
+
+    assert receipt.simulator_sha256 == hashlib.sha256(archive_bytes).hexdigest()
+    assert all(command[0] not in {"curl", "tar"} for command in calls)
 
 
 def test_provision_commands_do_not_receive_credential_environment(tmp_path: Path, monkeypatch):
