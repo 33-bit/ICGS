@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import pytest
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised by Python 3.10
+    import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,6 +38,10 @@ def test_project_declares_portable_profiles_and_python_floor():
         "torch-scatter==2.1.2+pt22cu118",
     }.issubset(extras["cuda118"])
     assert any("gymnasium" in requirement for requirement in extras["generation"])
+    assert any(
+        "tomli" in requirement and "python_version < '3.11'" in requirement
+        for requirement in extras["test"]
+    )
     assert "torch" not in payload["project"]["dependencies"]
     assert payload["tool"]["uv"]["sources"]["torch"] == [
         {"index": "pytorch-cpu", "extra": "cpu"},
@@ -210,3 +219,44 @@ def test_cuda_profile_probe_requires_cuda_11_8(tmp_path: Path):
     )
     assert result["checks"]["cuda"]["status"] == "PASS"
     assert any("torch.version.cuda == '11.8'" in " ".join(command) for command in calls)
+
+
+def test_generation_verifier_passes_renderer_environment_to_probes(
+    tmp_path: Path, monkeypatch
+):
+    verify = _verify_module()
+    simulator_root = tmp_path / "CoppeliaSim"
+    rlbench_root = tmp_path / "RLBench"
+    simulator_root.mkdir()
+    rlbench_root.mkdir()
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/base-libraries")
+    environments: list[dict[str, str]] = []
+
+    def runner(command, **kwargs):
+        environment = kwargs.get("env")
+        if environment is not None:
+            environments.append(environment)
+        normalized = tuple(str(part) for part in command)
+        stdout = "/usr/bin/Xvfb\n" if normalized[0] == "sh" else "3.11.0\n"
+        return subprocess.CompletedProcess(normalized, 0, stdout=stdout, stderr="")
+
+    result = verify.verify_environment(
+        "generation",
+        repo_root=tmp_path,
+        python_executable=sys.executable,
+        simulator_root=simulator_root,
+        rlbench_root=rlbench_root,
+        runner=runner,
+    )
+
+    assert result["status"] == "PASS"
+    assert environments
+    for environment in environments:
+        assert environment["COPPELIASIM_ROOT"] == str(simulator_root)
+        assert environment["LD_LIBRARY_PATH"] == os.pathsep.join(
+            [str(simulator_root), "/opt/base-libraries"]
+        )
+        assert environment["QT_QPA_PLATFORM_PLUGIN_PATH"] == str(simulator_root)
+        assert environment["QT_QPA_PLATFORM"] == "xcb"
+        assert str(tmp_path / "src") in environment["PYTHONPATH"]
+        assert str(rlbench_root) in environment["PYTHONPATH"]

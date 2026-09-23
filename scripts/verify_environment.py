@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -17,7 +18,12 @@ from typing import Any
 if __package__ in {None, ""}:
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from scripts.setup_environment import PROFILE_NAMES, _redact_string, _validate_profile
+from scripts.setup_environment import (
+    PROFILE_NAMES,
+    _redact_string,
+    _safe_environment,
+    _validate_profile,
+)
 
 Runner = Callable[..., Any]
 _IMPORT_PROBES = {
@@ -39,15 +45,18 @@ def _probe(
     *,
     runner: Runner,
     cwd: str | Path | None = None,
+    environment: Mapping[str, str] | None = None,
 ) -> tuple[bool, str]:
     try:
-        result = runner(
-            [str(part) for part in command],
-            check=False,
-            capture_output=True,
-            text=True,
-            cwd=str(cwd) if cwd is not None else None,
-        )
+        options: dict[str, Any] = {
+            "check": False,
+            "capture_output": True,
+            "text": True,
+            "cwd": str(cwd) if cwd is not None else None,
+        }
+        if environment is not None:
+            options["env"] = dict(environment)
+        result = runner([str(part) for part in command], **options)
     except (OSError, subprocess.SubprocessError) as exc:
         return False, str(exc)
     return_code = int(getattr(result, "returncode", 1))
@@ -55,10 +64,16 @@ def _probe(
     return return_code == 0, _redact_string(output.strip())
 
 
-def _python_check(python_executable: str, runner: Runner) -> dict[str, str]:
+def _python_check(
+    python_executable: str,
+    runner: Runner,
+    *,
+    environment: Mapping[str, str] | None = None,
+) -> dict[str, str]:
     ok, output = _probe(
         [python_executable, "-c", "import sys; print(sys.version.split()[0])"],
         runner=runner,
+        environment=environment,
     )
     if not ok:
         return _status("FAIL", output or "python executable could not run")
@@ -69,6 +84,30 @@ def _python_check(python_executable: str, runner: Runner) -> dict[str, str]:
     if (major, minor) < (3, 10) or (major, minor) >= (3, 13):
         return _status("FAIL", f"Python {major}.{minor} is outside >=3.10,<3.13")
     return _status("PASS", f"Python {major}.{minor}")
+
+
+def _generation_probe_environment(
+    repo_root: Path,
+    simulator_root: str | Path | None,
+    rlbench_root: str | Path | None,
+) -> dict[str, str]:
+    """Build the headless simulator environment without credential variables."""
+    environment = _safe_environment()
+    if simulator_root is not None:
+        simulator = str(Path(simulator_root).resolve())
+        environment["COPPELIASIM_ROOT"] = simulator
+        environment["LD_LIBRARY_PATH"] = os.pathsep.join(
+            filter(None, (simulator, environment.get("LD_LIBRARY_PATH", "")))
+        )
+        environment["QT_QPA_PLATFORM_PLUGIN_PATH"] = simulator
+        environment["QT_QPA_PLATFORM"] = "xcb"
+    paths = [str(repo_root / "src")]
+    if rlbench_root is not None:
+        paths.append(str(Path(rlbench_root).resolve()))
+    if environment.get("PYTHONPATH"):
+        paths.append(environment["PYTHONPATH"])
+    environment["PYTHONPATH"] = os.pathsep.join(paths)
+    return environment
 
 
 def _credential_check(paths: Sequence[str | Path]) -> dict[str, str]:
@@ -108,13 +147,19 @@ def verify_environment(
     profile = _validate_profile(profile)
     root = Path(repo_root).resolve()
     python = str(python_executable or sys.executable)
+    probe_environment = (
+        _generation_probe_environment(root, simulator_root, rlbench_root)
+        if profile == "generation"
+        else None
+    )
     checks: dict[str, dict[str, str]] = {}
-    checks["python"] = _python_check(python, runner)
+    checks["python"] = _python_check(python, runner, environment=probe_environment)
     for name, expression in _IMPORT_PROBES.items():
         ok, output = _probe(
             [python, "-c", expression],
             runner=runner,
             cwd=root,
+            environment=probe_environment,
         )
         checks[name] = _status("PASS" if ok else "FAIL", output or ("import probe failed" if not ok else ""))
 
@@ -132,7 +177,11 @@ def verify_environment(
         checks["cuda"] = _status("NOT_RUN", "CUDA profile not selected")
 
     if profile == "generation":
-        ok, output = _probe(["sh", "-c", "command -v Xvfb"], runner=runner)
+        ok, output = _probe(
+            ["sh", "-c", "command -v Xvfb"],
+            runner=runner,
+            environment=probe_environment,
+        )
         checks["renderer"] = _status("PASS", output or "Xvfb found") if ok else _status("FAIL", "Xvfb is not installed")
         if simulator_root is None:
             checks["simulator"] = _status("FAIL", "simulator_root was not supplied")
@@ -150,6 +199,7 @@ def verify_environment(
                     [python, "-c", "import pyrep; import rlbench"],
                     runner=runner,
                     cwd=rlbench,
+                    environment=probe_environment,
                 )
                 checks["rlbench_pyrep"] = _status("PASS" if ok else "FAIL", output or "PyRep/RLBench imports failed")
     else:

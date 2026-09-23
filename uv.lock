@@ -779,6 +779,7 @@ native-extensions = [
 ]
 test = [
     { name = "pytest" },
+    { name = "tomli", marker = "python_full_version < '3.11' or (extra == 'extra-4-icgs-cpu' and extra == 'extra-4-icgs-cuda118')" },
 ]
 training = [
     { name = "lightning" },
@@ -804,6 +805,7 @@ requires-dist = [
     { name = "pytorch-lightning", marker = "extra == 'training'", specifier = "==2.4.0" },
     { name = "regex" },
     { name = "scipy", specifier = ">=1.14,<1.15" },
+    { name = "tomli", marker = "python_full_version < '3.11' and extra == 'test'", specifier = "==2.4.1" },
     { name = "torch", marker = "extra == 'cpu'", specifier = "==2.2.0", index = "https://download.pytorch.org/whl/cpu", conflict = { package = "icgs", extra = "cpu" } },
     { name = "torch", marker = "extra == 'cuda118'", specifier = "==2.2.0", index = "https://download.pytorch.org/whl/cu118", conflict = { package = "icgs", extra = "cuda118" } },
     { name = "torch-cluster", marker = "extra == 'cuda118'", specifier = "==1.6.3+pt22cu118", index = "https://data.pyg.org/whl/torch-2.2.0+cu118.html", conflict = { package = "icgs", extra = "cuda118" } },
