@@ -343,6 +343,23 @@ The implementation must keep these ownership boundaries:
 
 Local plan gates are pure fixture/unit/L0 checks. No simulator, download, preprocessing workload, training, robot motion, or HF publication is incidental to this plan.
 
+## Implementation progress
+
+- [x] Phase 0.2 — Added an opt-in immutable archive profile. Legacy runtime configs still parse with `archive_profile=None`; the checked-in bounded validation example selects the archive format with `keep` retention.
+- [x] Recorded implementation rulings: `numpy.savez_compressed` has no `allow_pickle` argument, so archive writes reject object arrays and readers use `numpy.load(..., allow_pickle=False)`; dated audits remain historical evidence and current storage behavior belongs in current owner docs.
+- [ ] Phase 1 — Canonical archive writer/reader and both materialization paths.
+- [ ] Phase 2 — New-profile validation, complete HF publication, receipt-only retention, and HF-only resume.
+- [ ] Phase 3 — Lazy archive readers and revision-bound provisional/final views.
+- [ ] Phase 4 — Local migration and capacity instrumentation.
+- [ ] Phase 5 — Current owner documentation and local acceptance.
+
+Phase 0.2 TDD evidence (`/tmp/icgs-generation-hf-archive.koAE1D`, CPython 3.14.4, NumPy 2.4.4, pytest 8.4.2):
+
+- RED: `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_config.py` — 10 new profile assertions failed because the profile API did not exist; 32 legacy tests passed.
+- GREEN: `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_config.py` — **PASS, 42 passed** after implementation.
+- RED/GREEN for the checked-in example profile: the targeted profile test first failed because the example had no archive profile, then the full config file passed with **42 passed** after the example was updated.
+- Environment limit: this isolated worktree has no `.venv`; the system interpreter is CPython 3.14.4 rather than the documented 3.10–3.12 validation environment.
+
 At plan creation time:
 
 - Git state: clean `main` checkout.

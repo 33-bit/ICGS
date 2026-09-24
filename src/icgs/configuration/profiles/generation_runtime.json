@@ -1,4 +1,14 @@
 {
+  "archive_profile": {
+    "dataset_identity": "icgs-primary-v3-archive-v1",
+    "archive_format_id": "icgs_npz_chunked_v1",
+    "episode_schema_version": "icgs_episode_archive_v1",
+    "chunk_boundaries": 8,
+    "retain_full_cloud": true,
+    "publish_debug_metadata": true,
+    "local_artifact_retention": "keep",
+    "view_status": "provisional"
+  },
   "machine": {
     "repo_root": "/workspace/ICGS",
     "python_executable": "/workspace/venv/bin/python",

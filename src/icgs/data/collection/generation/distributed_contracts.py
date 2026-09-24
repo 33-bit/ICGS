@@ -49,6 +49,9 @@ _VALIDATION_GATE_NAMES = (
     "publication",
 )
 _VALIDATION_STATUSES = frozenset({"PASS", "FAIL", "NOT_RUN"})
+ARCHIVE_DATASET_IDENTITY = "icgs-primary-v3-archive-v1"
+ARCHIVE_FORMAT_ID = "icgs_npz_chunked_v1"
+ARCHIVE_EPISODE_SCHEMA_VERSION = "icgs_episode_archive_v1"
 
 
 def _nonblank(value: str, name: str) -> str:
@@ -235,15 +238,59 @@ class RuntimeRunConfig:
 
 
 @dataclass(frozen=True)
+class ArchiveProfileConfig:
+    """Opt-in lossless HF archive profile; absent profiles retain v3 JSON behavior."""
+
+    dataset_identity: str = ARCHIVE_DATASET_IDENTITY
+    archive_format_id: str = ARCHIVE_FORMAT_ID
+    episode_schema_version: str = ARCHIVE_EPISODE_SCHEMA_VERSION
+    chunk_boundaries: int = 64
+    retain_full_cloud: bool = True
+    publish_debug_metadata: bool = True
+    local_artifact_retention: str = "keep"
+    view_status: str = "provisional"
+
+    def __post_init__(self) -> None:
+        if self.dataset_identity != ARCHIVE_DATASET_IDENTITY:
+            raise ValueError("unsupported dataset_identity for generation archive profile")
+        if self.archive_format_id != ARCHIVE_FORMAT_ID:
+            raise ValueError("unsupported archive_format_id")
+        if self.episode_schema_version != ARCHIVE_EPISODE_SCHEMA_VERSION:
+            raise ValueError("unsupported episode_schema_version")
+        _positive_int(self.chunk_boundaries, "chunk_boundaries")
+        if type(self.retain_full_cloud) is not bool or not self.retain_full_cloud:
+            raise ValueError("retain_full_cloud must be true for the HF source-of-truth profile")
+        if type(self.publish_debug_metadata) is not bool or not self.publish_debug_metadata:
+            raise ValueError("publish_debug_metadata must be true for the HF source-of-truth profile")
+        if self.local_artifact_retention not in {"keep", "receipt_only"}:
+            raise ValueError("local_artifact_retention must be keep or receipt_only")
+        if self.view_status not in {"provisional", "final"}:
+            raise ValueError("view_status must be provisional or final")
+
+    @classmethod
+    def from_dict(cls, payload: Mapping[str, Any]) -> "ArchiveProfileConfig":
+        values = _mapping(payload, "archive_profile")
+        allowed = frozenset(cls.__dataclass_fields__)
+        _reject_unknown(values, allowed, "archive_profile")
+        return cls(**values)
+
+    def as_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class GenerationRuntimeConfig:
     machine: MachineConfig
     run: RuntimeRunConfig
+    archive_profile: ArchiveProfileConfig | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.machine, MachineConfig):
             raise ValueError("machine must be a MachineConfig")
         if not isinstance(self.run, RuntimeRunConfig):
             raise ValueError("run must be a RuntimeRunConfig")
+        if self.archive_profile is not None and not isinstance(self.archive_profile, ArchiveProfileConfig):
+            raise ValueError("archive_profile must be an ArchiveProfileConfig or null")
         width = max(3, len(str(self.run.worker_count - 1)))
         worker_ids = self.machine.worker_ids or tuple(
             f"{index:0{width}d}" for index in range(self.run.worker_count)
@@ -268,12 +315,17 @@ class GenerationRuntimeConfig:
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "GenerationRuntimeConfig":
         values = _mapping(payload, "runtime config")
-        allowed = frozenset({"machine", "run"})
+        required = frozenset({"machine", "run"})
+        allowed = required | {"archive_profile"}
         _reject_unknown(values, allowed, "runtime config")
-        _require_fields(values, allowed, "runtime config")
+        _require_fields(values, required, "runtime config")
         return cls(
             machine=MachineConfig.from_dict(values["machine"]),
             run=RuntimeRunConfig.from_dict(values["run"]),
+            archive_profile=(
+                None if values.get("archive_profile") is None
+                else ArchiveProfileConfig.from_dict(values["archive_profile"])
+            ),
         )
 
     @classmethod
@@ -296,7 +348,10 @@ class GenerationRuntimeConfig:
     def as_dict(self) -> dict[str, Any]:
         machine = asdict(self.machine)
         machine["worker_ids"] = list(self.machine.worker_ids)
-        return {"machine": machine, "run": asdict(self.run)}
+        payload = {"machine": machine, "run": asdict(self.run)}
+        if self.archive_profile is not None:
+            payload["archive_profile"] = self.archive_profile.as_dict()
+        return payload
 
     def resolved_environment(self, base: Mapping[str, str] | None = None) -> dict[str, str]:
         if base is None:
@@ -328,6 +383,10 @@ class GenerationRuntimeConfig:
             "ICGS_HF_SUBFOLDER": self.run.hf_subfolder or "",
             "ICGS_PUBLICATION_ENABLED": "1" if self.run.publication_enabled else "0",
             "ICGS_VALIDATION_MODE": "1" if self.run.validation_mode else "0",
+            "ICGS_GENERATION_ARCHIVE_PROFILE": (
+                json.dumps(self.archive_profile.as_dict(), sort_keys=True, separators=(",", ":"))
+                if self.archive_profile is not None else ""
+            ),
         })
         return environment
 

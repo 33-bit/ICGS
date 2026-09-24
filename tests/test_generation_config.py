@@ -263,6 +263,77 @@ def test_resolved_environment_merges_without_mutating_base(tmp_path: Path):
     assert base["LD_LIBRARY_PATH"] == "/opt/base-libraries"
 
 
+def _archive_profile(*, retention: str = "keep", chunk_boundaries: int = 8) -> dict:
+    return {
+        "dataset_identity": "icgs-primary-v3-archive-v1",
+        "archive_format_id": "icgs_npz_chunked_v1",
+        "episode_schema_version": "icgs_episode_archive_v1",
+        "chunk_boundaries": chunk_boundaries,
+        "retain_full_cloud": True,
+        "publish_debug_metadata": True,
+        "local_artifact_retention": retention,
+        "view_status": "provisional",
+    }
+
+
+def test_archive_profile_is_opt_in_and_roundtrips_without_changing_legacy_defaults(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    legacy = _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+    assert legacy.archive_profile is None
+    assert "archive_profile" not in legacy.as_dict()
+
+    payload["archive_profile"] = _archive_profile(retention="receipt_only", chunk_boundaries=64)
+    runtime = _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+    assert runtime.archive_profile.archive_format_id == "icgs_npz_chunked_v1"
+    assert runtime.archive_profile.episode_schema_version == "icgs_episode_archive_v1"
+    assert runtime.archive_profile.chunk_boundaries == 64
+    assert runtime.archive_profile.local_artifact_retention == "receipt_only"
+    assert runtime.as_dict()["archive_profile"] == payload["archive_profile"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("unknown", True, "unknown"),
+        ("archive_format_id", "icgs_episode_v2", "archive_format_id"),
+        ("episode_schema_version", "icgs_episode_v2", "episode_schema_version"),
+        ("chunk_boundaries", 0, "chunk_boundaries"),
+        ("retain_full_cloud", False, "retain_full_cloud"),
+        ("publish_debug_metadata", False, "publish_debug_metadata"),
+        ("local_artifact_retention", "delete_all", "local_artifact_retention"),
+        ("view_status", "complete", "view_status"),
+    ],
+)
+def test_archive_profile_rejects_unsupported_or_lossy_values(
+    tmp_path: Path, field: str, value, message: str
+):
+    payload = _portable_payload(tmp_path)
+    profile = _archive_profile()
+    profile[field] = value
+    payload["archive_profile"] = profile
+
+    with pytest.raises(ValueError, match=message):
+        _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+
+@pytest.mark.parametrize("retention", ["keep", "receipt_only"])
+def test_archive_profile_accepts_bounded_and_production_retention_modes(
+    tmp_path: Path, retention: str
+):
+    payload = _portable_payload(tmp_path)
+    payload["archive_profile"] = _archive_profile(retention=retention)
+
+    runtime = _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+    assert runtime.archive_profile.local_artifact_retention == retention
+    resolved = runtime.resolved_environment(base={})
+    assert '"local_artifact_retention":"' + retention + '"' in resolved[
+        "ICGS_GENERATION_ARCHIVE_PROFILE"
+    ]
+
+
 def test_checked_in_generation_runtime_profile_parses_without_path_checks():
     profile = Path(__file__).resolve().parents[1] / "src/icgs/configuration/profiles/generation_runtime.json"
 
@@ -272,6 +343,9 @@ def test_checked_in_generation_runtime_profile_parses_without_path_checks():
     assert runtime.machine.simulator_slots == 2
     assert runtime.run.publication_enabled is False
     assert runtime.run.validation_mode is True
+    assert runtime.archive_profile is not None
+    assert runtime.archive_profile.local_artifact_retention == "keep"
+    assert runtime.archive_profile.chunk_boundaries == 8
 
 
 def test_run_config_accepts_configurable_publication_and_validation_fields():
