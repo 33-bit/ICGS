@@ -345,20 +345,33 @@ Local plan gates are pure fixture/unit/L0 checks. No simulator, download, prepro
 
 ## Implementation progress
 
-- [x] Phase 0.2 — Added an opt-in immutable archive profile. Legacy runtime configs still parse with `archive_profile=None`; the checked-in bounded validation example selects the archive format with `keep` retention.
+- [x] Phase 0.2 — Added an opt-in immutable archive profile. Legacy runtime configs still parse with `archive_profile=None`; the checked-in bounded validation example selects the archive format with `keep` retention. Profiles also bound each uncompressed NPZ chunk with `max_chunk_bytes` (default 256 MiB); the writer streams `.npy` scratch pieces and records a local staging byte upper bound that includes spool plus final files.
 - [x] Recorded implementation rulings: `numpy.savez_compressed` has no `allow_pickle` argument, so archive writes reject object arrays and readers use `numpy.load(..., allow_pickle=False)`; dated audits remain historical evidence and current storage behavior belongs in current owner docs.
-- [ ] Phase 1 — Canonical archive writer/reader and both materialization paths.
+- [ ] Phase 1 — Canonical archive writer/reader and both materialization paths. Archive core is implemented and its focused tests pass; worker/materializer and distributed-validation integration remain open.
 - [ ] Phase 2 — New-profile validation, complete HF publication, receipt-only retention, and HF-only resume.
 - [ ] Phase 3 — Lazy archive readers and revision-bound provisional/final views.
 - [ ] Phase 4 — Local migration and capacity instrumentation.
 - [ ] Phase 5 — Current owner documentation and local acceptance.
 
-Phase 0.2 TDD evidence (`/tmp/icgs-generation-hf-archive.koAE1D`, CPython 3.14.4, NumPy 2.4.4, pytest 8.4.2):
+Phase 0.2 TDD evidence (`/tmp/icgs-generation-hf-archive.koAE1D`, system CPython 3.14.4, NumPy 2.4.4, pytest 8.4.2):
 
 - RED: `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_config.py` — 10 new profile assertions failed because the profile API did not exist; 32 legacy tests passed.
-- GREEN: `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_config.py` — **PASS, 42 passed** after implementation.
+- GREEN: `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_config.py` — **PASS, 42 passed** after initial implementation.
 - RED/GREEN for the checked-in example profile: the targeted profile test first failed because the example had no archive profile, then the full config file passed with **42 passed** after the example was updated.
 - Environment limit: this isolated worktree has no `.venv`; the system interpreter is CPython 3.14.4 rather than the documented 3.10–3.12 validation environment.
+
+Post-review profile hardening evidence (`PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_config.py -k 'unhashable_enum_values or literal_retention'`): **RED, 5 failed**, exposing unhashable enum values leaking `TypeError` and missing `Literal` annotations. After adding string-type checks, plan `Literal` types and `max_chunk_bytes`, config acceptance was rerun on supported CPython 3.11.15 and passed **48 tests**.
+
+Phase 1 archive-core evidence (read-only use of `/Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python`, CPython 3.11.15; `PYTHONPATH=/tmp/icgs-generation-hf-archive.koAE1D/src`):
+
+- RED: `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_archive.py` — **FAIL as expected**, 1 API-availability failure and 7 skipped because the module did not exist yet.
+- RED/GREEN for lazy task labels: the targeted test first failed because `task_labels()` called `to_episode_record()` and materialized every point cloud; it then passed after boundary-row chunk reads were added.
+- RED/GREEN for symlinked chunks: the targeted test first exposed inventory mismatch masking the symlink error; path preflight now rejects symlinks explicitly.
+- GREEN focused core: `PYTHONPATH=/tmp/icgs-generation-hf-archive.koAE1D/src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m pytest -q /tmp/icgs-generation-hf-archive.koAE1D/tests/test_generation_archive.py` — **PASS, 15 passed**.
+- Required paired command: the same interpreter and `PYTHONPATH` with `test_generation_config.py test_generation_archive.py` — **PASS, 63 passed**.
+- `git diff --check` — **PASS**, no output.
+- `python3 -B scripts/validate_fast.py` — **PASS, 22 L0 tests**, local links and static boundaries passed; two existing `SyntaxWarning` notices in `tests/test_task_router.py` were emitted.
+- Archive core uses bounded per-NPZ chunks, on-disk `.npy` spool, a 256 MiB uncompressed chunk cap, `np.load(..., allow_pickle=False)`, explicit bit-packed online validity, streamed archive validation, and LRU chunk caching. Materializer/handoff integration is not yet included in this evidence.
 
 At plan creation time:
 

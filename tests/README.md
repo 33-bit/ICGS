@@ -51,6 +51,7 @@ acceptance job must run actual checkpoint tests and reference comparison.
 | test_checkpoints.py | Generated alias/compiled/shape/missing diagnostics and artifact immutability |
 | test_loading.py | Resolved config survives load→context→prediction |
 | test_training.py | Actual Lightning wrapper alias registration (no training job) |
+| test_generation_config.py / test_generation_archive.py | Opt-in archive profile validation; lossless episode/attempt archive roundtrip, hashes, offsets, aliases, bit-packed validity, bounded chunk/cache behavior |
 | test_cli.py | Four bounded successful command-body lifecycle seam tests for infer/train/prepare-data/evaluate; installed `--help` and rejection parser/import probes kept separate |
 | test_differential.py | Verified original source methods, not two facades of new implementation |
 | test_model_integration.py | Real strict published native inference, explicitly enabled |

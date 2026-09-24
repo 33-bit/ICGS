@@ -41,6 +41,24 @@ Serialized records retain their existing `schema_version` and protocol identity
 strings. Those values identify stored artifacts and are not source-module names.
 Changing them requires a separate data migration.
 
+## Lossless HF archive profile
+
+[ADR0015](../decisions/0015-generation-storage-and-view-snapshots.md) accepts an
+opt-in archive identity `icgs-primary-v3-archive-v1` / `icgs_npz_chunked_v1` /
+`icgs_episode_archive_v1`. Runtime configs without `archive_profile` retain the
+existing v3 JSON behavior. The archive profile keeps full-resolution measured
+clouds and captured debug modalities in safe compressed NPZ chunks; success and
+`valid_failure` use full episode archives, while crash/invalid outcomes remain
+attempt archives with null `episode_id`. Provisional pointers are discovery
+indexes. Final training views must bind to a frozen HF dataset-manifest revision.
+
+The archive writer/reader and local integrity validator are implemented. The
+distributed worker handoff, publication, receipt-only retention, HF-only resume,
+and final-view publication are still being integrated; this profile is not yet
+an end-to-end production collection path. See the
+[active implementation plan](../plans/active/generation-storage-and-view-finalization.md)
+for current phase evidence.
+
 ## Distributed lifecycle
 
 ```text

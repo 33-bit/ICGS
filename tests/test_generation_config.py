@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import get_type_hints, Literal
 
 import pytest
 
@@ -269,6 +270,7 @@ def _archive_profile(*, retention: str = "keep", chunk_boundaries: int = 8) -> d
         "archive_format_id": "icgs_npz_chunked_v1",
         "episode_schema_version": "icgs_episode_archive_v1",
         "chunk_boundaries": chunk_boundaries,
+        "max_chunk_bytes": 268435456,
         "retain_full_cloud": True,
         "publish_debug_metadata": True,
         "local_artifact_retention": retention,
@@ -300,6 +302,7 @@ def test_archive_profile_is_opt_in_and_roundtrips_without_changing_legacy_defaul
         ("archive_format_id", "icgs_episode_v2", "archive_format_id"),
         ("episode_schema_version", "icgs_episode_v2", "episode_schema_version"),
         ("chunk_boundaries", 0, "chunk_boundaries"),
+        ("max_chunk_bytes", 0, "max_chunk_bytes"),
         ("retain_full_cloud", False, "retain_full_cloud"),
         ("publish_debug_metadata", False, "publish_debug_metadata"),
         ("local_artifact_retention", "delete_all", "local_artifact_retention"),
@@ -332,6 +335,30 @@ def test_archive_profile_accepts_bounded_and_production_retention_modes(
     assert '"local_artifact_retention":"' + retention + '"' in resolved[
         "ICGS_GENERATION_ARCHIVE_PROFILE"
     ]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("local_artifact_retention", []),
+        ("local_artifact_retention", {}),
+        ("view_status", []),
+        ("view_status", {}),
+    ],
+)
+def test_archive_profile_rejects_unhashable_enum_values(field: str, value):
+    profile = _archive_profile()
+    profile[field] = value
+
+    with pytest.raises(ValueError, match=field):
+        _config_api("ArchiveProfileConfig").from_dict(profile)
+
+
+def test_archive_profile_exposes_literal_retention_and_view_status_types():
+    hints = get_type_hints(_config_api("ArchiveProfileConfig"))
+
+    assert hints["local_artifact_retention"] == Literal["keep", "receipt_only"]
+    assert hints["view_status"] == Literal["provisional", "final"]
 
 
 def test_checked_in_generation_runtime_profile_parses_without_path_checks():

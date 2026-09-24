@@ -8,7 +8,7 @@ import math
 import os
 from pathlib import Path
 from pathlib import PurePosixPath
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 from icgs.data.collection.generation.batch import AttemptPlan, attempt_from_dict
 
@@ -245,10 +245,11 @@ class ArchiveProfileConfig:
     archive_format_id: str = ARCHIVE_FORMAT_ID
     episode_schema_version: str = ARCHIVE_EPISODE_SCHEMA_VERSION
     chunk_boundaries: int = 64
+    max_chunk_bytes: int = 268435456
     retain_full_cloud: bool = True
     publish_debug_metadata: bool = True
-    local_artifact_retention: str = "keep"
-    view_status: str = "provisional"
+    local_artifact_retention: Literal["keep", "receipt_only"] = "keep"
+    view_status: Literal["provisional", "final"] = "provisional"
 
     def __post_init__(self) -> None:
         if self.dataset_identity != ARCHIVE_DATASET_IDENTITY:
@@ -258,13 +259,14 @@ class ArchiveProfileConfig:
         if self.episode_schema_version != ARCHIVE_EPISODE_SCHEMA_VERSION:
             raise ValueError("unsupported episode_schema_version")
         _positive_int(self.chunk_boundaries, "chunk_boundaries")
+        _positive_int(self.max_chunk_bytes, "max_chunk_bytes")
         if type(self.retain_full_cloud) is not bool or not self.retain_full_cloud:
             raise ValueError("retain_full_cloud must be true for the HF source-of-truth profile")
         if type(self.publish_debug_metadata) is not bool or not self.publish_debug_metadata:
             raise ValueError("publish_debug_metadata must be true for the HF source-of-truth profile")
-        if self.local_artifact_retention not in {"keep", "receipt_only"}:
+        if not isinstance(self.local_artifact_retention, str) or self.local_artifact_retention not in {"keep", "receipt_only"}:
             raise ValueError("local_artifact_retention must be keep or receipt_only")
-        if self.view_status not in {"provisional", "final"}:
+        if not isinstance(self.view_status, str) or self.view_status not in {"provisional", "final"}:
             raise ValueError("view_status must be provisional or final")
 
     @classmethod

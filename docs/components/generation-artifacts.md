@@ -330,3 +330,36 @@ episode inventory that records `bytes` by top-level file before changing the wri
 - The `GenerationProtocol.layout_version` versus `training_layout.LAYOUT_VERSION`
   discrepancy must be resolved by an explicit compatibility decision.
 
+## Accepted lossless archive migration (ADR0015)
+
+The current v3 tree above remains the behavior of configs that omit the optional
+`archive_profile`. The accepted archive identity is dataset
+`icgs-primary-v3-archive-v1`, format `icgs_npz_chunked_v1`, and episode schema
+`icgs_episode_archive_v1`; it uses a new HF prefix and leaves existing v2/v3
+artifacts and protocol identities unchanged.
+The earlier proposed `debug_sidecars = false` reduction is superseded: information-
+bearing debug evidence remains part of the HF source-of-truth archive.
+
+The archive writer/reader currently materializes this tree:
+
+```text
+<result_dir>/
+├── episode.manifest.json OR attempt.manifest.json
+├── data/chunk-*.npz            # arrays only, loaded with allow_pickle=False
+├── debug.json                  # compact metadata plus array references
+└── artifact_manifest.json      # checksums for every other result file
+```
+
+Each episode manifest inventories array dtype, logical shape, semantic role,
+byte count, SHA256, and chunk pieces. Ragged point clouds use concatenated
+values and zero-based boundary offsets; boolean point validity is bit-packed and
+unpacked losslessly. Byte-identical measured arrays may use explicit aliases.
+Array payloads are written through disk-backed `.npy` scratch; `max_chunk_bytes`
+defaults to 256 MiB of uncompressed NPZ payload. `local_write_limits` records the
+spool peak and an upper bound that includes spool plus compressed output and
+metadata. Writer scratch is removed after durable archive commit or on errors.
+
+The writer/reader/integrity core is implemented and fixture-tested. Distributed
+worker result detection, validation, HF publication, pruning and resume are still
+pending integration in the active implementation plan. Until those steps pass,
+the legacy inventory above describes the end-to-end distributed path.
