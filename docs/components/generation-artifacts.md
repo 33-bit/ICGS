@@ -366,8 +366,10 @@ Aliases retain their semantic role and the target's complete logical piece/range
 map. Content-identical arrays with unrelated semantic roles do not alias; the
 explicit exception is `raw_arrays/measured_points` pointing to
 `online_observations/points` when their dtype, shape, and content match.
-Attempt diagnostic strings are bounded and recursively redacted in both the
-attempt manifest metadata and `debug.json` before they are written.
+Attempt strings are bounded and recursively redacted in source metadata,
+`debug.json`, and string-valued prefix metadata before they are written.
+Credential fields such as passwords, API keys, tokens, and secrets redact their
+values based on the field name even when the value itself has no token pattern.
 
 The writer/reader/integrity core is implemented and fixture-tested. Distributed
 worker result detection, validation, HF publication, pruning and resume are still

@@ -271,6 +271,39 @@ def test_attempt_archive_keeps_null_episode_identity_and_measured_prefix(tmp_pat
     assert "hf_abcdefghijklmnopqrstuvwxyz0123456789" not in artifact_text
 
 
+def test_attempt_closed_inventory_redacts_sensitive_keys_and_prefix_metadata(tmp_path: Path):
+    synthetic_secrets = (
+        "synthetic-password-credential",
+        "synthetic-api-key-credential",
+        "synthetic-client-secret-credential",
+        "synthetic-prefix-api-key-credential",
+        "synthetic-debug-authorization-credential",
+    )
+    attempt = {
+        "schema_version": "icgs_episode_v2",
+        "attempt_id": "att-sensitive-fields-00001",
+        "episode_id": None,
+        "program_id": "T01",
+        "outcome": "simulator_crash",
+        "password": synthetic_secrets[0],
+        "api_key": synthetic_secrets[1],
+        "nested": {"client_secret": synthetic_secrets[2]},
+    }
+
+    EpisodeArchiveWriter(_profile()).write_attempt(
+        attempt,
+        prefix_arrays={
+            "actions": np.asarray([[1.0, 2.0]], dtype=np.float64),
+            "api_key": synthetic_secrets[3],
+        },
+        debug_metadata=_debug(authorization=synthetic_secrets[4]),
+        output_dir=tmp_path / "attempt",
+    )
+
+    archived_bytes = b"".join(path.read_bytes() for path in (tmp_path / "attempt").rglob("*") if path.is_file())
+    assert all(secret.encode("utf-8") not in archived_bytes for secret in synthetic_secrets)
+
+
 def test_archive_rejects_object_arrays_before_npz_serialization(tmp_path: Path):
     with pytest.raises(ValueError, match="object arrays are forbidden"):
         EpisodeArchiveWriter(_profile()).write_episode(
@@ -625,6 +658,48 @@ def test_attempt_validation_rejects_prefix_count_mismatch_after_hashes_are_repai
     _rewrite_manifest_only(target, lambda payload: payload["timeline"].update(transitions=0), manifest_name="attempt.manifest.json")
 
     with pytest.raises(ValueError, match="does not align"):
+        validate_archive_manifest(target / "attempt.manifest.json")
+
+
+def _attempt_with_measured_prefix(target: Path) -> None:
+    EpisodeArchiveWriter(_profile()).write_attempt(
+        {
+            "schema_version": "icgs_episode_v2",
+            "attempt_id": "att-measured-prefix-00001",
+            "episode_id": None,
+            "program_id": "T01",
+            "outcome": "simulator_crash",
+            "valid_observation_until": 0,
+        },
+        prefix_arrays={"T_w_e": np.eye(4, dtype=np.float64)[None, :, :]},
+        debug_metadata=_debug(),
+        output_dir=target,
+    )
+
+
+def test_attempt_validation_rejects_rehashed_manifest_without_measured_prefix_reference(tmp_path: Path):
+    target = tmp_path / "attempt"
+    _attempt_with_measured_prefix(target)
+    _rewrite_manifest_only(
+        target,
+        lambda payload: payload["raw_arrays"].pop("T_w_e"),
+        manifest_name="attempt.manifest.json",
+    )
+
+    with pytest.raises(ValueError, match="requires a measured-prefix reference"):
+        validate_archive_manifest(target / "attempt.manifest.json")
+
+
+def test_attempt_validation_rejects_source_timeline_valid_until_conflict_after_rehash(tmp_path: Path):
+    target = tmp_path / "attempt"
+    _attempt_with_measured_prefix(target)
+    _rewrite_manifest_only(
+        target,
+        lambda payload: payload["record_metadata"]["attempt"].update(valid_observation_until=1),
+        manifest_name="attempt.manifest.json",
+    )
+
+    with pytest.raises(ValueError, match="valid_observation_until.*disagrees"):
         validate_archive_manifest(target / "attempt.manifest.json")
 
 

@@ -57,9 +57,11 @@ stored in binary chunks, not discarded.
 Archive aliases preserve semantic roles and the target's full piece/range map;
 content equality alone never aliases unrelated fields. The explicit measured
 point-cloud alias is `raw_arrays/measured_points` →
-`online_observations/points` when dtype, shape, and bytes match. Attempt error,
-traceback, and diagnostic strings are bounded and recursively redacted in every
-archived copy, including manifest metadata and `debug.json`.
+`online_observations/points` when dtype, shape, and bytes match. Attempt strings
+are bounded and recursively redacted in source metadata, `debug.json`, and
+string-valued prefix metadata. Password, API-key, token, secret, and credential
+fields have their values redacted based on the field name even if the value does
+not match a token pattern.
 
 ### 2. Training views are derived, not a second source of truth
 

@@ -57,6 +57,12 @@ _MANIFEST_FIELDS = frozenset({
 _SAFE_ARRAY_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _SAFE_NPZ_MEMBER = re.compile(r"^[A-Za-z0-9_]{1,128}\.npy$")
 _MAX_DEBUG_TEXT = 8192
+_SENSITIVE_METADATA_KEYS = frozenset({
+    "access_key", "access_token", "api_key", "apikey", "authorization", "client_secret",
+    "credential", "credentials", "hf_token", "id_token", "password", "password_path",
+    "passphrase", "passwd", "private_key", "proxy_authorization", "refresh_token",
+    "secret", "secret_key", "token", "token_file", "token_path",
+})
 _PIECE_FIELDS = frozenset({
     "key", "path", "shape", "byte_count", "sha256",
     "boundary_start", "boundary_stop", "point_start", "point_stop", "validity_point_count",
@@ -163,6 +169,18 @@ def _redact_debug_text(value: str) -> str:
     return text
 
 
+def _is_sensitive_metadata_key(value: Any) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", "_", str(value).casefold()).strip("_")
+    if normalized in _SENSITIVE_METADATA_KEYS:
+        return True
+    return normalized.endswith((
+        "_access_key", "_access_token", "_api_key", "_authorization", "_credential",
+        "_credentials", "_password", "_password_path", "_passphrase", "_passwd",
+        "_private_key", "_refresh_token", "_secret", "_secret_key", "_token",
+        "_token_file", "_token_path",
+    ))
+
+
 def _redact_sensitive(value: Any) -> Any:
     """Redact credentials recursively before attempt metadata reaches disk."""
     if isinstance(value, np.generic):
@@ -175,7 +193,7 @@ def _redact_sensitive(value: Any) -> Any:
             safe_key = _redact_debug_text(str(key))
             if safe_key in result:
                 raise ValueError("attempt metadata keys collide after secret redaction")
-            result[safe_key] = _redact_sensitive(item)
+            result[safe_key] = "[REDACTED]" if _is_sensitive_metadata_key(key) else _redact_sensitive(item)
         return result
     if isinstance(value, tuple):
         return tuple(_redact_sensitive(item) for item in value)
@@ -1191,6 +1209,7 @@ class EpisodeArchiveWriter:
         if not isinstance(attempt, Mapping) or not isinstance(prefix_arrays, Mapping) or not isinstance(debug_metadata, Mapping):
             raise ValueError("attempt, prefix_arrays and debug_metadata must be mappings")
         attempt = _redact_sensitive(dict(attempt))
+        prefix_arrays = _redact_sensitive(dict(prefix_arrays))
         outcome = attempt.get("outcome")
         if outcome not in {"simulator_crash", "invalid_observation"}:
             raise ValueError("write_attempt requires simulator_crash or invalid_observation")
@@ -1746,6 +1765,17 @@ def _validate_attempt_semantics(reader: "EpisodeArchiveReader", payload: Mapping
     ):
         raise ValueError("attempt valid_observation_until must identify its final archived observation")
     raw_arrays = payload["raw_arrays"]
+    measured_prefix_reference = False
+    for key in ("observations", "gripper_pose", "T_w_e"):
+        for reference in _array_references(raw_arrays.get(key)):
+            spec = _require_array_spec(reader, reference)
+            if spec["shape"] and spec["shape"][0] == observations:
+                measured_prefix_reference = True
+    point_values_ref, point_offsets_ref = raw_arrays.get("points"), raw_arrays.get("point_offsets")
+    if isinstance(point_values_ref, Mapping) and "$archive_array" in point_values_ref and isinstance(point_offsets_ref, Mapping) and "$archive_array" in point_offsets_ref:
+        measured_prefix_reference = True
+    if valid_until is not None and not measured_prefix_reference:
+        raise ValueError("attempt valid_observation_until requires a measured-prefix reference")
     for key, expected_count in (("actions", transitions), ("commands", transitions), ("T_w_e", observations), ("gripper_pose", observations), ("grip", observations)):
         reference = raw_arrays.get(key)
         if isinstance(reference, Mapping) and "$archive_array" in reference:
@@ -1770,6 +1800,8 @@ def _validate_attempt_semantics(reader: "EpisodeArchiveReader", payload: Mapping
         raise ValueError("attempt manifest must retain its source attempt metadata")
     if attempt.get("attempt_id") != payload["attempt_id"] or attempt.get("program_id") != payload["program_id"]:
         raise ValueError("attempt source metadata identity mismatch")
+    if attempt.get("valid_observation_until") != valid_until:
+        raise ValueError("attempt source valid_observation_until disagrees with timeline")
     if attempt.get("outcome") != payload["outcome"] or attempt.get("episode_id") is not None:
         raise ValueError("attempt source metadata outcome/episode identity mismatch")
 
