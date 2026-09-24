@@ -5,13 +5,16 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 import hashlib
+import io
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
 import tempfile
 from typing import Any, Iterable, Iterator, Mapping, Sequence
+import zipfile
 
 import numpy as np
 
@@ -52,7 +55,14 @@ _MANIFEST_FIELDS = frozenset({
     "artifact_manifest_path",
 })
 _SAFE_ARRAY_NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
+_SAFE_NPZ_MEMBER = re.compile(r"^[A-Za-z0-9_]{1,128}\.npy$")
 _MAX_DEBUG_TEXT = 8192
+_PIECE_FIELDS = frozenset({
+    "key", "path", "shape", "byte_count", "sha256",
+    "boundary_start", "boundary_stop", "point_start", "point_stop", "validity_point_count",
+    "transition_start", "transition_stop", "timeline_start", "timeline_stop",
+    "array_start", "array_stop", "timeline_index",
+})
 
 
 def _canonical_json(payload: Any) -> bytes:
@@ -145,7 +155,147 @@ def _redact_debug_text(value: str) -> str:
     text = re.sub(r"\bhf_[A-Za-z0-9]{16,}\b", "[REDACTED_HF_TOKEN]", text)
     text = re.sub(r"(?i)(authorization\s*:\s*bearer\s+)[^\s]+", r"\1[REDACTED]", text)
     text = re.sub(r"(?i)(token=)[^&\s]+", r"\1[REDACTED]", text)
+    text = re.sub(
+        r"(?i)(\b(?:api[_-]?key|access[_-]?token|refresh[_-]?token|secret|password)\s*[:=]\s*)[^\s&,;]+",
+        r"\1[REDACTED]",
+        text,
+    )
     return text
+
+
+def _redact_sensitive(value: Any) -> Any:
+    """Redact credentials recursively before attempt metadata reaches disk."""
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, str):
+        return _redact_debug_text(value)
+    if isinstance(value, Mapping):
+        result = {}
+        for key, item in value.items():
+            safe_key = _redact_debug_text(str(key))
+            if safe_key in result:
+                raise ValueError("attempt metadata keys collide after secret redaction")
+            result[safe_key] = _redact_sensitive(item)
+        return result
+    if isinstance(value, tuple):
+        return tuple(_redact_sensitive(item) for item in value)
+    if isinstance(value, list):
+        return [_redact_sensitive(item) for item in value]
+    return value
+
+
+def _npy_member_uncompressed_bytes(value: np.ndarray) -> int:
+    """Return the exact uncompressed .npy member size, including its header."""
+    buffer = io.BytesIO()
+    header = np.lib.format.header_data_from_array_1_0(value)
+    np.lib.format.write_array_header_1_0(buffer, header)
+    return int(value.nbytes) + buffer.tell()
+
+
+def _npz_uncompressed_member_bytes(path: Path) -> int:
+    """Inspect ZIP metadata only; do not inflate members to enforce archive caps."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            entries = archive.infolist()
+            names = [item.filename for item in entries]
+            if not entries or len(names) != len(set(names)):
+                raise ValueError(f"NPZ chunk has an empty or duplicate member inventory: {path}")
+            for item in entries:
+                if (
+                    not _SAFE_NPZ_MEMBER.fullmatch(item.filename)
+                    or "/" in item.filename
+                    or "\\" in item.filename
+                    or item.filename in {".", ".."}
+                    or item.file_size < 10
+                ):
+                    raise ValueError(f"NPZ chunk has an unsafe member name or size: {path}")
+            return sum(int(item.file_size) for item in entries)
+    except (OSError, zipfile.BadZipFile, zipfile.LargeZipFile) as error:
+        raise ValueError(f"chunk is not a safe NPZ archive: {path}") from error
+
+
+def _check_npz_uncompressed_cap(path: Path, *, max_chunk_bytes: int, relative: str) -> int:
+    size = _npz_uncompressed_member_bytes(path)
+    if size > max_chunk_bytes:
+        raise ValueError(
+            f"uncompressed archive chunk exceeds max_chunk_bytes ({size} > {max_chunk_bytes}): {relative}"
+        )
+    return size
+
+
+def _array_references(value: Any) -> Iterator[str]:
+    if isinstance(value, Mapping):
+        if "$archive_array" in value:
+            name = value.get("$archive_array")
+            if not isinstance(name, str) or not name:
+                raise ValueError("archive array reference must be a nonblank name")
+            yield name
+        for item in value.values():
+            yield from _array_references(item)
+    elif isinstance(value, list):
+        for item in value:
+            yield from _array_references(item)
+    elif isinstance(value, tuple):
+        for item in value:
+            yield from _array_references(item)
+
+
+def _array_references_with_paths(value: Any, path: tuple[str, ...] = ()) -> Iterator[tuple[tuple[str, ...], str]]:
+    if isinstance(value, Mapping):
+        if "$archive_array" in value:
+            name = value.get("$archive_array")
+            if not isinstance(name, str) or not name:
+                raise ValueError("archive array reference must be a nonblank name")
+            yield path, name
+            return
+        for key, item in value.items():
+            yield from _array_references_with_paths(item, path + (str(key),))
+    elif isinstance(value, (list, tuple)):
+        for index, item in enumerate(value):
+            yield from _array_references_with_paths(item, path + (str(index),))
+
+
+def _reference_semantic_role(reader: "EpisodeArchiveReader", name: str) -> str:
+    for alias in reader.manifest.payload["array_aliases"]:
+        if alias["name"] == name:
+            return alias["semantic_role"]
+    resolved = reader._resolved_name(name)
+    spec = reader.manifest.payload["array_specs"].get(resolved)
+    if spec is None:
+        raise ValueError(f"archive array reference is missing: {name}")
+    return spec["semantic_role"]
+
+
+def _validate_reference_semantic_roles(
+    reader: "EpisodeArchiveReader",
+    payload: Mapping[str, Any],
+    debug_metadata: Mapping[str, Any],
+) -> None:
+    def check(section: str, value: Any, *, attempt_prefix: bool = False) -> None:
+        for path, name in _array_references_with_paths(value):
+            semantic_role = _reference_semantic_role(reader, name)
+            if section == "record_metadata":
+                if path and path[0] == "dt":
+                    expected_role = "transitions/dt"
+                elif path and path[0] == "_archive_transition_metadata":
+                    expected_role = "/".join(("transition_metadata", *path[1:]))
+                else:
+                    expected_role = "/".join(path)
+            elif section == "raw_arrays":
+                if not path:
+                    raise ValueError("raw archive array references require a named field")
+                prefix = f"prefix_{path[0]}" if attempt_prefix else path[0]
+                expected_role = "/".join(("raw_arrays", prefix, *path[1:]))
+            else:
+                expected_role = "/".join(("debug", *path))
+            if semantic_role != expected_role:
+                raise ValueError(
+                    f"archive array reference semantic role mismatch: {name} has {semantic_role!r}, expected {expected_role!r}"
+                )
+
+    check("record_metadata", payload["record_metadata"])
+    check("raw_arrays", payload["raw_arrays"], attempt_prefix=payload["archive_kind"] == "attempt")
+    check("debug", debug_metadata)
 
 
 @dataclass(frozen=True)
@@ -233,6 +383,7 @@ class ArchiveManifest:
             raise ValueError("artifact_manifest_path must be artifact_manifest.json")
 
         specs = dict(values["array_specs"])
+        member_refs: set[tuple[str, str]] = set()
         for name, spec in specs.items():
             if not isinstance(name, str) or not _SAFE_ARRAY_NAME.fullmatch(name):
                 raise ValueError(f"invalid archive array name: {name!r}")
@@ -256,15 +407,56 @@ class ArchiveManifest:
             for piece in pieces:
                 if not isinstance(piece, Mapping):
                     raise ValueError(f"array piece must be an object: {name}")
+                unknown_piece = set(piece) - _PIECE_FIELDS
+                if unknown_piece:
+                    raise ValueError(f"array piece has unknown field(s): {', '.join(sorted(unknown_piece))}")
                 path = _require_safe_relative(piece.get("path"), "array piece path")
                 if path not in chunk_paths:
                     raise ValueError(f"array piece references missing chunk: {name}")
-                if not isinstance(piece.get("key"), str) or not piece["key"]:
+                if not isinstance(piece.get("key"), str) or not _SAFE_NPZ_MEMBER.fullmatch(piece["key"] + ".npy"):
                     raise ValueError(f"array piece key is required: {name}")
+                member_ref = (path, piece["key"])
+                if member_ref in member_refs:
+                    raise ValueError(f"array piece is referenced more than once: {name}")
+                member_refs.add(member_ref)
+                piece_shape = piece.get("shape")
+                if not isinstance(piece_shape, list) or any(type(item) is not int or item < 0 for item in piece_shape):
+                    raise ValueError(f"array piece shape is invalid: {name}")
                 if type(piece.get("byte_count")) is not int or piece["byte_count"] < 0:
                     raise ValueError(f"array piece byte_count is invalid: {name}")
+                expected_bytes = math.prod(piece_shape) * dtype.itemsize
+                if piece["byte_count"] != expected_bytes:
+                    raise ValueError(f"array piece byte count disagrees with shape: {name}")
                 if not _is_sha256(piece.get("sha256")):
                     raise ValueError(f"array piece SHA256 is invalid: {name}")
+                if len(piece_shape) != len(shape) or piece_shape[1:] != shape[1:]:
+                    raise ValueError(f"array piece rank or trailing shape mismatch: {name}")
+                for start_key, stop_key in (
+                    ("boundary_start", "boundary_stop"),
+                    ("point_start", "point_stop"),
+                    ("transition_start", "transition_stop"),
+                    ("timeline_start", "timeline_stop"),
+                    ("array_start", "array_stop"),
+                ):
+                    has_start, has_stop = start_key in piece, stop_key in piece
+                    if has_start != has_stop:
+                        raise ValueError(f"array piece has an incomplete {start_key[:-6]} range: {name}")
+                    if has_start and (
+                        type(piece[start_key]) is not int
+                        or type(piece[stop_key]) is not int
+                        or piece[start_key] < 0
+                        or piece[stop_key] <= piece[start_key]
+                    ):
+                        raise ValueError(f"array piece has an invalid {start_key[:-6]} range: {name}")
+                for field in ("validity_point_count", "timeline_index"):
+                    if field in piece and (type(piece[field]) is not int or piece[field] < 0):
+                        raise ValueError(f"array piece {field} is invalid: {name}")
+            if len(shape) == 0 and len(pieces) != 1:
+                raise ValueError(f"scalar archive arrays must have exactly one piece: {name}")
+            if type(spec["byte_count"]) is int:
+                expected_bytes = math.prod(shape) * dtype.itemsize
+                if spec["byte_count"] != expected_bytes:
+                    raise ValueError(f"array byte count disagrees with shape: {name}")
         aliases: dict[str, str] = {}
         for alias in values["array_aliases"]:
             if not isinstance(alias, Mapping):
@@ -280,7 +472,24 @@ class ArchiveManifest:
                 raise ValueError(f"array alias target metadata mismatch: {name}")
             if alias.get("sha256") != specs[target]["sha256"]:
                 raise ValueError(f"array alias digest mismatch: {name}")
+            if not isinstance(alias.get("semantic_role"), str) or not alias["semantic_role"]:
+                raise ValueError(f"array alias semantic_role is required: {name}")
+            target_role = specs[target]["semantic_role"]
+            alias_role = alias["semantic_role"]
+            explicit_measured_alias = (
+                target_role == "online_observations/points"
+                and alias_role == "raw_arrays/measured_points"
+            )
+            if alias_role != target_role and not explicit_measured_alias:
+                raise ValueError(f"array alias crosses incompatible semantic roles: {name}")
+            if alias.get("pieces") != specs[target]["pieces"]:
+                raise ValueError(f"array alias logical piece mapping mismatch: {name}")
             aliases[name] = target
+        known_array_names = set(specs) | set(aliases)
+        for section in (values["record_metadata"], values["raw_arrays"]):
+            for reference in _array_references(section):
+                if reference not in known_array_names:
+                    raise ValueError(f"archive array reference is missing: {reference}")
         object.__setattr__(self, "payload", values)
 
     @classmethod
@@ -313,7 +522,7 @@ class _ArchiveArrays:
         self.spool_peak_bytes = 0
         self.specs: dict[str, dict[str, Any]] = {}
         self.aliases: list[dict[str, Any]] = []
-        self.signatures: dict[tuple[str, tuple[int, ...], str], str] = {}
+        self.signatures: dict[tuple[str, str, tuple[int, ...], str, str], str] = {}
         self.counter = 0
 
     def ensure_chunk_capacity(self, chunk_index: int, additional_bytes: int) -> None:
@@ -322,19 +531,48 @@ class _ArchiveArrays:
         used = self.chunk_data_bytes.get(chunk_index, 0)
         if used + additional_bytes > self.max_chunk_bytes:
             raise ValueError(
-                f"uncompressed archive chunk exceeds max_chunk_bytes "
+                f"uncompressed archive chunk including .npy headers exceeds max_chunk_bytes "
                 f"({used + additional_bytes} > {self.max_chunk_bytes})"
             )
 
-    def _alias(self, name: str, target: str, dtype: np.dtype, shape: Sequence[int], digest: str) -> str:
+    @staticmethod
+    def _alias_role(semantic_role: str) -> str:
+        # These two names are the one explicit cross-role alias accepted by ADR0015.
+        if semantic_role in {"online_observations/points", "raw_arrays/measured_points"}:
+            return "lossless_measured_point_values"
+        return semantic_role
+
+    def _alias(self, name: str, target: str, dtype: np.dtype, shape: Sequence[int], digest: str, semantic_role: str) -> str:
+        target_spec = self.specs[target]
         self.aliases.append({
             "name": name,
             "target": target,
             "dtype": dtype.str,
             "shape": [int(item) for item in shape],
             "sha256": digest,
+            "semantic_role": semantic_role,
+            "pieces": [dict(piece) for piece in target_spec["pieces"]],
         })
         return name
+
+    @staticmethod
+    def _range_signature(pieces: Sequence[Mapping[str, Any]]) -> str:
+        range_keys = (
+            "boundary_start", "boundary_stop", "point_start", "point_stop", "validity_point_count",
+            "transition_start", "transition_stop", "timeline_start", "timeline_stop",
+            "array_start", "array_stop", "timeline_index",
+        )
+        ranges = [{key: piece[key] for key in range_keys if key in piece} for piece in pieces]
+        return _canonical_json(ranges).decode("utf-8")
+
+    def _measured_point_alias_target(self, semantic_role: str, signature: tuple[str, str, tuple[int, ...], str, str]) -> str | None:
+        if semantic_role != "raw_arrays/measured_points":
+            return None
+        content_signature = signature[:4]
+        for candidate, target in self.signatures.items():
+            if candidate[:4] == content_signature and self.specs[target]["semantic_role"] == "online_observations/points":
+                return target
+        return None
 
     def _store_array_file(self, key: str, chunk_index: int, value: np.ndarray) -> Path:
         chunk_root = self.scratch_root / f"chunk-{chunk_index:05d}"
@@ -374,15 +612,16 @@ class _ArchiveArrays:
                     raise ValueError(f"unsupported array dtype at {semantic_role}: {value.dtype}")
                 if value.dtype != dtype:
                     raise ValueError(f"array dtype changed between chunks at {semantic_role}")
-                self.ensure_chunk_capacity(chunk_index, int(value.nbytes))
+                member_bytes = _npy_member_uncompressed_bytes(value)
+                self.ensure_chunk_capacity(chunk_index, member_bytes)
                 key = f"a{self.counter:06d}_{piece_index:03d}"
                 self.counter += 1
                 piece_digest = _array_digest(value.dtype, value.shape, [value])
                 _update_array_digest(digest_builder, value)
                 byte_count += int(value.nbytes)
                 path = self._store_array_file(key, chunk_index, value)
-                stored_files.append((chunk_index, key, path, int(value.nbytes)))
-                self.chunk_data_bytes[chunk_index] = self.chunk_data_bytes.get(chunk_index, 0) + int(value.nbytes)
+                stored_files.append((chunk_index, key, path, member_bytes))
+                self.chunk_data_bytes[chunk_index] = self.chunk_data_bytes.get(chunk_index, 0) + member_bytes
                 piece_specs.append({
                     "key": key,
                     "chunk_index": chunk_index,
@@ -397,11 +636,20 @@ class _ArchiveArrays:
         if not piece_specs:
             raise ValueError(f"archive array has no payload pieces: {semantic_role}")
         digest = digest_builder.hexdigest()
-        signature = (dtype.str, tuple(int(item) for item in shape), digest)
+        normalized_shape = tuple(int(item) for item in shape)
+        signature = (
+            self._alias_role(semantic_role),
+            dtype.str,
+            normalized_shape,
+            digest,
+            self._range_signature(piece_specs),
+        )
         existing = self.signatures.get(signature)
+        if existing is None:
+            existing = self._measured_point_alias_target(semantic_role, signature)
         if existing is not None:
             self._discard_files(stored_files)
-            return self._alias(name, existing, dtype, shape, digest)
+            return self._alias(name, existing, dtype, shape, digest, semantic_role)
         for chunk_index, key, path, _data_bytes in stored_files:
             self.chunk_files.setdefault(chunk_index, []).append((key, path))
         self.specs[name] = {
@@ -428,16 +676,25 @@ class _ArchiveArrays:
             raise ValueError(f"object arrays are forbidden: {semantic_role}")
         array = np.asarray(value)
         digest = _array_digest(array.dtype, array.shape, [array])
-        signature = (array.dtype.str, tuple(int(item) for item in array.shape), digest)
+        normalized_ranges = ranges or {}
+        signature = (
+            self._alias_role(semantic_role),
+            array.dtype.str,
+            tuple(int(item) for item in array.shape),
+            digest,
+            self._range_signature([normalized_ranges]),
+        )
         existing = self.signatures.get(signature)
+        if existing is None:
+            existing = self._measured_point_alias_target(semantic_role, signature)
         if existing is not None:
-            return self._alias(name, existing, array.dtype, array.shape, digest)
+            return self._alias(name, existing, array.dtype, array.shape, digest, semantic_role)
         return self.add(
             name,
             array.dtype,
             array.shape,
             semantic_role,
-            [(chunk_index, array, ranges or {})],
+            [(chunk_index, array, normalized_ranges)],
         )
 
     def _discard_files(self, files: Sequence[tuple[int, str, Path, int]]) -> None:
@@ -476,6 +733,11 @@ class _ArchiveArrays:
                     mmap = getattr(value, "_mmap", None)
                     if mmap is not None:
                         mmap.close()
+            _check_npz_uncompressed_cap(
+                path,
+                max_chunk_bytes=self.max_chunk_bytes,
+                relative=f"data/chunk-{chunk_index:05d}.npz",
+            )
             inventory.append({"path": relative, "bytes": path.stat().st_size, "sha256": _sha256_file(path)})
         return inventory
 
@@ -492,6 +754,20 @@ class _ArchiveArrays:
             normalized["pieces"] = normalized_pieces
             output[name] = normalized
         return output
+
+    def aliases_as_list(self, chunk_paths: Mapping[int, str]) -> list[dict[str, Any]]:
+        output = []
+        for alias in self.aliases:
+            normalized = dict(alias)
+            pieces = []
+            for piece in alias["pieces"]:
+                item = dict(piece)
+                chunk_index = item.pop("chunk_index")
+                item["path"] = chunk_paths[chunk_index]
+                pieces.append(item)
+            normalized["pieces"] = pieces
+            output.append(normalized)
+        return sorted(output, key=lambda item: item["name"])
 
     def cleanup(self) -> None:
         shutil.rmtree(self.scratch_root, ignore_errors=True)
@@ -914,6 +1190,7 @@ class EpisodeArchiveWriter:
     ) -> ArchiveManifest:
         if not isinstance(attempt, Mapping) or not isinstance(prefix_arrays, Mapping) or not isinstance(debug_metadata, Mapping):
             raise ValueError("attempt, prefix_arrays and debug_metadata must be mappings")
+        attempt = _redact_sensitive(dict(attempt))
         outcome = attempt.get("outcome")
         if outcome not in {"simulator_crash", "invalid_observation"}:
             raise ValueError("write_attempt requires simulator_crash or invalid_observation")
@@ -923,23 +1200,50 @@ class EpisodeArchiveWriter:
         program_id = attempt.get("program_id")
         if not isinstance(attempt_id, str) or not attempt_id.strip() or not isinstance(program_id, str) or not program_id.strip():
             raise ValueError("attempt_id and program_id are required")
-        debug = dict(debug_metadata)
+        debug = _redact_sensitive(dict(debug_metadata))
         for field in ("error_type", "error", "traceback", "terminal_reason", "exit_code", "timeout", "stderr", "stdout"):
             if field not in debug and field in attempt:
                 debug[field] = attempt[field]
-        if "stderr" in debug and isinstance(debug["stderr"], str):
-            debug["stderr"] = _redact_debug_text(debug["stderr"])
-        if "stdout" in debug and isinstance(debug["stdout"], str):
-            debug["stdout"] = _redact_debug_text(debug["stdout"])
-        if "traceback" in debug and isinstance(debug["traceback"], str):
-            debug["traceback"] = _redact_debug_text(debug["traceback"])
-        if "error" in debug and isinstance(debug["error"], str):
-            debug["error"] = _redact_debug_text(debug["error"])
+        debug = _redact_sensitive(debug)
         identity = self._identity(debug, attempt)
+
+        valid_until = attempt.get("valid_observation_until")
+        if valid_until is not None and (type(valid_until) is not int or valid_until < 0):
+            raise ValueError("valid_observation_until must be a nonnegative integer or null")
+        if ("points" in prefix_arrays) != ("point_offsets" in prefix_arrays):
+            raise ValueError("attempt prefix points and point_offsets must be provided together")
+        observation_count = 0
+        for key in ("observations", "gripper_pose", "T_w_e"):
+            value = prefix_arrays.get(key)
+            if value is not None:
+                candidate = np.asarray(value)
+                if candidate.ndim > 0:
+                    observation_count = int(candidate.shape[0])
+                    break
+        point_offsets = prefix_arrays.get("point_offsets")
+        if observation_count == 0 and point_offsets is not None:
+            offsets = np.asarray(point_offsets)
+            if offsets.ndim == 1 and len(offsets) > 0:
+                observation_count = int(offsets.shape[0]) - 1
+        if observation_count == 0 and valid_until is not None:
+            observation_count = valid_until + 1
+        if valid_until is not None and observation_count != valid_until + 1:
+            raise ValueError("valid_observation_until must identify the final archived observation boundary")
+        if valid_until is not None and not any(
+            key in prefix_arrays for key in ("observations", "gripper_pose", "T_w_e", "points", "point_offsets")
+        ):
+            raise ValueError("valid_observation_until requires archived measured prefix arrays")
+        action_values = prefix_arrays.get("actions")
+        action_array = None if action_values is None else np.asarray(action_values)
+        transition_count = (
+            int(action_array.shape[0])
+            if action_array is not None and action_array.ndim > 0
+            else max(0, observation_count - 1)
+        )
         encoder = _MetadataEncoder(
             arrays,
-            transition_count=0,
-            observation_count=0,
+            transition_count=transition_count,
+            observation_count=observation_count,
             chunk_boundaries=self.profile.chunk_boundaries,
         )
         encoded_attempt = encoder.encode(dict(attempt), ("attempt",))
@@ -949,30 +1253,12 @@ class EpisodeArchiveWriter:
                 prefix_arrays[key],
                 name=f"prefix_{key}",
                 arrays=arrays,
-                transition_count=0,
-                observation_count=0,
+                transition_count=transition_count,
+                observation_count=observation_count,
                 chunk_boundaries=self.profile.chunk_boundaries,
                 encoder=encoder,
             )
         encoded_debug = encoder.encode(debug, ("debug",))
-        observation_count = 0
-        for key in ("observations", "gripper_pose", "T_w_e"):
-            value = prefix_arrays.get(key)
-            if value is not None:
-                candidate = np.asarray(value)
-                if candidate.ndim > 0:
-                    observation_count = int(candidate.shape[0])
-                    break
-        valid_until = attempt.get("valid_observation_until")
-        if observation_count == 0 and type(valid_until) is int and valid_until >= 0:
-            observation_count = valid_until + 1
-        action_values = prefix_arrays.get("actions")
-        action_array = None if action_values is None else np.asarray(action_values)
-        transition_count = (
-            int(action_array.shape[0])
-            if action_array is not None and action_array.ndim > 0
-            else max(0, observation_count - 1)
-        )
         return self._write_archive(
             target=Path(output_dir),
             archive_kind="attempt",
@@ -1109,7 +1395,7 @@ class EpisodeArchiveWriter:
                 "record_metadata": dict(record_metadata),
                 "raw_arrays": dict(raw_arrays),
                 "array_specs": arrays.specs_as_dict(chunk_paths),
-                "array_aliases": sorted(arrays.aliases, key=lambda item: item["name"]),
+                "array_aliases": arrays.aliases_as_list(chunk_paths),
                 "chunk_inventory": chunk_inventory,
                 "debug_path": debug_inventory["path"],
                 "debug_bytes": debug_inventory["bytes"],
@@ -1271,12 +1557,231 @@ def _manifest_alias_map(manifest: ArchiveManifest) -> dict[str, str]:
     return {item["name"]: item["target"] for item in manifest.payload["array_aliases"]}
 
 
+def _validate_piece_ranges(payload: Mapping[str, Any]) -> None:
+    timeline = payload["timeline"]
+    observations = timeline.get("observations")
+    transitions = timeline.get("transitions")
+    for name, spec in payload["array_specs"].items():
+        pieces = spec["pieces"]
+        for prefix in ("boundary", "point", "transition", "timeline", "array"):
+            start_key, stop_key = f"{prefix}_start", f"{prefix}_stop"
+            if not any(start_key in piece for piece in pieces):
+                continue
+            if any(start_key not in piece or stop_key not in piece for piece in pieces):
+                raise ValueError(f"{name} has an incomplete {prefix} range mapping")
+            cursor = 0
+            for piece in pieces:
+                start, stop = piece[start_key], piece[stop_key]
+                if start != cursor:
+                    raise ValueError(f"{name} {prefix} range has a gap, overlap, or reordered piece")
+                cursor = stop
+                if prefix in {"transition", "timeline", "array"} and piece["shape"]:
+                    if piece["shape"][0] != stop - start:
+                        raise ValueError(f"{name} {prefix} range does not align with its array rows")
+            expected_stop = None
+            if prefix == "boundary" and payload["archive_kind"] == "episode":
+                expected_stop = observations
+            elif prefix == "transition":
+                expected_stop = transitions
+            elif prefix in {"timeline", "array"}:
+                shape = spec["shape"]
+                expected_stop = shape[0] if shape else None
+            elif prefix == "point" and name == "online_points":
+                expected_stop = spec["shape"][0]
+            elif prefix == "point" and name == "online_validity_packed":
+                expected_stop = sum(int(piece.get("validity_point_count", 0)) for piece in pieces)
+            if expected_stop is not None and cursor != expected_stop:
+                raise ValueError(f"{name} {prefix} ranges do not cover the declared logical array/timeline")
+
+        for piece in pieces:
+            if "timeline_index" in piece:
+                index = piece["timeline_index"]
+                role = spec["semantic_role"]
+                if role.startswith(("robot_states/", "object_states/", "event_states/", "timestamps/")) and index >= (observations or 0):
+                    raise ValueError(f"{name} timeline_index is outside the declared timeline")
+
+
+def _require_array_spec(reader: "EpisodeArchiveReader", name: str) -> Mapping[str, Any]:
+    resolved = reader._resolved_name(name)
+    spec = reader.manifest.payload["array_specs"].get(resolved)
+    if spec is None:
+        raise ValueError(f"required archive array is missing: {name}")
+    return spec
+
+
+def _require_array(reader: "EpisodeArchiveReader", name: str) -> tuple[Mapping[str, Any], np.ndarray]:
+    spec = _require_array_spec(reader, name)
+    return spec, reader.read_array(name)
+
+
+def _require_complete_range(spec: Mapping[str, Any], *, name: str, prefix: str, count: int) -> None:
+    start_key, stop_key = f"{prefix}_start", f"{prefix}_stop"
+    cursor = 0
+    for piece in spec["pieces"]:
+        if start_key not in piece or stop_key not in piece or piece[start_key] != cursor:
+            raise ValueError(f"{name} {prefix} ranges do not cover the timeline")
+        cursor = piece[stop_key]
+    if cursor != count:
+        raise ValueError(f"{name} {prefix} ranges do not cover the timeline")
+
+
+def _validate_episode_semantics(reader: "EpisodeArchiveReader", payload: Mapping[str, Any]) -> None:
+    required = {
+        "online_points", "online_points_offsets", "online_validity_packed", "online_poses", "online_grips",
+        "commands", "command_grips", "command_durations", "achieved_durations", "dt", "substeps",
+    }
+    available = set(payload["array_specs"]) | set(_manifest_alias_map(reader.manifest))
+    missing = required - available
+    if missing:
+        raise ValueError(f"episode archive is missing required arrays: {', '.join(sorted(missing))}")
+    timeline = payload["timeline"]
+    transitions, observations = timeline.get("transitions"), timeline.get("observations")
+    if type(transitions) is not int or transitions <= 0 or type(observations) is not int or observations != transitions + 1:
+        raise ValueError("episode archive timeline must contain T transitions and T+1 observations")
+
+    point_spec = _require_array_spec(reader, "online_points")
+    offsets_spec, offsets = _require_array(reader, "online_points_offsets")
+    validity_spec = _require_array_spec(reader, "online_validity_packed")
+    if (
+        offsets.shape != (observations + 1,)
+        or offsets.dtype.kind not in "iu"
+        or offsets[0] != 0
+        or offsets[-1] != point_spec["shape"][0]
+        or np.any(offsets[1:] <= offsets[:-1])
+        or point_spec["shape"][1:] != [3]
+        or np.dtype(point_spec["dtype"]).kind != "f"
+    ):
+        raise ValueError("online point offsets must be monotonic, strictly increasing, and end at the point count")
+    if tuple(point_spec["shape"]) != (int(offsets[-1]), 3):
+        raise ValueError("online points must have Nx3 values aligned with offsets")
+    if np.dtype(validity_spec["dtype"]) != np.dtype(np.uint8):
+        raise ValueError("packed online validity mask must use uint8 storage")
+    point_pieces = point_spec["pieces"]
+    validity_pieces = validity_spec["pieces"]
+    if len(point_pieces) != len(validity_pieces):
+        raise ValueError("online point and validity chunk mappings do not align")
+    _require_complete_range(point_spec, name="online_points", prefix="boundary", count=observations)
+    _require_complete_range(validity_spec, name="online_validity_packed", prefix="boundary", count=observations)
+    for point_piece, validity_piece in zip(point_pieces, validity_pieces):
+        start = point_piece["boundary_start"]
+        stop = point_piece["boundary_stop"]
+        point_start, point_stop = int(offsets[start]), int(offsets[stop])
+        if (
+            (validity_piece["boundary_start"], validity_piece["boundary_stop"]) != (start, stop)
+            or point_piece.get("point_start") != point_start
+            or point_piece.get("point_stop") != point_stop
+            or validity_piece.get("point_start") != point_start
+            or validity_piece.get("point_stop") != point_stop
+            or point_piece["shape"][0] != point_stop - point_start
+        ):
+            raise ValueError("online point and validity piece ranges do not align with offsets")
+        expected_count = point_stop - point_start
+        if validity_piece.get("validity_point_count") != expected_count:
+            raise ValueError("packed online validity point count does not align with offsets")
+        packed = reader._load_chunk(validity_piece["path"])[validity_piece["key"]]
+        if packed.shape != ((expected_count + 7) // 8,):
+            raise ValueError("packed online validity chunk has the wrong byte count")
+        if expected_count % 8:
+            padding = np.unpackbits(packed[-1:], bitorder="little")[expected_count % 8:]
+            if np.any(padding):
+                raise ValueError("packed online validity padding bits must be zero")
+
+    for name, shape, prefix, count in (
+        ("online_poses", (observations, 4, 4), "boundary", observations),
+        ("online_grips", (observations,), "boundary", observations),
+        ("commands", (transitions, 4, 4), "transition", transitions),
+        ("command_grips", (transitions,), "transition", transitions),
+        ("command_durations", (transitions,), "transition", transitions),
+        ("achieved_durations", (transitions,), "transition", transitions),
+        ("dt", (transitions,), "transition", transitions),
+        ("substeps", (transitions,), "transition", transitions),
+    ):
+        spec, value = _require_array(reader, name)
+        if tuple(value.shape) != shape:
+            raise ValueError(f"{name} must have the required T/T+1 shape")
+        _require_complete_range(spec, name=name, prefix=prefix, count=count)
+
+    metadata = payload["record_metadata"]
+    for field in ("robot_states", "robot_state", "object_states", "object_state"):
+        value = metadata.get(field)
+        if value is None:
+            continue
+        if isinstance(value, list):
+            if len(value) != observations:
+                raise ValueError(f"{field} must align with T+1 observation boundaries")
+        elif isinstance(value, Mapping) and "$archive_array" in value:
+            state_spec = _require_array_spec(reader, str(value["$archive_array"]))
+            if not state_spec["shape"] or state_spec["shape"][0] != observations:
+                raise ValueError(f"{field} must align with T+1 observation boundaries")
+        else:
+            raise ValueError(f"{field} must be a boundary sequence or archive-array reference")
+    for name in ("rho", "nu", "epsilon"):
+        value = metadata.get(name)
+        valid_value = metadata.get(f"{name}_valid")
+        if value is None:
+            if valid_value is not None:
+                raise ValueError(f"{name}_valid is present without {name}")
+            continue
+        if not isinstance(value, Mapping) or "$archive_array" not in value:
+            raise ValueError(f"{name} must reference an archived task-label array")
+        label_spec = _require_array_spec(reader, str(value["$archive_array"]))
+        if len(label_spec["shape"]) != 2 or label_spec["shape"][0] != observations:
+            raise ValueError(f"{name} must align to T+1 task-label rows")
+        if valid_value is not None:
+            if not isinstance(valid_value, Mapping) or "$archive_array" not in valid_value:
+                raise ValueError(f"{name}_valid must reference an archived boolean array")
+            valid_spec = _require_array_spec(reader, str(valid_value["$archive_array"]))
+            if np.dtype(valid_spec["dtype"]) != np.dtype(np.bool_) or valid_spec["shape"] != label_spec["shape"]:
+                raise ValueError(f"{name}_valid must match {name} shape and use boolean dtype")
+
+
+def _validate_attempt_semantics(reader: "EpisodeArchiveReader", payload: Mapping[str, Any]) -> None:
+    timeline = payload["timeline"]
+    observations, transitions = timeline.get("observations"), timeline.get("transitions")
+    if type(observations) is not int or observations < 0 or type(transitions) is not int or transitions < 0:
+        raise ValueError("attempt timeline observations/transitions must be nonnegative integers")
+    valid_until = timeline.get("valid_observation_until")
+    if valid_until is not None and (
+        type(valid_until) is not int or valid_until < 0 or observations != valid_until + 1
+    ):
+        raise ValueError("attempt valid_observation_until must identify its final archived observation")
+    raw_arrays = payload["raw_arrays"]
+    for key, expected_count in (("actions", transitions), ("commands", transitions), ("T_w_e", observations), ("gripper_pose", observations), ("grip", observations)):
+        reference = raw_arrays.get(key)
+        if isinstance(reference, Mapping) and "$archive_array" in reference:
+            value = reader.read_array(str(reference["$archive_array"]))
+            if not value.shape or value.shape[0] != expected_count:
+                raise ValueError(f"attempt prefix {key} does not align with its timeline count")
+    points_ref, offsets_ref = raw_arrays.get("points"), raw_arrays.get("point_offsets")
+    if (points_ref is None) != (offsets_ref is None):
+        raise ValueError("attempt prefix points and point_offsets must be provided together")
+    if isinstance(offsets_ref, Mapping) and "$archive_array" in offsets_ref:
+        offsets = reader.read_array(str(offsets_ref["$archive_array"]))
+        if offsets.shape != (observations + 1,) or offsets.dtype.kind not in "iu" or offsets[0] != 0:
+            raise ValueError("attempt point_offsets must contain one extra T+1 boundary")
+        if np.any(offsets[1:] < offsets[:-1]):
+            raise ValueError("attempt point_offsets must be monotonic")
+        if isinstance(points_ref, Mapping) and "$archive_array" in points_ref:
+            point_spec = _require_array_spec(reader, str(points_ref["$archive_array"]))
+            if point_spec["shape"][1:] != [3] or offsets[-1] != point_spec["shape"][0]:
+                raise ValueError("attempt points and point_offsets do not align")
+    attempt = payload["record_metadata"].get("attempt")
+    if not isinstance(attempt, Mapping):
+        raise ValueError("attempt manifest must retain its source attempt metadata")
+    if attempt.get("attempt_id") != payload["attempt_id"] or attempt.get("program_id") != payload["program_id"]:
+        raise ValueError("attempt source metadata identity mismatch")
+    if attempt.get("outcome") != payload["outcome"] or attempt.get("episode_id") is not None:
+        raise ValueError("attempt source metadata outcome/episode identity mismatch")
+
+
 def validate_archive_manifest(manifest_path: str | Path) -> dict[str, Any]:
     """Verify all local archive hashes, chunk arrays, identity and timeline offsets."""
     path, manifest = _read_manifest(manifest_path)
     root = path.parent
     payload = manifest.payload
     chunk_inventory = {item["path"]: item for item in payload["chunk_inventory"]}
+    profile = ArchiveProfileConfig.from_dict(payload["archive_profile"])
+    _validate_piece_ranges(payload)
     artifact_path = _safe_file(root, payload["artifact_manifest_path"])
     try:
         artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
@@ -1313,7 +1818,12 @@ def validate_archive_manifest(manifest_path: str | Path) -> dict[str, Any]:
         raise ValueError("debug metadata identity mismatch")
     if artifact.get("archive_format_id") != ARCHIVE_FORMAT_ID or artifact.get("dataset_identity") != ARCHIVE_DATASET_IDENTITY:
         raise ValueError("artifact manifest archive identity mismatch")
-    if artifact.get("episode_id") != payload["episode_id"] or artifact.get("attempt_id") != payload["attempt_id"]:
+    if (
+        artifact.get("episode_id") != payload["episode_id"]
+        or artifact.get("attempt_id") != payload["attempt_id"]
+        or artifact.get("program_id") != payload["program_id"]
+        or artifact.get("outcome") != payload["outcome"]
+    ):
         raise ValueError("artifact manifest identity mismatch")
 
     expected_chunks: dict[str, set[str]] = {}
@@ -1347,6 +1857,11 @@ def validate_archive_manifest(manifest_path: str | Path) -> dict[str, Any]:
 
     for relative in sorted(chunk_inventory):
         chunk_path = _safe_file(root, relative)
+        _check_npz_uncompressed_cap(
+            chunk_path,
+            max_chunk_bytes=profile.max_chunk_bytes,
+            relative=relative,
+        )
         if _sha256_file(chunk_path) != chunk_inventory[relative]["sha256"]:
             raise ValueError(f"chunk checksum mismatch: {relative}")
         try:
@@ -1362,6 +1877,15 @@ def validate_archive_manifest(manifest_path: str | Path) -> dict[str, Any]:
                         raise ValueError(f"array piece dtype/shape mismatch: {name}")
                     if int(value.nbytes) != piece["byte_count"] or _array_digest(value.dtype, value.shape, [value]) != piece["sha256"]:
                         raise ValueError(f"array piece checksum mismatch: {name}")
+                    role = spec["semantic_role"]
+                    if role in {"online_observations/points", "raw_arrays/measured_points", "raw_arrays/prefix_points"}:
+                        if value.ndim != 2 or value.shape[1] != 3 or not np.isfinite(value).all():
+                            raise ValueError(f"point array piece must contain finite Nx3 values: {name}")
+                    if role in {"rho", "nu", "epsilon"}:
+                        if not np.isfinite(value).all() or np.any(value < 0.0) or np.any(value > 1.0):
+                            raise ValueError(f"{role} values must be finite probabilities in [0,1]")
+                    if role in {"rho_valid", "nu_valid", "epsilon_valid"} and value.dtype != np.bool_:
+                        raise ValueError(f"{role} pieces must use boolean dtype")
                     state = spec_state[name]
                     _update_array_digest(state["digest"], value)
                     state["byte_count"] += int(value.nbytes)
@@ -1385,64 +1909,33 @@ def validate_archive_manifest(manifest_path: str | Path) -> dict[str, Any]:
             if any(item[1:] != shape[1:] for item in shapes):
                 raise ValueError(f"array logical shape mismatch: {name}")
 
-    aliases = _manifest_alias_map(manifest)
-    for alias, target in aliases.items():
-        if target not in payload["array_specs"]:
-            raise ValueError(f"array alias target is missing: {alias}")
+    known_array_names = set(payload["array_specs"]) | set(_manifest_alias_map(manifest))
+    try:
+        debug_metadata = json.loads(_safe_file(root, payload["debug_path"]).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("debug metadata is unreadable") from error
+    if not isinstance(debug_metadata, Mapping):
+        raise ValueError("debug metadata must be an object")
+    for reference in _array_references(debug_metadata):
+        if reference not in known_array_names:
+            raise ValueError(f"debug archive array reference is missing: {reference}")
+
+    reader = EpisodeArchiveReader(path, validate_files=False)
+    _validate_reference_semantic_roles(reader, payload, debug_metadata)
     if payload["archive_kind"] == "episode":
-        required = {
-            "online_points", "online_points_offsets", "online_validity_packed", "online_poses", "online_grips",
-            "commands", "command_grips", "command_durations", "achieved_durations", "dt", "substeps",
+        _validate_episode_semantics(reader, payload)
+    else:
+        if _canonical_json(_redact_sensitive(payload["record_metadata"])) != _canonical_json(payload["record_metadata"]):
+            raise ValueError("attempt manifest metadata contains unredacted or oversized secret text")
+        if _canonical_json(_redact_sensitive(debug_metadata)) != _canonical_json(debug_metadata):
+            raise ValueError("attempt debug metadata contains unredacted or oversized secret text")
+        sensitive_identity = {
+            name: payload.get(name)
+            for name in ("attempt_id", "program_id", "split", "subset", "source_run_id", "code_revision", "preprocessing_identity")
         }
-        available = set(payload["array_specs"]) | set(aliases)
-        missing = required - available
-        if missing:
-            raise ValueError(f"episode archive is missing required arrays: {', '.join(sorted(missing))}")
-        timeline = payload["timeline"]
-        transitions = timeline.get("transitions")
-        observations = timeline.get("observations")
-        if type(transitions) is not int or transitions <= 0 or observations != transitions + 1:
-            raise ValueError("episode archive timeline must contain T transitions and T+1 observations")
-        reader = EpisodeArchiveReader(path, validate_files=False)
-        offsets = reader.read_array("online_points_offsets")
-        point_spec = payload["array_specs"][reader._resolved_name("online_points")]
-        validity_spec = payload["array_specs"][reader._resolved_name("online_validity_packed")]
-        point_count = point_spec["shape"][0]
-        if offsets.shape != (observations + 1,) or offsets.dtype.kind not in "iu":
-            raise ValueError("online_points_offsets must contain T+2 integers")
-        if (
-            offsets[0] != 0
-            or offsets[-1] != point_count
-            or np.any(offsets[1:] < offsets[:-1])
-            or point_spec["shape"][1:] != [3]
-            or np.dtype(point_spec["dtype"]).kind != "f"
-        ):
-            raise ValueError("online point offsets must be monotonic and end at the point count")
-        if np.dtype(validity_spec["dtype"]) != np.dtype(np.uint8):
-            raise ValueError("packed online validity mask must use uint8 storage")
-        if sum(int(piece.get("validity_point_count", -1)) for piece in validity_spec["pieces"]) != point_count:
-            raise ValueError("packed online validity mask does not align with point count")
-        for piece in validity_spec["pieces"]:
-            expected_count = piece.get("validity_point_count")
-            value = reader._load_chunk(piece["path"])[piece["key"]]
-            if type(expected_count) is not int or value.shape != ((expected_count + 7) // 8,):
-                raise ValueError("packed online validity chunk has the wrong byte count")
-            if expected_count and expected_count % 8:
-                padding = np.unpackbits(value[-1:], bitorder="little")[expected_count % 8:]
-                if np.any(padding):
-                    raise ValueError("packed online validity padding bits must be zero")
-        for name, shape in (
-            ("online_poses", (observations, 4, 4)),
-            ("online_grips", (observations,)),
-            ("commands", (transitions, 4, 4)),
-            ("command_grips", (transitions,)),
-            ("command_durations", (transitions,)),
-            ("achieved_durations", (transitions,)),
-            ("dt", (transitions,)),
-            ("substeps", (transitions,)),
-        ):
-            if tuple(reader.read_array(name).shape) != shape:
-                raise ValueError(f"{name} must have the required T/T+1 shape")
+        if _canonical_json(_redact_sensitive(sensitive_identity)) != _canonical_json(sensitive_identity):
+            raise ValueError("attempt archive identity contains unredacted or oversized secret text")
+        _validate_attempt_semantics(reader, payload)
     return {
         "valid": True,
         "archive_kind": payload["archive_kind"],
@@ -1473,6 +1966,7 @@ class EpisodeArchiveReader:
         self.manifest_path, self.manifest = _read_manifest(manifest_path)
         self.root = self.manifest_path.parent
         self.cache_bytes = cache_bytes
+        self.max_chunk_bytes = ArchiveProfileConfig.from_dict(self.manifest.payload["archive_profile"]).max_chunk_bytes
         self._cache: OrderedDict[str, tuple[dict[str, np.ndarray], int]] = OrderedDict()
         self._cache_size = 0
         self._aliases = _manifest_alias_map(self.manifest)
@@ -1494,6 +1988,7 @@ class EpisodeArchiveReader:
         if entry is None:
             raise ValueError(f"chunk is not declared by the archive manifest: {relative}")
         path = _safe_file(self.root, relative)
+        _check_npz_uncompressed_cap(path, max_chunk_bytes=self.max_chunk_bytes, relative=relative)
         if path.stat().st_size != entry["bytes"] or _sha256_file(path) != entry["sha256"]:
             raise ValueError(f"chunk checksum mismatch: {relative}")
         try:

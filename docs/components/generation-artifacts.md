@@ -354,10 +354,20 @@ Each episode manifest inventories array dtype, logical shape, semantic role,
 byte count, SHA256, and chunk pieces. Ragged point clouds use concatenated
 values and zero-based boundary offsets; boolean point validity is bit-packed and
 unpacked losslessly. Byte-identical measured arrays may use explicit aliases.
-Array payloads are written through disk-backed `.npy` scratch; `max_chunk_bytes`
-defaults to 256 MiB of uncompressed NPZ payload. `local_write_limits` records the
-spool peak and an upper bound that includes spool plus compressed output and
-metadata. Writer scratch is removed after durable archive commit or on errors.
+Array payloads are written through disk-backed `.npy` scratch. `max_chunk_bytes`
+defaults to 256 MiB and caps the sum of NPZ ZIP members' uncompressed sizes,
+including each `.npy` header. The writer accounts for those headers before
+spooling; both validation and lazy reads inspect ZIP member sizes before loading
+arrays. `local_write_limits` records the spool peak and an upper bound that
+includes spool plus compressed output and metadata. Writer scratch is removed
+after durable archive commit or on errors.
+
+Aliases retain their semantic role and the target's complete logical piece/range
+map. Content-identical arrays with unrelated semantic roles do not alias; the
+explicit exception is `raw_arrays/measured_points` pointing to
+`online_observations/points` when their dtype, shape, and content match.
+Attempt diagnostic strings are bounded and recursively redacted in both the
+attempt manifest metadata and `debug.json` before they are written.
 
 The writer/reader/integrity core is implemented and fixture-tested. Distributed
 worker result detection, validation, HF publication, pruning and resume are still

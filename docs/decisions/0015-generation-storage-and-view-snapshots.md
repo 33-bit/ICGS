@@ -54,6 +54,12 @@ intervention, controller/simulator/camera identities, task binding, errors and
 traceback evidence. It must not contain a second copy of large numeric arrays.
 Unique telemetry such as depth, masks, forces or simulator-specific state is
 stored in binary chunks, not discarded.
+Archive aliases preserve semantic roles and the target's full piece/range map;
+content equality alone never aliases unrelated fields. The explicit measured
+point-cloud alias is `raw_arrays/measured_points` →
+`online_observations/points` when dtype, shape, and bytes match. Attempt error,
+traceback, and diagnostic strings are bounded and recursively redacted in every
+archived copy, including manifest metadata and `debug.json`.
 
 ### 2. Training views are derived, not a second source of truth
 

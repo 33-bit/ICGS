@@ -345,7 +345,7 @@ Local plan gates are pure fixture/unit/L0 checks. No simulator, download, prepro
 
 ## Implementation progress
 
-- [x] Phase 0.2 — Added an opt-in immutable archive profile. Legacy runtime configs still parse with `archive_profile=None`; the checked-in bounded validation example selects the archive format with `keep` retention. Profiles also bound each uncompressed NPZ chunk with `max_chunk_bytes` (default 256 MiB); the writer streams `.npy` scratch pieces and records a local staging byte upper bound that includes spool plus final files.
+- [x] Phase 0.2 — Added an opt-in immutable archive profile. Legacy runtime configs still parse with `archive_profile=None`; the checked-in bounded validation example selects the archive format with `keep` retention. Profiles also bound each NPZ chunk to 256 MiB of total uncompressed ZIP member bytes, including `.npy` headers; the writer streams `.npy` scratch pieces and records a local staging byte upper bound that includes spool plus final files.
 - [x] Recorded implementation rulings: `numpy.savez_compressed` has no `allow_pickle` argument, so archive writes reject object arrays and readers use `numpy.load(..., allow_pickle=False)`; dated audits remain historical evidence and current storage behavior belongs in current owner docs.
 - [ ] Phase 1 — Canonical archive writer/reader and both materialization paths. Archive core is implemented and its focused tests pass; worker/materializer and distributed-validation integration remain open.
 - [ ] Phase 2 — New-profile validation, complete HF publication, receipt-only retention, and HF-only resume.
@@ -372,6 +372,14 @@ Phase 1 archive-core evidence (read-only use of `/Users/33bit/AI/Research/VLA/IC
 - `git diff --check` — **PASS**, no output.
 - `python3 -B scripts/validate_fast.py` — **PASS, 22 L0 tests**, local links and static boundaries passed; two existing `SyntaxWarning` notices in `tests/test_task_router.py` were emitted.
 - Archive core uses bounded per-NPZ chunks, on-disk `.npy` spool, a 256 MiB uncompressed chunk cap, `np.load(..., allow_pickle=False)`, explicit bit-packed online validity, streamed archive validation, and LRU chunk caching. Materializer/handoff integration is not yet included in this evidence.
+
+Archive boundary review hardening (writer/reader/validator only; worker/materializer integration is intentionally held pending scoped re-review):
+
+- Alias identity now includes semantic role and logical range layout. Only exact-role arrays alias automatically, except the explicit byte-identical `raw_arrays/measured_points` → `online_observations/points` case; aliases record semantic role and target pieces/ranges.
+- Attempt metadata and debug strings are recursively bounded/redacted before any attempt copies are written. Prefix counts are inferred before encoding; action/observation arrays chunk against their respective counts, and ragged points require offsets.
+- Manifest validation now checks array references and their semantic roles, piece range continuity/coverage, point offsets and packed masks, required T/T+1 arrays, optional state/label references and boundary alignment, and attempt prefix counts/identity. It rejects truncated chunks and checks NPZ ZIP member sizes before decompression in both validation and read paths.
+- `max_chunk_bytes` is defined against the sum of uncompressed `.npy` ZIP member sizes, including headers; writer preflight accounts for those headers.
+- Targeted RED/GREEN evidence was collected for attempt-token redaction, cross-role rho/point aliasing, differing logical ranges, long attempt prefixes, missing arrays/references, malformed ranges/masks, and bounded streaming validation. The current fix-round suite is **PASS: 85 paired config/archive tests (37 archive tests)** on CPython 3.11.15 / NumPy 1.26.4; `python3 -B scripts/validate_fast.py` is **PASS: 22 L0 tests**, with two pre-existing `SyntaxWarning`s in `tests/test_task_router.py`; `git diff --check` is **PASS**. VPS, HF, simulator, training, and L1–L4 gates are **NOT RUN** by scope. The worker/materializer integration remains pending parent scoped re-review.
 
 At plan creation time:
 
