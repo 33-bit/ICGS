@@ -26,6 +26,10 @@ def online_observation_view(observation: Mapping[str, Any]) -> dict[str, Any]:
     return {field: observation[field] for field in ("points", "point_valid", "T_w_e", "grip")}
 
 from icgs.data.collection.generation.distributed_contracts import GenerationJob, WorkerResult
+from icgs.data.collection.generation.episode_archive import (
+    EpisodeArchiveWriter,
+    archive_profile_from_environment,
+)
 from icgs.data.collection.generation.episode_record import assemble_attempt_record, assemble_episode
 from icgs.data.collection.generation.task_labels import materialize_task_labels
 from icgs.data.collection.generation.perturbations import INVALID_OBSERVATION, SIMULATOR_CRASH, SUCCESS, VALID_FAILURE
@@ -117,7 +121,7 @@ def materialize_raw_attempt(
 ) -> MaterializedAttempt:
     try:
         observations = tuple(_observation_row(item) for item in raw.observations)
-        actions = tuple(np.asarray(item, dtype=np.float64) for item in raw.actions)
+        actions = tuple(np.asarray(item) for item in raw.actions)
         observation_valid = len(observations) >= 2 and len(actions) == len(observations) - 1
         if observation_valid and any(item.shape != (8,) or not np.isfinite(item).all() for item in actions):
             observation_valid = False
@@ -144,6 +148,8 @@ def materialize_raw_attempt(
             episode_id=None,
             episode_kind=job.plan.episode_kind,
             failure_type=raw.error_type or ("simulator_exception" if raw.simulator_crash else None),
+            terminal_t=len(actions) or None,
+            valid_observation_until=len(observations) - 1 if observations else None,
         )
         attempt.update({
             "error_type": raw.error_type,
@@ -179,28 +185,55 @@ def materialize_raw_attempt(
     wrist_masks = []
     front_masks = []
     for source, observation in zip(raw.observations, observations):
-        positions = np.asarray(getattr(source, "joint_positions"), dtype=np.float64)
-        velocities = np.asarray(getattr(source, "joint_velocities"), dtype=np.float64)
-        joint_positions.append(positions)
-        joint_velocities.append(velocities)
-        robot_states.append({
+        state = {
             "T_w_e": observation["T_w_e"],
             "grip": observation["grip"],
-            "joint_positions": positions,
-            "joint_velocities": velocities,
-        })
-        rgb_frames.append(np.asarray(getattr(source, "front_rgb"), dtype=np.uint8))
-        depth_frames.append(np.asarray(getattr(source, "wrist_depth")))
-        wrist_masks.append(np.asarray(getattr(source, "wrist_mask"), dtype=np.uint8))
-        front_masks.append(np.asarray(getattr(source, "front_mask"), dtype=np.uint8))
+        }
+        if hasattr(source, "joint_positions") and getattr(source, "joint_positions") is not None:
+            positions = np.asarray(getattr(source, "joint_positions"), dtype=np.float64)
+            joint_positions.append(positions)
+            state["joint_positions"] = positions
+        if hasattr(source, "joint_velocities") and getattr(source, "joint_velocities") is not None:
+            velocities = np.asarray(getattr(source, "joint_velocities"), dtype=np.float64)
+            joint_velocities.append(velocities)
+            state["joint_velocities"] = velocities
+        robot_states.append(state)
+        optional_modalities = (
+            ("front_rgb", rgb_frames, np.uint8),
+            ("wrist_depth", depth_frames, None),
+            ("wrist_mask", wrist_masks, np.uint8),
+            ("front_mask", front_masks, np.uint8),
+        )
+        for attribute, destination, dtype in optional_modalities:
+            if hasattr(source, attribute) and getattr(source, attribute) is not None:
+                value = np.asarray(getattr(source, attribute), dtype=dtype)
+                destination.append(value)
 
-    object_states = list(raw.scene_states)
-    if len(object_states) != len(observations):
-        object_states = [{} for _ in observations]
+    def _stack_if_complete(values: list[np.ndarray], count: int) -> np.ndarray | None:
+        if len(values) != count:
+            return None
+        try:
+            return np.stack(values)
+        except (TypeError, ValueError):
+            return None
+
+    joint_positions_array = _stack_if_complete(joint_positions, len(observations))
+    joint_velocities_array = _stack_if_complete(joint_velocities, len(observations))
+    front_rgb_array = _stack_if_complete(rgb_frames, len(observations))
+    wrist_depth_array = _stack_if_complete(depth_frames, len(observations))
+    wrist_mask_array = _stack_if_complete(wrist_masks, len(observations))
+    front_mask_array = _stack_if_complete(front_masks, len(observations))
+
+    scene_states = list(raw.scene_states)
+    object_states = (
+        scene_states
+        if len(scene_states) == len(observations) and all(isinstance(item, Mapping) for item in scene_states)
+        else None
+    )
     structured_steps = binding.get("structured_steps") or binding.get("events") or ()
     task_labels = (
         materialize_task_labels(structured_steps, object_states, robot_states)
-        if structured_steps else {}
+        if structured_steps and object_states is not None else {}
     )
     episode = assemble_episode(
         plan=job.plan,
@@ -216,18 +249,24 @@ def materialize_raw_attempt(
     )
     auxiliary = {
         "actions": np.stack(actions),
-        "joint_positions": np.stack(joint_positions),
-        "joint_velocities": np.stack(joint_velocities),
-        "front_rgb_frames": np.stack(rgb_frames),
-        "wrist_depth_frames": np.stack(depth_frames),
-        "wrist_mask_frames": np.stack(wrist_masks),
-        "front_mask_frames": np.stack(front_masks),
         "ee_poses": np.stack([item["T_w_e"] for item in observations]),
         "gripper_states": np.asarray([item["grip"] for item in observations], dtype=np.float32),
         "collision_events": list(raw.collision_events),
         "sim_time_s": raw.sim_time_s,
         "task_labels": task_labels,
+        "metadata": dict(raw.metadata or {}),
+        "object_states_available": object_states is not None,
     }
+    for name, value in (
+        ("joint_positions", joint_positions_array),
+        ("joint_velocities", joint_velocities_array),
+        ("front_rgb_frames", front_rgb_array),
+        ("wrist_depth_frames", wrist_depth_array),
+        ("wrist_mask_frames", wrist_mask_array),
+        ("front_mask_frames", front_mask_array),
+    ):
+        if value is not None:
+            auxiliary[name] = value
     return MaterializedAttempt(outcome, episode, None, observations, tuple(transitions), auxiliary)
 
 
@@ -244,12 +283,124 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _archive_debug_metadata(materialized: MaterializedAttempt, job: GenerationJob) -> dict[str, Any]:
+    auxiliary = materialized.auxiliary
+    return {
+        "source_run_id": job.run_id,
+        "code_revision": job.code_revision,
+        "preprocessing_identity": "rlbench_measured_v1",
+        "job": job.as_dict(),
+        "collision_events": auxiliary.get("collision_events", []),
+        "sim_time_s": auxiliary.get("sim_time_s"),
+        "task_labels": auxiliary.get("task_labels", {}),
+        "metadata": auxiliary.get("metadata", {}),
+        "outcome": materialized.outcome,
+    }
+
+
+def _archive_raw_arrays(materialized: MaterializedAttempt) -> dict[str, Any]:
+    auxiliary = materialized.auxiliary
+    names = (
+        "actions", "joint_positions", "joint_velocities", "front_rgb_frames",
+        "wrist_depth_frames", "wrist_mask_frames", "front_mask_frames",
+        "ee_poses", "gripper_states",
+    )
+    return {name: auxiliary[name] for name in names if name in auxiliary}
+
+
+def _archive_episode_record(materialized: MaterializedAttempt) -> dict[str, Any]:
+    record = dict(materialized.episode_record or {})
+    if not materialized.auxiliary.get("object_states_available", True):
+        record.pop("object_states", None)
+    robot_states = record.get("robot_states")
+    if isinstance(robot_states, list):
+        record["robot_states"] = [
+            {key: value for key, value in state.items() if value is not None}
+            if isinstance(state, Mapping) else state
+            for state in robot_states
+        ]
+    return record
+
+
+def _archive_attempt_prefix(materialized: MaterializedAttempt) -> dict[str, Any]:
+    auxiliary = materialized.auxiliary
+    observations = materialized.online_observations
+    raw_actions = auxiliary.get("raw_actions")
+    prefix: dict[str, Any] = {
+        "actions": np.asarray(() if raw_actions is None else raw_actions),
+    }
+    if observations:
+        point_values = np.concatenate([np.asarray(item["points"]) for item in observations], axis=0)
+        point_offsets = np.zeros(len(observations) + 1, dtype=np.int64)
+        for index, observation in enumerate(observations):
+            point_offsets[index + 1] = point_offsets[index] + len(observation["points"])
+        prefix.update({
+            "points": point_values,
+            "point_offsets": point_offsets,
+            "T_w_e": np.asarray([item["T_w_e"] for item in observations]),
+            "grip": np.asarray([item["grip"] for item in observations]),
+            "point_valid": np.concatenate([np.asarray(item["point_valid"], dtype=bool) for item in observations]),
+        })
+    return prefix
+
+
+def _write_archive_result(
+    materialized: MaterializedAttempt,
+    job: GenerationJob,
+    target: Path,
+    profile: Any,
+) -> WorkerResult:
+    writer = EpisodeArchiveWriter(profile)
+    if materialized.episode_record is not None:
+        record = _archive_episode_record(materialized)
+        writer.write_episode(
+            record,
+            raw_arrays=_archive_raw_arrays(materialized),
+            debug_metadata=_archive_debug_metadata(materialized, job),
+            output_dir=target,
+        )
+        episode_id: str | None = job.episode_id
+        timeline = {
+            "actions": len(materialized.transitions),
+            "observations": len(materialized.online_observations),
+            "durations": len(record["dt"]),
+        }
+    else:
+        writer.write_attempt(
+            materialized.attempt_record or {},
+            prefix_arrays=_archive_attempt_prefix(materialized),
+            debug_metadata=_archive_debug_metadata(materialized, job),
+            output_dir=target,
+        )
+        episode_id = None
+        timeline = None
+    file_sha256 = {
+        str(path.relative_to(target)): _sha256(path)
+        for path in sorted(target.rglob("*")) if path.is_file()
+    }
+    return WorkerResult(
+        job_id=job.job_id,
+        attempt_id=job.attempt_id,
+        episode_id=episode_id,
+        program_id=job.program_id,
+        outcome=materialized.outcome,
+        result_dir=str(target),
+        file_sha256=file_sha256,
+        timeline=timeline,
+    )
+
+
 def write_closed_attempt_result(
     materialized: MaterializedAttempt,
     job: GenerationJob,
     result_dir: str | Path,
 ) -> WorkerResult:
     target = Path(result_dir)
+    profile = archive_profile_from_environment()
+    if profile is not None:
+        if target.exists():
+            raise FileExistsError(f"result directory already exists: {target}")
+        return _write_archive_result(materialized, job, target, profile)
     partial = target.with_name(target.name + f".partial-{os.getpid()}-{time.time_ns()}")
     if target.exists():
         raise FileExistsError(f"result directory already exists: {target}")
@@ -260,6 +411,24 @@ def write_closed_attempt_result(
             _write_json(partial / "episode.json", record)
             observations = materialized.online_observations
             auxiliary = materialized.auxiliary
+            observation_payload: dict[str, Any] = {
+                "pointcloud": [item["points"] for item in observations],
+            }
+            for name, output_name in (
+                ("front_rgb_frames", "rgb"),
+                ("wrist_depth_frames", "depth"),
+                ("wrist_mask_frames", "masks"),
+            ):
+                if name in auxiliary:
+                    observation_payload[output_name] = auxiliary[name]
+            robot_payload: dict[str, Any] = {
+                "ee_pose": auxiliary["ee_poses"],
+                "gripper": auxiliary["gripper_states"],
+            }
+            if "joint_positions" in auxiliary and "joint_velocities" in auxiliary:
+                robot_payload["joint_state"] = np.concatenate([
+                    auxiliary["joint_positions"], auxiliary["joint_velocities"]
+                ], axis=1)
             layout_payload: dict[str, Any] = {
                 "episode": {
                     "episode_id": job.episode_id,
@@ -268,19 +437,8 @@ def write_closed_attempt_result(
                     "layout_version": LAYOUT_VERSION,
                     "outcome": materialized.outcome,
                 },
-                "observations": {
-                    "pointcloud": [item["points"] for item in observations],
-                    "rgb": auxiliary["front_rgb_frames"],
-                    "depth": auxiliary["wrist_depth_frames"],
-                    "masks": auxiliary["wrist_mask_frames"],
-                },
-                "robot": {
-                    "ee_pose": auxiliary["ee_poses"],
-                    "joint_state": np.concatenate([
-                        auxiliary["joint_positions"], auxiliary["joint_velocities"]
-                    ], axis=1),
-                    "gripper": auxiliary["gripper_states"],
-                },
+                "observations": observation_payload,
+                "robot": robot_payload,
                 "actions": auxiliary["actions"],
                 "task": {
                     "events": record.get("events", []),
@@ -294,16 +452,15 @@ def write_closed_attempt_result(
                 },
             }
             write_training_episode_layout(partial / "layout", layout_payload)
-            np.savez_compressed(
-                partial / "telemetry.npz",
-                joint_positions=auxiliary["joint_positions"],
-                joint_velocities=auxiliary["joint_velocities"],
-                ee_poses=auxiliary["ee_poses"],
-                gripper_states=auxiliary["gripper_states"],
-                wrist_depth_frames=auxiliary["wrist_depth_frames"],
-                wrist_mask_frames=auxiliary["wrist_mask_frames"],
-                front_mask_frames=auxiliary["front_mask_frames"],
-            )
+            telemetry = {
+                name: auxiliary[name]
+                for name in (
+                    "joint_positions", "joint_velocities", "ee_poses", "gripper_states",
+                    "wrist_depth_frames", "wrist_mask_frames", "front_mask_frames",
+                )
+                if name in auxiliary
+            }
+            np.savez_compressed(partial / "telemetry.npz", **telemetry)
             timeline = {
                 "actions": len(materialized.transitions),
                 "observations": len(materialized.online_observations),

@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
+import traceback
 import uuid
 from icgs.data.collection.generation.distributed_contracts import (
     GenerationJob,
@@ -18,6 +19,7 @@ from icgs.data.collection.generation.distributed_contracts import (
     WorkerResult,
 )
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+from icgs.data.collection.generation.episode_archive import EpisodeArchiveWriter
 
 
 def display_number(worker_id: str, config: GenerationRuntimeConfig) -> int:
@@ -61,6 +63,89 @@ def _credential_free_environment(config: GenerationRuntimeConfig) -> dict[str, s
     ):
         environment.pop(key, None)
     return environment
+
+
+def _archive_result_payload(
+    candidate: Path,
+    config: GenerationRuntimeConfig,
+    *,
+    job: GenerationJob | None = None,
+) -> dict | None:
+    """Return one canonical archive manifest, with no legacy fallback in archive mode."""
+    if config.archive_profile is None:
+        return None
+    manifest_paths = [
+        path for path in (candidate / "episode.manifest.json", candidate / "attempt.manifest.json")
+        if path.is_file()
+    ]
+    if (candidate / "episode.json").exists() or (candidate / "attempt.json").exists():
+        raise ValueError("archive profile result must not contain legacy episode/attempt JSON")
+    if len(manifest_paths) > 1:
+        raise ValueError("archive profile result must contain exactly one archive manifest")
+    if not manifest_paths:
+        return None
+    payload = json.loads(manifest_paths[0].read_text(encoding="utf-8"))
+    if payload.get("archive_format_id") != config.archive_profile.archive_format_id:
+        raise ValueError("archive result format identity disagrees with runtime profile")
+    if payload.get("episode_schema_version") != config.archive_profile.episode_schema_version:
+        raise ValueError("archive result schema identity disagrees with runtime profile")
+    if payload.get("dataset_identity") != config.archive_profile.dataset_identity:
+        raise ValueError("archive result dataset identity disagrees with runtime profile")
+    expected_kind = "episode" if manifest_paths[0].name == "episode.manifest.json" else "attempt"
+    if payload.get("archive_kind") != expected_kind:
+        raise ValueError("archive manifest kind disagrees with its filename")
+    outcome = payload.get("outcome")
+    valid_outcomes = {"success", "valid_failure"} if expected_kind == "episode" else {"simulator_crash", "invalid_observation"}
+    if outcome not in valid_outcomes:
+        raise ValueError("archive manifest outcome disagrees with its kind")
+    if job is not None:
+        if payload.get("attempt_id") != job.attempt_id or payload.get("program_id") != job.program_id:
+            raise ValueError("archive manifest identity disagrees with the claimed job")
+        expected_episode_id = job.episode_id if expected_kind == "episode" else None
+        if payload.get("episode_id") != expected_episode_id:
+            raise ValueError("archive manifest episode identity disagrees with the claimed job")
+    return payload
+
+
+def _write_archive_worker_attempt(
+    candidate: Path,
+    job: GenerationJob,
+    config: GenerationRuntimeConfig,
+    *,
+    outcome: str,
+    error: str,
+    stdout: str = "",
+    stderr: str = "",
+    traceback_text: str = "",
+    exit_code: int | None = None,
+    timeout: bool = False,
+) -> None:
+    if candidate.exists():
+        shutil.rmtree(candidate)
+    attempt = {
+        "attempt_id": job.attempt_id,
+        "episode_id": None,
+        "program_id": job.program_id,
+        "outcome": outcome,
+        "error": error[:8192],
+        "valid_observation_until": None,
+    }
+    debug = {
+        "source_run_id": job.run_id,
+        "code_revision": job.code_revision,
+        "preprocessing_identity": "generation_worker_failure_v1",
+        "exit_code": exit_code,
+        "timeout": timeout,
+        "stdout": (stdout or "")[-8192:],
+        "stderr": (stderr or "")[-8192:],
+        "traceback": (traceback_text or "")[-8192:],
+    }
+    EpisodeArchiveWriter(config.archive_profile).write_attempt(
+        attempt,
+        prefix_arrays={},
+        debug_metadata=debug,
+        output_dir=candidate,
+    )
 
 
 class SimulatorSlotPool:
@@ -210,6 +295,8 @@ def run_worker(
                 "ICGS_GENERATION_WRITE_EPISODE": str(output_root),
                 "ICGS_GENERATION_BINDING_JSON": str(binding_path),
                 "ICGS_GENERATION_APPROVED_MANIFEST": str(approved_manifest),
+                "ICGS_GENERATION_RUN_ID": job.run_id,
+                "ICGS_GENERATION_CODE_REVISION": job.code_revision,
                 "PYTHONUNBUFFERED": "1",
             })
             command = [
@@ -249,20 +336,57 @@ def run_worker(
             log_path.parent.mkdir(parents=True, exist_ok=True)
             log_path.write_text((process.stdout or "") + (process.stderr or ""), encoding="utf-8")
             candidate = output_root / job.program_id
-            episode_path = candidate / "episode.json"
-            if episode_path.is_file():
-                payload = json.loads(episode_path.read_text(encoding="utf-8"))
-                outcome = str(payload.get("provenance", {}).get("outcome", "success"))
+            archive_payload = _archive_result_payload(candidate, config, job=job)
+            if config.archive_profile is not None:
+                if archive_payload is None:
+                    outcome = "simulator_crash" if process.returncode else "invalid_observation"
+                    _write_archive_worker_attempt(
+                        candidate,
+                        job,
+                        config,
+                        outcome=outcome,
+                        error="worker did not produce a closed archive",
+                        stdout=process.stdout or "",
+                        stderr=process.stderr or "",
+                        exit_code=process.returncode,
+                    )
+                    archive_payload = _archive_result_payload(candidate, config, job=job)
+                else:
+                    outcome = str(archive_payload.get("outcome"))
+                timeline_payload = archive_payload.get("timeline") or {}
                 result = WorkerResult(
-                    job_id=job.job_id, attempt_id=job.attempt_id, episode_id=job.episode_id,
+                    job_id=job.job_id,
+                    attempt_id=job.attempt_id,
+                    episode_id=job.episode_id if outcome in {"success", "valid_failure"} else None,
                     program_id=job.program_id, outcome=outcome, result_dir=str(candidate),
-                    file_sha256=_file_hashes(candidate), timeline={
-                        "actions": len(payload.get("transitions", [])),
-                        "observations": len(payload.get("online_observations", [])),
-                        "durations": len(payload.get("dt", [])),
-                    },
+                    file_sha256=_file_hashes(candidate),
+                    timeline=(
+                        {
+                            "actions": int(timeline_payload.get("transitions", 0)),
+                            "observations": int(timeline_payload.get("observations", 0)),
+                            "durations": int(timeline_payload.get("transitions", 0)),
+                        }
+                        if outcome in {"success", "valid_failure"} else None
+                    ),
                 )
             else:
+                episode_path = candidate / "episode.json"
+                if episode_path.is_file():
+                    payload = json.loads(episode_path.read_text(encoding="utf-8"))
+                    outcome = str(payload.get("provenance", {}).get("outcome", "success"))
+                    result = WorkerResult(
+                        job_id=job.job_id, attempt_id=job.attempt_id, episode_id=job.episode_id,
+                        program_id=job.program_id, outcome=outcome, result_dir=str(candidate),
+                        file_sha256=_file_hashes(candidate), timeline={
+                            "actions": len(payload.get("transitions", [])),
+                            "observations": len(payload.get("online_observations", [])),
+                            "durations": len(payload.get("dt", [])),
+                        },
+                    )
+                    queue.publish_ready(worker_id, result, worker_instance_id=worker_instance_id)
+                    if once:
+                        return 0
+                    continue
                 attempt_path = candidate / "attempt.json"
                 if attempt_path.is_file():
                     attempt = json.loads(attempt_path.read_text(encoding="utf-8"))
@@ -293,6 +417,56 @@ def run_worker(
             queue.publish_ready(worker_id, result, worker_instance_id=worker_instance_id)
         except Exception as exc:
             result_dir = _attempt_output_root(job) / job.program_id
+            if config.archive_profile is not None:
+                try:
+                    archive_payload = _archive_result_payload(result_dir, config, job=job)
+                    if archive_payload is not None and archive_payload.get("archive_kind") == "episode":
+                        outcome = str(archive_payload.get("outcome"))
+                        if outcome in {"success", "valid_failure"}:
+                            timeline_payload = archive_payload.get("timeline") or {}
+                            queue.publish_ready(worker_id, WorkerResult(
+                                job_id=job.job_id,
+                                attempt_id=job.attempt_id,
+                                episode_id=job.episode_id,
+                                program_id=job.program_id,
+                                outcome=outcome,
+                                result_dir=str(result_dir),
+                                file_sha256=_file_hashes(result_dir),
+                                timeline={
+                                    "actions": int(timeline_payload.get("transitions", 0)),
+                                    "observations": int(timeline_payload.get("observations", 0)),
+                                    "durations": int(timeline_payload.get("transitions", 0)),
+                                },
+                            ), worker_instance_id=worker_instance_id)
+                            if once:
+                                return 0
+                            continue
+                except Exception:
+                    pass
+                _write_archive_worker_attempt(
+                    result_dir,
+                    job,
+                    config,
+                    outcome="simulator_crash",
+                    error=str(exc),
+                    stdout=getattr(exc, "output", "") or "",
+                    stderr=getattr(exc, "stderr", "") or "",
+                    traceback_text=traceback.format_exc(),
+                    timeout=isinstance(exc, subprocess.TimeoutExpired),
+                )
+                queue.publish_ready(worker_id, WorkerResult(
+                    job_id=job.job_id,
+                    attempt_id=job.attempt_id,
+                    episode_id=None,
+                    program_id=job.program_id,
+                    outcome="simulator_crash",
+                    result_dir=str(result_dir),
+                    file_sha256=_file_hashes(result_dir),
+                    timeline=None,
+                ), worker_instance_id=worker_instance_id)
+                if once:
+                    return 0
+                continue
             episode_path = result_dir / "episode.json"
             artifact_manifest_path = result_dir / "artifact_manifest.json"
             # A subprocess timeout can happen after the pilot has atomically

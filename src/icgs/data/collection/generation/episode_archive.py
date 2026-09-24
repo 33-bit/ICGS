@@ -528,6 +528,19 @@ def _is_sha256(value: Any) -> bool:
     )
 
 
+def archive_profile_from_environment(environment: Mapping[str, str] | None = None) -> ArchiveProfileConfig | None:
+    """Decode the opt-in worker profile without changing legacy callers."""
+    values = os.environ if environment is None else environment
+    raw = values.get("ICGS_GENERATION_ARCHIVE_PROFILE", "")
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    try:
+        payload = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as error:
+        raise ValueError("ICGS_GENERATION_ARCHIVE_PROFILE must contain a JSON object") from error
+    return ArchiveProfileConfig.from_dict(payload)
+
+
 class _ArchiveArrays:
     def __init__(self, scratch_root: Path, *, max_chunk_bytes: int) -> None:
         self.scratch_root = scratch_root
@@ -2202,5 +2215,6 @@ __all__ = [
     "ArchiveManifest",
     "EpisodeArchiveReader",
     "EpisodeArchiveWriter",
+    "archive_profile_from_environment",
     "validate_archive_manifest",
 ]

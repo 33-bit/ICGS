@@ -58,8 +58,13 @@ def _write_episode(write_dir: Path, row: dict) -> None:
     from icgs.data.collection.generation.episode_record import assemble_episode, classify_generation_outcome
     from icgs.data.training_layout import LAYOUT_VERSION, write_training_episode_layout
     from icgs.data.collection.generation.rlbench_attempt import online_observation_view
+    from icgs.data.collection.generation.episode_archive import (
+        EpisodeArchiveWriter,
+        archive_profile_from_environment,
+    )
 
     write_dir.mkdir(parents=True, exist_ok=True)
+    archive_profile = archive_profile_from_environment()
     binding_path = Path(os.environ.get("ICGS_GENERATION_BINDING_JSON", ""))
     if binding_path.is_file():
         row["_binding"] = json.loads(binding_path.read_text(encoding="utf-8"))
@@ -124,6 +129,42 @@ def _write_episode(write_dir: Path, row: dict) -> None:
         predicates_ok=bool(row.get("success")),
         observation_valid=row.get("result_class") != "invalid_observation",
     )
+
+    def _has_captured_object_state(states) -> bool:
+        if not states:
+            return False
+        for state in states:
+            if not isinstance(state, dict):
+                if state:
+                    return True
+                continue
+            if state.get("objects"):
+                return True
+            for key, value in state.items():
+                if key == "objects" or value is None:
+                    continue
+                if isinstance(value, (list, tuple, dict)) and not value:
+                    continue
+                return True
+        return False
+
+    def _archive_record(record_value: dict) -> dict:
+        normalized = dict(record_value)
+        object_states = normalized.get("object_states")
+        if not _has_captured_object_state(object_states):
+            normalized.pop("object_states", None)
+        robot_states = normalized.get("robot_states")
+        if isinstance(robot_states, list):
+            normalized["robot_states"] = [
+                {
+                    key: value for key, value in state.items()
+                    if value is not None
+                }
+                if isinstance(state, dict) else state
+                for state in robot_states
+            ]
+        return normalized
+
     if result_class in {"simulator_crash", "invalid_observation"}:
         from icgs.data.collection.generation.episode_record import assemble_attempt_record
         valid_until = len(timed) - 1 if timed else None
@@ -151,6 +192,43 @@ def _write_episode(write_dir: Path, row: dict) -> None:
             "error_type": row.get("error_type"),
             "traceback": row.get("traceback"),
         })
+        if archive_profile is not None:
+            actions_value = row.get("_actions")
+            prefix: dict[str, np.ndarray] = {
+                "actions": np.asarray(() if actions_value is None else actions_value),
+            }
+            if timed:
+                point_frames = [np.asarray(item["points"]).reshape(-1, 3) for item in timed]
+                point_offsets = np.zeros(len(point_frames) + 1, dtype=np.int64)
+                for index, frame in enumerate(point_frames):
+                    point_offsets[index + 1] = point_offsets[index] + len(frame)
+                prefix.update({
+                    "points": np.concatenate(point_frames, axis=0),
+                    "point_offsets": point_offsets,
+                    "T_w_e": np.asarray([item["T_w_e"] for item in timed]),
+                    "grip": np.asarray([item["grip"] for item in timed]),
+                    "point_valid": np.concatenate([
+                        np.asarray(item["point_valid"]) for item in timed
+                    ]),
+                })
+            debug = {
+                key: value for key, value in row.items()
+                if key not in {"_timed_obs", "_actions"}
+            }
+            if not _has_captured_object_state(debug.get("_object_states")):
+                debug.pop("_object_states", None)
+            debug.update({
+                "source_run_id": os.environ.get("ICGS_GENERATION_RUN_ID") or row.get("run_id") or "script-local",
+                "code_revision": os.environ.get("ICGS_GENERATION_CODE_REVISION") or row.get("code_revision") or "script-local",
+                "preprocessing_identity": "rlbench_script_measured_v1",
+            })
+            EpisodeArchiveWriter(archive_profile).write_attempt(
+                attempt,
+                prefix_arrays=prefix,
+                debug_metadata=debug,
+                output_dir=write_dir,
+            )
+            return
         (write_dir / "attempt.json").write_text(json.dumps(_enc(attempt), indent=2) + "\n")
         point_frames = [np.asarray(item["points"], dtype=np.float32).reshape(-1, 3) for item in timed]
         point_offsets = np.zeros(len(point_frames) + 1, dtype=np.int64)
@@ -188,6 +266,24 @@ def _write_episode(write_dir: Path, row: dict) -> None:
     )
     if row.get("_sensor_randomization") is not None:
         record["sensor_randomization"] = row["_sensor_randomization"]
+    execution = {
+        k: v for k, v in row.items()
+        if k not in {"_timed_obs", "_actions", "_robot_states", "_object_states", "_task_labels"}
+    }
+    execution["outcome"] = result_class
+    execution.update({
+        "source_run_id": os.environ.get("ICGS_GENERATION_RUN_ID") or row.get("run_id") or "script-local",
+        "code_revision": os.environ.get("ICGS_GENERATION_CODE_REVISION") or row.get("code_revision") or "script-local",
+        "preprocessing_identity": "rlbench_script_measured_v1",
+    })
+    if archive_profile is not None:
+        EpisodeArchiveWriter(archive_profile).write_episode(
+            _archive_record(record),
+            raw_arrays={},
+            debug_metadata=execution,
+            output_dir=write_dir,
+        )
+        return
     (write_dir / "episode.json").write_text(json.dumps(_enc(record), indent=2) + "\n")
     execution = {
         k: v for k, v in row.items()

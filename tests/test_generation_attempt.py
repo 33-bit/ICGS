@@ -4,11 +4,14 @@ from dataclasses import dataclass
 import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from icgs.data.collection.generation.batch import AttemptPlan
-from icgs.data.collection.generation.distributed_contracts import GenerationJob
+from icgs.data.collection.generation.distributed_contracts import ArchiveProfileConfig, GenerationJob
+from icgs.data.collection.generation.episode_archive import EpisodeArchiveReader, validate_archive_manifest
 from icgs.data.collection.generation.rlbench_attempt import (
     RawAttempt,
     materialize_raw_attempt,
@@ -149,6 +152,109 @@ def test_closed_valid_failure_writes_full_layout_and_hashes(tmp_path: Path):
     }
     episode = json.loads((tmp_path / "result" / "episode.json").read_text())
     assert episode["provenance"]["outcome"] == "valid_failure"
+
+
+def _enable_archive_profile(monkeypatch):
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(profile.as_dict()))
+
+
+def test_archive_profile_writes_valid_failure_as_canonical_episode_archive(tmp_path: Path, monkeypatch):
+    _enable_archive_profile(monkeypatch)
+    materialized = materialize_raw_attempt(_raw(predicates_ok=False), _job(), _binding())
+
+    result = write_closed_attempt_result(materialized, _job(), tmp_path / "archive-result")
+    root = Path(result.result_dir)
+    manifest_path = root / "episode.manifest.json"
+
+    assert result.outcome == "valid_failure"
+    assert manifest_path.is_file()
+    assert not (root / "episode.json").exists()
+    assert not (root / "layout").exists()
+    assert not (root / "telemetry.npz").exists()
+    assert validate_archive_manifest(manifest_path)["valid"] is True
+    assert EpisodeArchiveReader(manifest_path).manifest.payload["outcome"] == "valid_failure"
+    debug = json.loads((root / "debug.json").read_text(encoding="utf-8"))
+    assert "online_observations" not in debug
+    assert "points" not in json.dumps(debug)
+
+
+def test_archive_profile_preserves_measured_action_dtype(tmp_path: Path, monkeypatch):
+    _enable_archive_profile(monkeypatch)
+    raw = _raw(predicates_ok=False)
+    raw = RawAttempt(
+        observations=raw.observations,
+        actions=tuple(np.asarray(action, dtype=np.float32) for action in raw.actions),
+        scene_states=raw.scene_states,
+        collision_events=raw.collision_events,
+        sim_time_s=raw.sim_time_s,
+        predicates_ok=False,
+        terminal_reason=raw.terminal_reason,
+    )
+    materialized = materialize_raw_attempt(raw, _job(), _binding())
+    result = write_closed_attempt_result(materialized, _job(), tmp_path / "dtype-archive")
+    reader = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json")
+
+    assert reader.raw_arrays["actions"].dtype == np.dtype(np.float32)
+
+
+@pytest.mark.parametrize("simulator_crash", [False, True])
+def test_archive_profile_routes_closed_crash_or_invalid_to_attempt_archive(
+    tmp_path: Path, monkeypatch, simulator_crash: bool
+):
+    _enable_archive_profile(monkeypatch)
+    materialized = materialize_raw_attempt(
+        _raw(predicates_ok=False, count=3 if simulator_crash else 1, simulator_crash=simulator_crash),
+        _job(),
+        _binding(),
+    )
+
+    result = write_closed_attempt_result(materialized, _job(), tmp_path / f"attempt-{simulator_crash}")
+    root = Path(result.result_dir)
+    manifest_path = root / "attempt.manifest.json"
+
+    assert result.episode_id is None
+    assert result.outcome in {"simulator_crash", "invalid_observation"}
+    assert manifest_path.is_file()
+    assert not (root / "attempt.json").exists()
+    assert not (root / "valid_prefix.npz").exists()
+    assert validate_archive_manifest(manifest_path)["valid"] is True
+
+
+def test_archive_profile_omits_unavailable_optional_modalities(tmp_path: Path, monkeypatch):
+    _enable_archive_profile(monkeypatch)
+    observations = tuple(
+        SimpleNamespace(
+            wrist_point_cloud=np.asarray([[index, 0.0, 0.8]], dtype=np.float32),
+            gripper_pose=np.asarray([index * 0.01, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0], dtype=np.float64),
+            gripper_open=1.0,
+        )
+        for index in range(3)
+    )
+    raw = RawAttempt(
+        observations=observations,
+        actions=tuple(np.asarray([0.1, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 1.0], dtype=np.float64) for _ in range(2)),
+        scene_states=(),
+        collision_events=(),
+        sim_time_s=0.1,
+        predicates_ok=True,
+        terminal_reason="predicate_satisfied",
+    )
+
+    materialized = materialize_raw_attempt(raw, _job(), _binding())
+    assert materialized.episode_record is not None
+    result = write_closed_attempt_result(materialized, _job(), tmp_path / "minimal-archive")
+    archive = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json")
+    roles = {
+        spec["semantic_role"]
+        for spec in archive.manifest.payload["array_specs"].values()
+    }
+    assert not any(role.startswith("raw_arrays/front_rgb") for role in roles)
+    assert not any(role.startswith("raw_arrays/wrist_depth") for role in roles)
+    assert not any(role.startswith("raw_arrays/wrist_mask") for role in roles)
+    assert not any(role.startswith("raw_arrays/front_mask") for role in roles)
+    assert not any("joint_positions" in role or "joint_velocities" in role for role in roles)
+    assert "object_states" not in archive.manifest.payload["record_metadata"]
 
 
 def test_materializer_writes_measured_task_labels_when_steps_are_bound(tmp_path: Path):

@@ -371,7 +371,10 @@ Attempt strings are bounded and recursively redacted in source metadata,
 Credential fields such as passwords, API keys, tokens, and secrets redact their
 values based on the field name even when the value itself has no token pattern.
 
-The writer/reader/integrity core is implemented and fixture-tested. Distributed
-worker result detection, validation, HF publication, pruning and resume are still
-pending integration in the active implementation plan. Until those steps pass,
-the legacy inventory above describes the end-to-end distributed path.
+The writer/reader/integrity core, opt-in RLBench materializer, distributed episode
+worker handoff, and archive-manifest result detection are implemented and
+fixture-tested. With the archive profile absent, the legacy `episode.json`,
+layout, telemetry, and `attempt.json` paths remain unchanged. Archive-aware
+distributed validation, HF publication, pruning and resume are still pending
+integration in the active implementation plan. Until those steps pass, the
+legacy inventory above describes the end-to-end distributed path.

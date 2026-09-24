@@ -52,10 +52,12 @@ clouds and captured debug modalities in safe compressed NPZ chunks; success and
 attempt archives with null `episode_id`. Provisional pointers are discovery
 indexes. Final training views must bind to a frozen HF dataset-manifest revision.
 
-The archive writer/reader and local integrity validator are implemented. The
-distributed worker handoff, publication, receipt-only retention, HF-only resume,
-and final-view publication are still being integrated; this profile is not yet
-an end-to-end production collection path. See the
+The archive writer/reader, both local materialization paths, and archive-aware
+worker result detection are implemented for this opt-in profile. Legacy configs
+without `archive_profile` retain their JSON/layout writer behavior. Distributed
+archive validation, publication, receipt-only retention, HF-only resume, and
+final-view publication are still being integrated; this profile is not yet an
+end-to-end production collection path. See the
 [active implementation plan](../plans/active/generation-storage-and-view-finalization.md)
 for current phase evidence.
 

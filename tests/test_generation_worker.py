@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from icgs.data.collection.generation.distributed_contracts import (
+    ArchiveProfileConfig,
     GenerationJob,
     GenerationRuntimeConfig,
 )
@@ -205,6 +206,70 @@ def test_worker_stages_recovered_retry_in_a_disjoint_result_directory(tmp_path: 
 
     result = json.loads((queue.root / "ready" / "job-retry" / "result.json").read_text())
     assert "/worker-results/job-retry/retry-1/T01" in result["result_dir"]
+
+
+def test_archive_result_detection_requires_canonical_manifest_without_legacy_fallback(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    payload = config.as_dict()
+    payload["archive_profile"] = ArchiveProfileConfig(chunk_boundaries=2).as_dict()
+    config = GenerationRuntimeConfig.from_dict(payload)
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "episode.manifest.json").write_text(json.dumps({
+        "archive_format_id": config.archive_profile.archive_format_id,
+        "episode_schema_version": config.archive_profile.episode_schema_version,
+        "dataset_identity": config.archive_profile.dataset_identity,
+        "archive_kind": "episode",
+        "outcome": "valid_failure",
+        "timeline": {"observations": 2, "transitions": 1},
+    }), encoding="utf-8")
+
+    detected = generation_worker._archive_result_payload(candidate, config)
+    assert detected["archive_kind"] == "episode"
+    assert detected["outcome"] == "valid_failure"
+
+    (candidate / "episode.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(ValueError, match="legacy"):
+        generation_worker._archive_result_payload(candidate, config)
+
+
+def test_archive_profile_worker_propagates_identity_and_writes_canonical_failure(tmp_path: Path):
+    base = _runtime_config(tmp_path)
+    payload = base.as_dict()
+    payload["archive_profile"] = ArchiveProfileConfig(chunk_boundaries=2).as_dict()
+    config = GenerationRuntimeConfig.from_dict(payload)
+    queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1,
+        episode_id="episode-t01-archive-000001", episode_kind="nominal", scene_seed=7,
+        collection_seed=20260920, randomization={"scene_signature": "signature-1", "asset_instance_id": "asset-1"},
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id="job-archive", run_id=config.run.run_id, attempt_id=f"att-{plan.episode_id}",
+        episode_id=plan.episode_id, program_id="T01", plan=plan,
+        code_revision="a" * 40, manifest_sha256="b" * 64,
+        output_root=str(Path(config.run.run_root) / "staging"),
+    )
+    queue.enqueue(job)
+    approved_manifest = Path(config.run.run_root) / "approved.json"
+    approved_manifest.write_text(json.dumps({"catalog": [{"program_id": "T01"}]}), encoding="utf-8")
+    calls = []
+
+    def runner(command, **kwargs):
+        calls.append(kwargs)
+        return SimpleNamespace(returncode=1, stdout="worker stdout", stderr="worker stderr")
+
+    generation_worker.run_worker(
+        "000", queue, config=config, approved_manifest=str(approved_manifest), once=True, runner=runner
+    )
+
+    assert calls[0]["env"]["ICGS_GENERATION_RUN_ID"] == job.run_id
+    assert calls[0]["env"]["ICGS_GENERATION_CODE_REVISION"] == job.code_revision
+    assert calls[0]["env"]["ICGS_GENERATION_ARCHIVE_PROFILE"]
+    result = json.loads((queue.root / "ready" / job.job_id / "result.json").read_text())
+    assert Path(result["result_dir"], "attempt.manifest.json").is_file()
+    assert not Path(result["result_dir"], "attempt.json").exists()
 
 
 def test_generation_subprocess_refreshes_heartbeat_until_exit(monkeypatch):
