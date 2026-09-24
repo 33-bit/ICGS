@@ -8,7 +8,11 @@ from __future__ import annotations
 from dataclasses import dataclass, asdict
 import json
 from pathlib import Path
+import re
 from typing import Any, Mapping
+
+
+_SAFE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 
 
 @dataclass(frozen=True)
@@ -19,8 +23,8 @@ class CapacityStage:
     max_jobs: int
 
     def __post_init__(self) -> None:
-        if not self.name.strip():
-            raise ValueError("stage name must be nonblank")
+        if not isinstance(self.name, str) or not _SAFE_ID.fullmatch(self.name):
+            raise ValueError("stage name must be a safe identifier")
         if type(self.worker_count) is not int or not 1 <= self.worker_count <= 200:
             raise ValueError("stage worker_count must be in 1..200")
         if type(self.simulator_slots) is not int or not 1 <= self.simulator_slots <= self.worker_count:
@@ -38,8 +42,8 @@ class CapacityProbeConfig:
     stages: tuple[CapacityStage, ...]
 
     def __post_init__(self) -> None:
-        if not self.run_id.strip():
-            raise ValueError("run_id must be nonblank")
+        if not isinstance(self.run_id, str) or not _SAFE_ID.fullmatch(self.run_id):
+            raise ValueError("run_id must be a safe identifier")
         if not self.hf_subfolder.startswith("validation/") or ".." in Path(self.hf_subfolder).parts:
             raise ValueError("hf_subfolder must remain under validation/")
         if type(self.max_total_jobs) is not int or not 1 <= self.max_total_jobs <= 400:

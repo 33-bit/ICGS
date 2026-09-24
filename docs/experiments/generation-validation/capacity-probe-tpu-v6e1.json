@@ -6,9 +6,9 @@
   "stages": [
     {"name": "w08", "worker_count": 8, "simulator_slots": 8, "max_jobs": 8},
     {"name": "w16", "worker_count": 16, "simulator_slots": 16, "max_jobs": 16},
-    {"name": "w32", "worker_count": 32, "simulator_slots": 32, "max_jobs": 32},
-    {"name": "w64", "worker_count": 64, "simulator_slots": 64, "max_jobs": 64},
-    {"name": "w128", "worker_count": 128, "simulator_slots": 128, "max_jobs": 80},
-    {"name": "w200", "worker_count": 200, "simulator_slots": 200, "max_jobs": 200}
+    {"name": "w32", "worker_count": 32, "simulator_slots": 24, "max_jobs": 32},
+    {"name": "w64", "worker_count": 64, "simulator_slots": 32, "max_jobs": 64},
+    {"name": "w128", "worker_count": 128, "simulator_slots": 40, "max_jobs": 80},
+    {"name": "w200", "worker_count": 200, "simulator_slots": 40, "max_jobs": 200}
   ]
 }
