@@ -96,6 +96,31 @@ def _free_memory_bytes() -> int | None:
     return None
 
 
+def wait_for_ready_results(queue, processes, *, expected_jobs: int, deadline: float) -> dict:
+    """Finish at the last closed result; extra idle workers need not exit first."""
+    minimum_free = _free_memory_bytes()
+    while True:
+        counts = queue.counts()
+        if counts.ready == expected_jobs:
+            return {
+                "ready": counts.ready,
+                "active_workers_at_completion": sum(process.poll() is None for process in processes),
+                "minimum_available_memory_bytes": minimum_free,
+            }
+        if counts.ready > expected_jobs:
+            raise RuntimeError("capacity queue exceeded fixed job cap")
+        if time.monotonic() >= deadline:
+            raise TimeoutError("capacity probe global deadline reached")
+        available = _free_memory_bytes()
+        if available is not None:
+            minimum_free = available if minimum_free is None else min(minimum_free, available)
+            if available < 8 * 1024**3:
+                raise RuntimeError("capacity probe stopped: less than 8 GiB memory available")
+        if all(process.poll() is not None for process in processes):
+            raise RuntimeError("all workers exited before all results became ready")
+        time.sleep(1)
+
+
 def run_stage(
     base: GenerationRuntimeConfig,
     probe: CapacityProbeConfig,
@@ -135,7 +160,6 @@ def run_stage(
     for key in ("ICGS_HF_TOKEN_PATH", "HF_TOKEN", "HUGGINGFACE_HUB_TOKEN", "HF_ACCESS_TOKEN"):
         environment.pop(key, None)
     processes = []
-    minimum_free = _free_memory_bytes()
     started = time.monotonic()
     try:
         for worker_id in runtime.machine.worker_ids:
@@ -155,19 +179,14 @@ def run_stage(
             finally:
                 log.close()
             processes.append(process)
-        while any(process.poll() is None for process in processes):
-            if time.monotonic() >= deadline:
-                raise TimeoutError("capacity probe global deadline reached")
-            available = _free_memory_bytes()
-            if available is not None:
-                minimum_free = available if minimum_free is None else min(minimum_free, available)
-                if available < 8 * 1024**3:
-                    raise RuntimeError("capacity probe stopped: less than 8 GiB memory available")
-            time.sleep(1)
-        returncodes = [process.returncode for process in processes]
+        completion = wait_for_ready_results(
+            queue, processes, expected_jobs=len(job_ids), deadline=deadline,
+        )
+        results_elapsed = time.monotonic() - started
     finally:
         stop_processes(processes)
-    elapsed = time.monotonic() - started
+    cleanup_elapsed = time.monotonic() - started - results_elapsed
+    returncodes = [process.poll() for process in processes]
     ready = queue.iter_ready()
     outcomes = Counter()
     artifact_bytes = 0
@@ -190,15 +209,20 @@ def run_stage(
         "worker_timeout_s": stage.worker_timeout_s,
         "job_cap": stage.max_jobs,
         "enqueued": len(job_ids),
-        "elapsed_s": elapsed,
-        "attempts_per_hour": round(len(ready) * 3600 / elapsed, 2) if elapsed else 0,
+        "elapsed_s": results_elapsed,
+        "cleanup_elapsed_s": cleanup_elapsed,
+        "active_workers_at_completion": completion["active_workers_at_completion"],
+        "attempts_per_hour": round(len(ready) * 3600 / results_elapsed, 2) if results_elapsed else 0,
         "outcomes": dict(outcomes),
         "invalid_results": invalid,
         "artifact_bytes": artifact_bytes,
-        "minimum_available_memory_bytes": minimum_free,
+        "minimum_available_memory_bytes": completion["minimum_available_memory_bytes"],
         "worker_returncodes": returncodes,
         "queue": counts.__dict__,
-        "status": "PASS" if len(ready) == len(job_ids) and not invalid and all(code == 0 for code in returncodes) else "FAIL",
+        "status": "PASS" if len(ready) == len(job_ids) and not invalid
+        and sum(outcomes.values()) == len(job_ids)
+        and not (outcomes["simulator_crash"] or outcomes["invalid_observation"])
+        else "FAIL",
     }
     (root / "capacity_receipt.json").write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return receipt

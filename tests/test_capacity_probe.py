@@ -130,3 +130,54 @@ def test_stage_runtime_disables_publication_and_rewrites_identity(tmp_path):
     assert runtime.run.publication_enabled is False
     assert runtime.machine.worker_timeout_s == 180
     assert len(runtime.machine.worker_ids) == 16
+
+
+def test_wait_for_ready_results_finishes_before_idle_workers_exit(monkeypatch):
+    class Counts:
+        def __init__(self, ready):
+            self.ready = ready
+            self.pending = 2 - ready
+            self.claimed = 0
+
+    class Queue:
+        def __init__(self):
+            self.calls = 0
+
+        def counts(self):
+            self.calls += 1
+            return Counts(min(self.calls - 1, 2))
+
+    class Process:
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(generation_capacity_probe.time, "sleep", lambda _: None)
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: 100 * 1024**3)
+    result = generation_capacity_probe.wait_for_ready_results(
+        Queue(), [Process(), Process(), Process()], expected_jobs=2,
+        deadline=generation_capacity_probe.time.monotonic() + 10,
+    )
+    assert result["ready"] == 2
+    assert result["active_workers_at_completion"] == 3
+
+
+def test_wait_for_ready_results_rejects_workers_exiting_with_unfinished_jobs(monkeypatch):
+    class Counts:
+        pending = 1
+        claimed = 0
+        ready = 0
+
+    class Queue:
+        def counts(self):
+            return Counts()
+
+    class Process:
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: 100 * 1024**3)
+    with pytest.raises(RuntimeError, match="before all results"):
+        generation_capacity_probe.wait_for_ready_results(
+            Queue(), [Process()], expected_jobs=1,
+            deadline=generation_capacity_probe.time.monotonic() + 10,
+        )
