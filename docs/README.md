@@ -43,6 +43,8 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Generation contract audit](audits/2026-09-20-generation-contract.md) | Historical collection quota, splits, schema, perturbations and views |
 | [Generation launch record](audits/2026-09-21-generation-launch.md) | Historical distributed launch evidence and publication receipts |
 | [Resumable multi-host generation](plans/active/resumable-multihost-generation.md) | Current HF resume, shared-filesystem worker leases and host-scoped launch contract |
+| [Generation storage and view finalization](plans/active/generation-storage-and-view-finalization.md) | HF source-of-truth lossless archive, bounded local retention and frozen training-view plan |
+| [Generation storage decision](decisions/0015-generation-storage-and-view-snapshots.md) | Accepted HF archive, binary deduplication and provisional/final view boundary |
 | [Third-party notices](third-party-notices.md) | Attribution and license for adapted guidance |
 
 Source code owns implementation detail; tests establish only the behavior they
