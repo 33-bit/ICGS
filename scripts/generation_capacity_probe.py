@@ -77,7 +77,12 @@ def _stage_runtime(base: GenerationRuntimeConfig, probe: CapacityProbeConfig, st
         validation_mode=True,
         resume_from_hf=False,
     )
-    machine = replace(base.machine, simulator_slots=stage.simulator_slots, worker_ids=())
+    machine = replace(
+        base.machine,
+        simulator_slots=stage.simulator_slots,
+        worker_timeout_s=stage.worker_timeout_s,
+        worker_ids=(),
+    )
     return GenerationRuntimeConfig(machine=machine, run=run)
 
 
@@ -182,6 +187,7 @@ def run_stage(
         "stage": stage.name,
         "worker_count": stage.worker_count,
         "simulator_slots": stage.simulator_slots,
+        "worker_timeout_s": stage.worker_timeout_s,
         "job_cap": stage.max_jobs,
         "enqueued": len(job_ids),
         "elapsed_s": elapsed,

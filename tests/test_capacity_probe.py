@@ -12,8 +12,8 @@ def _payload():
         "max_total_jobs": 40,
         "max_runtime_s": 600,
         "stages": [
-            {"name": "low", "worker_count": 8, "simulator_slots": 2, "max_jobs": 8},
-            {"name": "high", "worker_count": 16, "simulator_slots": 4, "max_jobs": 16},
+            {"name": "low", "worker_count": 8, "simulator_slots": 2, "max_jobs": 8, "worker_timeout_s": 180},
+            {"name": "high", "worker_count": 16, "simulator_slots": 4, "max_jobs": 16, "worker_timeout_s": 180},
         ],
     }
 
@@ -128,4 +128,5 @@ def test_stage_runtime_disables_publication_and_rewrites_identity(tmp_path):
     assert runtime.machine.simulator_slots == 4
     assert runtime.run.run_id == "capacity-test-high"
     assert runtime.run.publication_enabled is False
+    assert runtime.machine.worker_timeout_s == 180
     assert len(runtime.machine.worker_ids) == 16

@@ -21,6 +21,7 @@ class CapacityStage:
     worker_count: int
     simulator_slots: int
     max_jobs: int
+    worker_timeout_s: int = 180
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not _SAFE_ID.fullmatch(self.name):
@@ -31,6 +32,8 @@ class CapacityStage:
             raise ValueError("stage simulator_slots must be within worker_count")
         if type(self.max_jobs) is not int or not 1 <= self.max_jobs <= 400:
             raise ValueError("stage max_jobs must be in 1..400")
+        if type(self.worker_timeout_s) is not int or not 30 <= self.worker_timeout_s <= 600:
+            raise ValueError("stage worker_timeout_s must be in 30..600")
 
 
 @dataclass(frozen=True)
@@ -69,7 +72,7 @@ class CapacityProbeConfig:
         stages = payload["stages"]
         if not isinstance(stages, list):
             raise ValueError("stages must be a list")
-        stage_fields = {"name", "worker_count", "simulator_slots", "max_jobs"}
+        stage_fields = {"name", "worker_count", "simulator_slots", "max_jobs", "worker_timeout_s"}
         parsed = []
         for item in stages:
             if not isinstance(item, Mapping) or set(item) != stage_fields:
