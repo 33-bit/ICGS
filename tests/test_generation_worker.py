@@ -406,11 +406,10 @@ def test_archive_worker_keeps_closed_attempt_when_publication_fails(
         )
         raise subprocess.TimeoutExpired(command, 33, output="timed out after close")
 
-    monkeypatch.setattr(
-        queue,
-        "publish_ready",
-        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("publish unavailable")),
-    )
+    def fail_publish(*args, **kwargs):
+        raise RuntimeError("publish unavailable")
+
+    monkeypatch.setattr(queue, "publish_ready", fail_publish)
 
     with pytest.raises(RuntimeError, match="publish unavailable"):
         generation_worker.run_worker(
