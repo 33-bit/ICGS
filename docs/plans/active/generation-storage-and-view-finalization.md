@@ -219,7 +219,7 @@ guard (3 failures: resume returned without raising), then GREEN after it (3/3).
 **Files:**
 - Create: `src/icgs/data/datasets/generation_archive.py`
 - Modify: `src/icgs/data/datasets/generation_views.py`
-- Modify: `src/icgs/data/datasets/episodes.py`
+- Leave `src/icgs/data/datasets/episodes.py` unchanged; P02/A0/A1 behavior remains separate and is covered by compatibility tests.
 - Test: `tests/test_generation_archive.py`, `tests/test_generation_views.py`
 
 **Interfaces:**
@@ -228,13 +228,30 @@ guard (3 failures: resume returned without raising), then GREEN after it (3/3).
 - `EpisodeArchiveReader.observation(boundary)`, `.transition(index)`, and `.task_labels(boundary)` provide lazy values.
 - `build_generation_view(records_or_index, view, *, role="train", mix=None)` supports archive-backed references without loading all episodes.
 
-- [ ] Index manifests and sample references without loading full point arrays.
-- [ ] Add bounded LRU chunk caching with explicit cache byte cap and deterministic cache keys including archive/preprocessing identity.
-- [ ] Make `D_geom`, `D_temporal`, `D_dyn`, and `D_task` use archive references; preserve causal histories and intervention flags.
-- [ ] Derive the 2,048-point training input lazily with the existing preprocessing identity; record the resolved preprocessing hash in the training run metadata.
-- [ ] Keep `adapter_a0`/`adapter_a1` semantics and native PyG loaders separate from the new archive reader.
-- [ ] Test random boundary access, cross-chunk windows, cache eviction, missing optional modalities, causal masking, and valid-failure inclusion.
-- [ ] Run the archive/view tests with tiny fixtures only.
+- [x] Index manifests and sample references without loading full point arrays.
+- [x] Add bounded LRU chunk caching with an explicit dataset byte cap and deterministic cache keys including archive/preprocessing identity.
+- [x] Make `D_geom`, `D_temporal`, `D_dyn`, and `D_task` use archive references; preserve causal histories and intervention flags.
+- [x] Derive the 2,048-point training input lazily with a strict preprocessing identity/hash and deterministic sample seed; expose a compact metadata payload for callers.
+- [x] Keep `adapter_a0`/`adapter_a1` semantics and native PyG loaders separate from the new archive reader.
+- [x] Test random boundary access, cross-chunk windows, cache eviction, missing optional modalities, causal masking, and valid-failure inclusion.
+- [x] Run the archive/view tests with tiny fixtures only.
+
+**Integration boundary:** Persisting the metadata payload automatically in a run
+record and teaching `icgs train` to consume the archive-backed index are **NOT
+IMPLEMENTED**. The current trainer reads native PyG sample directories and has no
+archive-backed metadata seam; this task does not add one. The real Open3D filter
+execution is also **NOT RUN** when Open3D is unavailable; the fixture test isolates
+the deterministic sampling/frame path while production delegates to the unchanged
+native filter.
+
+**Local validation record (2026-09-25):** Environment was CPython 3.14.4,
+NumPy 2.4.4, PyTorch 2.11.0, PyG 2.5.0, SciPy 1.17.1, pytest 8.4.2; Open3D was
+not installed.
+
+- **PASS** — `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_archive.py tests/test_generation_views.py` (51 passed; no skips).
+- **PASS** — `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation*.py tests/test_capacity_probe.py` (430 passed; one Python multiprocessing fork deprecation warning).
+- **PASS** — `python3 -B scripts/validate_fast.py` (22 harness self-tests passed; L0 syntax, local links, boundaries, and generation naming passed; two existing invalid-escape `SyntaxWarning`s from `tests/test_task_router.py`).
+- **NOT RUN** — actual Open3D statistical-outlier filtering; unavailable in this environment. No HF access/publication, training, simulator, full preprocessing, or C1–C5 execution was run for this bounded task.
 
 ### Task 3.2: Add provisional and final view snapshots
 

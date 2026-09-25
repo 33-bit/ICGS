@@ -828,6 +828,36 @@ def test_archive_reader_loads_only_requested_chunks_and_keeps_lru_bounded(tmp_pa
     assert len(reader._cache) <= 1
 
 
+def test_archive_reader_cache_keys_bind_archive_and_resolved_preprocessing_identity(tmp_path: Path):
+    target = tmp_path / "episode"
+    EpisodeArchiveWriter(_profile(chunk_boundaries=1)).write_episode(
+        _episode(), raw_arrays={}, debug_metadata=_debug(), output_dir=target
+    )
+    manifest_path = target / "episode.manifest.json"
+    preprocessing_hash = "b" * 64
+    first = EpisodeArchiveReader(
+        manifest_path,
+        resolved_preprocessing_identity="icgs_native_2048_v1",
+        resolved_preprocessing_sha256=preprocessing_hash,
+    )
+    same = EpisodeArchiveReader(
+        manifest_path,
+        resolved_preprocessing_identity="icgs_native_2048_v1",
+        resolved_preprocessing_sha256=preprocessing_hash,
+    )
+    different = EpisodeArchiveReader(
+        manifest_path,
+        resolved_preprocessing_identity="icgs_native_2048_v2",
+        resolved_preprocessing_sha256="c" * 64,
+    )
+
+    assert first.cache_identity == same.cache_identity
+    assert first.cache_identity != different.cache_identity
+    first.observation(0)
+    assert first._cache
+    assert all(key[0] == first.cache_identity for key in first._cache)
+
+
 @pytest.mark.parametrize("consumer", ["reader", "validator"])
 def test_npz_uncompressed_cap_is_checked_before_loading_members(tmp_path: Path, monkeypatch, consumer: str):
     target = tmp_path / "episode"

@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from icgs.data.collection.generation.protocol import GENERATION_PROTOCOL
 from icgs.data.collection.generation.sampler import mix_training_transitions
 from icgs.data.schemas.episode_records import validate_episode
+
+if TYPE_CHECKING:
+    from icgs.data.datasets.generation_archive import ArchiveDatasetIndex, SampleRef
 
 
 SUPPORTED_GENERATION_VIEWS = GENERATION_PROTOCOL.views
@@ -37,14 +40,22 @@ def _include_record(provenance: Mapping[str, Any], role: str) -> bool:
 
 
 def build_generation_view(
-    records: Sequence[Mapping[str, Any]],
+    records: Sequence[Mapping[str, Any]] | ArchiveDatasetIndex,
     view: str,
     *,
     role: str = "train",
     mix: bool | None = None,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, Any]] | list[SampleRef]:
     if view not in SUPPORTED_GENERATION_VIEWS:
         raise ValueError(f"unsupported phase-1 view: {view}")
+    from icgs.data.datasets.generation_archive import (
+        ArchiveDatasetIndex,
+        build_generation_view as build_archive_view,
+    )
+
+    if isinstance(records, ArchiveDatasetIndex):
+        return build_archive_view(records, view, role=role, mix=mix)
+
     samples: list[dict[str, Any]] = []
     apply_mix = GENERATION_PROTOCOL.mixture_measured_on == "training_transitions" if mix is None else mix
     for record in records:

@@ -2005,6 +2005,8 @@ class EpisodeArchiveReader:
         *,
         cache_bytes: int = DEFAULT_CACHE_BYTES,
         validate_files: bool = False,
+        resolved_preprocessing_identity: str | None = None,
+        resolved_preprocessing_sha256: str | None = None,
     ) -> None:
         if type(cache_bytes) is not int or cache_bytes <= 0:
             raise ValueError("cache_bytes must be a positive integer")
@@ -2012,7 +2014,27 @@ class EpisodeArchiveReader:
         self.root = self.manifest_path.parent
         self.cache_bytes = cache_bytes
         self.max_chunk_bytes = ArchiveProfileConfig.from_dict(self.manifest.payload["archive_profile"]).max_chunk_bytes
-        self._cache: OrderedDict[str, tuple[dict[str, np.ndarray], int]] = OrderedDict()
+        if resolved_preprocessing_identity is not None and (
+            not isinstance(resolved_preprocessing_identity, str) or not resolved_preprocessing_identity.strip()
+        ):
+            raise ValueError("resolved_preprocessing_identity must be a nonblank string when provided")
+        if resolved_preprocessing_sha256 is not None and not _is_sha256(resolved_preprocessing_sha256):
+            raise ValueError("resolved_preprocessing_sha256 must be a lowercase SHA256 digest")
+        if (resolved_preprocessing_identity is None) != (resolved_preprocessing_sha256 is None):
+            raise ValueError("resolved preprocessing identity and SHA256 must be supplied together")
+        source_preprocessing_identity = str(self.manifest.payload["preprocessing_identity"])
+        self.resolved_preprocessing_identity = resolved_preprocessing_identity or source_preprocessing_identity
+        self.resolved_preprocessing_sha256 = resolved_preprocessing_sha256 or _sha256_bytes(
+            source_preprocessing_identity.encode("utf-8")
+        )
+        identity_bytes = _canonical_json({
+            "archive_manifest_sha256": _sha256_file(self.manifest_path),
+            "archive_preprocessing_identity": source_preprocessing_identity,
+            "resolved_preprocessing_identity": self.resolved_preprocessing_identity,
+            "resolved_preprocessing_sha256": self.resolved_preprocessing_sha256,
+        })
+        self.cache_identity = _sha256_bytes(identity_bytes)
+        self._cache: OrderedDict[tuple[str, str], tuple[dict[str, np.ndarray], int]] = OrderedDict()
         self._cache_size = 0
         self._aliases = _manifest_alias_map(self.manifest)
         self._chunk_entries = {item["path"]: item for item in self.manifest.payload["chunk_inventory"]}
@@ -2025,9 +2047,10 @@ class EpisodeArchiveReader:
         return iter(range(count))
 
     def _load_chunk(self, relative: str) -> dict[str, np.ndarray]:
-        cached = self._cache.get(relative)
+        cache_key = (self.cache_identity, relative)
+        cached = self._cache.get(cache_key)
         if cached is not None:
-            self._cache.move_to_end(relative)
+            self._cache.move_to_end(cache_key)
             return cached[0]
         entry = self._chunk_entries.get(relative)
         if entry is None:
@@ -2046,7 +2069,7 @@ class EpisodeArchiveReader:
             while self._cache and self._cache_size + size > self.cache_bytes:
                 _evicted_key, (_evicted_values, evicted_size) = self._cache.popitem(last=False)
                 self._cache_size -= evicted_size
-            self._cache[relative] = (values, size)
+            self._cache[cache_key] = (values, size)
             self._cache_size += size
         return values
 
@@ -2086,8 +2109,17 @@ class EpisodeArchiveReader:
         if not spec["shape"] or index >= spec["shape"][0]:
             raise IndexError(f"array row index out of range: {index}")
         for piece in spec["pieces"]:
-            start = piece.get("array_start", 0)
-            stop = piece.get("array_stop", spec["shape"][0])
+            start = piece.get(
+                "array_start",
+                piece.get("timeline_start", piece.get("boundary_start", piece.get("transition_start", 0))),
+            )
+            stop = piece.get(
+                "array_stop",
+                piece.get(
+                    "timeline_stop",
+                    piece.get("boundary_stop", piece.get("transition_stop", spec["shape"][0])),
+                ),
+            )
             if start <= index < stop:
                 value = self._load_chunk(piece["path"])[piece["key"]]
                 return np.array(value[index - start], copy=True)
