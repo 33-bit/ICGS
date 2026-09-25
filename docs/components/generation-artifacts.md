@@ -319,6 +319,38 @@ episode inventory that records `bytes` by top-level file before changing the wri
 5. Rerun closed-result validation, resume and one isolated HF publication batch.
 6. Only then recalculate full storage/ETA and authorize production generation.
 
+## Additive v2 migration status (2026-09-26)
+
+`scripts/generation_archive_migrate.py` provides an explicit one-record migration
+path for immutable `icgs_episode_v2` artifacts. The command requires a full HF
+commit OID, source prefix, one record kind/program/ID, and a distinct target
+prefix. It lists and downloads only that selected artifact, verifies the complete
+v2 `artifact_manifest.json` inventory and any layout inventory, then writes with
+the canonical `EpisodeArchiveWriter` and validates with the canonical archive
+reader before publication. Success and `valid_failure` remain episode archives;
+`simulator_crash` and `invalid_observation` remain attempt archives.
+
+The migration receipt records the source repo/revision/prefix/path and every
+source file hash, the target repo/prefix/path and every target archive hash,
+field/timeline counts, and conversion warnings. Invalid or incomplete inputs
+produce a local failure receipt. A verified identical target plus receipt is
+idempotent; a partial or conflicting target fails closed. The command uses
+temporary HF cache and staging directories under its owned scratch root and
+requires explicit source, target, and scratch byte caps. It never removes or
+rewrites source v2 files.
+
+`episode.json` stores JSON numbers without dtype metadata. Exact typed layout or
+telemetry sidecars may restore a dtype only when their arrays match the JSON
+values and timeline exactly. Numeric arrays without a matching typed sidecar are
+preserved by value and listed as dtype ambiguities; migration receipts do not
+claim dtype-perfect recovery from JSON alone. Missing historical generator
+identity is marked with stable migration placeholders and warnings, while any
+original identity value present in the source is retained.
+
+Local evidence uses tiny fixtures and an offline fake HF client. No live HF
+migration or publication has been run; a remote migration remains a separately
+authorized operation.
+
 ## Known limitations and open questions
 
 - No retained episode from the TPU probe is available for exact per-file bytes.
