@@ -95,10 +95,23 @@ def _closed(tmp_path: Path, outcome: str, index: int = 1):
     return job, result
 
 
-def _archive_closed(tmp_path: Path, monkeypatch, outcome: str, index: int = 1):
+def _archive_closed(
+    tmp_path: Path,
+    monkeypatch,
+    outcome: str,
+    index: int = 1,
+    *,
+    randomization_overrides: dict | None = None,
+):
     profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
     monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(profile.as_dict()))
     job = _job(index)
+    if randomization_overrides:
+        plan = replace(
+            job.plan,
+            randomization={**job.plan.randomization, **randomization_overrides},
+        )
+        job = replace(job, plan=plan)
     if outcome == "success":
         raw = _raw(True)
     elif outcome == "valid_failure":
@@ -116,6 +129,44 @@ def _archive_closed(tmp_path: Path, monkeypatch, outcome: str, index: int = 1):
     materialized = materialize_raw_attempt(raw, job, _binding())
     result = write_closed_attempt_result(materialized, job, tmp_path / f"archive-{outcome}-{index}")
     return job, result, profile
+
+
+def _archive_file_hashes(root: Path) -> dict[str, str]:
+    return {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in root.rglob("*") if path.is_file()
+    }
+
+
+def _write_canonical_json(path: Path, payload: dict) -> bytes:
+    encoded = (
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
+    ).encode("utf-8")
+    path.write_bytes(encoded)
+    return encoded
+
+
+def _repair_archive_debug_hashes(root: Path, manifest_name: str) -> dict[str, str]:
+    manifest_path = root / manifest_name
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    debug_path = root / manifest["debug_path"]
+    debug_bytes = debug_path.read_bytes()
+    manifest["debug_bytes"] = len(debug_bytes)
+    manifest["debug_sha256"] = hashlib.sha256(debug_bytes).hexdigest()
+    manifest_bytes = _write_canonical_json(manifest_path, manifest)
+
+    artifact_path = root / "artifact_manifest.json"
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    for relative, content in (
+        (manifest["debug_path"], debug_bytes),
+        (manifest_name, manifest_bytes),
+    ):
+        artifact["files"][relative].update({
+            "bytes": len(content),
+            "sha256": hashlib.sha256(content).hexdigest(),
+        })
+    _write_canonical_json(artifact_path, artifact)
+    return _archive_file_hashes(root)
 
 
 @pytest.mark.parametrize("outcome", ["success", "valid_failure"])
@@ -175,6 +226,40 @@ def test_archive_profile_validates_attempts_without_episode_training_entry(
         f"attempts/{job.program_id}/{job.attempt_id}"
     )
     assert validated.attempt_entry["file_sha256"] == result.file_sha256
+
+
+def test_archive_attempt_manifest_row_excludes_local_paths_and_unprojected_arrays(
+    tmp_path: Path, monkeypatch
+):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "simulator_crash")
+    original = EpisodeArchiveReader(Path(result.result_dir) / "attempt.manifest.json")
+    attempt = original.to_episode_record()
+    attempt["result_dir"] = "/private/worker/staging/result"
+    attempt["untrusted_numeric"] = np.asarray([1, 2, 3], dtype=np.int32)
+    attempt["untrusted_nested"] = {"local_path": "/private/worker/cache"}
+    target = tmp_path / "attempt-with-extra-metadata"
+    EpisodeArchiveWriter(profile).write_attempt(
+        attempt,
+        prefix_arrays=original.raw_arrays,
+        debug_metadata=dict(original.debug_metadata),
+        output_dir=target,
+    )
+    hashes = _archive_file_hashes(target)
+
+    validated = validate_closed_result(
+        job,
+        replace(result, result_dir=str(target), file_sha256=hashes),
+        archive_profile=profile,
+    )
+
+    row = validated.attempt_entry
+    assert row is not None
+    assert row["episode_id"] is None
+    assert row["episode_kind"] == job.plan.episode_kind
+    assert "result_dir" not in row
+    assert "untrusted_numeric" not in row
+    assert "untrusted_nested" not in row
+    assert "/private/worker/" not in json.dumps(row, allow_nan=False)
 
 
 def test_archive_profile_rejects_legacy_dense_json_result(tmp_path: Path, monkeypatch):
@@ -312,6 +397,80 @@ def test_archive_profile_rejects_provenance_conflict_after_repairing_file_invent
         )
 
 
+@pytest.mark.parametrize(
+    ("field", "wrong_value"),
+    [
+        ("asset_instance_id", "asset-other"),
+        ("subset", "train_val"),
+        ("train_subset", "train_val"),
+    ],
+)
+def test_archive_profile_binds_asset_and_subset_provenance_to_plan(
+    tmp_path: Path,
+    monkeypatch,
+    field: str,
+    wrong_value: str,
+):
+    job, result, profile = _archive_closed(
+        tmp_path,
+        monkeypatch,
+        "success",
+        randomization_overrides={"train_subset": "train_core"},
+    )
+    original = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json")
+    record = original.to_episode_record()
+    record["provenance"][field] = wrong_value
+    target = tmp_path / f"conflicting-{field}"
+    EpisodeArchiveWriter(profile).write_episode(
+        record,
+        raw_arrays=original.raw_arrays,
+        debug_metadata=dict(original.debug_metadata),
+        output_dir=target,
+    )
+    hashes = _archive_file_hashes(target)
+
+    with pytest.raises(ValueError, match=f"archive provenance mismatch for {field}"):
+        validate_closed_result(
+            job,
+            replace(result, result_dir=str(target), file_sha256=hashes),
+            archive_profile=profile,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("source_run_id", "run-tampered", "disagrees with debug metadata"),
+        ("code_revision", "c" * 40, "disagrees with debug metadata"),
+        ("preprocessing_identity", "other-preprocessing-v1", "disagrees with debug metadata"),
+        ("source_run_id", " ", "must be a nonblank string"),
+        ("code_revision", "", "must be a nonblank string"),
+        ("preprocessing_identity", "", "must be a nonblank string"),
+    ],
+)
+def test_archive_profile_binds_identity_fields_to_debug_metadata_after_hash_repair(
+    tmp_path: Path,
+    monkeypatch,
+    field: str,
+    value: str,
+    message: str,
+):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "success")
+    root = Path(result.result_dir)
+    debug_path = root / "debug.json"
+    debug = json.loads(debug_path.read_text(encoding="utf-8"))
+    debug[field] = value
+    _write_canonical_json(debug_path, debug)
+    hashes = _repair_archive_debug_hashes(root, "episode.manifest.json")
+
+    with pytest.raises(ValueError, match=f"{field}.*{message}"):
+        validate_closed_result(
+            job,
+            replace(result, file_sha256=hashes),
+            archive_profile=profile,
+        )
+
+
 def test_archive_profile_rejects_inconsistent_partial_modality_boundaries(
     tmp_path: Path, monkeypatch
 ):
@@ -368,6 +527,33 @@ def test_archive_profile_accepts_valid_partial_modality_boundaries(
     )
 
     assert validated.episode_entry is not None
+
+
+def test_optional_modality_validation_accepts_archive_array_alias_metadata():
+    from types import SimpleNamespace
+
+    payload = {
+        "raw_arrays": {
+            "front_rgb_frames": {"$archive_array": "front-rgb-alias"},
+            "front_rgb_frame_boundaries": {"$archive_array": "boundary-index"},
+        },
+        "timeline": {"observations": 2},
+        "array_specs": {},
+        "array_aliases": [{
+            "name": "front-rgb-alias",
+            "target": "canonical-front-rgb",
+            "shape": [1, 2, 2, 3],
+        }],
+    }
+
+    class Reader:
+        manifest = SimpleNamespace(payload=payload)
+
+        def read_array(self, name):
+            assert name == "boundary-index"
+            return np.asarray([0], dtype=np.int64)
+
+    validation._validate_optional_modality_declarations(Reader())
 
 
 def test_hash_mismatch_is_rejected_without_mutating_files(tmp_path: Path):

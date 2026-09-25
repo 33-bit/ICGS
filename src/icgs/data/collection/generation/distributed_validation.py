@@ -400,7 +400,16 @@ def _validate_optional_modality_declarations(reader: EpisodeArchiveReader) -> No
             continue
         if not isinstance(values_ref, Mapping) or not isinstance(values_ref.get("$archive_array"), str):
             raise ValueError(f"optional modality {values_name} must reference a numeric archive array")
-        value_spec = payload["array_specs"].get(values_ref["$archive_array"])
+        array_name = values_ref["$archive_array"]
+        value_spec = payload["array_specs"].get(array_name)
+        if value_spec is None:
+            value_spec = next(
+                (
+                    alias for alias in payload["array_aliases"]
+                    if alias.get("name") == array_name
+                ),
+                None,
+            )
         if value_spec is None or not value_spec["shape"]:
             raise ValueError(f"optional modality {values_name} must have a frame axis")
         frame_count = int(value_spec["shape"][0])
@@ -463,6 +472,12 @@ def _validate_archive_identity(
         raise ValueError("archive source_run_id disagrees with job")
     if payload.get("code_revision") != job.code_revision:
         raise ValueError("archive code_revision disagrees with job")
+    for key in ("source_run_id", "code_revision", "preprocessing_identity"):
+        debug_value = reader.debug_metadata.get(key)
+        if not isinstance(debug_value, str) or not debug_value.strip():
+            raise ValueError(f"archive debug metadata {key} must be a nonblank string")
+        if payload.get(key) != debug_value:
+            raise ValueError(f"archive manifest {key} disagrees with debug metadata")
     plan = _archive_plan_from_debug(reader.debug_metadata)
     if plan is None:
         raise ValueError("archive provenance must retain the attempt plan")
@@ -495,12 +510,21 @@ def _validate_archive_identity(
             "program_id": job.program_id,
             "outcome": result.outcome,
             "scene_signature": job.plan.randomization.get("scene_signature"),
+            "asset_instance_id": job.plan.randomization.get("asset_instance_id"),
             "scene_seed": job.plan.scene_seed,
             "collection_seed": job.plan.collection_seed,
             "episode_index": job.plan.episode_index,
             "episode_kind": job.plan.episode_kind,
             "split": "dev" if job.plan.split == "development" else job.plan.split,
         }
+        if job.plan.split == "train":
+            planned_subset = (
+                job.plan.randomization.get("train_subset")
+                or job.plan.randomization.get("subset")
+            )
+            if planned_subset is not None:
+                expected_provenance["subset"] = planned_subset
+                expected_provenance["train_subset"] = planned_subset
         for key, value in expected_provenance.items():
             if provenance.get(key) != value:
                 raise ValueError(f"archive provenance mismatch for {key}")
@@ -514,7 +538,7 @@ def _validate_archive_identity(
         if result.timeline != timeline:
             raise ValueError("result timeline differs from archive episode")
         return payload, reader, dict(provenance)
-    attempt = reader.to_episode_record()
+    attempt = payload["record_metadata"].get("attempt")
     if not isinstance(attempt, Mapping):
         raise ValueError("archive attempt metadata must be an object")
     for key, value in {
@@ -625,13 +649,27 @@ def validate_closed_result(
             }
             return ValidatedResult(job, result, provenance, episode_entry, None)
         attempt_entry = {
-            **reader.to_episode_record(),
             **archive_entry,
+            "attempt_id": job.attempt_id,
+            "episode_id": None,
+            "program_id": job.program_id,
+            "outcome": result.outcome,
+            "episode_kind": job.plan.episode_kind,
+            "split": "dev" if job.plan.split == "development" else job.plan.split,
+            "subset": (
+                job.plan.randomization.get("train_subset")
+                or job.plan.randomization.get("subset")
+            ) if job.plan.split == "train" else None,
             "scene_signature": job.plan.randomization.get("scene_signature"),
             "scene_seed": job.plan.scene_seed,
             "episode_index": job.plan.episode_index,
             "attempt_plan": job.plan.as_dict(),
         }
+        if type(archive_payload["timeline"].get("valid_observation_until")) is int:
+            attempt_entry["valid_observation_until"] = archive_payload["timeline"]["valid_observation_until"]
+        terminal_t = provenance.get("terminal_t")
+        if type(terminal_t) is int and terminal_t >= 0:
+            attempt_entry["terminal_t"] = terminal_t
         return ValidatedResult(job, result, attempt_entry, None, attempt_entry)
 
     if result.outcome in {"success", "valid_failure"}:
