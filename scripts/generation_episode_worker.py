@@ -277,9 +277,12 @@ def _write_episode(write_dir: Path, row: dict) -> None:
         "preprocessing_identity": "rlbench_script_measured_v1",
     })
     if archive_profile is not None:
+        actions_value = row.get("_actions")
         EpisodeArchiveWriter(archive_profile).write_episode(
             _archive_record(record),
-            raw_arrays={},
+            raw_arrays={
+                "actions": np.asarray(() if actions_value is None else actions_value),
+            },
             debug_metadata=execution,
             output_dir=write_dir,
         )

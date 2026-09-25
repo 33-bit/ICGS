@@ -121,7 +121,11 @@ def _write_archive_worker_attempt(
     timeout: bool = False,
 ) -> None:
     if candidate.exists():
-        shutil.rmtree(candidate)
+        if any(candidate.iterdir()):
+            raise FileExistsError(
+                "archive worker attempt candidate must be classified before overwrite"
+            )
+        candidate.rmdir()
     attempt = {
         "attempt_id": job.attempt_id,
         "episode_id": None,
@@ -340,6 +344,8 @@ def run_worker(
             if config.archive_profile is not None:
                 if archive_payload is None:
                     outcome = "simulator_crash" if process.returncode else "invalid_observation"
+                    if candidate.exists():
+                        shutil.rmtree(candidate)
                     _write_archive_worker_attempt(
                         candidate,
                         job,
@@ -420,9 +426,9 @@ def run_worker(
             if config.archive_profile is not None:
                 try:
                     archive_payload = _archive_result_payload(result_dir, config, job=job)
-                    if archive_payload is not None and archive_payload.get("archive_kind") == "episode":
+                    if archive_payload is not None and archive_payload.get("archive_kind") in {"episode", "attempt"}:
                         outcome = str(archive_payload.get("outcome"))
-                        if outcome in {"success", "valid_failure"}:
+                        if archive_payload.get("archive_kind") == "episode" and outcome in {"success", "valid_failure"}:
                             timeline_payload = archive_payload.get("timeline") or {}
                             queue.publish_ready(worker_id, WorkerResult(
                                 job_id=job.job_id,
@@ -441,8 +447,27 @@ def run_worker(
                             if once:
                                 return 0
                             continue
+                        if (
+                            archive_payload.get("archive_kind") == "attempt"
+                            and outcome in {"simulator_crash", "invalid_observation"}
+                        ):
+                            queue.publish_ready(worker_id, WorkerResult(
+                                job_id=job.job_id,
+                                attempt_id=job.attempt_id,
+                                episode_id=None,
+                                program_id=job.program_id,
+                                outcome=outcome,
+                                result_dir=str(result_dir),
+                                file_sha256=_file_hashes(result_dir),
+                                timeline=None,
+                            ), worker_instance_id=worker_instance_id)
+                            if once:
+                                return 0
+                            continue
                 except Exception:
                     pass
+                if result_dir.exists():
+                    shutil.rmtree(result_dir)
                 _write_archive_worker_attempt(
                     result_dir,
                     job,

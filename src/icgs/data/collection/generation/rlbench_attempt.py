@@ -119,9 +119,13 @@ def materialize_raw_attempt(
     job: GenerationJob,
     binding: Mapping[str, Any],
 ) -> MaterializedAttempt:
+    archive_enabled = archive_profile_from_environment() is not None
     try:
         observations = tuple(_observation_row(item) for item in raw.observations)
-        actions = tuple(np.asarray(item) for item in raw.actions)
+        actions = tuple(
+            np.asarray(item) if archive_enabled else np.asarray(item, dtype=np.float64)
+            for item in raw.actions
+        )
         observation_valid = len(observations) >= 2 and len(actions) == len(observations) - 1
         if observation_valid and any(item.shape != (8,) or not np.isfinite(item).all() for item in actions):
             observation_valid = False
@@ -185,24 +189,40 @@ def materialize_raw_attempt(
     wrist_masks = []
     front_masks = []
     for source, observation in zip(raw.observations, observations):
+        if not archive_enabled:
+            positions = np.asarray(getattr(source, "joint_positions"), dtype=np.float64)
+            velocities = np.asarray(getattr(source, "joint_velocities"), dtype=np.float64)
+            joint_positions.append(positions)
+            joint_velocities.append(velocities)
+            robot_states.append({
+                "T_w_e": observation["T_w_e"],
+                "grip": observation["grip"],
+                "joint_positions": positions,
+                "joint_velocities": velocities,
+            })
+            rgb_frames.append(np.asarray(getattr(source, "front_rgb"), dtype=np.uint8))
+            depth_frames.append(np.asarray(getattr(source, "wrist_depth")))
+            wrist_masks.append(np.asarray(getattr(source, "wrist_mask"), dtype=np.uint8))
+            front_masks.append(np.asarray(getattr(source, "front_mask"), dtype=np.uint8))
+            continue
         state = {
             "T_w_e": observation["T_w_e"],
             "grip": observation["grip"],
         }
         if hasattr(source, "joint_positions") and getattr(source, "joint_positions") is not None:
-            positions = np.asarray(getattr(source, "joint_positions"), dtype=np.float64)
+            positions = np.asarray(getattr(source, "joint_positions"))
             joint_positions.append(positions)
             state["joint_positions"] = positions
         if hasattr(source, "joint_velocities") and getattr(source, "joint_velocities") is not None:
-            velocities = np.asarray(getattr(source, "joint_velocities"), dtype=np.float64)
+            velocities = np.asarray(getattr(source, "joint_velocities"))
             joint_velocities.append(velocities)
             state["joint_velocities"] = velocities
         robot_states.append(state)
         optional_modalities = (
-            ("front_rgb", rgb_frames, np.uint8),
+            ("front_rgb", rgb_frames, None),
             ("wrist_depth", depth_frames, None),
-            ("wrist_mask", wrist_masks, np.uint8),
-            ("front_mask", front_masks, np.uint8),
+            ("wrist_mask", wrist_masks, None),
+            ("front_mask", front_masks, None),
         )
         for attribute, destination, dtype in optional_modalities:
             if hasattr(source, attribute) and getattr(source, attribute) is not None:
@@ -225,11 +245,16 @@ def materialize_raw_attempt(
     front_mask_array = _stack_if_complete(front_masks, len(observations))
 
     scene_states = list(raw.scene_states)
-    object_states = (
-        scene_states
-        if len(scene_states) == len(observations) and all(isinstance(item, Mapping) for item in scene_states)
-        else None
-    )
+    if archive_enabled:
+        object_states = (
+            scene_states
+            if len(scene_states) == len(observations) and all(isinstance(item, Mapping) for item in scene_states)
+            else None
+        )
+    else:
+        object_states = scene_states
+        if len(object_states) != len(observations):
+            object_states = [{} for _ in observations]
     structured_steps = binding.get("structured_steps") or binding.get("events") or ()
     task_labels = (
         materialize_task_labels(structured_steps, object_states, robot_states)
@@ -267,6 +292,37 @@ def materialize_raw_attempt(
     ):
         if value is not None:
             auxiliary[name] = value
+    if archive_enabled:
+        modality_sources = (
+            ("front_rgb", rgb_frames, "front_rgb_frame_boundaries"),
+            ("wrist_depth", depth_frames, "wrist_depth_frame_boundaries"),
+            ("wrist_mask", wrist_masks, "wrist_mask_frame_boundaries"),
+            ("front_mask", front_masks, "front_mask_frame_boundaries"),
+        )
+        for _name, values, boundary_name in modality_sources:
+            if not values:
+                continue
+            try:
+                auxiliary_name = {
+                    "front_rgb": "front_rgb_frames",
+                    "wrist_depth": "wrist_depth_frames",
+                    "wrist_mask": "wrist_mask_frames",
+                    "front_mask": "front_mask_frames",
+                }[_name]
+                if auxiliary_name not in auxiliary:
+                    auxiliary[auxiliary_name] = np.stack(values)
+                if len(values) != len(raw.observations):
+                    auxiliary[boundary_name] = np.asarray(
+                        [index for index, source in enumerate(raw.observations)
+                         if hasattr(source, _name) and getattr(source, _name) is not None],
+                        dtype=np.int64,
+                    )
+            except (TypeError, ValueError):
+                # A captured modality with incompatible frame shapes cannot be
+                # represented as one numeric archive array; omit only that
+                # modality while retaining all other captured source arrays.
+                auxiliary.pop(auxiliary_name, None)
+                auxiliary.pop(boundary_name, None)
     return MaterializedAttempt(outcome, episode, None, observations, tuple(transitions), auxiliary)
 
 
@@ -303,6 +359,8 @@ def _archive_raw_arrays(materialized: MaterializedAttempt) -> dict[str, Any]:
     names = (
         "actions", "joint_positions", "joint_velocities", "front_rgb_frames",
         "wrist_depth_frames", "wrist_mask_frames", "front_mask_frames",
+        "front_rgb_frame_boundaries", "wrist_depth_frame_boundaries",
+        "wrist_mask_frame_boundaries", "front_mask_frame_boundaries",
         "ee_poses", "gripper_states",
     )
     return {name: auxiliary[name] for name in names if name in auxiliary}
@@ -329,6 +387,10 @@ def _archive_attempt_prefix(materialized: MaterializedAttempt) -> dict[str, Any]
     prefix: dict[str, Any] = {
         "actions": np.asarray(() if raw_actions is None else raw_actions),
     }
+    raw_observations = auxiliary.get("raw_observations") or ()
+    gripper_poses = [getattr(item, "gripper_pose", None) for item in raw_observations]
+    if gripper_poses and all(item is not None for item in gripper_poses):
+        prefix["gripper_pose"] = np.asarray(gripper_poses)
     if observations:
         point_values = np.concatenate([np.asarray(item["points"]) for item in observations], axis=0)
         point_offsets = np.zeros(len(observations) + 1, dtype=np.int64)

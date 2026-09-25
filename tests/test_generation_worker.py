@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+import subprocess
 import sys
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 
 from icgs.data.collection.generation.distributed_contracts import (
@@ -15,6 +17,11 @@ from icgs.data.collection.generation.distributed_contracts import (
 )
 from icgs.data.collection.generation.batch import AttemptPlan
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+from icgs.data.collection.generation.episode_archive import (
+    EpisodeArchiveReader,
+    EpisodeArchiveWriter,
+    validate_archive_manifest,
+)
 from scripts import generation_worker
 
 
@@ -270,6 +277,78 @@ def test_archive_profile_worker_propagates_identity_and_writes_canonical_failure
     result = json.loads((queue.root / "ready" / job.job_id / "result.json").read_text())
     assert Path(result["result_dir"], "attempt.manifest.json").is_file()
     assert not Path(result["result_dir"], "attempt.json").exists()
+
+
+@pytest.mark.parametrize("outcome", ["simulator_crash", "invalid_observation"])
+def test_archive_worker_preserves_closed_attempt_when_runner_raises(
+    tmp_path: Path, outcome: str
+):
+    base = _runtime_config(tmp_path)
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    payload = base.as_dict()
+    payload["archive_profile"] = profile.as_dict()
+    config = GenerationRuntimeConfig.from_dict(payload)
+    queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1,
+        episode_id="episode-t01-closed-attempt", episode_kind="nominal", scene_seed=7,
+        collection_seed=20260920,
+        randomization={"scene_signature": "signature-closed", "asset_instance_id": "asset-closed"},
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id="job-closed-attempt", run_id=config.run.run_id,
+        attempt_id=f"att-{plan.episode_id}", episode_id=plan.episode_id, program_id="T01",
+        plan=plan, code_revision="a" * 40, manifest_sha256="b" * 64,
+        output_root=str(Path(config.run.run_root) / "staging"),
+    )
+    queue.enqueue(job)
+    approved_manifest = Path(config.run.run_root) / "approved.json"
+    approved_manifest.write_text(json.dumps({"catalog": [{"program_id": "T01"}]}), encoding="utf-8")
+    measured_actions = np.asarray([[0.2, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 1.0]], dtype=np.float32)
+    measured_points = np.asarray([[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]], dtype=np.float32)
+
+    def runner(command, **kwargs):
+        candidate = Path(kwargs["env"]["ICGS_GENERATION_WRITE_EPISODE"]) / job.program_id
+        EpisodeArchiveWriter(profile).write_attempt(
+            {
+                "attempt_id": job.attempt_id,
+                "episode_id": None,
+                "program_id": job.program_id,
+                "outcome": outcome,
+                "valid_observation_until": 1,
+            },
+            prefix_arrays={
+                "actions": measured_actions,
+                "points": measured_points,
+                "point_offsets": np.asarray([0, 1, 2], dtype=np.int64),
+                "T_w_e": np.repeat(np.eye(4, dtype=np.float64)[None], 2, axis=0),
+            },
+            debug_metadata={
+                "source_run_id": job.run_id,
+                "code_revision": job.code_revision,
+                "preprocessing_identity": "runner_closed_attempt_v1",
+                "stdout": "attempt archive closed before the runner exception",
+            },
+            output_dir=candidate,
+        )
+        raise subprocess.TimeoutExpired(command, 33, output="timed out after close")
+
+    generation_worker.run_worker(
+        "000", queue, config=config, approved_manifest=str(approved_manifest),
+        once=True, runner=runner,
+    )
+
+    result = json.loads((queue.root / "ready" / job.job_id / "result.json").read_text())
+    result_dir = Path(result["result_dir"])
+    manifest_path = result_dir / "attempt.manifest.json"
+    assert result["outcome"] == outcome
+    assert manifest_path.is_file()
+    assert validate_archive_manifest(manifest_path)["valid"] is True
+    archive = EpisodeArchiveReader(manifest_path)
+    np.testing.assert_array_equal(archive.raw_arrays["actions"], measured_actions)
+    np.testing.assert_array_equal(archive.raw_arrays["points"], measured_points)
+    assert archive.debug_metadata["stdout"] == "attempt archive closed before the runner exception"
 
 
 def test_generation_subprocess_refreshes_heartbeat_until_exit(monkeypatch):

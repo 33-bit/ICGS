@@ -3,7 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 import json
 import os
+import importlib.util
 from pathlib import Path
+import sys
+import types
 from types import SimpleNamespace
 
 import numpy as np
@@ -196,6 +199,180 @@ def test_archive_profile_preserves_measured_action_dtype(tmp_path: Path, monkeyp
     reader = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json")
 
     assert reader.raw_arrays["actions"].dtype == np.dtype(np.float32)
+
+
+def test_legacy_materializer_keeps_float64_actions_without_archive_profile(monkeypatch):
+    monkeypatch.delenv("ICGS_GENERATION_ARCHIVE_PROFILE", raising=False)
+    raw = _raw(predicates_ok=True)
+    raw = RawAttempt(
+        observations=raw.observations,
+        actions=tuple(np.asarray(action, dtype=np.float32) for action in raw.actions),
+        scene_states=raw.scene_states,
+        collision_events=raw.collision_events,
+        sim_time_s=raw.sim_time_s,
+        predicates_ok=True,
+        terminal_reason=raw.terminal_reason,
+    )
+
+    materialized = materialize_raw_attempt(raw, _job(), _binding())
+
+    assert materialized.auxiliary["actions"].dtype == np.dtype(np.float64)
+
+
+def test_archive_profile_preserves_source_dtypes_and_mask_values(tmp_path: Path, monkeypatch):
+    _enable_archive_profile(monkeypatch)
+    observations = tuple(
+        SimpleNamespace(
+            wrist_point_cloud=np.asarray([[index, 0.0, 0.8]], dtype=np.float32),
+            gripper_pose=np.asarray([index * 0.01, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0], dtype=np.float64),
+            gripper_open=1.0,
+            joint_positions=np.full((7,), index, dtype=np.float32),
+            joint_velocities=np.full((7,), index / 10.0, dtype=np.float16),
+            front_rgb=np.full((2, 2, 3), 300 + index, dtype=np.uint16),
+            wrist_depth=np.full((2, 2), index / 100.0, dtype=np.float16),
+            wrist_mask=np.full((2, 2), 300 + index, dtype=np.uint16),
+            front_mask=np.full((2, 2), 500 + index, dtype=np.uint16),
+        )
+        for index in range(3)
+    )
+    raw = RawAttempt(
+        observations=observations,
+        actions=tuple(np.asarray([0.1, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 1.0], dtype=np.float32) for _ in range(2)),
+        scene_states=({}, {}, {}),
+        collision_events=(),
+        sim_time_s=0.1,
+        predicates_ok=True,
+        terminal_reason="predicate_satisfied",
+    )
+
+    materialized = materialize_raw_attempt(raw, _job(), _binding())
+    result = write_closed_attempt_result(materialized, _job(), tmp_path / "source-dtypes")
+    archive = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json")
+    arrays = archive.raw_arrays
+
+    assert arrays["joint_positions"].dtype == np.dtype(np.float32)
+    assert arrays["joint_velocities"].dtype == np.dtype(np.float16)
+    assert arrays["front_rgb_frames"].dtype == np.dtype(np.uint16)
+    assert arrays["wrist_depth_frames"].dtype == np.dtype(np.float16)
+    assert arrays["wrist_mask_frames"].dtype == np.dtype(np.uint16)
+    assert arrays["wrist_mask_frames"][0, 0, 0] == 300
+    assert arrays["front_mask_frames"].dtype == np.dtype(np.uint16)
+
+
+def test_archive_profile_retains_partial_captured_modalities_with_boundaries(tmp_path: Path, monkeypatch):
+    _enable_archive_profile(monkeypatch)
+    observations = (
+        SimpleNamespace(
+            wrist_point_cloud=np.asarray([[0.0, 0.0, 0.8]], dtype=np.float32),
+            gripper_pose=np.asarray([0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0], dtype=np.float64),
+            gripper_open=1.0,
+            front_rgb=np.full((1, 1, 3), 10, dtype=np.uint16),
+            wrist_mask=np.full((1, 1), 300, dtype=np.uint16),
+        ),
+        SimpleNamespace(
+            wrist_point_cloud=np.asarray([[0.1, 0.0, 0.8]], dtype=np.float32),
+            gripper_pose=np.asarray([0.1, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0], dtype=np.float64),
+            gripper_open=1.0,
+            wrist_depth=np.full((1, 1), 0.25, dtype=np.float16),
+        ),
+        SimpleNamespace(
+            wrist_point_cloud=np.asarray([[0.2, 0.0, 0.8]], dtype=np.float32),
+            gripper_pose=np.asarray([0.2, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0], dtype=np.float64),
+            gripper_open=0.0,
+            front_rgb=np.full((1, 1, 3), 20, dtype=np.uint16),
+            wrist_mask=np.full((1, 1), 500, dtype=np.uint16),
+        ),
+    )
+    raw = RawAttempt(
+        observations=observations,
+        actions=tuple(np.asarray([0.1, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 1.0], dtype=np.float32) for _ in range(2)),
+        scene_states=({}, {}, {}), collision_events=(), sim_time_s=0.1,
+        predicates_ok=True, terminal_reason="predicate_satisfied",
+    )
+
+    materialized = materialize_raw_attempt(raw, _job(), _binding())
+    result = write_closed_attempt_result(materialized, _job(), tmp_path / "partial-modalities")
+    arrays = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json").raw_arrays
+
+    np.testing.assert_array_equal(arrays["front_rgb_frames"][:, 0, 0, 0], [10, 20])
+    np.testing.assert_array_equal(arrays["front_rgb_frame_boundaries"], [0, 2])
+    assert arrays["front_rgb_frames"].dtype == np.dtype(np.uint16)
+    np.testing.assert_array_equal(arrays["wrist_depth_frames"][:, 0, 0], [0.25])
+    np.testing.assert_array_equal(arrays["wrist_depth_frame_boundaries"], [1])
+    np.testing.assert_array_equal(arrays["wrist_mask_frames"][:, 0, 0], [300, 500])
+    np.testing.assert_array_equal(arrays["wrist_mask_frame_boundaries"], [0, 2])
+    assert "front_mask_frames" not in arrays
+
+
+def test_archive_profile_retains_crash_prefix_raw_gripper_pose_vectors(tmp_path: Path, monkeypatch):
+    _enable_archive_profile(monkeypatch)
+    raw = _raw(predicates_ok=False, count=3, simulator_crash=True)
+    expected = np.stack([item.gripper_pose for item in raw.observations])
+    materialized = materialize_raw_attempt(raw, _job(), _binding())
+
+    result = write_closed_attempt_result(materialized, _job(), tmp_path / "raw-gripper-pose")
+    archive = EpisodeArchiveReader(Path(result.result_dir) / "attempt.manifest.json")
+
+    np.testing.assert_array_equal(archive.raw_arrays["gripper_pose"], expected)
+    assert archive.raw_arrays["gripper_pose"].dtype == np.dtype(np.float64)
+
+
+def test_episode_worker_archive_keeps_captured_actions_and_inventory(tmp_path: Path, monkeypatch):
+    package_names = {
+        "pyrep", "pyrep.objects", "rlbench", "rlbench.action_modes",
+    }
+    modules = {
+        "pyrep.objects.object": {"Object": object},
+        "pyrep.objects.shape": {"Shape": object},
+        "rlbench.action_modes.action_mode": {"MoveArmThenGripper": object},
+        "rlbench.action_modes.arm_action_modes": {"EndEffectorPoseViaIK": object},
+        "rlbench.action_modes.gripper_action_modes": {"Discrete": object},
+        "rlbench.environment": {"Environment": object},
+        "rlbench.observation_config": {"ObservationConfig": object},
+    }
+    for name in sorted(package_names | set(modules)):
+        fake = types.ModuleType(name)
+        if name in package_names:
+            fake.__path__ = []
+        for attribute, value in modules.get(name, {}).items():
+            setattr(fake, attribute, value)
+        monkeypatch.setitem(sys.modules, name, fake)
+
+    source = Path("scripts/generation_episode_worker.py").resolve()
+    spec = importlib.util.spec_from_file_location("_generation_episode_worker_test", source)
+    assert spec is not None and spec.loader is not None
+    worker = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(worker)
+    _enable_archive_profile(monkeypatch)
+    plan = _job().plan
+    actions = np.asarray([[0.1, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 1.0]], dtype=np.float32)
+    timed = [
+        {
+            "points": np.asarray([[index * 0.1, 0.0, 0.8]], dtype=np.float32),
+            "point_valid": np.asarray([True]),
+            "T_w_e": np.eye(4, dtype=np.float64),
+            "grip": 1,
+        }
+        for index in range(2)
+    ]
+    row = {
+        "program_id": "T01", "success": False, "result_class": "valid_failure",
+        "_timed_obs": timed, "_actions": actions, "_plan": plan.as_dict(), "_binding": _binding(),
+    }
+
+    worker._write_episode(tmp_path / "episode-worker", row)
+
+    manifest_path = tmp_path / "episode-worker" / "episode.manifest.json"
+    archive = EpisodeArchiveReader(manifest_path)
+    np.testing.assert_array_equal(archive.raw_arrays["actions"], actions)
+    assert archive.raw_arrays["actions"].dtype == np.dtype(np.float32)
+    action_specs = [
+        spec for spec in archive.manifest.payload["array_specs"].values()
+        if spec["semantic_role"] == "raw_arrays/actions"
+    ]
+    assert len(action_specs) == 1
+    assert action_specs[0]["dtype"] == np.dtype(np.float32).str
+    assert action_specs[0]["shape"] == [1, 8]
 
 
 @pytest.mark.parametrize("simulator_crash", [False, True])
