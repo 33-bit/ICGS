@@ -23,9 +23,9 @@ from icgs.data.collection.generation.distributed_validation import (
 )
 from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
 try:
-    from scripts.generation_coordinator import _validate_resume_manifest
+    from scripts.generation_coordinator import load_remote_manifest
 except ModuleNotFoundError:  # direct ``python scripts/generation_launch.py`` entrypoint
-    from generation_coordinator import _validate_resume_manifest
+    from generation_coordinator import load_remote_manifest
 
 
 def validate_smoke_receipt(path: str | Path, *, expected_program_ids) -> None:
@@ -177,7 +177,7 @@ def preflight_resume_manifest(
             for row in catalog
             if isinstance(row, dict) and isinstance(row.get("program_id"), str)
         }
-        manifest = _validate_resume_manifest(json.loads(remote_bytes), RunConfig(
+        resume_run = RunConfig(
             run_id=config.run.run_id,
             run_root=config.run.run_root,
             code_revision="a" * 40,
@@ -190,7 +190,15 @@ def preflight_resume_manifest(
             validation_mode=config.run.validation_mode,
             distribution_mode=config.run.distribution_mode,
             resume_from_hf=config.run.resume_from_hf,
-        ), approved_program_ids=approved_program_ids)
+        )
+        manifest = load_remote_manifest(
+            json.loads(remote_bytes),
+            resume_run,
+            archive_profile=config.archive_profile,
+            approved_program_ids=approved_program_ids,
+            remote_manifest_sha256=hashlib.sha256(remote_bytes).hexdigest(),
+            manifest_bytes=remote_bytes,
+        )
     except Exception as error:
         raise RuntimeError("remote resume manifest failed immutable validation") from error
     parts = Path(remote_path).parts

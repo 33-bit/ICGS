@@ -9,21 +9,24 @@ import hashlib
 import json
 import os
 from pathlib import Path
+from pathlib import PurePosixPath
 import stat
 import tempfile
 import time
-from typing import Literal, Mapping
+from typing import Any, Literal, Mapping
 
 from huggingface_hub import HfApi, hf_hub_download
 from huggingface_hub.errors import EntryNotFoundError, LocalEntryNotFoundError
 
 from icgs.data.collection.generation.distributed_contracts import (
+    ArchiveProfileConfig,
     CoordinatorHeartbeat,
     GenerationJob,
     GenerationRuntimeConfig,
     RunConfig,
     WorkerResult,
 )
+from icgs.data.collection.generation.batch import attempt_from_dict
 from icgs.data.collection.generation.distributed_planner import DistributedPlanner
 from icgs.data.collection.generation.distributed_publication import (
     HuggingFaceBatchPublisher,
@@ -35,6 +38,7 @@ from icgs.data.collection.generation.distributed_validation import (
     validate_closed_result,
 )
 from icgs.data.collection.generation.distributed_validation import ValidationFailure
+from icgs.data.collection.generation.diversity import scene_signature, train_subset_for_sample
 
 
 MAX_READY_PER_TICK = 100
@@ -265,6 +269,18 @@ def _merge_manifests(remote: Mapping[str, object], local: Mapping[str, object]) 
             source_run_ids.add(value)
     if source_run_ids:
         merged["source_run_ids"] = sorted(source_run_ids)
+    for key in (
+        "dataset_identity",
+        "archive_format_id",
+        "episode_schema_version",
+        "archive_profile",
+        "view_status",
+    ):
+        values = [source[key] for source in (remote, local) if key in source]
+        if values and any(value != values[0] for value in values[1:]):
+            raise ValueError(f"remote resume immutable conflict: {key}")
+        if values:
+            merged[key] = values[0]
     return merged
 
 
@@ -539,6 +555,350 @@ def _validate_resume_manifest(
     return validated
 
 
+def _resume_archive_file_path(value: Any, *, field: str) -> str:
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or "\\" in value
+        or ":" in value
+        or any(ord(character) < 32 for character in value)
+    ):
+        raise ValueError(f"archive {field} must be a portable relative path")
+    path = PurePosixPath(value)
+    if (
+        path.is_absolute()
+        or not path.parts
+        or path.as_posix() != value
+        or any(part in {"", ".", ".."} for part in path.parts)
+    ):
+        raise ValueError(f"archive {field} must be a portable relative path")
+    return path.as_posix()
+
+
+def _resume_archive_sha(value: Any, *, field: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ValueError(f"archive {field} must be a lowercase SHA256 digest")
+    return value
+
+
+def _remote_file_bytes(value: Any) -> bytes:
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, bytearray):
+        return bytes(value)
+    if isinstance(value, Path):
+        return value.read_bytes()
+    if isinstance(value, str):
+        return Path(value).read_bytes()
+    raise ValueError("remote archive file must be bytes or a regular file path")
+
+
+def _validate_remote_archive_manifest_bytes(
+    row: Mapping[str, Any],
+    content: bytes,
+    profile: ArchiveProfileConfig,
+) -> None:
+    try:
+        payload = json.loads(content)
+    except (TypeError, ValueError, json.JSONDecodeError) as error:
+        raise ValueError("remote archive manifest is malformed") from error
+    if not isinstance(payload, Mapping):
+        raise ValueError("remote archive manifest must be an object")
+    archive_kind = "episode" if row.get("episode_id") is not None else "attempt"
+    expected = {
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "dataset_identity": profile.dataset_identity,
+        "archive_kind": archive_kind,
+        "episode_id": row.get("episode_id"),
+        "attempt_id": row.get("attempt_id"),
+        "program_id": row.get("program_id"),
+        "outcome": row.get("outcome"),
+        "source_run_id": row.get("source_run_id"),
+        "code_revision": row.get("code_revision"),
+        "preprocessing_identity": row.get("preprocessing_identity"),
+    }
+    archive_profile = payload.get("archive_profile")
+    if archive_profile != profile.as_dict():
+        raise ValueError("remote archive manifest profile disagrees with dataset manifest")
+    for field, value in expected.items():
+        if payload.get(field) != value:
+            raise ValueError(f"remote archive manifest identity mismatch for {field}")
+    chunks = payload.get("chunk_inventory")
+    if not isinstance(chunks, list):
+        raise ValueError("remote archive manifest chunk inventory must be a list")
+    if archive_kind == "episode" and not chunks:
+        raise ValueError("remote archive manifest chunk inventory is empty")
+    declared_files = row["file_sha256"]
+    for chunk in chunks:
+        if not isinstance(chunk, Mapping):
+            raise ValueError("remote archive manifest chunk entry must be an object")
+        path = _resume_archive_file_path(chunk.get("path"), field="chunk reference")
+        if not path.startswith("data/chunk-") or not path.endswith(".npz"):
+            raise ValueError("remote archive manifest chunk reference is not canonical")
+        chunk_hash = _resume_archive_sha(chunk.get("sha256"), field=f"chunk {path}")
+        if declared_files.get(path) != chunk_hash:
+            raise ValueError(f"remote archive manifest chunk reference is missing from row: {path}")
+
+
+def _validate_archive_resume_manifest(
+    manifest: Mapping[str, Any],
+    run: RunConfig,
+    profile: ArchiveProfileConfig,
+    *,
+    approved_program_ids: set[str] | None = None,
+    remote_files: Mapping[str, Any] | None = None,
+    remote_manifest_sha256: str | None = None,
+    manifest_bytes: bytes | None = None,
+) -> dict[str, Any]:
+    if not isinstance(profile, ArchiveProfileConfig):
+        raise TypeError("archive_profile must be an ArchiveProfileConfig")
+    if manifest_bytes is not None and remote_manifest_sha256 is not None:
+        actual = hashlib.sha256(manifest_bytes).hexdigest()
+        if actual != remote_manifest_sha256:
+            raise ValueError("remote dataset manifest SHA256 does not match the pinned hash")
+    if manifest.get("manifest_version", 3) != 3:
+        raise ValueError("remote resume manifest_version must be 3")
+    for field, expected in (
+        ("dataset_identity", profile.dataset_identity),
+        ("archive_format_id", profile.archive_format_id),
+        ("episode_schema_version", profile.episode_schema_version),
+        ("archive_profile", profile.as_dict()),
+    ):
+        if manifest.get(field) != expected:
+            raise ValueError(f"remote archive manifest {field} mismatch")
+    source_ids: set[str] = set()
+    source_run_ids = manifest.get("source_run_ids")
+    if not isinstance(source_run_ids, list) or not source_run_ids:
+        raise ValueError("remote archive manifest must identify source_run_ids")
+    for value in source_run_ids:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("remote archive source_run_ids must contain strings")
+        source_ids.add(value)
+    for key in ("run_id", "source_run_id"):
+        value = manifest.get(key)
+        if value is not None:
+            if not isinstance(value, str) or not value.strip():
+                raise ValueError(f"remote archive {key} must be a nonblank string")
+            source_ids.add(value)
+    if run.resume_from_hf and not source_ids:
+        raise ValueError("remote resume manifest must identify its source run")
+    if run.run_id in source_ids:
+        raise ValueError("resumed run_id must be disjoint from remote source runs")
+
+    identities: set[str] = set()
+    attempt_ids: set[str] = set()
+    job_ids: set[str] = set()
+    validated = dict(manifest)
+    remote_files_supplied = remote_files is not None
+    remote_file_inventory: dict[str, Any] = {}
+    expected_remote_files: set[str] = set()
+    if remote_files_supplied:
+        prefix = f"{run.hf_subfolder}/" if run.hf_subfolder else None
+        for key, value in dict(remote_files).items():
+            relative = _resume_archive_file_path(key, field="remote file reference")
+            if prefix and relative.startswith(prefix):
+                relative = _resume_archive_file_path(
+                    relative[len(prefix):], field="remote file reference"
+                )
+            if relative in remote_file_inventory:
+                raise ValueError(f"remote archive file is supplied more than once: {relative}")
+            remote_file_inventory[relative] = value
+    for collection, identity_key, allowed_outcomes in (
+        ("episodes", "episode_id", {"success", "valid_failure"}),
+        ("failure_attempts", "attempt_id", {"simulator_crash", "invalid_observation"}),
+    ):
+        rows = manifest.get(collection, [])
+        if not isinstance(rows, list):
+            raise ValueError(f"remote archive {collection} must be a list")
+        for row in rows:
+            if not isinstance(row, Mapping):
+                raise ValueError(f"remote archive {collection} row must be an object")
+            row = dict(row)
+            identity = row.get(identity_key)
+            if not isinstance(identity, str) or not identity.strip():
+                raise ValueError(f"remote archive row missing {identity_key}")
+            if identity in identities:
+                raise ValueError(f"remote resume duplicate immutable identity: {identity}")
+            identities.add(identity)
+            for field in (
+                "job_id",
+                "run_id",
+                "source_run_id",
+                "code_revision",
+                "preprocessing_identity",
+                "program_id",
+                "attempt_id",
+            ):
+                value = row.get(field)
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"remote archive row {field} must be a nonblank string")
+            if row["job_id"] in job_ids:
+                raise ValueError(f"remote archive duplicate job identity: {row['job_id']}")
+            if row["attempt_id"] in attempt_ids:
+                raise ValueError(f"remote archive duplicate attempt identity: {row['attempt_id']}")
+            job_ids.add(row["job_id"])
+            attempt_ids.add(row["attempt_id"])
+            if row.get("episode_id") is not None and (
+                not isinstance(row.get("episode_id"), str) or not row["episode_id"].strip()
+            ):
+                raise ValueError("remote archive row episode_id must be a nonblank string or null")
+            if approved_program_ids is not None and row.get("program_id") not in approved_program_ids:
+                raise ValueError(f"remote resume row uses unapproved program: {row.get('program_id')}")
+            if row.get("outcome") not in allowed_outcomes:
+                raise ValueError(f"remote archive {collection} has invalid outcome")
+            if row.get("run_id") != row.get("source_run_id") or row.get("source_run_id") not in source_ids:
+                raise ValueError("remote archive row source_run_id is not bound to the manifest")
+            if row.get("run_id") == run.run_id:
+                raise ValueError("resumed row run_id must be disjoint from current run")
+            if (
+                not isinstance(row.get("manifest_sha256"), str)
+                or len(row["manifest_sha256"]) != 64
+                or any(character not in "0123456789abcdef" for character in row["manifest_sha256"])
+            ):
+                raise ValueError("remote archive row manifest_sha256 must be a lowercase SHA256 digest")
+            if type(row.get("retry_generation")) is not int or row["retry_generation"] < 0:
+                raise ValueError("remote archive row retry_generation must be nonnegative")
+            for field, expected in (
+                ("archive_format_id", profile.archive_format_id),
+                ("episode_schema_version", profile.episode_schema_version),
+                ("dataset_identity", profile.dataset_identity),
+            ):
+                if row.get(field) != expected:
+                    raise ValueError(f"remote archive row {field} mismatch")
+            archive_ref = _resume_archive_file_path(row.get("archive_ref"), field="archive_ref")
+            expected_prefix = "episodes/" if collection == "episodes" else "attempts/"
+            if not archive_ref.startswith(expected_prefix) or len(PurePosixPath(archive_ref).parts) != 3:
+                raise ValueError("remote archive_ref is not canonical")
+            expected_ref = (
+                f"episodes/{row['program_id']}/{row['episode_id']}"
+                if collection == "episodes"
+                else f"attempts/{row['program_id']}/{row['attempt_id']}"
+            )
+            if archive_ref != expected_ref:
+                raise ValueError("remote archive_ref does not match row identity")
+            manifest_name = "episode.manifest.json" if collection == "episodes" else "attempt.manifest.json"
+            archive_manifest = _resume_archive_file_path(row.get("archive_manifest"), field="manifest reference")
+            if archive_manifest != f"{archive_ref}/{manifest_name}":
+                raise ValueError("remote archive manifest reference does not match archive_ref")
+            inventory = row.get("file_sha256")
+            if not isinstance(inventory, Mapping) or not inventory:
+                raise ValueError("remote archive row file_sha256 must be nonempty")
+            inventory = dict(inventory)
+            required = {manifest_name, "artifact_manifest.json", "debug.json"}
+            if collection == "episodes":
+                required.add("data/chunk-00000.npz")
+            if not required.issubset(inventory):
+                missing = sorted(required - set(inventory))
+                raise ValueError(f"remote archive row is missing archive/chunk reference: {missing}")
+            for relative, digest in inventory.items():
+                relative = _resume_archive_file_path(relative, field="file reference")
+                _resume_archive_sha(digest, field=f"file {relative}")
+            try:
+                plan = attempt_from_dict(row["attempt_plan"])
+            except (KeyError, TypeError, ValueError) as error:
+                raise ValueError("remote archive row attempt_plan is malformed") from error
+            if plan.program_id != row.get("program_id"):
+                raise ValueError("remote archive attempt_plan program identity mismatch")
+            if f"att-{plan.episode_id}" != row.get("attempt_id"):
+                raise ValueError("remote archive attempt_plan attempt identity mismatch")
+            if collection == "episodes" and plan.episode_id != row.get("episode_id"):
+                raise ValueError("remote archive attempt_plan episode identity mismatch")
+            if collection == "failure_attempts" and row.get("episode_id") is not None:
+                raise ValueError("remote archive failure attempt episode_id must be null")
+            expected_split = "dev" if plan.split == "development" else plan.split
+            if row.get("split") != expected_split:
+                raise ValueError("remote archive row split disagrees with attempt_plan")
+            if row.get("episode_kind") != plan.episode_kind:
+                raise ValueError("remote archive row episode_kind disagrees with attempt_plan")
+            planned_subset = (
+                train_subset_for_sample(plan.randomization) if plan.split == "train" else None
+            )
+            if row.get("subset") != planned_subset:
+                raise ValueError("remote archive row subset disagrees with attempt_plan")
+            expected_fields = {
+                "scene_signature": plan.randomization.get("scene_signature") or scene_signature(plan.randomization),
+                "scene_seed": plan.scene_seed,
+                "episode_index": plan.episode_index,
+                "asset_instance_id": plan.randomization.get("asset_instance_id"),
+                "asset_family_id": plan.randomization.get("asset_family_id"),
+                "intervention_id": (plan.intervention or {}).get("intervention_id"),
+                "source_episode_id": (plan.intervention or {}).get("source_episode_id"),
+                "base_episode_id": (plan.intervention or {}).get("base_episode_id"),
+            }
+            for field, expected in expected_fields.items():
+                if row.get(field) != expected:
+                    raise ValueError(f"remote archive row {field} disagrees with attempt_plan")
+            if collection == "episodes" and (
+                not isinstance(row.get("source_lineage_id"), str)
+                or not row["source_lineage_id"].strip()
+            ):
+                raise ValueError("remote archive episode source_lineage_id is required")
+
+            for relative, digest in inventory.items():
+                remote_key = f"{archive_ref}/{relative}"
+                expected_remote_files.add(remote_key)
+                remote_value = remote_file_inventory.get(remote_key)
+                if remote_files_supplied and remote_value is None:
+                    raise ValueError(f"remote archive file is missing: {remote_key}")
+                if remote_value is not None:
+                    content = _remote_file_bytes(remote_value)
+                    if hashlib.sha256(content).hexdigest() != digest:
+                        raise ValueError(f"remote archive hash mismatch: {remote_key}")
+                    if relative == manifest_name:
+                        _validate_remote_archive_manifest_bytes(row, content, profile)
+        validated[collection] = [dict(row) for row in rows]
+    if remote_files_supplied:
+        unexpected = sorted(set(remote_file_inventory) - expected_remote_files)
+        if unexpected:
+            raise ValueError(f"remote archive contains files outside the declared inventory: {unexpected}")
+    return validated
+
+
+def load_remote_manifest(
+    manifest: Mapping[str, Any] | str | Path,
+    run: RunConfig,
+    *,
+    archive_profile: ArchiveProfileConfig | None = None,
+    approved_program_ids: set[str] | None = None,
+    remote_files: Mapping[str, Any] | None = None,
+    remote_manifest_sha256: str | None = None,
+    manifest_bytes: bytes | None = None,
+) -> dict[str, Any]:
+    """Parse and validate a legacy or lossless archive resume manifest.
+
+    ``remote_files`` is an optional test/integration seam keyed by each row's
+    HF-relative ``archive_ref/<file>`` path. When supplied, it is treated as a
+    complete inventory and every declared file is hash-checked; normal bootstrap
+    uses the already verified immutable row inventory and performs structural
+    validation without downloading the raw chunks.
+    """
+    if isinstance(manifest, (str, Path)):
+        manifest_path = Path(manifest)
+        raw_manifest_bytes = manifest_path.read_bytes()
+        payload = json.loads(raw_manifest_bytes)
+    else:
+        payload = dict(manifest)
+        raw_manifest_bytes = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    if manifest_bytes is None:
+        manifest_bytes = raw_manifest_bytes
+    if archive_profile is None:
+        return _validate_resume_manifest(payload, run, approved_program_ids=approved_program_ids)
+    return _validate_archive_resume_manifest(
+        payload,
+        run,
+        archive_profile,
+        approved_program_ids=approved_program_ids,
+        remote_files=remote_files,
+        remote_manifest_sha256=remote_manifest_sha256,
+        manifest_bytes=manifest_bytes,
+    )
+
+
 def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tuple[str, ...], revision: str, token: str) -> None:
     if (
         not isinstance(revision, str)
@@ -731,10 +1091,13 @@ class CoordinatorControlPlane:
             remote_manifest_sha256 = hashlib.sha256(remote_bytes).hexdigest()
             if bootstrap_manifest_sha256 and remote_manifest_sha256 != bootstrap_manifest_sha256:
                 raise ValueError("remote resume manifest digest changed after preflight")
-            remote_manifest = _validate_resume_manifest(
+            remote_manifest = load_remote_manifest(
                 json.loads(remote_bytes),
                 run,
+                archive_profile=runtime.archive_profile,
                 approved_program_ids=set(rows),
+                remote_manifest_sha256=remote_manifest_sha256,
+                manifest_bytes=remote_bytes,
             )
         except Exception as error:
             remote_error = error

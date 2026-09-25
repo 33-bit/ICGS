@@ -21,6 +21,7 @@ from scripts.generation_coordinator import (
     CoordinatorLock,
     _credential_path,
     _inflight_jobs_from_queue,
+    load_remote_manifest,
     _merge_manifests,
     _validate_resume_manifest,
 )
@@ -31,6 +32,7 @@ from scripts.generation_watchdog import (
     reconcile_processes,
 )
 from icgs.data.collection.generation.distributed_contracts import (
+    ArchiveProfileConfig,
     GenerationJob,
     GenerationRuntimeConfig,
     RunConfig,
@@ -80,6 +82,106 @@ def _runtime_config(tmp_path: Path, *, publication_enabled: bool = False):
 def _required_api(name: str):
     assert hasattr(generation_launch, name), f"generation_launch.{name} is required"
     return getattr(generation_launch, name)
+
+
+def _archive_resume_profile() -> ArchiveProfileConfig:
+    return ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="receipt_only")
+
+
+def _archive_resume_plan(*, episode_id: str, episode_kind: str = "nominal") -> AttemptPlan:
+    return AttemptPlan(
+        program_id="T01",
+        split="train",
+        episode_index=1,
+        episode_id=episode_id,
+        episode_kind=episode_kind,
+        scene_seed=17,
+        collection_seed=20260920,
+        randomization={
+            "scene_signature": f"signature-{episode_id}",
+            "asset_instance_id": "asset-1",
+            "asset_family_id": "family-1",
+            "scene_seed": 17,
+        },
+        intervention=(
+            {"kind": "pause_hold", "intervention_id": "pause_hold_v1"}
+            if episode_kind == "perturbed" else None
+        ),
+    )
+
+
+def _archive_resume_row(
+    profile: ArchiveProfileConfig,
+    *,
+    episode_id: str,
+    outcome: str = "success",
+    episode_kind: str = "nominal",
+) -> dict:
+    from icgs.data.collection.generation.diversity import train_subset_for_sample
+
+    plan = _archive_resume_plan(episode_id=episode_id, episode_kind=episode_kind)
+    is_episode = outcome in {"success", "valid_failure"}
+    attempt_id = f"att-{plan.episode_id}"
+    identity = episode_id if is_episode else attempt_id
+    archive_ref = f"episodes/T01/{episode_id}" if is_episode else f"attempts/T01/{attempt_id}"
+    manifest_name = "episode.manifest.json" if is_episode else "attempt.manifest.json"
+    subset = train_subset_for_sample(plan.randomization)
+    return {
+        "archive_ref": archive_ref,
+        "archive_manifest": f"{archive_ref}/{manifest_name}",
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "dataset_identity": profile.dataset_identity,
+        "job_id": f"job-old-{identity}",
+        "run_id": "old-run",
+        "manifest_sha256": "b" * 64,
+        "retry_generation": 0,
+        "source_run_id": "old-run",
+        "code_revision": "a" * 40,
+        "preprocessing_identity": "resume_fixture_v1",
+        "file_sha256": {
+            manifest_name: "1" * 64,
+            "artifact_manifest.json": "2" * 64,
+            "debug.json": "3" * 64,
+            "data/chunk-00000.npz": "4" * 64,
+        },
+            "attempt_id": attempt_id,
+        "episode_id": episode_id if is_episode else None,
+        "program_id": "T01",
+        "split": "train",
+        "subset": subset,
+        "episode_kind": episode_kind,
+        "scene_signature": plan.randomization["scene_signature"],
+        "scene_seed": plan.scene_seed,
+        "episode_index": plan.episode_index,
+        "asset_instance_id": "asset-1",
+        "asset_family_id": "family-1",
+        "source_lineage_id": "lineage-1" if is_episode else None,
+        "outcome": outcome,
+        "intervention_id": (plan.intervention or {}).get("intervention_id"),
+        "source_episode_id": (plan.intervention or {}).get("source_episode_id"),
+        "base_episode_id": (plan.intervention or {}).get("base_episode_id"),
+        "attempt_plan": plan.as_dict(),
+    }
+
+
+def _archive_resume_manifest(profile: ArchiveProfileConfig) -> dict:
+    return {
+        "manifest_version": 3,
+        "source_run_ids": ["old-run"],
+        "dataset_identity": profile.dataset_identity,
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "archive_profile": profile.as_dict(),
+        "view_status": "PROVISIONAL",
+        "episodes": [
+            _archive_resume_row(profile, episode_id="episode-old-success", outcome="success"),
+            _archive_resume_row(profile, episode_id="episode-old-failure", outcome="valid_failure"),
+        ],
+        "failure_attempts": [
+            _archive_resume_row(profile, episode_id="episode-old-crash", outcome="simulator_crash"),
+        ],
+    }
 
 
 def test_launcher_builds_workers_from_configured_limits_and_paths(tmp_path: Path):
@@ -371,6 +473,243 @@ def test_remote_resume_manifest_merge_rejects_immutable_conflict():
         _merge_manifests(remote, local)
 
 
+def test_archive_resume_manifest_validates_identity_and_remote_file_hashes():
+    profile = _archive_resume_profile()
+    run = RunConfig(
+        run_id="new-run",
+        run_root="/tmp/new-run",
+        code_revision="a" * 40,
+        approved_manifest_sha256="b" * 64,
+        resume_from_hf=True,
+    )
+    manifest = _archive_resume_manifest(profile)
+    manifest["episodes"] = [manifest["episodes"][0]]
+    manifest["failure_attempts"] = []
+    row = manifest["episodes"][0]
+    remote_files = {}
+    chunk_content = b"archive chunk\n"
+    row["file_sha256"]["data/chunk-00000.npz"] = hashlib.sha256(chunk_content).hexdigest()
+    archive_payload = {
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "dataset_identity": profile.dataset_identity,
+        "archive_profile": profile.as_dict(),
+        "archive_kind": "episode",
+        "episode_id": row["episode_id"],
+        "attempt_id": row["attempt_id"],
+        "program_id": row["program_id"],
+        "outcome": row["outcome"],
+        "source_run_id": row["source_run_id"],
+        "code_revision": row["code_revision"],
+        "preprocessing_identity": row["preprocessing_identity"],
+        "chunk_inventory": [{
+            "path": "data/chunk-00000.npz",
+            "sha256": row["file_sha256"]["data/chunk-00000.npz"],
+        }],
+    }
+    archive_content = json.dumps(archive_payload, sort_keys=True).encode("utf-8")
+    row["file_sha256"]["episode.manifest.json"] = hashlib.sha256(archive_content).hexdigest()
+    for relative in ("artifact_manifest.json", "debug.json"):
+        content = f"{relative}\n".encode()
+        row["file_sha256"][relative] = hashlib.sha256(content).hexdigest()
+        remote_files[f"{row['archive_ref']}/{relative}"] = content
+    remote_files[f"{row['archive_ref']}/data/chunk-00000.npz"] = chunk_content
+    remote_files[row["archive_manifest"]] = archive_content
+
+    loaded = load_remote_manifest(
+        manifest,
+        run,
+        archive_profile=profile,
+        approved_program_ids={"T01"},
+        remote_files=remote_files,
+    )
+
+    assert loaded["episodes"][0]["archive_ref"] == "episodes/T01/episode-old-success"
+    assert loaded["failure_attempts"] == []
+
+    remote_files["episodes/T01/unlisted/extra.bin"] = b"unlisted"
+    with pytest.raises(ValueError, match="outside the declared inventory"):
+        load_remote_manifest(
+            manifest,
+            run,
+            archive_profile=profile,
+            approved_program_ids={"T01"},
+            remote_files=remote_files,
+        )
+
+
+@pytest.mark.parametrize(
+    "mutator, message",
+    [
+        (lambda manifest: manifest.update({"archive_profile": {}}), "archive.*profile"),
+        (
+            lambda manifest: manifest["episodes"][0].update({"archive_ref": "../escape"}),
+            "archive_ref",
+        ),
+        (
+            lambda manifest: manifest["episodes"][0].update({
+                "archive_ref": "episodes//T01/episode-old-success",
+            }),
+            "archive_ref",
+        ),
+        (
+            lambda manifest: manifest["episodes"][0]["file_sha256"].pop("data/chunk-00000.npz"),
+            "chunk",
+        ),
+        (
+            lambda manifest: manifest["episodes"].append(dict(manifest["episodes"][0])),
+            "duplicate",
+        ),
+    ],
+)
+def test_archive_resume_manifest_rejects_malformed_or_missing_archive_references(
+    mutator, message,
+):
+    profile = _archive_resume_profile()
+    run = RunConfig(
+        run_id="new-run",
+        run_root="/tmp/new-run",
+        code_revision="a" * 40,
+        approved_manifest_sha256="b" * 64,
+        resume_from_hf=True,
+    )
+    manifest = _archive_resume_manifest(profile)
+    mutator(manifest)
+
+    with pytest.raises(ValueError, match=message):
+        load_remote_manifest(
+            manifest,
+            run,
+            archive_profile=profile,
+            approved_program_ids={"T01"},
+        )
+
+
+def test_archive_resume_manifest_rejects_conflicting_row_and_current_source_run():
+    profile = _archive_resume_profile()
+    run = RunConfig(
+        run_id="new-run",
+        run_root="/tmp/new-run",
+        code_revision="a" * 40,
+        approved_manifest_sha256="b" * 64,
+        resume_from_hf=True,
+    )
+    manifest = _archive_resume_manifest(profile)
+    conflicting = dict(manifest["episodes"][0])
+    conflicting["episode_id"] = manifest["episodes"][1]["episode_id"]
+    manifest["episodes"].append(conflicting)
+    with pytest.raises(ValueError, match="duplicate|conflict"):
+        load_remote_manifest(
+            manifest,
+            run,
+            archive_profile=profile,
+            approved_program_ids={"T01"},
+        )
+
+    manifest = _archive_resume_manifest(profile)
+    manifest["source_run_ids"] = [run.run_id]
+    with pytest.raises(ValueError, match="disjoint"):
+        load_remote_manifest(
+            manifest,
+            run,
+            archive_profile=profile,
+            approved_program_ids={"T01"},
+        )
+
+
+def test_archive_resume_manifest_rejects_duplicate_attempt_ids_across_row_kinds():
+    profile = _archive_resume_profile()
+    run = RunConfig(
+        run_id="new-run",
+        run_root="/tmp/new-run",
+        code_revision="a" * 40,
+        approved_manifest_sha256="b" * 64,
+        resume_from_hf=True,
+    )
+    manifest = _archive_resume_manifest(profile)
+    manifest["failure_attempts"][0]["attempt_id"] = manifest["episodes"][0]["attempt_id"]
+
+    with pytest.raises(ValueError, match="duplicate attempt"):
+        load_remote_manifest(
+            manifest,
+            run,
+            archive_profile=profile,
+            approved_program_ids={"T01"},
+        )
+
+
+def test_archive_resume_manifest_rejects_remote_manifest_missing_chunk_reference():
+    profile = _archive_resume_profile()
+    run = RunConfig(
+        run_id="new-run",
+        run_root="/tmp/new-run",
+        code_revision="a" * 40,
+        approved_manifest_sha256="b" * 64,
+        resume_from_hf=True,
+    )
+    manifest = _archive_resume_manifest(profile)
+    row = manifest["episodes"][0]
+    archive_payload = {
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "dataset_identity": profile.dataset_identity,
+        "archive_profile": profile.as_dict(),
+        "archive_kind": "episode",
+        "episode_id": row["episode_id"],
+        "attempt_id": row["attempt_id"],
+        "program_id": row["program_id"],
+        "outcome": row["outcome"],
+        "source_run_id": row["source_run_id"],
+        "code_revision": row["code_revision"],
+        "preprocessing_identity": row["preprocessing_identity"],
+        "chunk_inventory": [{"path": "data/chunk-00001.npz", "sha256": "4" * 64}],
+    }
+    archive_content = json.dumps(archive_payload).encode("utf-8")
+    row["file_sha256"]["episode.manifest.json"] = hashlib.sha256(archive_content).hexdigest()
+    row["file_sha256"]["artifact_manifest.json"] = hashlib.sha256(b"artifact").hexdigest()
+    row["file_sha256"]["debug.json"] = hashlib.sha256(b"debug").hexdigest()
+    row["file_sha256"]["data/chunk-00000.npz"] = hashlib.sha256(b"chunk").hexdigest()
+    remote_files = {
+        row["archive_manifest"]: archive_content,
+        f"{row['archive_ref']}/artifact_manifest.json": b"artifact",
+        f"{row['archive_ref']}/debug.json": b"debug",
+        f"{row['archive_ref']}/data/chunk-00000.npz": b"chunk",
+    }
+
+    with pytest.raises(ValueError, match="chunk reference"):
+        load_remote_manifest(
+            manifest,
+            run,
+            archive_profile=profile,
+            approved_program_ids={"T01"},
+            remote_files=remote_files,
+        )
+
+
+def test_archive_resume_manifest_rejects_missing_remote_archive_file():
+    profile = _archive_resume_profile()
+    run = RunConfig(
+        run_id="new-run",
+        run_root="/tmp/new-run",
+        code_revision="a" * 40,
+        approved_manifest_sha256="b" * 64,
+        resume_from_hf=True,
+    )
+    manifest = _archive_resume_manifest(profile)
+    row = manifest["episodes"][0]
+
+    with pytest.raises(ValueError, match="remote archive file is missing"):
+        load_remote_manifest(
+            manifest,
+            run,
+            archive_profile=profile,
+            approved_program_ids={"T01"},
+            remote_files={
+                f"{row['archive_ref']}/data/chunk-00000.npz": b"only one file",
+            },
+        )
+
+
 def test_resume_manifest_rejects_source_run_collision_and_duplicate_ids():
     run = RunConfig(
         run_id="resume-run",
@@ -442,6 +781,53 @@ def test_coordinator_resume_requires_and_consumes_remote_manifest(tmp_path: Path
     )
 
     assert control.planner.counts("T01").nominal_successes == 1
+
+
+def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(
+    tmp_path: Path,
+    monkeypatch,
+):
+    profile = _archive_resume_profile()
+    config_payload = _runtime_config(tmp_path, publication_enabled=True).as_dict()
+    config_payload["run"].update({
+        "run_id": "new-archive-run",
+        "validation_mode": False,
+        "resume_from_hf": True,
+    })
+    config_payload["archive_profile"] = profile.as_dict()
+    config = GenerationRuntimeConfig.from_dict(config_payload)
+    approved = Path("artifacts/composition/approved_composition_manifest.json")
+    run_json = generation_launch.persist_run_config(
+        config,
+        approved,
+        code_revision="a" * 40,
+    )
+    token = tmp_path / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+    remote = tmp_path / "dataset_manifest.json"
+    remote.write_text(json.dumps(_archive_resume_manifest(profile)), encoding="utf-8")
+
+    monkeypatch.setattr(
+        generation_coordinator_module,
+        "hf_hub_download",
+        lambda **kwargs: str(remote),
+    )
+    control = CoordinatorControlPlane.open(
+        run_json,
+        api_factory=lambda: object(),
+        token_path=token,
+    )
+
+    assert control.queue.counts().ingested == 0
+    assert control.queue.counts().published == 0
+    assert len(control.manifest["episodes"]) == 2
+    assert len(control.manifest["failure_attempts"]) == 1
+    assert control.planner.counts("T01").nominal_successes == 1
+    assert control.planner.counts("T01").nominal_valid_failures == 1
+    assert control.planner.counts("T01").nominal_crashes == 1
 
 
 def test_coordinator_resume_reuses_launcher_pinned_revision(tmp_path: Path, monkeypatch):

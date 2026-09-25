@@ -121,6 +121,67 @@ def test_resume_restores_serialized_nominal_plan_for_perturbation_source():
     assert perturbed.plan.intervention["source_episode_id"] == nominal.episode_id
 
 
+def test_archive_manifest_rows_restore_quota_without_local_result_payload():
+    rows = {"T01": _rows()["T01"]}
+    initial = DistributedPlanner.from_manifest(_run(), rows, {"episodes": [], "failure_attempts": []})
+    nominal = initial.next_job()
+    assert nominal is not None
+    archive_row = {
+        "archive_ref": f"episodes/T01/{nominal.episode_id}",
+        "archive_manifest": f"episodes/T01/{nominal.episode_id}/episode.manifest.json",
+        "archive_format_id": "icgs_npz_chunked_v1",
+        "episode_schema_version": "icgs_episode_archive_v1",
+        "dataset_identity": "icgs-primary-v3-archive-v1",
+        "job_id": "job-old",
+        "run_id": "old-run",
+        "source_run_id": "old-run",
+        "manifest_sha256": "b" * 64,
+        "retry_generation": 0,
+        "code_revision": "a" * 40,
+        "preprocessing_identity": "resume-v1",
+        "file_sha256": {
+            "episode.manifest.json": "1" * 64,
+            "artifact_manifest.json": "2" * 64,
+            "debug.json": "3" * 64,
+            "data/chunk-00000.npz": "4" * 64,
+        },
+        "attempt_id": nominal.attempt_id,
+        "episode_id": nominal.episode_id,
+        "program_id": nominal.program_id,
+        "split": "train",
+        "subset": nominal.plan.randomization["train_subset"],
+        "episode_kind": "nominal",
+        "scene_signature": nominal.plan.randomization["scene_signature"],
+        "scene_seed": nominal.plan.scene_seed,
+        "episode_index": nominal.plan.episode_index,
+        "asset_instance_id": nominal.plan.randomization["asset_instance_id"],
+        "asset_family_id": nominal.plan.randomization["asset_family_id"],
+        "source_lineage_id": "lineage-1",
+        "outcome": "success",
+        "intervention_id": None,
+        "source_episode_id": None,
+        "base_episode_id": None,
+        "attempt_plan": nominal.plan.as_dict(),
+    }
+    resumed = DistributedPlanner.from_manifest(
+        _run(),
+        rows,
+        {
+            "manifest_version": 3,
+            "source_run_ids": ["old-run"],
+            "dataset_identity": "icgs-primary-v3-archive-v1",
+            "archive_format_id": "icgs_npz_chunked_v1",
+            "episode_schema_version": "icgs_episode_archive_v1",
+            "episodes": [archive_row],
+            "failure_attempts": [],
+        },
+    )
+    assert resumed.counts("T01").nominal_successes == 1
+    next_job = resumed.next_job()
+    assert next_job is not None
+    assert next_job.episode_id != nominal.episode_id
+
+
 def test_inflight_jobs_bound_optimistic_quota_overplanning():
     rows = {"T01": _rows()["T01"]}
     manifest = {
