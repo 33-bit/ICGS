@@ -372,9 +372,16 @@ Credential fields such as passwords, API keys, tokens, and secrets redact their
 values based on the field name even when the value itself has no token pattern.
 
 The writer/reader/integrity core, opt-in RLBench materializer, distributed episode
-worker handoff, and archive-manifest result detection are implemented and
-fixture-tested. With the archive profile absent, the legacy `episode.json`,
-layout, telemetry, and `attempt.json` paths remain unchanged. Archive-aware
-distributed validation, HF publication, pruning and resume are still pending
-integration in the active implementation plan. Until those steps pass, the
-legacy inventory above describes the end-to-end distributed path.
+worker handoff, archive-manifest result detection, and profile-aware validation
+are implemented and fixture-tested. The coordinator validates the canonical
+archive manifest, all chunk/metadata hashes, job identity, plan, provenance and
+timeline before ingestion; the publisher repeats validation before upload.
+Validated dataset-manifest rows contain HF-relative `archive_ref` and manifest
+paths plus the complete per-file SHA256 map. They do not contain absolute local
+`result_dir` values, so rows remain portable after receipt-only pruning or when
+reconstructed on another machine. `success` and `valid_failure` stay episode rows;
+`simulator_crash` and `invalid_observation` stay attempt rows. With the archive
+profile absent, the legacy `episode.json`, layout, telemetry, and `attempt.json`
+paths remain unchanged. Remote publication acceptance, pruning, and HF-only resume
+remain pending integration in the active implementation plan. Until those steps
+pass, the legacy inventory above describes the end-to-end distributed path.

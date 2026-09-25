@@ -388,7 +388,20 @@ def test_episode_worker_archive_keeps_captured_actions_and_inventory(tmp_path: P
     worker = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(worker)
     _enable_archive_profile(monkeypatch)
-    plan = _job().plan
+    job = _job()
+    plan = job.plan
+    job_identity = {
+        "job_id": job.job_id,
+        "run_id": job.run_id,
+        "attempt_id": job.attempt_id,
+        "episode_id": job.episode_id,
+        "program_id": job.program_id,
+        "code_revision": job.code_revision,
+        "manifest_sha256": job.manifest_sha256,
+        "retry_generation": job.retry_generation,
+        "plan": job.plan.as_dict(),
+    }
+    monkeypatch.setenv("ICGS_GENERATION_JOB_IDENTITY", json.dumps(job_identity))
     actions = np.asarray([[0.1, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 1.0]], dtype=np.float32)
     timed = [
         {
@@ -409,6 +422,7 @@ def test_episode_worker_archive_keeps_captured_actions_and_inventory(tmp_path: P
     manifest_path = tmp_path / "episode-worker" / "episode.manifest.json"
     archive = EpisodeArchiveReader(manifest_path)
     np.testing.assert_array_equal(archive.raw_arrays["actions"], actions)
+    assert archive.debug_metadata["job_identity"] == job_identity
     assert archive.raw_arrays["actions"].dtype == np.dtype(np.float32)
     action_specs = [
         spec for spec in archive.manifest.payload["array_specs"].values()

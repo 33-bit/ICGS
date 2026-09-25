@@ -13,12 +13,19 @@ import time
 import traceback as traceback_module
 from typing import Any, Mapping
 
+import numpy as np
+
 from icgs.data.collection.generation.distributed_contracts import (
+    ArchiveProfileConfig,
     GenerationJob,
     ValidationGateResult,
     ValidationPlan,
     ValidationReceipt,
     WorkerResult,
+)
+from icgs.data.collection.generation.episode_archive import (
+    EpisodeArchiveReader,
+    validate_archive_manifest,
 )
 from icgs.data.collection.generation.report import split_disjointness_report
 from icgs.data.schemas.episode_records import validate_episode
@@ -363,7 +370,211 @@ def _validate_artifact_manifest(root: Path, result: WorkerResult) -> None:
             raise ValueError(f"artifact manifest checksum mismatch: {relative}")
 
 
-def validate_closed_result(job: GenerationJob, result: WorkerResult) -> ValidatedResult:
+def _archive_plan_from_debug(debug: Mapping[str, Any]) -> Mapping[str, Any] | None:
+    for key in ("job_identity", "job"):
+        job = debug.get(key)
+        if isinstance(job, Mapping) and isinstance(job.get("plan"), Mapping):
+            return job["plan"]
+    for key in ("_plan", "plan"):
+        value = debug.get(key)
+        if isinstance(value, Mapping):
+            return value
+    return None
+
+
+def _validate_optional_modality_declarations(reader: EpisodeArchiveReader) -> None:
+    payload = reader.manifest.payload
+    raw_arrays = payload["raw_arrays"]
+    observations = int(payload["timeline"].get("observations", 0))
+    for values_name, boundaries_name in (
+        ("front_rgb_frames", "front_rgb_frame_boundaries"),
+        ("wrist_depth_frames", "wrist_depth_frame_boundaries"),
+        ("wrist_mask_frames", "wrist_mask_frame_boundaries"),
+        ("front_mask_frames", "front_mask_frame_boundaries"),
+    ):
+        values_ref = raw_arrays.get(values_name)
+        boundaries_ref = raw_arrays.get(boundaries_name)
+        if values_ref is None:
+            if boundaries_ref is not None:
+                raise ValueError(f"optional modality boundaries lack {values_name}")
+            continue
+        if not isinstance(values_ref, Mapping) or not isinstance(values_ref.get("$archive_array"), str):
+            raise ValueError(f"optional modality {values_name} must reference a numeric archive array")
+        value_spec = payload["array_specs"].get(values_ref["$archive_array"])
+        if value_spec is None or not value_spec["shape"]:
+            raise ValueError(f"optional modality {values_name} must have a frame axis")
+        frame_count = int(value_spec["shape"][0])
+        if boundaries_ref is None:
+            if frame_count != observations:
+                raise ValueError(f"optional modality {values_name} must align to all observation boundaries")
+            continue
+        if not isinstance(boundaries_ref, Mapping) or not isinstance(boundaries_ref.get("$archive_array"), str):
+            raise ValueError(f"optional modality {boundaries_name} must reference numeric boundary indices")
+        boundaries = reader.read_array(boundaries_ref["$archive_array"])
+        if (
+            boundaries.dtype.kind not in "iu"
+            or boundaries.ndim != 1
+            or boundaries.shape[0] != frame_count
+            or np.any(boundaries < 0)
+            or np.any(boundaries >= observations)
+            or np.any(boundaries[1:] <= boundaries[:-1])
+        ):
+            raise ValueError(f"optional modality {boundaries_name} does not align with captured frames")
+
+
+def _validate_archive_identity(
+    job: GenerationJob,
+    result: WorkerResult,
+    profile: ArchiveProfileConfig,
+    root: Path,
+) -> tuple[dict[str, Any], EpisodeArchiveReader, dict[str, Any]]:
+    manifest_paths = [
+        path for path in (root / "episode.manifest.json", root / "attempt.manifest.json")
+        if path.is_file()
+    ]
+    if (root / "episode.json").exists() or (root / "attempt.json").exists():
+        raise ValueError("archive profile result must not contain legacy dense JSON")
+    if len(manifest_paths) != 1:
+        raise ValueError("archive profile requires exactly one archive manifest")
+    manifest_path = manifest_paths[0]
+    archive_validation = validate_archive_manifest(manifest_path)
+    if not archive_validation.get("valid"):
+        raise ValueError("archive manifest validation failed")
+    reader = EpisodeArchiveReader(manifest_path)
+    payload = dict(reader.manifest.payload)
+    _validate_optional_modality_declarations(reader)
+    expected_profile = profile.as_dict()
+    if payload.get("archive_profile") != expected_profile:
+        raise ValueError("archive manifest profile disagrees with runtime profile")
+    expected_kind = "episode" if result.outcome in {"success", "valid_failure"} else "attempt"
+    if payload.get("archive_kind") != expected_kind:
+        raise ValueError("archive manifest kind disagrees with result outcome")
+    if payload.get("outcome") != result.outcome:
+        raise ValueError("archive manifest outcome disagrees with result")
+    expected_identity = {
+        "attempt_id": job.attempt_id,
+        "episode_id": job.episode_id if expected_kind == "episode" else None,
+        "program_id": job.program_id,
+    }
+    for key, value in expected_identity.items():
+        if payload.get(key) != value:
+            raise ValueError(f"archive identity mismatch for {key}")
+    if payload.get("source_run_id") != job.run_id:
+        raise ValueError("archive source_run_id disagrees with job")
+    if payload.get("code_revision") != job.code_revision:
+        raise ValueError("archive code_revision disagrees with job")
+    plan = _archive_plan_from_debug(reader.debug_metadata)
+    if plan is None:
+        raise ValueError("archive provenance must retain the attempt plan")
+    if dict(plan) != job.plan.as_dict():
+        raise ValueError("archive attempt plan disagrees with job")
+    job_identity = reader.debug_metadata.get("job_identity") or reader.debug_metadata.get("job")
+    if not isinstance(job_identity, Mapping):
+        raise ValueError("archive debug metadata must retain the full job identity")
+    expected_job_identity = {
+        "job_id": job.job_id,
+        "run_id": job.run_id,
+        "attempt_id": job.attempt_id,
+        "episode_id": job.episode_id,
+        "program_id": job.program_id,
+        "code_revision": job.code_revision,
+        "manifest_sha256": job.manifest_sha256,
+        "retry_generation": job.retry_generation,
+        "plan": job.plan.as_dict(),
+    }
+    for key, value in expected_job_identity.items():
+        if job_identity.get(key) != value:
+            raise ValueError(f"archive job identity mismatch for {key}")
+    if expected_kind == "episode":
+        provenance = payload["record_metadata"].get("provenance")
+        if not isinstance(provenance, Mapping):
+            raise ValueError("archive episode provenance must be an object")
+        expected_provenance = {
+            "attempt_id": job.attempt_id,
+            "episode_id": job.episode_id,
+            "program_id": job.program_id,
+            "outcome": result.outcome,
+            "scene_signature": job.plan.randomization.get("scene_signature"),
+            "scene_seed": job.plan.scene_seed,
+            "collection_seed": job.plan.collection_seed,
+            "episode_index": job.plan.episode_index,
+            "episode_kind": job.plan.episode_kind,
+            "split": "dev" if job.plan.split == "development" else job.plan.split,
+        }
+        for key, value in expected_provenance.items():
+            if provenance.get(key) != value:
+                raise ValueError(f"archive provenance mismatch for {key}")
+        archive_timeline = payload["timeline"]
+        transitions = int(archive_timeline.get("transitions", 0))
+        timeline = {
+            "actions": transitions,
+            "observations": int(archive_timeline.get("observations", 0)),
+            "durations": transitions,
+        }
+        if result.timeline != timeline:
+            raise ValueError("result timeline differs from archive episode")
+        return payload, reader, dict(provenance)
+    attempt = reader.to_episode_record()
+    if not isinstance(attempt, Mapping):
+        raise ValueError("archive attempt metadata must be an object")
+    for key, value in {
+        "attempt_id": job.attempt_id,
+        "episode_id": None,
+        "program_id": job.program_id,
+        "outcome": result.outcome,
+    }.items():
+        if attempt.get(key) != value:
+            raise ValueError(f"archive attempt metadata mismatch for {key}")
+    if result.timeline is not None:
+        raise ValueError("attempt archive result must not carry a timeline")
+    return payload, reader, dict(attempt)
+
+
+def _archive_manifest_entry(
+    *,
+    job: GenerationJob,
+    result: WorkerResult,
+    profile: ArchiveProfileConfig,
+    archive_kind: str,
+    archive_payload: Mapping[str, Any],
+) -> dict[str, Any]:
+    for name, value in (
+        ("program_id", job.program_id),
+        ("episode_id", job.episode_id if archive_kind == "episode" else job.attempt_id),
+    ):
+        if not value or value in {".", ".."} or "/" in value or "\\" in value:
+            raise ValueError(f"{name} is not a safe HF archive path segment")
+    if archive_kind == "episode":
+        archive_ref = f"episodes/{job.program_id}/{job.episode_id}"
+        manifest_name = "episode.manifest.json"
+    else:
+        archive_ref = f"attempts/{job.program_id}/{job.attempt_id}"
+        manifest_name = "attempt.manifest.json"
+    if manifest_name not in result.file_sha256:
+        raise ValueError("archive result file inventory is missing its canonical manifest")
+    return {
+        "archive_ref": archive_ref,
+        "archive_manifest": f"{archive_ref}/{manifest_name}",
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "dataset_identity": profile.dataset_identity,
+        "job_id": job.job_id,
+        "run_id": job.run_id,
+        "manifest_sha256": job.manifest_sha256,
+        "retry_generation": job.retry_generation,
+        "source_run_id": archive_payload["source_run_id"],
+        "code_revision": archive_payload["code_revision"],
+        "preprocessing_identity": archive_payload["preprocessing_identity"],
+        "file_sha256": dict(result.file_sha256),
+    }
+
+
+def validate_closed_result(
+    job: GenerationJob,
+    result: WorkerResult,
+    *,
+    archive_profile: ArchiveProfileConfig | None = None,
+) -> ValidatedResult:
     _verify_identity(job, result)
     root = Path(result.result_dir)
     if not root.is_dir() or root.is_symlink():
@@ -376,6 +587,52 @@ def validate_closed_result(job: GenerationJob, result: WorkerResult) -> Validate
     for relative, digest in result.file_sha256.items():
         if actual[relative] != digest:
             raise ValueError(f"checksum mismatch: {relative}")
+
+    if archive_profile is not None:
+        if not isinstance(archive_profile, ArchiveProfileConfig):
+            raise TypeError("archive_profile must be an ArchiveProfileConfig or None")
+        archive_payload, reader, provenance = _validate_archive_identity(
+            job, result, archive_profile, root
+        )
+        archive_kind = "episode" if result.outcome in {"success", "valid_failure"} else "attempt"
+        archive_entry = _archive_manifest_entry(
+            job=job,
+            result=result,
+            profile=archive_profile,
+            archive_kind=archive_kind,
+            archive_payload=archive_payload,
+        )
+        if archive_kind == "episode":
+            episode_entry = {
+                **archive_entry,
+                "attempt_id": job.attempt_id,
+                "episode_id": job.episode_id,
+                "program_id": job.program_id,
+                "split": provenance.get("split"),
+                "subset": provenance.get("subset") or provenance.get("train_subset"),
+                "source_lineage_id": provenance.get("source_lineage_id"),
+                "asset_family_id": provenance.get("asset_family_id"),
+                "asset_instance_id": provenance.get("asset_instance_id"),
+                "scene_signature": provenance.get("scene_signature"),
+                "scene_seed": provenance.get("scene_seed"),
+                "episode_index": provenance.get("episode_index"),
+                "episode_kind": provenance.get("episode_kind"),
+                "outcome": result.outcome,
+                "intervention_id": provenance.get("intervention_id"),
+                "source_episode_id": provenance.get("source_episode_id"),
+                "base_episode_id": provenance.get("base_episode_id"),
+                "attempt_plan": job.plan.as_dict(),
+            }
+            return ValidatedResult(job, result, provenance, episode_entry, None)
+        attempt_entry = {
+            **reader.to_episode_record(),
+            **archive_entry,
+            "scene_signature": job.plan.randomization.get("scene_signature"),
+            "scene_seed": job.plan.scene_seed,
+            "episode_index": job.plan.episode_index,
+            "attempt_plan": job.plan.as_dict(),
+        }
+        return ValidatedResult(job, result, attempt_entry, None, attempt_entry)
 
     if result.outcome in {"success", "valid_failure"}:
         episode_path = root / "episode.json"

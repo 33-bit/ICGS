@@ -52,12 +52,16 @@ clouds and captured debug modalities in safe compressed NPZ chunks; success and
 attempt archives with null `episode_id`. Provisional pointers are discovery
 indexes. Final training views must bind to a frozen HF dataset-manifest revision.
 
-The archive writer/reader, both local materialization paths, and archive-aware
-worker result detection are implemented for this opt-in profile. Legacy configs
-without `archive_profile` retain their JSON/layout writer behavior. Distributed
-archive validation, publication, receipt-only retention, HF-only resume, and
-final-view publication are still being integrated; this profile is not yet an
-end-to-end production collection path. See the
+The archive writer/reader, both local materialization paths, archive-aware worker
+result detection, and profile-aware distributed validation are implemented for
+this opt-in profile. The coordinator validates the canonical archive inventory
+before ingestion and the publisher revalidates it immediately before upload.
+Validated dataset rows contain HF-relative archive references and complete file
+hash inventories, not absolute local result paths. Success and `valid_failure`
+remain episode rows; crashes and invalid observations remain attempt rows. Legacy
+configs without `archive_profile` retain their JSON/layout behavior. Receipt-only
+retention, HF-only resume, final-view publication, and remote acceptance remain
+pending; this profile is not yet an end-to-end production collection path. See the
 [active implementation plan](../plans/active/generation-storage-and-view-finalization.md)
 for current phase evidence.
 

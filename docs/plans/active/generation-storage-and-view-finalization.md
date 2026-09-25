@@ -158,12 +158,12 @@ The implementation must keep these ownership boundaries:
 - `validate_closed_result()` accepts the new archive profile and returns an immutable `ValidatedResult` whose `file_sha256` covers every chunk/manifest/debug file.
 - `validate_archive_manifest()` is called before ingestion and before publication.
 
-- [ ] Require the new archive manifest and reject a v2 dense-JSON result under the new production profile.
-- [ ] Validate archive identity against `GenerationJob`, including episode/attempt/program/outcome/plan identity.
-- [ ] Validate all timeline cardinalities, array schemas, chunk hashes, aliases, optional-modality declarations, and provenance fields.
-- [ ] Keep simulator crashes and invalid observations out of episode manifests and training view inputs.
-- [ ] Add tests for valid success, valid failure, crash, invalid observation, malformed chunk inventory, dense JSON regression, and immutable re-ingestion.
-- [ ] Run `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation_validation.py tests/test_generation_archive.py`.
+- [x] Require the new archive manifest and reject a v2 dense-JSON result under the new production profile.
+- [x] Validate archive identity against `GenerationJob`, including episode/attempt/program/outcome/plan identity.
+- [x] Validate timeline cardinalities, array schemas, chunk hashes, aliases, partial-modality boundary declarations, and provenance fields.
+- [x] Keep simulator crashes and invalid observations out of episode manifests and training view inputs.
+- [x] Add tests for valid success, valid failure, crash, invalid observation, malformed chunk inventory, dense JSON regression, and immutable re-ingestion across a different local mount.
+- [x] Run `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation_validation.py tests/test_generation_archive.py`.
 
 ### Task 2.2: Publish complete HF archives and finalize local retention
 
@@ -347,11 +347,19 @@ Local plan gates are pure fixture/unit/L0 checks. No simulator, download, prepro
 
 - [x] Phase 0.2 — Added an opt-in immutable archive profile. Legacy runtime configs still parse with `archive_profile=None`; the checked-in bounded validation example selects the archive format with `keep` retention. Profiles also bound each NPZ chunk to 256 MiB of total uncompressed ZIP member bytes, including `.npy` headers; the writer streams `.npy` scratch pieces and records a local staging byte upper bound that includes spool plus final files.
 - [x] Recorded implementation rulings: `numpy.savez_compressed` has no `allow_pickle` argument, so archive writes reject object arrays and readers use `numpy.load(..., allow_pickle=False)`; dated audits remain historical evidence and current storage behavior belongs in current owner docs.
-- [ ] Phase 1 — Canonical archive writer/reader and both materialization paths. Archive core, both opt-in materializers, and archive-manifest worker handoff/detection are implemented and focused-tested; distributed archive validation remains open.
+- [x] Phase 1 — Canonical archive writer/reader and both materialization paths. Archive core, both opt-in materializers, archive-manifest worker handoff/detection, and scoped review corrections are locally tested.
 - [ ] Phase 2 — New-profile validation, complete HF publication, receipt-only retention, and HF-only resume.
 - [ ] Phase 3 — Lazy archive readers and revision-bound provisional/final views.
 - [ ] Phase 4 — Local migration and capacity instrumentation.
 - [ ] Phase 5 — Current owner documentation and local acceptance.
+
+Task 2.1 is locally implemented. `validate_closed_result(..., archive_profile=...)`
+uses the canonical archive validator before ingestion and emits episode/attempt
+rows with relative HF archive references, source/profile identities, and every
+file hash. Profile-aware publisher operation construction revalidates the queue
+result before upload. Legacy configs continue through the original dense-JSON
+validation path. Full archive publication, receipt-only pruning, remote resume,
+and remote acceptance remain open for later tasks.
 
 Phase 0.2 TDD evidence (`/tmp/icgs-generation-hf-archive.koAE1D`, system CPython 3.14.4, NumPy 2.4.4, pytest 8.4.2):
 

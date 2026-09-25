@@ -120,7 +120,12 @@ def _inflight_jobs_from_queue(queue: FilesystemJobQueue):
     return tuple(by_id[key] for key in sorted(by_id))
 
 
-def _manifest_from_closed_queue(queue: FilesystemJobQueue, states=("ingested", "published")) -> dict:
+def _manifest_from_closed_queue(
+    queue: FilesystemJobQueue,
+    states=("ingested", "published"),
+    *,
+    archive_profile=None,
+) -> dict:
     from icgs.data.collection.generation.distributed_contracts import GenerationJob, WorkerResult
 
     manifest = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
@@ -130,7 +135,12 @@ def _manifest_from_closed_queue(queue: FilesystemJobQueue, states=("ingested", "
                 continue
             job = GenerationJob.from_dict(json.loads((directory / "job.json").read_text(encoding="utf-8")))
             result = WorkerResult.from_dict(json.loads((directory / "result.json").read_text(encoding="utf-8")))
-            manifest = ingest_validated_result(manifest, validate_closed_result(job, result))
+            validated = (
+                validate_closed_result(job, result, archive_profile=archive_profile)
+                if archive_profile is not None
+                else validate_closed_result(job, result)
+            )
+            manifest = ingest_validated_result(manifest, validated)
     return manifest
 
 
@@ -264,11 +274,21 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
 
 
 class CoordinatorControlPlane:
-    def __init__(self, run: RunConfig, queue: FilesystemJobQueue, planner: DistributedPlanner, publisher: HuggingFaceBatchPublisher, manifest=None):
+    def __init__(
+        self,
+        run: RunConfig,
+        queue: FilesystemJobQueue,
+        planner: DistributedPlanner,
+        publisher: HuggingFaceBatchPublisher,
+        manifest=None,
+        *,
+        archive_profile=None,
+    ):
         self.run = run
         self.queue = queue
         self.planner = planner
         self.publisher = publisher
+        self.archive_profile = archive_profile
         self.manifest = dict(manifest or {"manifest_version": 3, "episodes": [], "failure_attempts": []})
         self.status = "PREFLIGHT"
         self._tick_started_at_s: float | None = None
@@ -315,7 +335,9 @@ class CoordinatorControlPlane:
         token = _credential_path(run_config_path, payload, token_path).read_text(
             encoding="utf-8"
         ).strip()
-        local_manifest = _manifest_from_closed_queue(queue)
+        local_manifest = _manifest_from_closed_queue(
+            queue, archive_profile=runtime.archive_profile
+        )
         if not local_manifest["episodes"] and not local_manifest["failure_attempts"]:
             local_manifest = payload.get("manifest", local_manifest)
         remote_manifest: dict = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
@@ -373,6 +395,7 @@ class CoordinatorControlPlane:
         api = api_factory()
         publisher = HuggingFaceBatchPublisher(
             run, api, token, queue,
+            archive_profile=runtime.archive_profile,
             remote_verify=lambda job_ids, revision, _token: _verify_remote_batch(
                 queue, run, job_ids, revision, token
             ),
@@ -380,8 +403,19 @@ class CoordinatorControlPlane:
         if remote_error is None:
             publisher.remote_manifest = remote_manifest
         else:
-            publisher.remote_manifest = _manifest_from_closed_queue(queue, states=("published",))
-        return cls(run, queue, planner, publisher, manifest)
+            publisher.remote_manifest = _manifest_from_closed_queue(
+                queue,
+                states=("published",),
+                archive_profile=runtime.archive_profile,
+            )
+        return cls(
+            run,
+            queue,
+            planner,
+            publisher,
+            manifest,
+            archive_profile=runtime.archive_profile,
+        )
 
     def _refill(self, target: int = 400) -> int:
         validation_max_jobs = getattr(self.run, "validation_max_jobs", None)
@@ -446,7 +480,11 @@ class CoordinatorControlPlane:
                 or not inventory_root.resolve().is_relative_to(allowed_result_root)
             ):
                 raise ValueError("result_dir must be contained within the run root")
-            validated = validate_closed_result(job, result)
+            validated = (
+                validate_closed_result(job, result, archive_profile=self.archive_profile)
+                if self.archive_profile is not None
+                else validate_closed_result(job, result)
+            )
             updated_manifest = ingest_validated_result(self.manifest, validated)
         except Exception as error:
             failure = ValidationFailure.capture(

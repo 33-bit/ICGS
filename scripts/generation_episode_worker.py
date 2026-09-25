@@ -65,6 +65,13 @@ def _write_episode(write_dir: Path, row: dict) -> None:
 
     write_dir.mkdir(parents=True, exist_ok=True)
     archive_profile = archive_profile_from_environment()
+    archive_job_identity = None
+    if archive_profile is not None:
+        identity_value = os.environ.get("ICGS_GENERATION_JOB_IDENTITY")
+        if identity_value:
+            archive_job_identity = json.loads(identity_value)
+            if not isinstance(archive_job_identity, dict):
+                raise ValueError("ICGS_GENERATION_JOB_IDENTITY must encode an object")
     binding_path = Path(os.environ.get("ICGS_GENERATION_BINDING_JSON", ""))
     if binding_path.is_file():
         row["_binding"] = json.loads(binding_path.read_text(encoding="utf-8"))
@@ -222,6 +229,8 @@ def _write_episode(write_dir: Path, row: dict) -> None:
                 "code_revision": os.environ.get("ICGS_GENERATION_CODE_REVISION") or row.get("code_revision") or "script-local",
                 "preprocessing_identity": "rlbench_script_measured_v1",
             })
+            if archive_job_identity is not None:
+                debug["job_identity"] = archive_job_identity
             EpisodeArchiveWriter(archive_profile).write_attempt(
                 attempt,
                 prefix_arrays=prefix,
@@ -278,6 +287,8 @@ def _write_episode(write_dir: Path, row: dict) -> None:
     })
     if archive_profile is not None:
         actions_value = row.get("_actions")
+        if archive_job_identity is not None:
+            execution["job_identity"] = archive_job_identity
         EpisodeArchiveWriter(archive_profile).write_episode(
             _archive_record(record),
             raw_arrays={

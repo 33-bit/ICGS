@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 
 from icgs.data.collection.generation.batch import AttemptPlan
-from icgs.data.collection.generation.distributed_contracts import GenerationJob
+from icgs.data.collection.generation.distributed_contracts import ArchiveProfileConfig, GenerationJob
 from icgs.data.collection.generation.distributed_contracts import (
     ValidationGateResult,
     ValidationPlan,
@@ -21,6 +21,7 @@ from icgs.data.collection.generation.distributed_validation import (
     validate_validation_receipt,
     validate_closed_result,
 )
+from icgs.data.collection.generation.episode_archive import EpisodeArchiveReader, EpisodeArchiveWriter
 from icgs.data.collection.generation import distributed_validation as validation
 from icgs.data.collection.generation.rlbench_attempt import RawAttempt, materialize_raw_attempt, write_closed_attempt_result
 
@@ -94,6 +95,29 @@ def _closed(tmp_path: Path, outcome: str, index: int = 1):
     return job, result
 
 
+def _archive_closed(tmp_path: Path, monkeypatch, outcome: str, index: int = 1):
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(profile.as_dict()))
+    job = _job(index)
+    if outcome == "success":
+        raw = _raw(True)
+    elif outcome == "valid_failure":
+        raw = _raw(False)
+    elif outcome == "invalid_observation":
+        source = _raw(False)
+        raw = RawAttempt(
+            observations=source.observations[:1], actions=(), scene_states=(),
+            collision_events=(), sim_time_s=0.0, predicates_ok=False,
+            terminal_reason="observation incomplete",
+        )
+    else:
+        source = _raw(False)
+        raw = replace(source, simulator_crash=True)
+    materialized = materialize_raw_attempt(raw, job, _binding())
+    result = write_closed_attempt_result(materialized, job, tmp_path / f"archive-{outcome}-{index}")
+    return job, result, profile
+
+
 @pytest.mark.parametrize("outcome", ["success", "valid_failure"])
 def test_episode_outcomes_require_complete_timeline_and_hashes(tmp_path: Path, outcome: str):
     job, result = _closed(tmp_path, outcome)
@@ -102,6 +126,248 @@ def test_episode_outcomes_require_complete_timeline_and_hashes(tmp_path: Path, o
     assert validated.episode_entry is not None
     assert validated.episode_entry["outcome"] == outcome
     assert validated.episode_entry["attempt_plan"] == job.plan.as_dict()
+
+
+@pytest.mark.parametrize("outcome", ["success", "valid_failure"])
+def test_archive_profile_validates_episode_and_emits_durable_hf_reference(
+    tmp_path: Path, monkeypatch, outcome: str
+):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, outcome)
+
+    validated = validate_closed_result(job, result, archive_profile=profile)
+
+    assert validated.episode_entry is not None
+    entry = validated.episode_entry
+    assert "result_dir" not in entry
+    assert entry["archive_ref"] == f"episodes/{job.program_id}/{job.episode_id}"
+    assert entry["archive_manifest"] == (
+        f"episodes/{job.program_id}/{job.episode_id}/episode.manifest.json"
+    )
+    assert entry["file_sha256"] == result.file_sha256
+    assert entry["archive_format_id"] == profile.archive_format_id
+    assert entry["episode_schema_version"] == profile.episode_schema_version
+    assert entry["dataset_identity"] == profile.dataset_identity
+    assert entry["job_id"] == job.job_id
+    assert entry["run_id"] == job.run_id
+    assert entry["manifest_sha256"] == job.manifest_sha256
+    assert entry["source_run_id"] == job.run_id
+    assert entry["code_revision"] == job.code_revision
+    assert entry["preprocessing_identity"] == "rlbench_measured_v1"
+    assert set(entry["file_sha256"]) == {
+        str(path.relative_to(result.result_dir))
+        for path in Path(result.result_dir).rglob("*") if path.is_file()
+    }
+
+
+@pytest.mark.parametrize("outcome", ["simulator_crash", "invalid_observation"])
+def test_archive_profile_validates_attempts_without_episode_training_entry(
+    tmp_path: Path, monkeypatch, outcome: str
+):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, outcome)
+
+    validated = validate_closed_result(job, result, archive_profile=profile)
+
+    assert validated.episode_entry is None
+    assert validated.attempt_entry is not None
+    assert validated.attempt_entry["outcome"] == outcome
+    assert "result_dir" not in validated.attempt_entry
+    assert validated.attempt_entry["archive_ref"] == (
+        f"attempts/{job.program_id}/{job.attempt_id}"
+    )
+    assert validated.attempt_entry["file_sha256"] == result.file_sha256
+
+
+def test_archive_profile_rejects_legacy_dense_json_result(tmp_path: Path, monkeypatch):
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    job, result = _closed(tmp_path, "success")
+
+    with pytest.raises(ValueError, match="legacy dense JSON|archive manifest"):
+        validate_closed_result(job, result, archive_profile=profile)
+
+
+def test_archive_profile_rejects_chunk_inventory_corruption(tmp_path: Path, monkeypatch):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "success")
+    chunk = next(
+        path for path in Path(result.result_dir).rglob("data/chunk-*.npz")
+    )
+    chunk.write_bytes(chunk.read_bytes() + b"corruption")
+    hashes = dict(result.file_sha256)
+    hashes[str(chunk.relative_to(result.result_dir))] = hashlib.sha256(chunk.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match="chunk checksum|artifact manifest"):
+        validate_closed_result(job, replace(result, file_sha256=hashes), archive_profile=profile)
+
+
+def test_archive_profile_rejects_array_corruption_after_file_hashes_are_repaired(
+    tmp_path: Path, monkeypatch
+):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "success")
+    root = Path(result.result_dir)
+    manifest_path = root / "episode.manifest.json"
+    artifact_path = root / "artifact_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    chunk_inventory = manifest["chunk_inventory"][0]
+    chunk_path = root / chunk_inventory["path"]
+    with np.load(chunk_path, allow_pickle=False) as loaded:
+        chunk_arrays = {key: np.array(loaded[key], copy=True) for key in loaded.files}
+    mutable_name = next(
+        name for name, value in chunk_arrays.items()
+        if value.size and value.dtype.kind in "fiu"
+    )
+    changed = chunk_arrays[mutable_name]
+    changed.flat[0] = changed.flat[0] + 1
+    np.savez_compressed(chunk_path, **chunk_arrays)
+
+    def canonical_json(path: Path, payload: dict) -> bytes:
+        encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n"
+        path.write_text(encoded, encoding="utf-8")
+        return encoded.encode("utf-8")
+
+    changed_chunk = chunk_path.read_bytes()
+    chunk_digest = hashlib.sha256(changed_chunk).hexdigest()
+    chunk_inventory.update({"bytes": len(changed_chunk), "sha256": chunk_digest})
+    artifact["files"][chunk_inventory["path"]].update({
+        "bytes": len(changed_chunk), "sha256": chunk_digest,
+    })
+    manifest_bytes = canonical_json(manifest_path, manifest)
+    artifact["files"]["episode.manifest.json"].update({
+        "bytes": len(manifest_bytes), "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+    })
+    canonical_json(artifact_path, artifact)
+    repaired_hashes = {
+        str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in root.rglob("*") if path.is_file()
+    }
+
+    with pytest.raises(ValueError, match="array piece checksum mismatch"):
+        validate_closed_result(
+            job,
+            replace(result, file_sha256=repaired_hashes),
+            archive_profile=profile,
+        )
+
+
+def test_archive_profile_ingestion_is_immutable_and_idempotent(tmp_path: Path, monkeypatch):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "valid_failure")
+    validated = validate_closed_result(job, result, archive_profile=profile)
+    original = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
+
+    updated = ingest_validated_result(original, validated)
+    assert "result_dir" not in updated["episodes"][0]
+    assert updated["episodes"][0]["archive_ref"].startswith("episodes/")
+    assert ingest_validated_result(updated, validated) == updated
+
+    remounted = tmp_path / "different-local-mount" / "archive-valid_failure-1"
+    import shutil
+    shutil.copytree(result.result_dir, remounted)
+    remounted_result = replace(result, result_dir=str(remounted))
+    remounted_validated = validate_closed_result(job, remounted_result, archive_profile=profile)
+    assert remounted_validated.episode_entry == validated.episode_entry
+    assert ingest_validated_result(updated, remounted_validated) == updated
+
+
+def test_archive_profile_binds_plan_and_result_timeline_to_job(tmp_path: Path, monkeypatch):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "success")
+    conflicting_plan = replace(job.plan, scene_seed=job.plan.scene_seed + 1)
+    conflicting_job = replace(job, plan=conflicting_plan)
+
+    with pytest.raises(ValueError, match="attempt plan|job identity|provenance"):
+        validate_closed_result(conflicting_job, result, archive_profile=profile)
+    conflicting_manifest_job = replace(job, manifest_sha256="c" * 64)
+    with pytest.raises(ValueError, match="manifest_sha256"):
+        validate_closed_result(conflicting_manifest_job, result, archive_profile=profile)
+    with pytest.raises(ValueError, match="timeline"):
+        validate_closed_result(
+            job,
+            replace(result, timeline={"actions": 1, "observations": 2, "durations": 1}),
+            archive_profile=profile,
+        )
+
+
+def test_archive_profile_rejects_provenance_conflict_after_repairing_file_inventory(
+    tmp_path: Path, monkeypatch
+):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "success")
+    original = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json")
+    record = original.to_episode_record()
+    record["provenance"]["scene_seed"] += 1
+    target = tmp_path / "conflicting-provenance"
+    EpisodeArchiveWriter(profile).write_episode(
+        record,
+        raw_arrays=original.raw_arrays,
+        debug_metadata=dict(original.debug_metadata),
+        output_dir=target,
+    )
+    hashes = {
+        str(path.relative_to(target)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in target.rglob("*") if path.is_file()
+    }
+
+    with pytest.raises(ValueError, match="archive provenance mismatch for scene_seed"):
+        validate_closed_result(
+            job,
+            replace(result, result_dir=str(target), file_sha256=hashes),
+            archive_profile=profile,
+        )
+
+
+def test_archive_profile_rejects_inconsistent_partial_modality_boundaries(
+    tmp_path: Path, monkeypatch
+):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "success")
+    original = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json")
+    record = original.to_episode_record()
+    raw_arrays = dict(original.raw_arrays)
+    raw_arrays["front_rgb_frame_boundaries"] = np.asarray([0], dtype=np.int64)
+    target = tmp_path / "mismatched-modality-index"
+    EpisodeArchiveWriter(profile).write_episode(
+        record,
+        raw_arrays=raw_arrays,
+        debug_metadata=dict(original.debug_metadata),
+        output_dir=target,
+    )
+    hashes = {
+        str(path.relative_to(target)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in target.rglob("*") if path.is_file()
+    }
+
+    with pytest.raises(ValueError, match="front_rgb_frame_boundaries"):
+        validate_closed_result(
+            job,
+            replace(result, result_dir=str(target), file_sha256=hashes),
+            archive_profile=profile,
+        )
+
+
+def test_archive_profile_accepts_valid_partial_modality_boundaries(
+    tmp_path: Path, monkeypatch
+):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "success")
+    original = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json")
+    record = original.to_episode_record()
+    raw_arrays = dict(original.raw_arrays)
+    raw_arrays["front_rgb_frames"] = np.zeros((1, 2, 2, 3), dtype=np.uint8)
+    raw_arrays["front_rgb_frame_boundaries"] = np.asarray([0], dtype=np.int64)
+    target = tmp_path / "valid-partial-modality-index"
+    EpisodeArchiveWriter(profile).write_episode(
+        record,
+        raw_arrays=raw_arrays,
+        debug_metadata=dict(original.debug_metadata),
+        output_dir=target,
+    )
+    hashes = {
+        str(path.relative_to(target)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in target.rglob("*") if path.is_file()
+    }
+
+    validated = validate_closed_result(
+        job,
+        replace(result, result_dir=str(target), file_sha256=hashes),
+        archive_profile=profile,
+    )
+
+    assert validated.episode_entry is not None
 
 
 def test_hash_mismatch_is_rejected_without_mutating_files(tmp_path: Path):

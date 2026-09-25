@@ -1,7 +1,10 @@
 import pytest
 
 from icgs.data.collection.generation.capacity_probe import CapacityProbeConfig
-from icgs.data.collection.generation.distributed_contracts import GenerationRuntimeConfig
+from icgs.data.collection.generation.distributed_contracts import (
+    ArchiveProfileConfig,
+    GenerationRuntimeConfig,
+)
 from scripts import generation_capacity_probe
 
 
@@ -120,6 +123,7 @@ def test_stage_runtime_disables_publication_and_rewrites_identity(tmp_path):
             "publication_enabled": False,
             "validation_mode": True,
         },
+        "archive_profile": ArchiveProfileConfig().as_dict(),
     }
     base = GenerationRuntimeConfig.from_dict(payload)
     probe = CapacityProbeConfig.from_dict(_payload())
@@ -130,6 +134,7 @@ def test_stage_runtime_disables_publication_and_rewrites_identity(tmp_path):
     assert runtime.run.publication_enabled is False
     assert runtime.machine.worker_timeout_s == 180
     assert len(runtime.machine.worker_ids) == 16
+    assert runtime.archive_profile == base.archive_profile
 
 
 def test_wait_for_ready_results_finishes_before_idle_workers_exit(monkeypatch):

@@ -1,17 +1,25 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 
+import numpy as np
 import pytest
 
-from icgs.data.collection.generation.distributed_contracts import GenerationJob, RunConfig, WorkerResult
+from icgs.data.collection.generation.distributed_contracts import (
+    ArchiveProfileConfig,
+    GenerationJob,
+    RunConfig,
+    WorkerResult,
+)
 from icgs.data.collection.generation.distributed_publication import (
     HuggingFaceBatchPublisher,
     PublicationConfig,
     PublicationReceipt,
     reconcile_publication,
 )
+from icgs.data.collection.generation.episode_archive import EpisodeArchiveWriter
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
 
 
@@ -99,6 +107,75 @@ def _queue(tmp_path: Path):
     queue.publish_ready("000", result)
     queue.mark_ingested(result)
     return queue, job
+
+
+def _archive_queue(tmp_path: Path):
+    from icgs.data.collection.generation.episode_record import assemble_episode
+
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    queue = FilesystemJobQueue(tmp_path / "archive-queue")
+    job = _job()
+    queue.enqueue(job)
+    assert queue.claim("000") == job
+    pose0 = np.eye(4, dtype=np.float64)
+    pose1 = np.eye(4, dtype=np.float64)
+    pose1[0, 3] = 0.1
+    record = assemble_episode(
+        plan=job.plan,
+        binding={
+            "program_id": job.program_id,
+            "split": "train",
+            "asset_family_id": "family-1",
+            "source_lineage_id": "lineage-1",
+        },
+        observations=[
+            {
+                "points": np.asarray([[0.1, 0.0, 0.8]], dtype=np.float32),
+                "point_valid": np.asarray([True]), "T_w_e": pose0, "grip": 0,
+            },
+            {
+                "points": np.asarray([[0.2, 0.0, 0.8]], dtype=np.float32),
+                "point_valid": np.asarray([True]), "T_w_e": pose1, "grip": 1,
+            },
+        ],
+        transitions=[{
+            "command": {"T_w_e": pose1, "grip": 1, "duration_s": 0.05},
+            "achieved_duration_s": 0.05,
+            "physics_substeps": 1,
+            "before_boundary": 0,
+            "after_boundary": 1,
+        }],
+        outcome="success",
+    )
+    result_dir = tmp_path / "archive-result"
+    EpisodeArchiveWriter(profile).write_episode(
+        record,
+        raw_arrays={},
+        debug_metadata={
+            "source_run_id": job.run_id,
+            "code_revision": job.code_revision,
+            "preprocessing_identity": "publication_fixture_v1",
+            "job": job.as_dict(),
+        },
+        output_dir=result_dir,
+    )
+    hashes = {
+        str(path.relative_to(result_dir)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in result_dir.rglob("*") if path.is_file()
+    }
+    result = WorkerResult(
+        job_id=job.job_id,
+        attempt_id=job.attempt_id,
+        episode_id=job.episode_id,
+        program_id=job.program_id,
+        outcome="success",
+        result_dir=str(result_dir),
+        file_sha256=hashes,
+        timeline={"actions": 1, "observations": 2, "durations": 1},
+    )
+    queue.publish_ready("000", result)
+    queue.mark_ingested(result)
+    return queue, job, result, profile
 
 
 def test_publish_due_only_after_300_seconds_or_force(tmp_path: Path):
@@ -225,6 +302,39 @@ def test_operations_use_meaningful_episode_path(tmp_path: Path):
     assert not any(f"results/{job.job_id}/" in path for path in paths)
     assert any(path.endswith("/resume_receipt.json") for path in paths)
     assert any("/views/" in path for path in paths)
+
+
+def test_archive_operations_revalidate_complete_inventory_before_publication(tmp_path: Path):
+    queue, job, result, profile = _archive_queue(tmp_path)
+    publisher = HuggingFaceBatchPublisher(
+        _run(), FakeApi(), "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+    )
+    manifest = publisher._manifest_from_states(("ingested",))
+    assert "result_dir" not in manifest["episodes"][0]
+
+    operations = publisher._operations((job.job_id,), manifest)
+    result_paths = {
+        operation.path_in_repo
+        for operation in operations
+        if f"episodes/{job.program_id}/{job.episode_id}/" in operation.path_in_repo
+    }
+    assert result_paths == {
+        f"{_run().hf_subfolder}/episodes/{job.program_id}/{job.episode_id}/{relative}"
+        for relative in result.file_sha256
+    }
+
+    chunk = next(Path(result.result_dir).glob("data/chunk-*.npz"))
+    chunk.write_bytes(chunk.read_bytes() + b"tampered")
+    result_path = queue.root / "ingested" / job.job_id / "result.json"
+    stored_result = json.loads(result_path.read_text(encoding="utf-8"))
+    stored_result["file_sha256"][str(chunk.relative_to(result.result_dir))] = hashlib.sha256(
+        chunk.read_bytes()
+    ).hexdigest()
+    result_path.write_text(json.dumps(stored_result), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="checksum mismatch"):
+        publisher._operations((job.job_id,), manifest)
 
 
 def test_publication_limits_large_lfs_commit_concurrency(tmp_path: Path):

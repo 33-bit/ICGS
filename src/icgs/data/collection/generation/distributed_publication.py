@@ -11,7 +11,13 @@ from typing import Any, Mapping
 
 from huggingface_hub import CommitOperationAdd
 
-from icgs.data.collection.generation.distributed_contracts import RunConfig
+from icgs.data.collection.generation.distributed_contracts import (
+    ArchiveProfileConfig,
+    GenerationJob,
+    RunConfig,
+    WorkerResult,
+)
+from icgs.data.collection.generation.distributed_validation import validate_closed_result
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
 
 
@@ -197,10 +203,14 @@ class HuggingFaceBatchPublisher:
         remote_manifest: Mapping[str, Any] | None = None,
         remote_verify: Any | None = None,
         publication_config: PublicationConfig | None = None,
+        archive_profile: ArchiveProfileConfig | None = None,
     ) -> None:
         if not isinstance(token, str) or not token.strip():
             raise ValueError("Hugging Face token is required")
         self.run = run
+        if archive_profile is not None and not isinstance(archive_profile, ArchiveProfileConfig):
+            raise TypeError("archive_profile must be an ArchiveProfileConfig or None")
+        self.archive_profile = archive_profile
         self.api = api
         self._token = token
         self.queue = queue
@@ -397,6 +407,20 @@ class HuggingFaceBatchPublisher:
                     continue
                 result = json.loads((path / "result.json").read_text(encoding="utf-8"))
                 result_root = Path(result["result_dir"])
+                if self.archive_profile is not None:
+                    job = GenerationJob.from_dict(
+                        json.loads((path / "job.json").read_text(encoding="utf-8"))
+                    )
+                    validated = validate_closed_result(
+                        job,
+                        WorkerResult.from_dict(result),
+                        archive_profile=self.archive_profile,
+                    )
+                    if validated.episode_entry is not None:
+                        episodes.append(validated.episode_entry)
+                    elif validated.attempt_entry is not None:
+                        failures.append(validated.attempt_entry)
+                    continue
                 for filename, target in (("episode.json", episodes), ("attempt.json", failures)):
                     candidate = result_root / filename
                     if candidate.is_file():
@@ -425,6 +449,37 @@ class HuggingFaceBatchPublisher:
             directory = self.queue.root / "ingested" / job_id
             result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
             result_root = Path(result["result_dir"])
+            if self.archive_profile is not None:
+                job = GenerationJob.from_dict(
+                    json.loads((directory / "job.json").read_text(encoding="utf-8"))
+                )
+                validated = validate_closed_result(
+                    job,
+                    WorkerResult.from_dict(result),
+                    archive_profile=self.archive_profile,
+                )
+                if validated.episode_entry is not None:
+                    collection, identity_key, expected_entry = (
+                        "episodes", "episode_id", validated.episode_entry
+                    )
+                else:
+                    collection, identity_key, expected_entry = (
+                        "failure_attempts", "attempt_id", validated.attempt_entry
+                    )
+                if expected_entry is None:
+                    raise ValueError("validated archive result did not produce a manifest row")
+                rows = manifest.get(collection, ())
+                if not isinstance(rows, (list, tuple)):
+                    raise ValueError(f"dataset manifest {collection} must be a list")
+                matching_rows = [
+                    row for row in rows
+                    if isinstance(row, Mapping)
+                    and row.get(identity_key) == expected_entry[identity_key]
+                ]
+                if len(matching_rows) != 1 or dict(matching_rows[0]) != expected_entry:
+                    raise ValueError(
+                        f"dataset manifest archive row disagrees with validated result: {expected_entry[identity_key]}"
+                    )
             program_id = str(result["program_id"])
             if result.get("episode_id"):
                 record_prefix = f"episodes/{program_id}/{result['episode_id']}"

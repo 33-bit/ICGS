@@ -83,7 +83,11 @@ def _stage_runtime(base: GenerationRuntimeConfig, probe: CapacityProbeConfig, st
         worker_timeout_s=stage.worker_timeout_s,
         worker_ids=(),
     )
-    return GenerationRuntimeConfig(machine=machine, run=run)
+    return GenerationRuntimeConfig(
+        machine=machine,
+        run=run,
+        archive_profile=base.archive_profile,
+    )
 
 
 def _free_memory_bytes() -> int | None:
@@ -196,7 +200,11 @@ def run_stage(
         try:
             from icgs.data.collection.generation.distributed_contracts import GenerationJob
             job = GenerationJob.from_dict(json.loads(job_path.read_text(encoding="utf-8")))
-            validated = validate_closed_result(job, result)
+            validated = (
+                validate_closed_result(job, result, archive_profile=runtime.archive_profile)
+                if runtime.archive_profile is not None
+                else validate_closed_result(job, result)
+            )
             outcomes[validated.outcome] += 1
             artifact_bytes += sum(path.stat().st_size for path in Path(result.result_dir).rglob("*") if path.is_file())
         except Exception as error:

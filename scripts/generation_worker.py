@@ -138,6 +138,17 @@ def _write_archive_worker_attempt(
         "source_run_id": job.run_id,
         "code_revision": job.code_revision,
         "preprocessing_identity": "generation_worker_failure_v1",
+        "job_identity": {
+            "job_id": job.job_id,
+            "run_id": job.run_id,
+            "attempt_id": job.attempt_id,
+            "episode_id": job.episode_id,
+            "program_id": job.program_id,
+            "code_revision": job.code_revision,
+            "manifest_sha256": job.manifest_sha256,
+            "retry_generation": job.retry_generation,
+            "plan": job.plan.as_dict(),
+        },
         "exit_code": exit_code,
         "timeout": timeout,
         "stdout": (stdout or "")[-8192:],
@@ -303,6 +314,18 @@ def run_worker(
                 "ICGS_GENERATION_CODE_REVISION": job.code_revision,
                 "PYTHONUNBUFFERED": "1",
             })
+            if config.archive_profile is not None:
+                env["ICGS_GENERATION_JOB_IDENTITY"] = json.dumps({
+                    "job_id": job.job_id,
+                    "run_id": job.run_id,
+                    "attempt_id": job.attempt_id,
+                    "episode_id": job.episode_id,
+                    "program_id": job.program_id,
+                    "code_revision": job.code_revision,
+                    "manifest_sha256": job.manifest_sha256,
+                    "retry_generation": job.retry_generation,
+                    "plan": job.plan.as_dict(),
+                }, sort_keys=True, separators=(",", ":"))
             command = [
                 config.machine.python_executable,
                 "-B",

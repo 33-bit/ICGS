@@ -14,6 +14,7 @@ from icgs.data.collection.generation.distributed_contracts import (
     ArchiveProfileConfig,
     GenerationJob,
     GenerationRuntimeConfig,
+    WorkerResult,
 )
 from icgs.data.collection.generation.batch import AttemptPlan
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
@@ -22,6 +23,7 @@ from icgs.data.collection.generation.episode_archive import (
     EpisodeArchiveWriter,
     validate_archive_manifest,
 )
+from icgs.data.collection.generation.distributed_validation import validate_closed_result
 from scripts import generation_worker
 
 
@@ -274,9 +276,21 @@ def test_archive_profile_worker_propagates_identity_and_writes_canonical_failure
     assert calls[0]["env"]["ICGS_GENERATION_RUN_ID"] == job.run_id
     assert calls[0]["env"]["ICGS_GENERATION_CODE_REVISION"] == job.code_revision
     assert calls[0]["env"]["ICGS_GENERATION_ARCHIVE_PROFILE"]
+    archive_job_identity = json.loads(calls[0]["env"]["ICGS_GENERATION_JOB_IDENTITY"])
+    assert archive_job_identity["manifest_sha256"] == job.manifest_sha256
+    assert archive_job_identity["plan"] == job.plan.as_dict()
     result = json.loads((queue.root / "ready" / job.job_id / "result.json").read_text())
     assert Path(result["result_dir"], "attempt.manifest.json").is_file()
     assert not Path(result["result_dir"], "attempt.json").exists()
+    attempt_archive = EpisodeArchiveReader(Path(result["result_dir"]) / "attempt.manifest.json")
+    assert attempt_archive.debug_metadata["job_identity"]["job_id"] == job.job_id
+    validated = validate_closed_result(
+        job,
+        WorkerResult.from_dict(result),
+        archive_profile=config.archive_profile,
+    )
+    assert validated.attempt_entry is not None
+    assert validated.attempt_entry["outcome"] == "simulator_crash"
 
 
 @pytest.mark.parametrize("outcome", ["simulator_crash", "invalid_observation"])
