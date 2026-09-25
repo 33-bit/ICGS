@@ -23,6 +23,7 @@ from icgs.data.collection.generation.distributed_contracts import (
     ValidationReceipt,
     WorkerResult,
 )
+from icgs.data.collection.generation.diversity import train_subset_for_sample
 from icgs.data.collection.generation.episode_archive import (
     EpisodeArchiveReader,
     validate_archive_manifest,
@@ -382,6 +383,15 @@ def _archive_plan_from_debug(debug: Mapping[str, Any]) -> Mapping[str, Any] | No
     return None
 
 
+def _planned_archive_subset(job: GenerationJob) -> str | None:
+    if job.plan.split != "train":
+        return None
+    return (
+        job.plan.randomization.get("train_subset")
+        or train_subset_for_sample(job.plan.randomization)
+    )
+
+
 def _validate_optional_modality_declarations(reader: EpisodeArchiveReader) -> None:
     payload = reader.manifest.payload
     raw_arrays = payload["raw_arrays"]
@@ -517,14 +527,10 @@ def _validate_archive_identity(
             "episode_kind": job.plan.episode_kind,
             "split": "dev" if job.plan.split == "development" else job.plan.split,
         }
-        if job.plan.split == "train":
-            planned_subset = (
-                job.plan.randomization.get("train_subset")
-                or job.plan.randomization.get("subset")
-            )
-            if planned_subset is not None:
-                expected_provenance["subset"] = planned_subset
-                expected_provenance["train_subset"] = planned_subset
+        planned_subset = _planned_archive_subset(job)
+        if planned_subset is not None:
+            expected_provenance["subset"] = planned_subset
+            expected_provenance["train_subset"] = planned_subset
         for key, value in expected_provenance.items():
             if provenance.get(key) != value:
                 raise ValueError(f"archive provenance mismatch for {key}")
@@ -656,10 +662,7 @@ def validate_closed_result(
             "outcome": result.outcome,
             "episode_kind": job.plan.episode_kind,
             "split": "dev" if job.plan.split == "development" else job.plan.split,
-            "subset": (
-                job.plan.randomization.get("train_subset")
-                or job.plan.randomization.get("subset")
-            ) if job.plan.split == "train" else None,
+            "subset": _planned_archive_subset(job),
             "scene_signature": job.plan.randomization.get("scene_signature"),
             "scene_seed": job.plan.scene_seed,
             "episode_index": job.plan.episode_index,

@@ -437,6 +437,36 @@ def test_archive_profile_binds_asset_and_subset_provenance_to_plan(
         )
 
 
+def test_archive_profile_binds_derived_subset_when_plan_omits_subset_fields(
+    tmp_path: Path, monkeypatch
+):
+    job, result, profile = _archive_closed(tmp_path, monkeypatch, "success")
+    assert "train_subset" not in job.plan.randomization
+    assert "subset" not in job.plan.randomization
+    original = EpisodeArchiveReader(Path(result.result_dir) / "episode.manifest.json")
+    record = original.to_episode_record()
+    correct_subset = record["provenance"]["subset"]
+    assert record["provenance"]["train_subset"] == correct_subset
+    wrong_subset = "train_val" if correct_subset == "train_core" else "train_core"
+    record["provenance"]["subset"] = wrong_subset
+    record["provenance"]["train_subset"] = wrong_subset
+    target = tmp_path / "conflicting-derived-subset"
+    EpisodeArchiveWriter(profile).write_episode(
+        record,
+        raw_arrays=original.raw_arrays,
+        debug_metadata=dict(original.debug_metadata),
+        output_dir=target,
+    )
+    hashes = _archive_file_hashes(target)
+
+    with pytest.raises(ValueError, match="archive provenance mismatch for subset"):
+        validate_closed_result(
+            job,
+            replace(result, result_dir=str(target), file_sha256=hashes),
+            archive_profile=profile,
+        )
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
