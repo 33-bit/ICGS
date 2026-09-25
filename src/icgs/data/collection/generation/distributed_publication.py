@@ -439,6 +439,14 @@ class HuggingFaceBatchPublisher:
         _atomic_write_bytes(path, _canonical_json_bytes(receipt.as_dict()))
         return path
 
+    def _clear_stale_verification_receipt_snapshot(self) -> None:
+        path = self._verification_receipt_path
+        if path.is_symlink():
+            raise ValueError("publication receipt verification snapshot may not be a symlink")
+        if path.exists() and not path.is_file():
+            raise ValueError("publication receipt verification snapshot must be a regular file")
+        path.unlink(missing_ok=True)
+
     def _read_publication_receipt(self) -> PublicationReceipt | None:
         try:
             return PublicationReceipt.from_dict(
@@ -786,6 +794,7 @@ class HuggingFaceBatchPublisher:
                 # A COMPLETE receipt belongs to an earlier batch. Keep its
                 # immutable identity for reconciliation only when no newer
                 # ingested jobs are waiting; otherwise plan a fresh batch.
+                self._clear_stale_verification_receipt_snapshot()
                 local_receipt = None
         if local_receipt is not None:
             reconciled = reconcile_publication(local_receipt, remote)
@@ -1148,6 +1157,8 @@ class HuggingFaceBatchPublisher:
             next_retry_s=None,
         )
         self._write_publication_receipt(complete)
+        if self.archive_profile is not None:
+            self.remote_manifest = self._read_completed_manifest_snapshot(complete)
         self.last_success_s = now_s
         self.receipts.append(complete)
         self._clear_retry_state()

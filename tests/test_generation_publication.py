@@ -61,6 +61,20 @@ class DataCommitThenTimeoutApi(FakeApi):
         raise RuntimeError("RequestTimeout while committing publication receipt")
 
 
+class ArchiveCapturingApi(FakeApi):
+    def __init__(self):
+        super().__init__()
+        self.committed_files = []
+
+    def create_commit(self, **kwargs):
+        committed_files = {}
+        for operation in kwargs["operations"]:
+            content = Path(operation.path_or_fileobj).read_bytes()
+            committed_files[operation.path_in_repo] = content
+        self.committed_files.append(committed_files)
+        return super().create_commit(**kwargs)
+
+
 def _run() -> RunConfig:
     return RunConfig(
         run_id="run-1", run_root="/content/run",
@@ -186,6 +200,99 @@ def _archive_queue(
     queue.publish_ready("000", result)
     queue.mark_ingested(result)
     return queue, job, result, profile
+
+
+def _enqueue_second_archive_job(
+    queue: FilesystemJobQueue,
+    first_job: GenerationJob,
+    profile: ArchiveProfileConfig,
+    tmp_path: Path,
+) -> GenerationJob:
+    from dataclasses import replace
+    from icgs.data.collection.generation.episode_record import assemble_episode
+
+    second_plan = replace(
+        first_job.plan,
+        episode_index=2,
+        episode_id="episode-t01-00002",
+        randomization={
+            **first_job.plan.randomization,
+            "scene_signature": "sig-2",
+            "asset_instance_id": "asset-2",
+        },
+    )
+    second_job = GenerationJob.create(
+        job_id="job-run-1-episode-t01-00002",
+        run_id=first_job.run_id,
+        attempt_id="att-episode-t01-00002",
+        episode_id=second_plan.episode_id,
+        program_id=first_job.program_id,
+        plan=second_plan,
+        code_revision=first_job.code_revision,
+        manifest_sha256=first_job.manifest_sha256,
+        output_root=first_job.output_root,
+    )
+    pose0 = np.eye(4, dtype=np.float64)
+    pose1 = np.eye(4, dtype=np.float64)
+    pose1[0, 3] = 0.1
+    record = assemble_episode(
+        plan=second_plan,
+        binding={
+            "program_id": second_job.program_id,
+            "split": "train",
+            "asset_family_id": "family-1",
+            "source_lineage_id": "lineage-1",
+        },
+        observations=[
+            {
+                "points": np.asarray([[0.1, 0.0, 0.8]], dtype=np.float32),
+                "point_valid": np.asarray([True]), "T_w_e": pose0, "grip": 0,
+            },
+            {
+                "points": np.asarray([[0.2, 0.0, 0.8]], dtype=np.float32),
+                "point_valid": np.asarray([True]), "T_w_e": pose1, "grip": 1,
+            },
+        ],
+        transitions=[{
+            "command": {"T_w_e": pose1, "grip": 1, "duration_s": 0.05},
+            "achieved_duration_s": 0.05,
+            "physics_substeps": 1,
+            "before_boundary": 0,
+            "after_boundary": 1,
+        }],
+        outcome="success",
+    )
+    result_dir = tmp_path / "archive-result-second"
+    EpisodeArchiveWriter(profile).write_episode(
+        record,
+        raw_arrays={},
+        debug_metadata={
+            "source_run_id": second_job.run_id,
+            "code_revision": second_job.code_revision,
+            "preprocessing_identity": "publication_fixture_v1",
+            "job": second_job.as_dict(),
+        },
+        output_dir=result_dir,
+    )
+    hashes = {
+        str(path.relative_to(result_dir)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in result_dir.rglob("*") if path.is_file()
+    }
+    result = WorkerResult(
+        job_id=second_job.job_id,
+        attempt_id=second_job.attempt_id,
+        episode_id=second_job.episode_id,
+        program_id=second_job.program_id,
+        outcome="success",
+        result_dir=str(result_dir),
+        file_sha256=hashes,
+        timeline={"actions": 1, "observations": 2, "durations": 1},
+    )
+    queue.enqueue(second_job)
+    assert queue.claim("001") == second_job
+    queue.publish_ready("001", result)
+    queue.mark_ingested(result)
+    return second_job
 
 
 def test_publish_due_only_after_300_seconds_or_force(tmp_path: Path):
@@ -881,9 +988,6 @@ def test_archive_verification_failure_keeps_payload_and_retries_same_revision(
 
 
 def test_archive_retry_advances_remote_manifest_before_next_batch(tmp_path: Path):
-    from dataclasses import replace
-    from icgs.data.collection.generation.episode_record import assemble_episode
-
     queue, first_job, _first_result, profile = _archive_queue(
         tmp_path, retention="receipt_only",
     )
@@ -928,87 +1032,7 @@ def test_archive_retry_advances_remote_manifest_before_next_batch(tmp_path: Path
     assert publisher.publish_due(now_s=301.0, force=False).status == "COMPLETE"
     assert queue.counts().published == 1
 
-    second_plan = replace(
-        first_job.plan,
-        episode_index=2,
-        episode_id="episode-t01-00002",
-        randomization={
-            **first_job.plan.randomization,
-            "scene_signature": "sig-2",
-            "asset_instance_id": "asset-2",
-        },
-    )
-    second_job = GenerationJob.create(
-        job_id="job-run-1-episode-t01-00002",
-        run_id=first_job.run_id,
-        attempt_id="att-episode-t01-00002",
-        episode_id=second_plan.episode_id,
-        program_id=first_job.program_id,
-        plan=second_plan,
-        code_revision=first_job.code_revision,
-        manifest_sha256=first_job.manifest_sha256,
-        output_root=first_job.output_root,
-    )
-    pose0 = np.eye(4, dtype=np.float64)
-    pose1 = np.eye(4, dtype=np.float64)
-    pose1[0, 3] = 0.1
-    record = assemble_episode(
-        plan=second_plan,
-        binding={
-            "program_id": second_job.program_id,
-            "split": "train",
-            "asset_family_id": "family-1",
-            "source_lineage_id": "lineage-1",
-        },
-        observations=[
-            {
-                "points": np.asarray([[0.1, 0.0, 0.8]], dtype=np.float32),
-                "point_valid": np.asarray([True]), "T_w_e": pose0, "grip": 0,
-            },
-            {
-                "points": np.asarray([[0.2, 0.0, 0.8]], dtype=np.float32),
-                "point_valid": np.asarray([True]), "T_w_e": pose1, "grip": 1,
-            },
-        ],
-        transitions=[{
-            "command": {"T_w_e": pose1, "grip": 1, "duration_s": 0.05},
-            "achieved_duration_s": 0.05,
-            "physics_substeps": 1,
-            "before_boundary": 0,
-            "after_boundary": 1,
-        }],
-        outcome="success",
-    )
-    result_dir = tmp_path / "archive-result-second"
-    EpisodeArchiveWriter(profile).write_episode(
-        record,
-        raw_arrays={},
-        debug_metadata={
-            "source_run_id": second_job.run_id,
-            "code_revision": second_job.code_revision,
-            "preprocessing_identity": "publication_fixture_v1",
-            "job": second_job.as_dict(),
-        },
-        output_dir=result_dir,
-    )
-    hashes = {
-        str(path.relative_to(result_dir)): hashlib.sha256(path.read_bytes()).hexdigest()
-        for path in result_dir.rglob("*") if path.is_file()
-    }
-    second_result = WorkerResult(
-        job_id=second_job.job_id,
-        attempt_id=second_job.attempt_id,
-        episode_id=second_job.episode_id,
-        program_id=second_job.program_id,
-        outcome="success",
-        result_dir=str(result_dir),
-        file_sha256=hashes,
-        timeline={"actions": 1, "observations": 2, "durations": 1},
-    )
-    queue.enqueue(second_job)
-    assert queue.claim("001") == second_job
-    queue.publish_ready("001", second_result)
-    queue.mark_ingested(second_result)
+    second_job = _enqueue_second_archive_job(queue, first_job, profile, tmp_path)
 
     assert publisher.publish_due(now_s=302.0, force=True).status == "COMPLETE"
 
@@ -1025,6 +1049,118 @@ def test_archive_retry_advances_remote_manifest_before_next_batch(tmp_path: Path
     assert verification_calls[0][0] == (first_job.job_id,)
     assert verification_calls[1][0] == (first_job.job_id,)
     assert queue.counts().published == 2
+
+
+def test_archive_new_batch_clears_stale_verification_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+):
+    queue, first_job, _first_result, profile = _archive_queue(
+        tmp_path, retention="receipt_only",
+    )
+    api = ArchiveCapturingApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+        remote_verify=lambda *_args: None,
+        publication_config=PublicationConfig(
+            batch_size=1,
+            retry_attempts=1,
+            retry_cooldown_s=0.0,
+            rate_limit_cooldown_s=0.0,
+        ),
+    )
+    original_unlink = Path.unlink
+    interrupted = False
+
+    def interrupt_snapshot_unlink(path, *args, **kwargs):
+        nonlocal interrupted
+        if path == queue.root / "publication_receipt_to_verify.json" and not interrupted:
+            interrupted = True
+            raise OSError("simulated crash after COMPLETE")
+        return original_unlink(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(Path, "unlink", interrupt_snapshot_unlink)
+        with pytest.raises(OSError, match="simulated crash after COMPLETE"):
+            publisher.publish_due(now_s=300.0, force=True)
+
+    stale_snapshot = queue.root / "publication_receipt_to_verify.json"
+    assert stale_snapshot.is_file()
+    assert json.loads((queue.root / "publication_receipt.json").read_text())["status"] == "COMPLETE"
+
+    # Model the remote manifest already containing the completed first batch;
+    # the regression is the stale local receipt snapshot blocking the disjoint
+    # second batch from replacing it.
+    publisher.remote_manifest = json.loads(
+        (queue.root / "publication_manifest.json").read_text(encoding="utf-8")
+    )
+    second_job = _enqueue_second_archive_job(queue, first_job, profile, tmp_path)
+
+    completed = publisher.publish_due(now_s=301.0, force=True)
+
+    assert completed is not None and completed.status == "COMPLETE"
+    assert not stale_snapshot.exists()
+    manifest_path = f"{_run().hf_subfolder}/dataset_manifest.json"
+    second_manifest = json.loads(
+        next(files[manifest_path] for files in reversed(api.committed_files) if manifest_path in files)
+    )
+    assert {row["episode_id"] for row in second_manifest["episodes"]} == {
+        first_job.episode_id,
+        second_job.episode_id,
+    }
+
+
+def test_archive_verified_completion_retry_advances_manifest_before_next_batch(
+    tmp_path: Path,
+    monkeypatch,
+):
+    queue, first_job, _first_result, profile = _archive_queue(
+        tmp_path, retention="receipt_only",
+    )
+    api = ArchiveCapturingApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+        remote_verify=lambda *_args: None,
+        publication_config=PublicationConfig(
+            batch_size=1,
+            retry_attempts=1,
+            retry_cooldown_s=0.0,
+            rate_limit_cooldown_s=0.0,
+        ),
+    )
+    original_mark_published = queue.mark_published
+    failed = True
+
+    def fail_mark_published(job_id, **kwargs):
+        nonlocal failed
+        if failed:
+            failed = False
+            raise OSError("simulated prune interruption")
+        return original_mark_published(job_id, **kwargs)
+
+    monkeypatch.setattr(queue, "mark_published", fail_mark_published)
+    with pytest.raises(OSError, match="simulated prune interruption"):
+        publisher.publish_due(now_s=300.0, force=True)
+    monkeypatch.setattr(queue, "mark_published", original_mark_published)
+
+    retried = publisher.publish_due(now_s=301.0, force=True)
+    assert retried is not None and retried.status == "COMPLETE"
+    assert publisher.remote_manifest["episodes"][0]["episode_id"] == first_job.episode_id
+
+    second_job = _enqueue_second_archive_job(queue, first_job, profile, tmp_path)
+    completed = publisher.publish_due(now_s=302.0, force=True)
+
+    assert completed is not None and completed.status == "COMPLETE"
+    manifest_path = f"{_run().hf_subfolder}/dataset_manifest.json"
+    second_manifest = json.loads(
+        next(files[manifest_path] for files in reversed(api.committed_files) if manifest_path in files)
+    )
+    assert {row["episode_id"] for row in second_manifest["episodes"]} == {
+        first_job.episode_id,
+        second_job.episode_id,
+    }
 
 
 def test_archive_receipt_retry_reuses_committed_data_revision_without_reupload(
