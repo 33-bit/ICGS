@@ -100,7 +100,8 @@ fails closed. The fetched revision and SHA256 are written to
 resume requires a lowercase 40- or 64-character HF commit OID. Before restoring
 planner state, the coordinator checks both remote receipts against the manifest,
 downloads and hashes every declared archive file at that revision through owned
-temporary scratch, and runs the canonical archive validator. Attempt plans must
+temporary scratch, runs the canonical archive validator, and requires each archive
+manifest's full profile to equal the dataset/runtime profile. Attempt plans must
 also match the program catalog's split, allowed kind, and approved asset family.
 Legacy resume behavior is unchanged.
 

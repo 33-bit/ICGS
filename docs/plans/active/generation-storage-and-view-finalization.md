@@ -204,11 +204,13 @@ The implementation must keep these ownership boundaries:
 
 Local evidence (macOS, Python 3.14.4, fixture-only): `PYTHONPATH=src python3 -B -m
 pytest -q tests/test_generation_control.py tests/test_generation_planner.py
-tests/test_generation_publication.py tests/test_generation_queue.py` PASS 167/167;
+tests/test_generation_publication.py tests/test_generation_queue.py` PASS 170/170;
 `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation*.py
-tests/test_capacity_probe.py` PASS 416/416; `python3 -B scripts/validate_fast.py`
+tests/test_capacity_probe.py` PASS 419/419; `python3 -B scripts/validate_fast.py`
 PASS (22 harness tests); `git diff --check` PASS. No live HF, simulator, or full
 generation run was selected.
+The three rehashed profile-mismatch fixtures were RED before the production
+guard (3 failures: resume returned without raising), then GREEN after it (3/3).
 
 ## Phase 3 — Lazy HF archive reader and training views
 
@@ -375,7 +377,9 @@ planner state after payload pruning. Task 2.3 now requires a pinned lowercase HF
 revision, checks both remote control receipts against the manifest and latest batch,
 downloads and hashes every row file through owned bounded scratch, invokes the
 canonical archive validator, and checks AttemptPlan against catalog split/kind/asset
-rules before planner construction. Local fake HF tests cover allowed recovery and
+rules before planner construction. The full per-archive profile must also equal
+the dataset/runtime profile, including chunk limits, retention, and view status.
+Local fake HF tests cover allowed recovery and
 targeted malformed cases; live HF acceptance and production run authorization
 remain later gates.
 

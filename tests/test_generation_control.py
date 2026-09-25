@@ -991,6 +991,32 @@ def test_archive_resume_rejects_self_consistent_malformed_archive(
     assert any(word in str(failure.value.__cause__) for word in ("chunk", "array"))
 
 
+@pytest.mark.parametrize("field,value", [
+    ("local_artifact_retention", "keep"),
+    ("view_status", "final"),
+    ("max_chunk_bytes", 134217728),
+])
+def test_archive_resume_rejects_rehashed_archive_profile_mismatch(
+    tmp_path: Path, monkeypatch, field: str, value: object,
+):
+    run_json, token, manifest, prefix_root, _ = _complete_archive_remote(tmp_path, monkeypatch)
+    archive_path = prefix_root / manifest["episodes"][0]["archive_ref"] / "episode.manifest.json"
+    archive = json.loads(archive_path.read_text(encoding="utf-8"))
+    archive["archive_profile"][field] = value
+    if field == "max_chunk_bytes":
+        archive["local_write_limits"]["max_chunk_bytes"] = value
+    archive_path.write_text(json.dumps(archive), encoding="utf-8")
+    _refresh_archive_remote_hashes(manifest, prefix_root)
+    bootstrap_path = Path(json.loads(run_json.read_text())["run"]["run_root"]) / "control" / "resume_bootstrap.json"
+    bootstrap = json.loads(bootstrap_path.read_text())
+    bootstrap["remote_manifest_sha256"] = hashlib.sha256((prefix_root / "dataset_manifest.json").read_bytes()).hexdigest()
+    bootstrap_path.write_text(json.dumps(bootstrap), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(run_json, api_factory=lambda: object(), token_path=token)
+    assert "archive_profile" in str(failure.value.__cause__)
+
+
 @pytest.mark.parametrize("field,value,message", [
     ("split", "test", "split disagrees with catalog"),
     ("episode_kind", "unknown", "episode_kind is invalid"),

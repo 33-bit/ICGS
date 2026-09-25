@@ -421,6 +421,8 @@ def _verify_archive_resume_files(
             manifest_name = "episode.manifest.json" if row["episode_id"] is not None else "attempt.manifest.json"
             validate_archive_manifest(archive / manifest_name)
             payload = json.loads((archive / manifest_name).read_text(encoding="utf-8"))
+            if payload.get("archive_profile") != profile.as_dict():
+                raise ValueError("remote archive manifest archive_profile disagrees with dataset profile")
             for field in ("archive_format_id", "episode_schema_version", "dataset_identity", "archive_kind", "episode_id", "attempt_id", "program_id", "outcome", "source_run_id", "code_revision", "preprocessing_identity", "split", "subset"):
                 expected = (
                     ("episode" if row["episode_id"] is not None else "attempt")
