@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import time
@@ -20,6 +21,7 @@ from icgs.data.collection.generation.distributed_contracts import (
 )
 from icgs.data.collection.generation.distributed_validation import validate_closed_result
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+from icgs.data.datasets.generation_view_index import build_provisional_episode_pointers
 
 
 PUBLICATION_STATES = frozenset({
@@ -565,6 +567,7 @@ class HuggingFaceBatchPublisher:
                 "archive_format_id": self.archive_profile.archive_format_id,
                 "episode_schema_version": self.archive_profile.episode_schema_version,
                 "view_status": "PROVISIONAL",
+                "hf_prefix": self.run.hf_subfolder,
             }
             for key, expected in archive_identity.items():
                 previous = remote.get(key)
@@ -572,6 +575,24 @@ class HuggingFaceBatchPublisher:
                     raise ValueError(f"remote archive identity conflict: {key}")
             merged.update(archive_identity)
         return merged
+
+    def _freeze_source_snapshot(
+        self,
+        manifest: Mapping[str, Any],
+        *,
+        created_at_s: float,
+    ) -> dict[str, Any]:
+        if self.archive_profile is None:
+            return dict(manifest)
+        if not math.isfinite(created_at_s) or created_at_s <= 0:
+            raise ValueError("archive publication source snapshot timestamp must be positive and finite")
+        supplied_prefix = manifest.get("hf_prefix")
+        if supplied_prefix is not None and supplied_prefix != self.run.hf_subfolder:
+            raise ValueError("archive dataset manifest hf_prefix conflicts with publication prefix")
+        frozen = dict(manifest)
+        frozen["hf_prefix"] = self.run.hf_subfolder
+        frozen["source_snapshot_created_at_s"] = created_at_s
+        return frozen
 
     def _manifest_from_states(self, states: tuple[str, ...]) -> dict[str, Any]:
         episodes: list[dict[str, Any]] = []
@@ -621,6 +642,24 @@ class HuggingFaceBatchPublisher:
         receipt: PublicationReceipt | None = None,
     ) -> list[Any]:
         self._validate_prefix()
+        if self.archive_profile is not None:
+            if receipt is None:
+                snapshot_created_at_s = time.time()
+                receipt = PublicationReceipt(
+                    run_id=self.run.run_id,
+                    job_ids=job_ids,
+                    prefix=self.run.hf_subfolder,
+                    created_at_s=snapshot_created_at_s,
+                    updated_at_s=snapshot_created_at_s,
+                )
+            else:
+                snapshot_created_at_s = receipt.created_at_s or receipt.updated_at_s or time.time()
+                receipt = replace(
+                    receipt,
+                    created_at_s=snapshot_created_at_s,
+                    updated_at_s=max(receipt.updated_at_s, snapshot_created_at_s),
+                )
+            manifest = self._freeze_source_snapshot(manifest, created_at_s=snapshot_created_at_s)
         operations: list[Any] = []
         for job_id in job_ids:
             directory = self.queue.root / "ingested" / job_id
@@ -659,6 +698,30 @@ class HuggingFaceBatchPublisher:
                     raise ValueError(
                         f"dataset manifest archive row disagrees with validated result: {expected_entry[identity_key]}"
                     )
+                if validated.episode_entry is not None:
+                    episode_manifest_path = result_root / "episode.manifest.json"
+                    episode_manifest = json.loads(episode_manifest_path.read_text(encoding="utf-8"))
+                    pointers = build_provisional_episode_pointers(episode_manifest)
+                    expected_manifest_sha256 = validated.episode_entry["file_sha256"][
+                        "episode.manifest.json"
+                    ]
+                    program_id = str(validated.episode_entry["program_id"])
+                    episode_id = str(validated.episode_entry["episode_id"])
+                    for pointer in pointers:
+                        if pointer["archive_manifest_sha256"] != expected_manifest_sha256:
+                            raise ValueError("provisional episode pointer archive manifest digest mismatch")
+                        pointer_path = (
+                            self.queue.root / "views" / "provisional" / "episodes"
+                            / program_id / episode_id / f"{pointer['view']}.json"
+                        )
+                        _atomic_write_bytes(pointer_path, _canonical_json_bytes(pointer))
+                        operations.append(CommitOperationAdd(
+                            path_in_repo=(
+                                f"{self.run.hf_subfolder}/views/provisional/episodes/"
+                                f"{program_id}/{episode_id}/{pointer['view']}.json"
+                            ),
+                            path_or_fileobj=str(pointer_path),
+                        ))
             program_id = str(result["program_id"])
             if result.get("episode_id"):
                 record_prefix = f"episodes/{program_id}/{result['episode_id']}"
@@ -872,6 +935,17 @@ class HuggingFaceBatchPublisher:
             created_at_s=now,
             updated_at_s=now,
         )
+        if self.archive_profile is not None:
+            snapshot_created_at_s = prepared.created_at_s or prepared.updated_at_s or now
+            prepared = replace(
+                prepared,
+                created_at_s=snapshot_created_at_s,
+                updated_at_s=max(prepared.updated_at_s, snapshot_created_at_s),
+            )
+            plan["manifest"] = self._freeze_source_snapshot(
+                plan["manifest"],
+                created_at_s=snapshot_created_at_s,
+            )
         prepared = self._bind_archive_receipt(prepared, plan["manifest"])
         operations = self._operations(job_ids, plan["manifest"], prepared)
         prepared = replace(prepared, path_count=len(operations), updated_at_s=now)

@@ -510,7 +510,9 @@ def test_archive_operations_revalidate_complete_episode_inventory_before_publica
     result_paths = {
         operation.path_in_repo
         for operation in operations
-        if f"episodes/{job.program_id}/{job.episode_id}/" in operation.path_in_repo
+        if operation.path_in_repo.startswith(
+            f"{_run().hf_subfolder}/episodes/{job.program_id}/{job.episode_id}/"
+        )
     }
     assert result_paths == {
         f"{_run().hf_subfolder}/episodes/{job.program_id}/{job.episode_id}/{relative}"
@@ -1442,6 +1444,7 @@ def test_archive_metadata_and_prefix_views_remain_provisional_and_revision_bound
     assert dataset_manifest["archive_format_id"] == profile.archive_format_id
     assert dataset_manifest["episode_schema_version"] == profile.episode_schema_version
     assert dataset_manifest["view_status"] == "PROVISIONAL"
+    assert dataset_manifest["source_snapshot_created_at_s"] == receipt.created_at_s
     assert "result_dir" not in dataset_manifest["episodes"][0]
     assert dataset_manifest["episodes"][0]["archive_ref"] == (
         f"episodes/{job.program_id}/{job.episode_id}"
@@ -1469,6 +1472,16 @@ def test_archive_metadata_and_prefix_views_remain_provisional_and_revision_bound
         ]
         assert "episode_ids" not in view_payload
         assert "schema_version" not in view_payload
+
+        episode_pointer_path = (
+            queue.root / "views" / "provisional" / "episodes"
+            / job.program_id / job.episode_id / f"{view}.json"
+        )
+        episode_pointer = json.loads(episode_pointer_path.read_text(encoding="utf-8"))
+        assert episode_pointer["status"] == "PROVISIONAL"
+        assert episode_pointer["role"] == "all"
+        assert episode_pointer["mix"] is False
+        assert episode_pointer["archive_ref"] == f"episodes/{job.program_id}/{job.episode_id}"
 
 
 def test_validation_publisher_rejects_receipt_only_archive_retention(tmp_path: Path):
