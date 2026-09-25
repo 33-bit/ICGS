@@ -28,12 +28,13 @@ def _episode(
     *,
     outcome: str = "success",
     split: str = "train",
-    subset: str = "train_core",
+    subset: str | None = None,
     kind: str = "nominal",
     n_actions: int = 5,
     event_t: int | None = 2,
     intervention: dict | None = None,
 ) -> dict:
+    subset = ("train_core" if split == "train" else None) if subset is None else subset
     observations = []
     for boundary in range(n_actions + 1):
         pose = np.eye(4, dtype=np.float64)
@@ -176,6 +177,36 @@ def test_index_rejects_archive_manifest_digest_mismatch(tmp_path: Path):
         ArchiveDatasetIndex.from_manifest(_dataset_manifest(tmp_path, [entry]))
 
 
+def test_archive_index_rejects_unknown_role(tmp_path: Path):
+    _require_archive_dataset_api()
+    entry = _write_archive(tmp_path, _episode("ep-role"))
+    index = ArchiveDatasetIndex.from_manifest(_dataset_manifest(tmp_path, [entry]))
+    with pytest.raises(ValueError, match="role"):
+        list(index.sample_refs("D_geom", "trian"))
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [("split", "mystery"), ("subset", "unassigned"), ("subset", None)],
+)
+def test_index_rejects_unknown_split_or_subset(tmp_path: Path, field: str, invalid: str):
+    _require_archive_dataset_api()
+    entry = _write_archive(tmp_path, _episode(f"ep-invalid-{field}"))
+    archive_path = tmp_path / entry["archive_manifest"]
+    archive_payload = json.loads(archive_path.read_text(encoding="utf-8"))
+    archive_payload[field] = invalid
+    archive_payload["record_metadata"]["provenance"][field] = invalid
+    archive_path.write_text(
+        json.dumps(archive_payload, sort_keys=True, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    entry[field] = invalid
+    entry["file_sha256"]["episode.manifest.json"] = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match=field):
+        ArchiveDatasetIndex.from_manifest(_dataset_manifest(tmp_path, [entry]))
+
+
 def test_index_and_refs_are_metadata_only_and_include_valid_failures(tmp_path: Path, monkeypatch):
     _require_archive_dataset_api()
     success = _episode("ep-success")
@@ -201,6 +232,11 @@ def test_index_and_refs_are_metadata_only_and_include_valid_failures(tmp_path: P
     index = ArchiveDatasetIndex.from_manifest(manifest_path)
     refs = list(index.sample_refs("D_geom", "train"))
 
+    expected_manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    assert index.dataset_manifest_sha256 == expected_manifest_sha256
+    assert refs[0].dataset_manifest_sha256 == expected_manifest_sha256
+    with pytest.raises(ValueError, match="role"):
+        list(index.sample_refs("D_geom", "trian"))
     assert len(refs) == 12
     assert {ref.episode_id for ref in refs} == {"ep-success", "ep-valid-failure"}
     assert all(isinstance(ref, SampleRef) for ref in refs)
@@ -211,6 +247,7 @@ def test_index_and_refs_are_metadata_only_and_include_valid_failures(tmp_path: P
     assert refs[0]["mask"] is None
     assert len(list(index.sample_refs("D_geom", "validation"))) == 6
     assert len(list(index.sample_refs("D_geom", "evaluation"))) == 6
+    assert len(list(index.sample_refs("D_geom", "all"))) == 24
 
 
 def test_temporal_and_dynamics_refs_keep_causal_cross_chunk_windows(tmp_path: Path):
@@ -295,6 +332,44 @@ def test_geom_optional_modalities_are_refs_only_when_archived(tmp_path: Path):
     assert ref["depth"] is None
     assert index.read_optional_modality(ref, "rgb").shape == (2, 2, 3)
     np.testing.assert_array_equal(index.read_optional_modality(ref, "rgb"), rgb[5])
+
+
+def test_producer_named_sparse_modalities_resolve_only_captured_boundaries(tmp_path: Path, monkeypatch):
+    _require_archive_dataset_api()
+    record = _episode("ep-sparse-modalities")
+    rgb = np.arange(3 * 2 * 2 * 3, dtype=np.uint8).reshape(3, 2, 2, 3)
+    rgb_boundaries = np.asarray([0, 2, 5], dtype=np.int64)
+    depth = np.arange(2 * 2 * 2, dtype=np.float32).reshape(2, 2, 2)
+    depth_boundaries = np.asarray([1, 4], dtype=np.int64)
+    mask = np.arange(2 * 2 * 2, dtype=np.uint8).reshape(2, 2, 2)
+    mask_boundaries = np.asarray([2, 5], dtype=np.int64)
+    entry = _write_archive(tmp_path, record, raw_arrays={
+        "front_rgb_frames": rgb,
+        "front_rgb_frame_boundaries": rgb_boundaries,
+        "wrist_depth_frames": depth,
+        "wrist_depth_frame_boundaries": depth_boundaries,
+        "wrist_mask_frames": mask,
+        "wrist_mask_frame_boundaries": mask_boundaries,
+    })
+    manifest_path = _dataset_manifest(tmp_path, [entry])
+
+    def forbidden_chunk_read(*_args, **_kwargs):
+        raise AssertionError("optional-modality indexing must not load image or point chunks")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(EpisodeArchiveReader, "_load_chunk", forbidden_chunk_read)
+        index = ArchiveDatasetIndex.from_manifest(manifest_path)
+        refs = list(index.sample_refs("D_geom", "train"))
+
+    assert refs[2]["rgb"] == ("ep-sparse-modalities", "rgb", 2)
+    assert refs[2]["depth"] == ("ep-sparse-modalities", "depth", 2)
+    assert refs[2]["mask"] == ("ep-sparse-modalities", "mask", 2)
+    np.testing.assert_array_equal(index.read_optional_modality(refs[2], "rgb"), rgb[1])
+    np.testing.assert_array_equal(index.read_optional_modality(refs[5], "rgb"), rgb[2])
+    assert index.read_optional_modality(refs[3], "rgb") is None
+    np.testing.assert_array_equal(index.read_optional_modality(refs[1], "depth"), depth[0])
+    assert index.read_optional_modality(refs[2], "depth") is None
+    np.testing.assert_array_equal(index.read_optional_modality(refs[5], "mask"), mask[1])
 
 
 def test_task_view_keeps_label_references_and_resolves_rows_across_chunks(tmp_path: Path):

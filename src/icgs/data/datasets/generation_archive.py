@@ -51,7 +51,16 @@ _PREPROCESSING_SPEC = {
 _PREPROCESSING_SHA256 = hashlib.sha256(
     (json.dumps(_PREPROCESSING_SPEC, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
 ).hexdigest()
-_OPTIONAL_MODALITIES = ("rgb", "depth", "mask")
+_VALID_ROLES = frozenset({"train", "validation", "evaluation", "all"})
+_VALID_SPLITS = frozenset({"train", "dev", "development", "test"})
+_TRAIN_SUBSETS = frozenset({GENERATION_PROTOCOL.train_on, GENERATION_PROTOCOL.validation})
+_OPTIONAL_MODALITY_ARRAYS = {
+    "rgb": ("front_rgb_frames", "front_rgb_frame_boundaries"),
+    "depth": ("wrist_depth_frames", "wrist_depth_frame_boundaries"),
+    "mask": ("wrist_mask_frames", "wrist_mask_frame_boundaries"),
+    "front_mask": ("front_mask_frames", "front_mask_frame_boundaries"),
+}
+_OPTIONAL_MODALITIES = ("rgb", "depth", "mask", "front_mask")
 
 
 def _sha256_bytes(payload: bytes) -> str:
@@ -204,9 +213,9 @@ class ArchiveDatasetIndex:
         if manifest_path.is_symlink() or not manifest_path.is_file():
             raise ValueError("dataset manifest must be a regular, non-symlink file")
         manifest_path = manifest_path.resolve()
-        manifest_bytes = manifest_path.read_bytes()
+        dataset_manifest_bytes = manifest_path.read_bytes()
         try:
-            dataset = json.loads(manifest_bytes)
+            dataset = json.loads(dataset_manifest_bytes)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ValueError("dataset manifest is not valid JSON") from error
         if not isinstance(dataset, Mapping) or dataset.get("manifest_version") != 3:
@@ -242,13 +251,13 @@ class ArchiveDatasetIndex:
                 relative_manifest,
                 field=f"episode {episode_id} archive_manifest",
             )
-            manifest_bytes = episode_manifest_path.read_bytes()
-            manifest_digest = _sha256_bytes(manifest_bytes)
+            episode_manifest_bytes = episode_manifest_path.read_bytes()
+            manifest_digest = _sha256_bytes(episode_manifest_bytes)
             file_sha256 = row.get("file_sha256")
             if not isinstance(file_sha256, Mapping) or file_sha256.get(PurePosixPath(relative_manifest).name) != manifest_digest:
                 raise ValueError(f"episode {episode_id} archive manifest SHA256 mismatch")
             try:
-                archive_payload = json.loads(manifest_bytes)
+                archive_payload = json.loads(episode_manifest_bytes)
                 archive_manifest = ArchiveManifest.from_dict(archive_payload)
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
                 raise ValueError(f"episode {episode_id} archive manifest is not valid JSON") from error
@@ -269,10 +278,34 @@ class ArchiveDatasetIndex:
             provenance = record_metadata.get("provenance")
             if not isinstance(provenance, Mapping):
                 raise ValueError(f"episode {episode_id} archive provenance is missing")
+            split = provenance.get("split")
+            if not isinstance(split, str) or split not in _VALID_SPLITS:
+                raise ValueError(f"episode {episode_id} has an unsupported split: {split!r}")
+            subset = provenance.get("subset")
+            train_subset = provenance.get("train_subset")
+            if subset is not None and not isinstance(subset, str):
+                raise ValueError(f"episode {episode_id} subset must be a string or null")
+            if train_subset is not None and not isinstance(train_subset, str):
+                raise ValueError(f"episode {episode_id} train_subset must be a string or null")
+            if subset is not None and train_subset is not None and subset != train_subset:
+                raise ValueError(f"episode {episode_id} subset and train_subset disagree")
+            subset = subset if subset is not None else train_subset
+            if split == "train":
+                if subset not in _TRAIN_SUBSETS:
+                    raise ValueError(f"episode {episode_id} has an unsupported train subset: {subset!r}")
+            elif subset is not None:
+                raise ValueError(f"episode {episode_id} must not assign a training subset to split {split!r}")
+            if payload.get("split") != split:
+                raise ValueError(f"episode {episode_id} archive split differs from its provenance")
+            archive_subset = payload.get("subset")
+            if archive_subset is None:
+                archive_subset = train_subset
+            if archive_subset != subset:
+                raise ValueError(f"episode {episode_id} archive subset differs from its provenance")
             for field in ("program_id", "split", "subset", "episode_kind"):
                 recorded = provenance.get(field)
-                if field == "subset" and recorded is None:
-                    recorded = provenance.get("train_subset")
+                if field == "subset":
+                    recorded = subset
                 if row.get(field) != recorded:
                     raise ValueError(f"episode {episode_id} {field} differs from its archive manifest")
             if row.get("preprocessing_identity") != payload.get("preprocessing_identity"):
@@ -306,7 +339,7 @@ class ArchiveDatasetIndex:
             raise ValueError("dataset manifest source revision must be a string when present")
         return cls(
             dataset_root=dataset_root,
-            dataset_manifest_sha256=_sha256_bytes(manifest_bytes),
+            dataset_manifest_sha256=_sha256_bytes(dataset_manifest_bytes),
             dataset_identity=ARCHIVE_DATASET_IDENTITY,
             source_revision=source_revision,
             entries=tuple(entries),
@@ -332,8 +365,8 @@ class ArchiveDatasetIndex:
         """Yield metadata-only references for one view and split role."""
         if view not in GENERATION_PROTOCOL.views:
             raise ValueError(f"unsupported phase-1 view: {view}")
-        if not isinstance(role, str) or not role:
-            raise ValueError("role must be a nonblank string")
+        if not isinstance(role, str) or role not in _VALID_ROLES:
+            raise ValueError(f"unsupported generation view role: {role!r}")
         for entry in self._entries:
             if not _include_record(entry.provenance, role):
                 continue
@@ -345,10 +378,14 @@ class ArchiveDatasetIndex:
         kind = provenance.get("episode_kind", "nominal")
         subset = provenance.get("subset") or provenance.get("train_subset")
         if view == "D_geom":
+            available = {
+                name: self._has_observation_array(entry, name)
+                for name in _OPTIONAL_MODALITIES
+            }
             for boundary in range(entry.observations):
                 optional = {
                     name: (entry.episode_id, name, boundary)
-                    if self._has_observation_array(entry, name)
+                    if available[name]
                     else None
                     for name in _OPTIONAL_MODALITIES
                 }
@@ -357,6 +394,7 @@ class ArchiveDatasetIndex:
                     "depth": optional["depth"],
                     "pointcloud": (entry.episode_id, "pointcloud", boundary),
                     "mask": optional["mask"],
+                    "front_mask": optional["front_mask"],
                     "calibration_id": provenance.get("calibration_id"),
                     "episode_kind": kind,
                     "subset": subset,
@@ -470,19 +508,17 @@ class ArchiveDatasetIndex:
         )
 
     @staticmethod
-    def _resolved_array_name(entry: _EpisodeEntry, name: str) -> str | None:
+    def _raw_array_name(entry: _EpisodeEntry, name: str) -> str | None:
         raw_arrays = entry.payload["raw_arrays"]
         if name not in raw_arrays:
             return None
         value = raw_arrays[name]
         if not isinstance(value, Mapping) or not isinstance(value.get("$archive_array"), str):
-            raise ValueError(f"optional modality {name} must reference an archived numeric array")
+            raise ValueError(f"archive array {name} must reference an archived numeric array")
         return str(value["$archive_array"])
 
-    def _has_observation_array(self, entry: _EpisodeEntry, name: str) -> bool:
-        array_name = self._resolved_array_name(entry, name)
-        if array_name is None:
-            return False
+    @staticmethod
+    def _array_spec(entry: _EpisodeEntry, array_name: str) -> Mapping[str, Any] | None:
         resolved = array_name
         aliases = {item["name"]: item["target"] for item in entry.payload["array_aliases"]}
         visited: set[str] = set()
@@ -491,9 +527,44 @@ class ArchiveDatasetIndex:
                 raise ValueError(f"cyclic archive array alias: {array_name}")
             visited.add(resolved)
             resolved = aliases[resolved]
-        spec = entry.payload["array_specs"].get(resolved)
-        if spec is None or not spec.get("shape") or spec["shape"][0] != entry.observations:
-            raise ValueError(f"optional modality {name} is not aligned to observation boundaries")
+        return entry.payload["array_specs"].get(resolved)
+
+    def _optional_array_names(self, entry: _EpisodeEntry, modality: str) -> tuple[str | None, str | None]:
+        if modality not in _OPTIONAL_MODALITIES:
+            raise ValueError(f"unsupported optional observation modality: {modality}")
+        raw_arrays = entry.payload["raw_arrays"]
+        if modality in raw_arrays:
+            boundary_key = f"{modality}_boundaries"
+            values_name = self._raw_array_name(entry, modality)
+            boundaries_name = self._raw_array_name(entry, boundary_key) if boundary_key in raw_arrays else None
+            return values_name, boundaries_name
+        source_names = _OPTIONAL_MODALITY_ARRAYS[modality]
+        values_key, boundary_key = source_names
+        values_name = self._raw_array_name(entry, values_key)
+        boundaries_name = self._raw_array_name(entry, boundary_key)
+        if values_name is None and boundaries_name is not None:
+            raise ValueError(f"optional modality boundary array {boundary_key} lacks {values_key}")
+        return values_name, boundaries_name
+
+    def _has_observation_array(self, entry: _EpisodeEntry, modality: str) -> bool:
+        values_name, boundaries_name = self._optional_array_names(entry, modality)
+        if values_name is None:
+            return False
+        values_spec = self._array_spec(entry, values_name)
+        if values_spec is None or not values_spec.get("shape"):
+            raise ValueError(f"optional modality {modality} must have a frame axis")
+        if boundaries_name is None:
+            if values_spec["shape"][0] != entry.observations:
+                raise ValueError(f"optional modality {modality} is not aligned to observation boundaries")
+            return True
+        boundaries_spec = self._array_spec(entry, boundaries_name)
+        if (
+            boundaries_spec is None
+            or len(boundaries_spec.get("shape", ())) != 1
+            or boundaries_spec["shape"][0] != values_spec["shape"][0]
+            or np.dtype(boundaries_spec["dtype"]).kind not in "iu"
+        ):
+            raise ValueError(f"optional modality boundary array for {modality} is malformed")
         return True
 
     def reader_for(self, sample_ref: SampleRef | str) -> EpisodeArchiveReader:
@@ -548,12 +619,28 @@ class ArchiveDatasetIndex:
         if modality not in _OPTIONAL_MODALITIES:
             raise ValueError(f"unsupported optional observation modality: {modality}")
         entry = self._entry_for_ref(sample_ref)
-        array_name = self._resolved_array_name(entry, modality)
-        if array_name is None:
+        values_name, boundaries_name = self._optional_array_names(entry, modality)
+        if values_name is None:
             return None
         if not self._has_observation_array(entry, modality):
             raise ValueError(f"optional modality {modality} is not aligned to observation boundaries")
-        return self.reader_for(sample_ref).read_array_row(array_name, sample_ref.t)
+        reader = self.reader_for(sample_ref)
+        if boundaries_name is None:
+            return reader.read_array_row(values_name, sample_ref.t)
+        boundaries = reader.read_array(boundaries_name)
+        if (
+            boundaries.dtype.kind not in "iu"
+            or boundaries.ndim != 1
+            or len(boundaries) == 0
+            or np.any(boundaries < 0)
+            or np.any(boundaries >= entry.observations)
+            or np.any(boundaries[1:] <= boundaries[:-1])
+        ):
+            raise ValueError(f"optional modality boundaries for {modality} are malformed")
+        position = int(np.searchsorted(boundaries, sample_ref.t))
+        if position >= len(boundaries) or int(boundaries[position]) != sample_ref.t:
+            return None
+        return reader.read_array_row(values_name, position)
 
     def preprocess_observation(self, sample_ref: SampleRef, *, boundary: int | None = None) -> np.ndarray:
         """Derive the frozen 2,048-point local-frame representation lazily."""
@@ -587,12 +674,14 @@ def _include_record(provenance: Mapping[str, Any], role: str) -> bool:
     split = provenance.get("split")
     subset = provenance.get("subset") or provenance.get("train_subset")
     if role == "train":
-        return split not in {"dev", "test", "development"} and subset != GENERATION_PROTOCOL.validation
+        return split == "train" and subset == GENERATION_PROTOCOL.train_on
     if role == "validation":
         return split == "train" and subset == GENERATION_PROTOCOL.validation
     if role == "evaluation":
-        return split in {"dev", "test", "development"}
-    return True
+        return split in {"dev", "development", "test"} and subset is None
+    if role == "all":
+        return True
+    raise ValueError(f"unsupported generation view role: {role!r}")
 
 
 def build_generation_view(
