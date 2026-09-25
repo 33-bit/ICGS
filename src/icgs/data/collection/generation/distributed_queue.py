@@ -603,6 +603,7 @@ class FilesystemJobQueue:
         job_id: str,
         *,
         archive_profile: ArchiveProfileConfig | None = None,
+        allow_remaining_payload: bool = False,
     ) -> dict[str, Any]:
         for name in ("job.json", "result.json", "publication_receipt.json"):
             path = directory / name
@@ -659,7 +660,12 @@ class FilesystemJobQueue:
         if receipt.get("manifest_row_sha256") != _canonical_json_sha256(row):
             raise ValueError("published receipt-only queue record manifest row SHA256 mismatch")
         validate_archive_manifest_row_identity(job, result, row, profile)
-        self.resolve_result_root(result.result_dir, require_exists=False)
+        if allow_remaining_payload and (
+            Path(result.result_dir).exists() or Path(result.result_dir).is_symlink()
+        ):
+            self._verify_local_result_inventory(result, allow_missing_files=True)
+        else:
+            self.resolve_result_root(result.result_dir, require_exists=False)
         return dict(row)
 
     def _verify_local_result_inventory(

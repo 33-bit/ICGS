@@ -150,7 +150,40 @@ def _manifest_from_closed_queue(
             job = GenerationJob.from_dict(json.loads((directory / "job.json").read_text(encoding="utf-8")))
             result = WorkerResult.from_dict(json.loads((directory / "result.json").read_text(encoding="utf-8")))
             receipt_path = directory / "publication_receipt.json"
-            if state == "published" and archive_profile is not None and receipt_path.exists():
+            receipt_marker = receipt_path.exists() or receipt_path.is_symlink()
+            if (
+                state == "ingested"
+                and archive_profile is not None
+                and receipt_marker
+            ):
+                row = queue._validate_saved_receipt_only_record(
+                    directory,
+                    job.job_id,
+                    archive_profile=archive_profile,
+                    allow_remaining_payload=True,
+                )
+                collection, identity_key, identity = (
+                    ("episodes", "episode_id", result.episode_id)
+                    if result.episode_id is not None
+                    else ("failure_attempts", "attempt_id", result.attempt_id)
+                )
+                if row.get(identity_key) != identity:
+                    raise ValueError("interrupted per-job receipt manifest row identity mismatch")
+                rows = manifest[collection]
+                previous = next((item for item in rows if item.get(identity_key) == identity), None)
+                if previous is not None and previous != row:
+                    raise ValueError(f"immutable published manifest row conflict: {identity}")
+                if previous is None:
+                    rows.append(row)
+                published = queue.mark_published(job.job_id, retention="receipt_only")
+                queue._validate_saved_receipt_only_record(
+                    published,
+                    job.job_id,
+                    archive_profile=archive_profile,
+                )
+                source_run_ids.add(job.run_id)
+                continue
+            if state == "published" and archive_profile is not None and receipt_marker:
                 row = queue._validate_saved_receipt_only_record(
                     directory,
                     job.job_id,

@@ -118,12 +118,13 @@ def _archive_queue(
     *,
     retention: str = "keep",
     outcome: str = "success",
+    job: GenerationJob | None = None,
 ):
     from icgs.data.collection.generation.episode_record import assemble_episode
 
     profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention=retention)
     queue = FilesystemJobQueue(tmp_path / "archive-queue")
-    job = _job()
+    job = _job() if job is None else job
     queue.enqueue(job)
     assert queue.claim("000") == job
     pose0 = np.eye(4, dtype=np.float64)
@@ -642,6 +643,125 @@ def test_published_receipt_only_job_reconstructs_manifest_without_episode_payloa
     assert not Path(_result.result_dir).exists()
 
 
+def test_coordinator_open_recovers_interrupted_receipt_only_prune(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from dataclasses import replace
+    from scripts import generation_coordinator
+    from scripts.generation_launch import persist_run_config
+    from icgs.data.collection.generation.distributed_contracts import GenerationRuntimeConfig
+    import icgs.data.collection.generation.distributed_queue as queue_module
+
+    job = _job()
+    job = replace(
+        job,
+        plan=replace(
+            job.plan,
+            randomization={
+                **job.plan.randomization,
+                "scene_seed": job.plan.scene_seed,
+            },
+        ),
+    )
+    queue, job, result, profile = _archive_queue(
+        tmp_path, retention="receipt_only", job=job,
+    )
+    queue.root.rename(tmp_path / "queue")
+    queue = FilesystemJobQueue(tmp_path / "queue")
+
+    runtime = GenerationRuntimeConfig.from_dict({
+        "machine": {
+            "repo_root": str(tmp_path),
+            "python_executable": "/usr/bin/python3",
+            "simulator_root": str(tmp_path),
+            "rlbench_root": str(tmp_path),
+            "display_base": 41,
+            "display_width": 1366,
+            "display_height": 768,
+            "simulator_slots": 1,
+            "worker_timeout_s": 60,
+        },
+        "run": {
+            "run_id": job.run_id,
+            "run_root": str(tmp_path),
+            "worker_count": 1,
+            "publish_interval_s": 300,
+            "hf_repo": "33bit/icgs",
+            "hf_subfolder": "generation/recovery-test",
+            "publication_enabled": True,
+            "validation_mode": False,
+        },
+        "archive_profile": profile.as_dict(),
+    })
+    approved_manifest = tmp_path / "approved.json"
+    approved_manifest.write_bytes(
+        Path("artifacts/composition/approved_composition_manifest.json").read_bytes()
+    )
+    run_config_path = persist_run_config(
+        runtime, approved_manifest, code_revision=job.code_revision,
+    )
+    token_path = tmp_path / "hf-token"
+    token_path.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_config_path.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token_path)
+    run_config_path.write_text(json.dumps(run_payload), encoding="utf-8")
+
+    run = RunConfig.from_dict(run_payload["run"])
+    publisher = HuggingFaceBatchPublisher(
+        run,
+        FakeApi(),
+        "secret",
+        queue,
+        archive_profile=profile,
+        remote_verify=lambda *_args: None,
+        publication_config=PublicationConfig(
+            batch_size=1,
+            retry_attempts=1,
+            retry_cooldown_s=0.0,
+            rate_limit_cooldown_s=0.0,
+        ),
+    )
+    relative_to_remove = next(iter(result.file_sha256))
+    original_rmtree = queue_module.shutil.rmtree
+
+    def interrupt_prune(path, *args, **kwargs):
+        if Path(path) == Path(result.result_dir):
+            (Path(result.result_dir) / relative_to_remove).unlink()
+            raise OSError("simulated interruption during receipt-only pruning")
+        return original_rmtree(path, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(queue_module.shutil, "rmtree", interrupt_prune)
+        with pytest.raises(OSError, match="interruption during receipt-only pruning"):
+            publisher.publish_due(now_s=300.0, force=True)
+
+    source = queue.root / "ingested" / job.job_id
+    assert source.is_dir()
+    assert (source / "publication_receipt.json").is_file()
+    assert Path(result.result_dir).is_dir()
+    assert not (Path(result.result_dir) / relative_to_remove).exists()
+
+    monkeypatch.setattr(
+        generation_coordinator,
+        "hf_hub_download",
+        lambda **_kwargs: (_ for _ in ()).throw(OSError("remote unavailable")),
+    )
+    control = generation_coordinator.CoordinatorControlPlane.open(
+        run_config_path,
+        api_factory=FakeApi,
+        token_path=token_path,
+    )
+
+    assert control.queue.counts().ingested == 0
+    assert control.queue.counts().published == 1
+    assert not Path(result.result_dir).exists()
+    assert [row["episode_id"] for row in control.manifest["episodes"]] == [job.episode_id]
+    assert [row["episode_id"] for row in control.publisher.remote_manifest["episodes"]] == [
+        job.episode_id
+    ]
+
+
 @pytest.mark.parametrize("field", ["split", "preprocessing_identity", "source_lineage_id"])
 def test_coordinator_rejects_tampered_published_manifest_row_after_pruning(
     tmp_path: Path,
@@ -758,6 +878,153 @@ def test_archive_verification_failure_keeps_payload_and_retries_same_revision(
     assert resume_receipt["dataset_manifest_revision"] == "d" * 40
     assert publisher.publish_due(now_s=302.0, force=True).status == "COMPLETE"
     assert len(api.calls) == 3
+
+
+def test_archive_retry_advances_remote_manifest_before_next_batch(tmp_path: Path):
+    from dataclasses import replace
+    from icgs.data.collection.generation.episode_record import assemble_episode
+
+    queue, first_job, _first_result, profile = _archive_queue(
+        tmp_path, retention="receipt_only",
+    )
+
+    class CapturingApi(FakeApi):
+        def __init__(self):
+            super().__init__()
+            self.committed_files = []
+
+        def create_commit(self, **kwargs):
+            self.committed_files.append({
+                operation.path_in_repo: Path(operation.path_or_fileobj).read_bytes()
+                for operation in kwargs["operations"]
+            })
+            return super().create_commit(**kwargs)
+
+    verification_calls = []
+    fail_once = True
+
+    def verify(job_ids, revision, _token):
+        nonlocal fail_once
+        verification_calls.append((job_ids, revision))
+        if fail_once:
+            fail_once = False
+            raise TimeoutError("temporary remote verification timeout")
+
+    api = CapturingApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+        remote_verify=verify,
+        publication_config=PublicationConfig(
+            batch_size=1,
+            retry_attempts=1,
+            retry_cooldown_s=0.0,
+            rate_limit_cooldown_s=0.0,
+        ),
+    )
+
+    assert publisher.publish_due(now_s=300.0, force=False) is None
+    assert queue.counts().published == 0
+    assert publisher.publish_due(now_s=301.0, force=False).status == "COMPLETE"
+    assert queue.counts().published == 1
+
+    second_plan = replace(
+        first_job.plan,
+        episode_index=2,
+        episode_id="episode-t01-00002",
+        randomization={
+            **first_job.plan.randomization,
+            "scene_signature": "sig-2",
+            "asset_instance_id": "asset-2",
+        },
+    )
+    second_job = GenerationJob.create(
+        job_id="job-run-1-episode-t01-00002",
+        run_id=first_job.run_id,
+        attempt_id="att-episode-t01-00002",
+        episode_id=second_plan.episode_id,
+        program_id=first_job.program_id,
+        plan=second_plan,
+        code_revision=first_job.code_revision,
+        manifest_sha256=first_job.manifest_sha256,
+        output_root=first_job.output_root,
+    )
+    pose0 = np.eye(4, dtype=np.float64)
+    pose1 = np.eye(4, dtype=np.float64)
+    pose1[0, 3] = 0.1
+    record = assemble_episode(
+        plan=second_plan,
+        binding={
+            "program_id": second_job.program_id,
+            "split": "train",
+            "asset_family_id": "family-1",
+            "source_lineage_id": "lineage-1",
+        },
+        observations=[
+            {
+                "points": np.asarray([[0.1, 0.0, 0.8]], dtype=np.float32),
+                "point_valid": np.asarray([True]), "T_w_e": pose0, "grip": 0,
+            },
+            {
+                "points": np.asarray([[0.2, 0.0, 0.8]], dtype=np.float32),
+                "point_valid": np.asarray([True]), "T_w_e": pose1, "grip": 1,
+            },
+        ],
+        transitions=[{
+            "command": {"T_w_e": pose1, "grip": 1, "duration_s": 0.05},
+            "achieved_duration_s": 0.05,
+            "physics_substeps": 1,
+            "before_boundary": 0,
+            "after_boundary": 1,
+        }],
+        outcome="success",
+    )
+    result_dir = tmp_path / "archive-result-second"
+    EpisodeArchiveWriter(profile).write_episode(
+        record,
+        raw_arrays={},
+        debug_metadata={
+            "source_run_id": second_job.run_id,
+            "code_revision": second_job.code_revision,
+            "preprocessing_identity": "publication_fixture_v1",
+            "job": second_job.as_dict(),
+        },
+        output_dir=result_dir,
+    )
+    hashes = {
+        str(path.relative_to(result_dir)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in result_dir.rglob("*") if path.is_file()
+    }
+    second_result = WorkerResult(
+        job_id=second_job.job_id,
+        attempt_id=second_job.attempt_id,
+        episode_id=second_job.episode_id,
+        program_id=second_job.program_id,
+        outcome="success",
+        result_dir=str(result_dir),
+        file_sha256=hashes,
+        timeline={"actions": 1, "observations": 2, "durations": 1},
+    )
+    queue.enqueue(second_job)
+    assert queue.claim("001") == second_job
+    queue.publish_ready("001", second_result)
+    queue.mark_ingested(second_result)
+
+    assert publisher.publish_due(now_s=302.0, force=True).status == "COMPLETE"
+
+    second_manifest_bytes = next(
+        files[f"{_run().hf_subfolder}/dataset_manifest.json"]
+        for files in reversed(api.committed_files)
+        if f"{_run().hf_subfolder}/dataset_manifest.json" in files
+    )
+    committed_manifest = json.loads(second_manifest_bytes)
+    assert {row["episode_id"] for row in committed_manifest["episodes"]} == {
+        first_job.episode_id,
+        second_job.episode_id,
+    }
+    assert verification_calls[0][0] == (first_job.job_id,)
+    assert verification_calls[1][0] == (first_job.job_id,)
+    assert queue.counts().published == 2
 
 
 def test_archive_receipt_retry_reuses_committed_data_revision_without_reupload(

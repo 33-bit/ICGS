@@ -447,6 +447,27 @@ class HuggingFaceBatchPublisher:
         except FileNotFoundError:
             return None
 
+    def _read_completed_manifest_snapshot(
+        self,
+        receipt: PublicationReceipt,
+    ) -> dict[str, Any]:
+        manifest_path = self.queue.root / "publication_manifest.json"
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            raise ValueError("completed publication is missing its manifest snapshot")
+        manifest_bytes = manifest_path.read_bytes()
+        if (
+            receipt.dataset_manifest_sha256 is not None
+            and hashlib.sha256(manifest_bytes).hexdigest() != receipt.dataset_manifest_sha256
+        ):
+            raise ValueError("completed publication manifest snapshot hash mismatch")
+        try:
+            manifest = json.loads(manifest_bytes)
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise ValueError("completed publication manifest snapshot is malformed") from error
+        if not isinstance(manifest, dict):
+            raise ValueError("completed publication manifest snapshot must be an object")
+        return manifest
+
     def _validate_prefix(self) -> None:
         if self.run.validation_mode:
             required = "validation/validation-cpu-20260922/"
@@ -795,7 +816,10 @@ class HuggingFaceBatchPublisher:
                 if now_s < next_retry_s and reconciled.status != "VERIFIED":
                     return None
                 if self.archive_profile is None or local_receipt.data_commit_oid:
-                    return self._commit_receipt(reconciled, now_s)
+                    completed = self._commit_receipt(reconciled, now_s)
+                    if completed is not None and completed.status == "COMPLETE":
+                        self.remote_manifest = self._read_completed_manifest_snapshot(completed)
+                    return completed
                 # A transient failure before Hugging Face returned a data OID
                 # has no immutable revision to verify. Retry the same ingested
                 # batch; once an OID is recorded, subsequent retries use it.
@@ -869,8 +893,8 @@ class HuggingFaceBatchPublisher:
         )
         self._write_publication_receipt(data_committed)
         resolved = self._commit_receipt(data_committed, now_s)
-        if resolved is not None:
-            self.remote_manifest = dict(plan["manifest"])
+        if resolved is not None and resolved.status == "COMPLETE":
+            self.remote_manifest = self._read_completed_manifest_snapshot(resolved)
         return resolved
 
     def _deferred_receipt(
