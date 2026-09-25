@@ -424,48 +424,49 @@ def run_worker(
         except Exception as exc:
             result_dir = _attempt_output_root(job) / job.program_id
             if config.archive_profile is not None:
+                archive_payload = None
                 try:
                     archive_payload = _archive_result_payload(result_dir, config, job=job)
-                    if archive_payload is not None and archive_payload.get("archive_kind") in {"episode", "attempt"}:
-                        outcome = str(archive_payload.get("outcome"))
-                        if archive_payload.get("archive_kind") == "episode" and outcome in {"success", "valid_failure"}:
-                            timeline_payload = archive_payload.get("timeline") or {}
-                            queue.publish_ready(worker_id, WorkerResult(
-                                job_id=job.job_id,
-                                attempt_id=job.attempt_id,
-                                episode_id=job.episode_id,
-                                program_id=job.program_id,
-                                outcome=outcome,
-                                result_dir=str(result_dir),
-                                file_sha256=_file_hashes(result_dir),
-                                timeline={
-                                    "actions": int(timeline_payload.get("transitions", 0)),
-                                    "observations": int(timeline_payload.get("observations", 0)),
-                                    "durations": int(timeline_payload.get("transitions", 0)),
-                                },
-                            ), worker_instance_id=worker_instance_id)
-                            if once:
-                                return 0
-                            continue
-                        if (
-                            archive_payload.get("archive_kind") == "attempt"
-                            and outcome in {"simulator_crash", "invalid_observation"}
-                        ):
-                            queue.publish_ready(worker_id, WorkerResult(
-                                job_id=job.job_id,
-                                attempt_id=job.attempt_id,
-                                episode_id=None,
-                                program_id=job.program_id,
-                                outcome=outcome,
-                                result_dir=str(result_dir),
-                                file_sha256=_file_hashes(result_dir),
-                                timeline=None,
-                            ), worker_instance_id=worker_instance_id)
-                            if once:
-                                return 0
-                            continue
                 except Exception:
                     pass
+                if archive_payload is not None and archive_payload.get("archive_kind") in {"episode", "attempt"}:
+                    outcome = str(archive_payload.get("outcome"))
+                    if archive_payload.get("archive_kind") == "episode" and outcome in {"success", "valid_failure"}:
+                        timeline_payload = archive_payload.get("timeline") or {}
+                        queue.publish_ready(worker_id, WorkerResult(
+                            job_id=job.job_id,
+                            attempt_id=job.attempt_id,
+                            episode_id=job.episode_id,
+                            program_id=job.program_id,
+                            outcome=outcome,
+                            result_dir=str(result_dir),
+                            file_sha256=_file_hashes(result_dir),
+                            timeline={
+                                "actions": int(timeline_payload.get("transitions", 0)),
+                                "observations": int(timeline_payload.get("observations", 0)),
+                                "durations": int(timeline_payload.get("transitions", 0)),
+                            },
+                        ), worker_instance_id=worker_instance_id)
+                        if once:
+                            return 0
+                        continue
+                    if (
+                        archive_payload.get("archive_kind") == "attempt"
+                        and outcome in {"simulator_crash", "invalid_observation"}
+                    ):
+                        queue.publish_ready(worker_id, WorkerResult(
+                            job_id=job.job_id,
+                            attempt_id=job.attempt_id,
+                            episode_id=None,
+                            program_id=job.program_id,
+                            outcome=outcome,
+                            result_dir=str(result_dir),
+                            file_sha256=_file_hashes(result_dir),
+                            timeline=None,
+                        ), worker_instance_id=worker_instance_id)
+                        if once:
+                            return 0
+                        continue
                 if result_dir.exists():
                     shutil.rmtree(result_dir)
                 _write_archive_worker_attempt(

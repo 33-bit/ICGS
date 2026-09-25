@@ -351,6 +351,83 @@ def test_archive_worker_preserves_closed_attempt_when_runner_raises(
     assert archive.debug_metadata["stdout"] == "attempt archive closed before the runner exception"
 
 
+@pytest.mark.parametrize("outcome", ["simulator_crash", "invalid_observation"])
+def test_archive_worker_keeps_closed_attempt_when_publication_fails(
+    tmp_path: Path, monkeypatch, outcome: str
+):
+    base = _runtime_config(tmp_path)
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    payload = base.as_dict()
+    payload["archive_profile"] = profile.as_dict()
+    config = GenerationRuntimeConfig.from_dict(payload)
+    queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1,
+        episode_id="episode-t01-publish-failure", episode_kind="nominal", scene_seed=7,
+        collection_seed=20260920,
+        randomization={"scene_signature": "signature-publish", "asset_instance_id": "asset-publish"},
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id="job-publish-failure", run_id=config.run.run_id,
+        attempt_id=f"att-{plan.episode_id}", episode_id=plan.episode_id, program_id="T01",
+        plan=plan, code_revision="a" * 40, manifest_sha256="b" * 64,
+        output_root=str(Path(config.run.run_root) / "staging"),
+    )
+    queue.enqueue(job)
+    approved_manifest = Path(config.run.run_root) / "approved.json"
+    approved_manifest.write_text(json.dumps({"catalog": [{"program_id": "T01"}]}), encoding="utf-8")
+    measured_actions = np.asarray([[0.25, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 1.0]], dtype=np.float32)
+    measured_points = np.asarray([[0.1, 0.2, 0.3]], dtype=np.float32)
+
+    def runner(command, **kwargs):
+        candidate = Path(kwargs["env"]["ICGS_GENERATION_WRITE_EPISODE"]) / job.program_id
+        EpisodeArchiveWriter(profile).write_attempt(
+            {
+                "attempt_id": job.attempt_id,
+                "episode_id": None,
+                "program_id": job.program_id,
+                "outcome": outcome,
+                "valid_observation_until": 0,
+            },
+            prefix_arrays={
+                "actions": measured_actions,
+                "points": measured_points,
+                "point_offsets": np.asarray([0, 1], dtype=np.int64),
+                "T_w_e": np.eye(4, dtype=np.float64)[None],
+            },
+            debug_metadata={
+                "source_run_id": job.run_id,
+                "code_revision": job.code_revision,
+                "preprocessing_identity": "runner_publish_failure_v1",
+                "traceback": "original closed-attempt traceback",
+            },
+            output_dir=candidate,
+        )
+        raise subprocess.TimeoutExpired(command, 33, output="timed out after close")
+
+    monkeypatch.setattr(
+        queue,
+        "publish_ready",
+        lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("publish unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="publish unavailable"):
+        generation_worker.run_worker(
+            "000", queue, config=config, approved_manifest=str(approved_manifest),
+            once=True, runner=runner,
+        )
+
+    candidate = Path(job.output_root) / "worker-results" / job.job_id / "retry-0" / job.program_id
+    manifest_path = candidate / "attempt.manifest.json"
+    assert manifest_path.is_file()
+    assert validate_archive_manifest(manifest_path)["valid"] is True
+    archive = EpisodeArchiveReader(manifest_path)
+    assert archive.manifest.payload["outcome"] == outcome
+    np.testing.assert_array_equal(archive.raw_arrays["actions"], measured_actions)
+    assert archive.debug_metadata["traceback"] == "original closed-attempt traceback"
+
+
 def test_generation_subprocess_refreshes_heartbeat_until_exit(monkeypatch):
     events = []
 

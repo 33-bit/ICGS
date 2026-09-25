@@ -380,6 +380,34 @@ def _archive_episode_record(materialized: MaterializedAttempt) -> dict[str, Any]
     return record
 
 
+def _archive_raw_gripper_pose_prefix(raw_observations: Sequence[Any]) -> dict[str, np.ndarray]:
+    """Keep captured numeric source poses without making a ragged object array."""
+    captured: list[tuple[int, np.ndarray]] = []
+    for index, observation in enumerate(raw_observations):
+        try:
+            value = getattr(observation, "gripper_pose", None)
+            if value is None:
+                continue
+            array = np.asarray(value)
+        except (TypeError, ValueError):
+            continue
+        if array.dtype.hasobject or array.dtype.kind not in "biufc" or array.ndim == 0:
+            continue
+        captured.append((index, array))
+    if not captured:
+        return {}
+    boundaries = np.asarray([index for index, _value in captured], dtype=np.int64)
+    first = captured[0][1]
+    if all(array.shape == first.shape and array.dtype == first.dtype for _index, array in captured):
+        prefix: dict[str, np.ndarray] = {"gripper_pose": np.stack([array for _index, array in captured])}
+        if len(captured) != len(raw_observations):
+            prefix["gripper_pose_boundaries"] = boundaries
+        return prefix
+    prefix = {"gripper_pose_boundaries": boundaries}
+    prefix.update({f"gripper_pose_{index}": array for index, array in captured})
+    return prefix
+
+
 def _archive_attempt_prefix(materialized: MaterializedAttempt) -> dict[str, Any]:
     auxiliary = materialized.auxiliary
     observations = materialized.online_observations
@@ -388,9 +416,7 @@ def _archive_attempt_prefix(materialized: MaterializedAttempt) -> dict[str, Any]
         "actions": np.asarray(() if raw_actions is None else raw_actions),
     }
     raw_observations = auxiliary.get("raw_observations") or ()
-    gripper_poses = [getattr(item, "gripper_pose", None) for item in raw_observations]
-    if gripper_poses and all(item is not None for item in gripper_poses):
-        prefix["gripper_pose"] = np.asarray(gripper_poses)
+    prefix.update(_archive_raw_gripper_pose_prefix(raw_observations))
     if observations:
         point_values = np.concatenate([np.asarray(item["points"]) for item in observations], axis=0)
         point_offsets = np.zeros(len(observations) + 1, dtype=np.int64)

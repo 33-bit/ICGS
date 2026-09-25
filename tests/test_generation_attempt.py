@@ -317,6 +317,50 @@ def test_archive_profile_retains_crash_prefix_raw_gripper_pose_vectors(tmp_path:
     assert archive.raw_arrays["gripper_pose"].dtype == np.dtype(np.float64)
 
 
+def test_archive_profile_keeps_malformed_gripper_pose_evidence_for_invalid_attempt(
+    tmp_path: Path, monkeypatch
+):
+    _enable_archive_profile(monkeypatch)
+    observations = (
+        SimpleNamespace(
+            wrist_point_cloud=np.asarray([[0.0, 0.0, 0.8]], dtype=np.float32),
+            gripper_pose=np.asarray([0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0], dtype=np.float32),
+            gripper_open=1.0,
+        ),
+        SimpleNamespace(
+            wrist_point_cloud=np.asarray([[0.1, 0.0, 0.8]], dtype=np.float32),
+            gripper_pose=np.asarray([0.1, 0.0, 0.8, 0.0, 0.0, 0.0], dtype=np.float32),
+            gripper_open=1.0,
+        ),
+    )
+    raw = RawAttempt(
+        observations=observations,
+        actions=(np.asarray([0.1, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 1.0], dtype=np.float32),),
+        scene_states=(),
+        collision_events=(),
+        sim_time_s=0.1,
+        predicates_ok=False,
+        terminal_reason="malformed pose",
+    )
+
+    materialized = materialize_raw_attempt(raw, _job(), _binding())
+    assert materialized.outcome == "invalid_observation"
+    result = write_closed_attempt_result(materialized, _job(), tmp_path / "malformed-pose")
+    manifest_path = Path(result.result_dir) / "attempt.manifest.json"
+    archive = EpisodeArchiveReader(manifest_path)
+
+    assert validate_archive_manifest(manifest_path)["valid"] is True
+    np.testing.assert_array_equal(
+        archive.raw_arrays["gripper_pose_0"], observations[0].gripper_pose
+    )
+    np.testing.assert_array_equal(
+        archive.raw_arrays["gripper_pose_1"], observations[1].gripper_pose
+    )
+    np.testing.assert_array_equal(archive.raw_arrays["gripper_pose_boundaries"], [0, 1])
+    assert archive.raw_arrays["gripper_pose_0"].dtype == np.dtype(np.float32)
+    assert archive.raw_arrays["gripper_pose_1"].shape == (6,)
+
+
 def test_episode_worker_archive_keeps_captured_actions_and_inventory(tmp_path: Path, monkeypatch):
     package_names = {
         "pyrep", "pyrep.objects", "rlbench", "rlbench.action_modes",
