@@ -28,6 +28,7 @@ from icgs.data.datasets.generation_archive import ArchiveDatasetIndex, SampleRef
 _ROLE_ORDER = ("train", "validation", "evaluation")
 _VIEW_ORDER = tuple(GENERATION_PROTOCOL.views)
 _MIXTURE_VIEWS = frozenset(GENERATION_PROTOCOL.mixture_views)
+_EXACT_MIXTURE_COUNTS = {"nominal": 7, "perturbed": 3}
 _PINNED_REVISION = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _DEFAULT_ROLE_SPEC_DATA = {
     "train": {"splits": ("train",), "subsets": (GENERATION_PROTOCOL.train_on,)},
@@ -234,21 +235,71 @@ def _canonical_role_refs(
     view: str,
     role: str,
     mixture_seed: int,
-) -> tuple[list[SampleRef], bool, bool]:
+) -> tuple[list[SampleRef], bool, bool, dict[str, int] | None, int | None]:
     refs = list(index.sample_refs(view, role))
     apply_mixture = role == "train" and view in _MIXTURE_VIEWS
     if not apply_mixture:
-        return refs, False, False
-    from icgs.data.collection.generation.sampler import mix_training_transitions
+        return refs, False, False, None, None
 
-    by_key = {(ref.episode_id, ref.t): ref for ref in refs}
-    selected_rows = mix_training_transitions(
-        [ref.as_dict() for ref in refs],
-        view=view,
-        seed=mixture_seed,
+    nominal = [ref for ref in refs if ref.fields.get("episode_kind") != "perturbed"]
+    perturbed = [ref for ref in refs if ref.fields.get("episode_kind") == "perturbed"]
+    units = min(
+        len(nominal) // _EXACT_MIXTURE_COUNTS["nominal"],
+        len(perturbed) // _EXACT_MIXTURE_COUNTS["perturbed"],
     )
-    selected = [by_key[(str(row["episode_id"]), int(row["t"]))] for row in selected_rows]
-    return selected, True, len(selected) != len(refs)
+    if units < 1:
+        raise ValueError(
+            f"final train {view} cannot form a complete 7:3 transition unit: "
+            f"eligible {len(nominal)} nominal and {len(perturbed)} perturbed transitions"
+        )
+    keep_nominal = _EXACT_MIXTURE_COUNTS["nominal"] * units
+    keep_perturbed = _EXACT_MIXTURE_COUNTS["perturbed"] * units
+    selected = (
+        _ranked_sample_refs(nominal, keep_nominal, mixture_seed, "nominal")
+        + _ranked_sample_refs(perturbed, keep_perturbed, mixture_seed, "perturbed")
+    )
+    return (
+        selected,
+        True,
+        len(selected) != len(refs),
+        {"nominal": keep_nominal, "perturbed": keep_perturbed},
+        units,
+    )
+
+
+def _ranked_sample_refs(
+    refs: list[SampleRef],
+    count: int,
+    seed: int,
+    channel: str,
+) -> list[SampleRef]:
+    if count >= len(refs):
+        return refs
+    ranked = []
+    for index, ref in enumerate(refs):
+        payload = (
+            f"{seed}|exact-7-3-training-transitions-v1|{channel}|"
+            f"{ref.episode_id}|{ref.t}|{index}"
+        ).encode("utf-8")
+        ranked.append((int.from_bytes(hashlib.sha256(payload).digest()[:8], "big"), index, ref))
+    ranked.sort()
+    return [item[2] for item in ranked[:count]]
+
+
+def _assert_exact_mixture_available(index: ArchiveDatasetIndex, view: str) -> None:
+    counts = Counter(
+        "perturbed" if ref.fields.get("episode_kind") == "perturbed" else "nominal"
+        for ref in index.sample_refs(view, "train")
+    )
+    units = min(
+        counts["nominal"] // _EXACT_MIXTURE_COUNTS["nominal"],
+        counts["perturbed"] // _EXACT_MIXTURE_COUNTS["perturbed"],
+    )
+    if units < 1:
+        raise ValueError(
+            f"final train {view} cannot form a complete 7:3 transition unit: "
+            f"eligible {counts['nominal']} nominal and {counts['perturbed']} perturbed transitions"
+        )
 
 
 def _write_immutable(path: Path, payload: bytes) -> None:
@@ -378,6 +429,8 @@ def finalize_generation_views(
         raise ValueError("complete dataset manifest total_failure_attempts binding is missing or inconsistent")
 
     index = ArchiveDatasetIndex.from_manifest(manifest_path, sample_seed=mixture_seed)
+    for view in sorted(_MIXTURE_VIEWS):
+        _assert_exact_mixture_available(index, view)
     source_manifest_sha256 = index.dataset_manifest_sha256
     base_output = (
         Path(output_dir)
@@ -390,8 +443,9 @@ def finalize_generation_views(
     counts: dict[str, int] = {}
     manifest_hashes: dict[str, str] = {}
     mixture_identity = {
-        "algorithm": "sha256-rank-70-30-training-transitions-v1",
+        "algorithm": "sha256-rank-exact-7-3-training-transitions-v1",
         "target": list(GENERATION_PROTOCOL.warmup_mixture),
+        "target_ratio": dict(_EXACT_MIXTURE_COUNTS),
         "measured_on": GENERATION_PROTOCOL.mixture_measured_on,
         "views": list(GENERATION_PROTOCOL.mixture_views),
         "seed": mixture_seed,
@@ -399,7 +453,7 @@ def finalize_generation_views(
     for role in _ROLE_ORDER:
         for view in _VIEW_ORDER:
             view_id = f"{role}/{view}"
-            selected, mixture_requested, mixture_changed = _canonical_role_refs(
+            selected, mixture_requested, mixture_changed, achieved_counts, mixture_units = _canonical_role_refs(
                 index,
                 view=view,
                 role=role,
@@ -419,6 +473,9 @@ def finalize_generation_views(
                 "applied": mixture_requested,
                 "selection_changed": mixture_changed,
                 "seed": mixture_seed if mixture_requested else None,
+                "achieved_transition_counts": achieved_counts,
+                "achieved_ratio": dict(_EXACT_MIXTURE_COUNTS) if mixture_requested else None,
+                "complete_7_to_3_units": mixture_units,
             }
             snapshot = {
                 "manifest_version": 1,

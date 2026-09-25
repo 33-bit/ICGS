@@ -12,7 +12,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path, PurePosixPath
-import shutil
 import sys
 import tempfile
 
@@ -42,27 +41,55 @@ def _prefix(value: str, field: str) -> str:
     return value.rstrip("/")
 
 
+def _download_hf_file_bytes(
+    *,
+    repo_id: str,
+    filename: str,
+    revision: str,
+    owned_cache_root: Path,
+) -> bytes:
+    """Download one pinned file into an owned, per-file cache that is removed immediately."""
+    with tempfile.TemporaryDirectory(
+        prefix="icgs-finalize-hf-download-",
+        dir=owned_cache_root,
+    ) as cache_dir:
+        downloaded = Path(hf_hub_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            filename=filename,
+            revision=revision,
+            cache_dir=cache_dir,
+        ))
+        if not downloaded.is_file():
+            raise ValueError(f"HF download did not produce a regular file: {filename}")
+        return downloaded.read_bytes()
+
+
 def _download_pinned_manifest_tree(
     *,
     repo_id: str,
     source_prefix: str,
     source_revision: str,
     root: Path,
+    owned_cache_root: Path,
 ) -> Path:
     manifest_repo_path = f"{source_prefix}/dataset_manifest.json"
-    downloaded_manifest = Path(hf_hub_download(
+    manifest_bytes = _download_hf_file_bytes(
         repo_id=repo_id,
-        repo_type="dataset",
         filename=manifest_repo_path,
         revision=source_revision,
-    ))
+        owned_cache_root=owned_cache_root,
+    )
     source_root = root / source_prefix
     source_root.mkdir(parents=True, exist_ok=True)
     manifest_path = source_root / "dataset_manifest.json"
-    shutil.copyfile(downloaded_manifest, manifest_path)
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_path.write_bytes(manifest_bytes)
+    manifest = json.loads(manifest_bytes)
     if not isinstance(manifest, dict) or not isinstance(manifest.get("episodes"), list):
         raise ValueError("pinned HF dataset manifest is malformed")
+    manifest_prefix = _prefix(manifest.get("hf_prefix"), "dataset manifest hf_prefix")
+    if manifest_prefix != source_prefix:
+        raise ValueError("dataset manifest hf_prefix conflicts with explicit source-prefix")
 
     downloaded_paths: set[str] = set()
     for row in manifest["episodes"]:
@@ -75,15 +102,15 @@ def _download_pinned_manifest_tree(
         if relative_name in downloaded_paths:
             continue
         downloaded_paths.add(relative_name)
-        downloaded_archive = Path(hf_hub_download(
+        archive_bytes = _download_hf_file_bytes(
             repo_id=repo_id,
-            repo_type="dataset",
             filename=f"{source_prefix}/{relative_name}",
             revision=source_revision,
-        ))
+            owned_cache_root=owned_cache_root,
+        )
         destination = source_root.joinpath(*relative.parts)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(downloaded_archive, destination)
+        destination.write_bytes(archive_bytes)
     return manifest_path
 
 
@@ -102,6 +129,7 @@ def _remote_snapshot_matches(
     repo_id: str,
     revision: str,
     file_paths: list[tuple[str, Path]],
+    owned_cache_root: Path,
 ) -> bool:
     exists = [api.file_exists(
         repo_id=repo_id,
@@ -116,13 +144,13 @@ def _remote_snapshot_matches(
     for (remote_path, local_path), present in zip(file_paths, exists):
         if not present:
             return False
-        remote_path_local = Path(hf_hub_download(
+        remote_bytes = _download_hf_file_bytes(
             repo_id=repo_id,
-            repo_type="dataset",
             filename=remote_path,
             revision=revision,
-        ))
-        if remote_path_local.read_bytes() != local_path.read_bytes():
+            owned_cache_root=owned_cache_root,
+        )
+        if remote_bytes != local_path.read_bytes():
             raise ValueError(f"immutable final view conflict at {remote_path}")
     return True
 
@@ -149,11 +177,14 @@ def main(argv: list[str] | None = None) -> int:
     api = HfApi()
     with tempfile.TemporaryDirectory(prefix="icgs-finalize-views-") as temporary:
         scratch = Path(temporary)
+        owned_cache_root = scratch / "hf-download-cache"
+        owned_cache_root.mkdir()
         dataset_manifest_path = _download_pinned_manifest_tree(
             repo_id=args.repo_id,
             source_prefix=source_prefix,
             source_revision=source_revision,
             root=scratch / "source",
+            owned_cache_root=owned_cache_root,
         )
         output_dir = scratch / "final"
         receipt = finalize_generation_views(
@@ -178,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
             repo_id=args.repo_id,
             revision=repo_head,
             file_paths=file_pairs,
+            owned_cache_root=owned_cache_root,
         ):
             print(json.dumps(receipt.as_dict(), sort_keys=True, indent=2))
             return 0
@@ -185,7 +217,7 @@ def main(argv: list[str] | None = None) -> int:
             CommitOperationAdd(path_in_repo=remote_path, path_or_fileobj=str(local_path))
             for remote_path, local_path in file_pairs
         ]
-        api.create_commit(
+        commit = api.create_commit(
             repo_id=args.repo_id,
             repo_type="dataset",
             operations=operations,
@@ -195,6 +227,15 @@ def main(argv: list[str] | None = None) -> int:
             ),
             parent_commit=repo_head,
         )
+        commit_oid = validate_source_revision(getattr(commit, "oid", None))
+        if not _remote_snapshot_matches(
+            api,
+            repo_id=args.repo_id,
+            revision=commit_oid,
+            file_paths=file_pairs,
+            owned_cache_root=owned_cache_root,
+        ):
+            raise ValueError("HF final-view commit verification found no uploaded files at its pinned revision")
         print(json.dumps(receipt.as_dict(), sort_keys=True, indent=2))
     return 0
 

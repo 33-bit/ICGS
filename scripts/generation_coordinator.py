@@ -1148,6 +1148,22 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
         for relative, expected_hash in sorted(worker_result.file_sha256.items()):
             local_path = resolved_root / relative
             verify_file(f"{prefix}/{relative}", local_path, expected_hash)
+        if worker_result.episode_id is not None and worker_result.outcome in {"success", "valid_failure"}:
+            for view in ("D_geom", "D_temporal", "D_dyn", "D_task"):
+                pointer_path = (
+                    queue.root / "views" / "provisional" / "episodes"
+                    / str(result["program_id"]) / str(worker_result.episode_id)
+                    / f"{view}.json"
+                )
+                pointer_filename = (
+                    f"{run.hf_subfolder}/views/provisional/episodes/"
+                    f"{result['program_id']}/{worker_result.episode_id}/{view}.json"
+                )
+                if pointer_path.is_symlink() or not pointer_path.is_file():
+                    raise ValueError(
+                        f"local publication artifact is not a regular file: {pointer_filename}"
+                    )
+                verify_file(pointer_filename, pointer_path, digest(pointer_path))
 
     manifest_path = queue.root / "publication_manifest.json"
     if manifest_path.is_symlink() or not manifest_path.is_file():

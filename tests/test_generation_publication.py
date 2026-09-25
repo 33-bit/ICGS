@@ -613,6 +613,8 @@ def test_archive_operations_upload_complete_attempt_inventory(
         "view_D_temporal",
         "view_D_dyn",
         "view_D_task",
+        "episode_view_D_geom",
+        "episode_view_missing",
     ],
 )
 def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache(
@@ -653,9 +655,17 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
         remote_sources[f"{run.hf_subfolder}/views/{view}.json"] = (
             queue.root / "views" / f"{view}.json"
         )
+        remote_sources[
+            f"{run.hf_subfolder}/views/provisional/episodes/"
+            f"{job.program_id}/{job.episode_id}/{view}.json"
+        ] = (
+            queue.root / "views" / "provisional" / "episodes"
+            / job.program_id / job.episode_id / f"{view}.json"
+        )
     first_archive_filename = sorted(
         filename for filename in remote_sources
-        if "/episodes/" in filename or "/attempts/" in filename
+        if filename.startswith(f"{run.hf_subfolder}/episodes/")
+        or filename.startswith(f"{run.hf_subfolder}/attempts/")
     )[0]
     metadata_paths = {
         "dataset_manifest": f"{run.hf_subfolder}/dataset_manifest.json",
@@ -665,9 +675,15 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
             f"view_{view}": f"{run.hf_subfolder}/views/{view}.json"
             for view in ("D_geom", "D_temporal", "D_dyn", "D_task")
         },
+        "episode_view_D_geom": (
+            f"{run.hf_subfolder}/views/provisional/episodes/"
+            f"{job.program_id}/{job.episode_id}/D_geom.json"
+        ),
     }
     changed_filename = (
         first_archive_filename if remote_mismatch == "archive"
+        else metadata_paths.get("episode_view_D_geom")
+        if remote_mismatch == "episode_view_missing"
         else metadata_paths.get(remote_mismatch)
     )
     calls = []
@@ -675,6 +691,9 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
     def fake_download(**kwargs):
         cache_dir = Path(kwargs["cache_dir"])
         assert kwargs["revision"] == "c" * 40
+        if remote_mismatch == "episode_view_missing" and "/views/provisional/episodes/" in kwargs["filename"]:
+            calls.append((kwargs["filename"], kwargs["revision"], cache_dir))
+            raise FileNotFoundError(kwargs["filename"])
         source = remote_sources[kwargs["filename"]]
         cache_dir.mkdir(parents=True, exist_ok=True)
         downloaded = cache_dir / "downloaded.bin"
@@ -687,7 +706,12 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
 
     monkeypatch.setattr(coordinator, "hf_hub_download", fake_download)
 
-    if remote_mismatch != "none":
+    if remote_mismatch == "episode_view_missing":
+        with pytest.raises(FileNotFoundError):
+            coordinator._verify_remote_batch(
+                queue, run, (job.job_id,), "c" * 40, "local-test-token",
+            )
+    elif remote_mismatch != "none":
         with pytest.raises(ValueError, match="remote hash mismatch"):
             coordinator._verify_remote_batch(
                 queue, run, (job.job_id,), "c" * 40, "local-test-token",
