@@ -9,16 +9,29 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import stat
 import time
-from typing import Any
+from typing import Any, Literal
 
-from icgs.data.collection.generation.distributed_contracts import GenerationJob, QueueCounts, WorkerResult
-from icgs.data.collection.generation.distributed_validation import ValidationFailure
+from icgs.data.collection.generation.distributed_contracts import (
+    ArchiveProfileConfig,
+    GenerationJob,
+    QueueCounts,
+    WorkerResult,
+)
+from icgs.data.collection.generation.distributed_validation import (
+    ValidationFailure,
+    validate_archive_manifest_row_identity,
+)
 
 
 def _canonical_json(payload: dict[str, Any]) -> bytes:
     return (json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
+
+
+def _canonical_json_sha256(payload: dict[str, Any]) -> str:
+    return hashlib.sha256(_canonical_json(payload)).hexdigest()
 
 
 def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
@@ -423,12 +436,328 @@ class FilesystemJobQueue:
             _atomic_write(target / "validation_failure.json", failure.as_dict())
             return target
 
-    def mark_published(self, job_id: str) -> Path:
+    def _receipt_only_binding(
+        self,
+        job_id: str,
+        source: Path,
+    ) -> tuple[GenerationJob, dict[str, Any], dict[str, Any]]:
+        """Validate the local batch receipt and return its immutable job row."""
+        for name in ("job.json", "result.json"):
+            path = source / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError(f"receipt-only publication requires a regular {name}")
+        job = GenerationJob.from_dict(_read_json(source / "job.json"))
+        result = WorkerResult.from_dict(_read_json(source / "result.json"))
+        if job.job_id != job_id or result.job_id != job_id:
+            raise ValueError("receipt-only publication job identity mismatch")
+        if result.attempt_id != job.attempt_id or result.program_id != job.program_id:
+            raise ValueError("receipt-only publication result identity mismatch")
+
+        receipt_path = self.root / "publication_receipt.json"
+        if receipt_path.is_symlink() or not receipt_path.is_file():
+            raise ValueError("receipt-only pruning requires a verified publication receipt")
+        receipt = _read_json(receipt_path)
+        if receipt.get("status") not in {"VERIFIED", "COMPLETE"}:
+            raise ValueError("receipt-only pruning requires a verified publication receipt")
+        if receipt.get("run_id") != job.run_id or receipt.get("source_run_id") != job.run_id:
+            raise ValueError("verified publication receipt run/source identity mismatch")
+        job_ids = receipt.get("job_ids")
+        if not isinstance(job_ids, list) or job_ids.count(job_id) != 1:
+            raise ValueError("verified publication receipt does not bind this job")
+        for field in ("dataset_identity", "archive_format_id", "episode_schema_version"):
+            if not isinstance(receipt.get(field), str) or not receipt[field].strip():
+                raise ValueError(f"verified publication receipt is missing {field}")
+        data_oid = receipt.get("data_commit_oid")
+        commit_oid = receipt.get("commit_oid")
+        for field, value in (("data_commit_oid", data_oid), ("commit_oid", commit_oid)):
+            if (
+                not isinstance(value, str)
+                or len(value) not in {40, 64}
+                or any(character not in "0123456789abcdef" for character in value)
+            ):
+                raise ValueError(f"verified publication receipt is missing a valid {field}")
+
+        declared_hashes = result.file_sha256
+        if not declared_hashes:
+            raise ValueError("receipt-only publication requires a nonempty artifact inventory")
+        batch_hashes = receipt.get("artifact_hashes")
+        if not isinstance(batch_hashes, dict):
+            raise ValueError("verified publication receipt is missing artifact hashes")
+        job_prefix = f"{job_id}/"
+        receipt_hashes = {
+            key[len(job_prefix):]: digest
+            for key, digest in batch_hashes.items()
+            if isinstance(key, str) and key.startswith(job_prefix)
+        }
+        if receipt_hashes != declared_hashes:
+            raise ValueError("verified publication receipt artifact hashes do not match the job")
+
+        profile = receipt.get("archive_profile")
+        if not isinstance(profile, dict):
+            raise ValueError("verified publication receipt is missing archive identity")
+        if profile.get("local_artifact_retention") != "receipt_only":
+            raise ValueError("receipt-only pruning requires the receipt-only archive profile")
+        for field in ("dataset_identity", "archive_format_id", "episode_schema_version"):
+            if profile.get(field) != receipt.get(field):
+                raise ValueError(f"verified publication receipt archive identity mismatch: {field}")
+        manifest_digest = receipt.get("dataset_manifest_sha256")
+        if (
+            not isinstance(manifest_digest, str)
+            or len(manifest_digest) != 64
+            or any(character not in "0123456789abcdef" for character in manifest_digest)
+        ):
+            raise ValueError("verified publication receipt is missing dataset manifest SHA256")
+        manifest_path = self.root / "publication_manifest.json"
+        if manifest_path.is_symlink() or not manifest_path.is_file():
+            raise ValueError("receipt-only pruning requires the published dataset manifest")
+        manifest_bytes = self._read_regular_file(manifest_path)
+        if hashlib.sha256(manifest_bytes).hexdigest() != manifest_digest:
+            raise ValueError("verified publication receipt dataset manifest hash mismatch")
+        manifest = json.loads(manifest_bytes)
+        if not isinstance(manifest, dict):
+            raise ValueError("published dataset manifest must be an object")
+        if manifest.get("dataset_identity") != receipt["dataset_identity"]:
+            raise ValueError("published dataset manifest identity mismatch")
+        if manifest.get("archive_format_id") != receipt["archive_format_id"]:
+            raise ValueError("published dataset manifest archive format mismatch")
+        if manifest.get("episode_schema_version") != receipt["episode_schema_version"]:
+            raise ValueError("published dataset manifest episode schema mismatch")
+        if manifest.get("archive_profile") != profile:
+            raise ValueError("published dataset manifest archive profile mismatch")
+        source_runs = manifest.get("source_run_ids")
+        if not isinstance(source_runs, list) or job.run_id not in source_runs:
+            raise ValueError("published dataset manifest does not bind the source run")
+
+        collection, identity_key, identity = (
+            ("episodes", "episode_id", result.episode_id)
+            if result.episode_id is not None
+            else ("failure_attempts", "attempt_id", result.attempt_id)
+        )
+        rows = manifest.get(collection)
+        if not isinstance(rows, list):
+            raise ValueError(f"published dataset manifest {collection} must be a list")
+        matching = [
+            row for row in rows
+            if isinstance(row, dict) and row.get(identity_key) == identity
+        ]
+        if len(matching) != 1:
+            raise ValueError("published dataset manifest does not uniquely bind the job row")
+        row = matching[0]
+        archive_profile = ArchiveProfileConfig.from_dict(profile)
+        validate_archive_manifest_row_identity(job, result, row, archive_profile)
+        if row.get("job_id") != job_id or row.get("run_id") != job.run_id:
+            raise ValueError("published dataset manifest row job/run identity mismatch")
+        if row.get("source_run_id") != job.run_id or row.get("file_sha256") != declared_hashes:
+            raise ValueError("published dataset manifest row source/hash identity mismatch")
+
+        return job, result.as_dict(), {
+            "receipt_version": 1,
+            "status": "VERIFIED",
+            "job_id": job_id,
+            "run_id": job.run_id,
+            "source_run_id": job.run_id,
+            "dataset_identity": receipt["dataset_identity"],
+            "archive_format_id": receipt["archive_format_id"],
+            "episode_schema_version": receipt["episode_schema_version"],
+            "archive_profile": dict(profile),
+            "data_commit_oid": data_oid,
+            "commit_oid": commit_oid,
+            "dataset_manifest_sha256": manifest_digest,
+            "artifact_hashes": dict(declared_hashes),
+            "manifest_row_sha256": _canonical_json_sha256(dict(row)),
+            "manifest_row": row,
+        }
+
+    def resolve_result_root(
+        self,
+        result_dir: str,
+        *,
+        require_exists: bool,
+    ) -> Path:
+        result_root = Path(result_dir)
+        if not result_root.is_absolute() or ".." in result_root.parts:
+            raise ValueError("result_dir must be absolute and contained")
+        run_root = self.root.parent.resolve(strict=True)
+        lexical_root = Path(os.path.abspath(result_root))
+        if not lexical_root.is_relative_to(run_root) or lexical_root == run_root:
+            raise ValueError("receipt-only result_dir must remain beneath the run root")
+        current = run_root
+        for part in lexical_root.relative_to(run_root).parts:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError("result_dir may not traverse symlinks")
+        if result_root.is_symlink():
+            raise ValueError("result_dir may not be a symlink")
+        resolved = result_root.resolve(strict=require_exists)
+        if not resolved.is_relative_to(run_root) or resolved == run_root:
+            raise ValueError("result_dir must remain beneath the run root")
+        if require_exists and not resolved.is_dir():
+            raise ValueError("result_dir must be a real directory")
+        if not require_exists and (result_root.exists() or result_root.is_symlink()):
+            raise ValueError("result payload unexpectedly exists after publication")
+        return resolved
+
+    def _validate_saved_receipt_only_record(
+        self,
+        directory: Path,
+        job_id: str,
+        *,
+        archive_profile: ArchiveProfileConfig | None = None,
+    ) -> dict[str, Any]:
+        for name in ("job.json", "result.json", "publication_receipt.json"):
+            path = directory / name
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("published result is missing its receipt-only queue record")
+        job = GenerationJob.from_dict(_read_json(directory / "job.json"))
+        result = WorkerResult.from_dict(_read_json(directory / "result.json"))
+        receipt = _read_json(directory / "publication_receipt.json")
+        if (
+            job.job_id != job_id
+            or result.job_id != job_id
+            or result.attempt_id != job.attempt_id
+            or result.program_id != job.program_id
+        ):
+            raise ValueError("published receipt-only queue record job identity mismatch")
+        if (
+            receipt.get("status") != "VERIFIED"
+            or receipt.get("job_id") != job_id
+            or receipt.get("run_id") != job.run_id
+            or receipt.get("source_run_id") != job.run_id
+        ):
+            raise ValueError("published receipt-only queue record identity mismatch")
+        profile_payload = receipt.get("archive_profile")
+        if not isinstance(profile_payload, dict):
+            raise ValueError("published receipt-only queue record is missing archive profile")
+        profile = ArchiveProfileConfig.from_dict(profile_payload)
+        if archive_profile is not None and profile != archive_profile:
+            raise ValueError("published receipt-only queue record archive profile mismatch")
+        if profile.local_artifact_retention != "receipt_only":
+            raise ValueError("published receipt-only queue record has the wrong retention profile")
+        for field in ("dataset_identity", "archive_format_id", "episode_schema_version"):
+            if receipt.get(field) != getattr(profile, field):
+                raise ValueError(f"published receipt-only queue record {field} mismatch")
+        for field in ("data_commit_oid", "commit_oid"):
+            value = receipt.get(field)
+            if (
+                not isinstance(value, str)
+                or len(value) not in {40, 64}
+                or any(character not in "0123456789abcdef" for character in value)
+            ):
+                raise ValueError(f"published receipt-only queue record has invalid {field}")
+        manifest_digest = receipt.get("dataset_manifest_sha256")
+        if (
+            not isinstance(manifest_digest, str)
+            or len(manifest_digest) != 64
+            or any(character not in "0123456789abcdef" for character in manifest_digest)
+        ):
+            raise ValueError("published receipt-only queue record has invalid dataset manifest SHA256")
+        if not result.file_sha256 or receipt.get("artifact_hashes") != result.file_sha256:
+            raise ValueError("published receipt-only queue record artifact hash mismatch")
+        row = receipt.get("manifest_row")
+        if not isinstance(row, dict):
+            raise ValueError("published receipt-only queue record has no manifest row")
+        if receipt.get("manifest_row_sha256") != _canonical_json_sha256(row):
+            raise ValueError("published receipt-only queue record manifest row SHA256 mismatch")
+        validate_archive_manifest_row_identity(job, result, row, profile)
+        self.resolve_result_root(result.result_dir, require_exists=False)
+        return dict(row)
+
+    def _verify_local_result_inventory(
+        self,
+        result: WorkerResult,
+        *,
+        allow_missing_files: bool = False,
+    ) -> Path:
+        resolved = self.resolve_result_root(result.result_dir, require_exists=True)
+
+        actual: dict[str, str] = {}
+        pending = [resolved]
+        while pending:
+            directory = pending.pop()
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    path = Path(entry.path)
+                    mode = entry.stat(follow_symlinks=False).st_mode
+                    if stat.S_ISLNK(mode):
+                        raise ValueError("receipt-only result inventory may not contain symlinks")
+                    if stat.S_ISDIR(mode):
+                        pending.append(path)
+                    elif stat.S_ISREG(mode):
+                        relative = path.relative_to(resolved).as_posix()
+                        actual[relative] = hashlib.sha256(self._read_regular_file(path)).hexdigest()
+                    else:
+                        raise ValueError("receipt-only result inventory must contain regular files only")
+        if allow_missing_files:
+            if any(
+                relative not in result.file_sha256
+                or result.file_sha256[relative] != digest
+                for relative, digest in actual.items()
+            ):
+                raise ValueError("remaining receipt-only files do not match the verified artifact inventory")
+        elif actual != result.file_sha256:
+            raise ValueError("receipt-only result files do not match the verified artifact inventory")
+        return resolved
+
+    def mark_published(
+        self,
+        job_id: str,
+        *,
+        retention: Literal["keep", "receipt_only"] = "keep",
+    ) -> Path:
+        if retention not in {"keep", "receipt_only"}:
+            raise ValueError("retention must be keep or receipt_only")
+        self._validate_job_component(job_id)
         with self._operation_lock():
+            for state in ("ingested", "published"):
+                state_root = self.root / state
+                if state_root.is_symlink() or not state_root.is_dir():
+                    raise ValueError(f"queue state must be a real directory: {state_root}")
             source = self.root / "ingested" / job_id
             target = self.root / "published" / job_id
+            if target.is_symlink():
+                raise ValueError(f"published job must not be a symlink: {target}")
             if target.exists():
+                if source.exists():
+                    raise ValueError(f"ingested and published results both exist: {job_id}")
+                if retention == "receipt_only":
+                    self._validate_saved_receipt_only_record(target, job_id)
                 return target
+            if source.is_symlink() or not source.is_dir():
+                raise FileNotFoundError(f"ingested result does not exist: {job_id}")
+            if retention == "keep":
+                os.replace(source, target)
+                return target
+
+            _job, result_payload, per_job_receipt = self._receipt_only_binding(job_id, source)
+            result = WorkerResult.from_dict(result_payload)
+            result_root = Path(result.result_dir)
+            local_receipt_path = source / "publication_receipt.json"
+            if local_receipt_path.exists() or local_receipt_path.is_symlink():
+                if local_receipt_path.is_symlink() or not local_receipt_path.is_file():
+                    raise ValueError("per-job publication receipt must be a regular file")
+                if _read_json(local_receipt_path) != per_job_receipt:
+                    raise ValueError("per-job publication receipt conflicts with verified batch")
+                if result_root.is_symlink():
+                    raise ValueError("receipt-only result_dir may not be a symlink")
+                if result_root.exists():
+                    self.resolve_result_root(result.result_dir, require_exists=True)
+                    self._verify_local_result_inventory(result, allow_missing_files=True)
+                    shutil.rmtree(result_root)
+                else:
+                    # A durable per-job receipt can make pruning restartable after
+                    # the payload has already disappeared.  It does not make an
+                    # untrusted result_dir safe: still validate its run-root
+                    # containment before accepting the receipt-only transition.
+                    self.resolve_result_root(result.result_dir, require_exists=False)
+            elif result_root.exists():
+                self._verify_local_result_inventory(result)
+                if local_receipt_path.is_symlink():
+                    raise ValueError("per-job publication receipt must not be a symlink")
+                else:
+                    _atomic_write(local_receipt_path, per_job_receipt)
+                shutil.rmtree(result_root)
+            else:
+                raise ValueError("missing local payload lacks a matching verified per-job receipt")
             os.replace(source, target)
             return target
 

@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import stat
+import tempfile
 import time
 from typing import Literal, Mapping
 
 from huggingface_hub import HfApi, hf_hub_download
+from huggingface_hub.errors import EntryNotFoundError, LocalEntryNotFoundError
 
 from icgs.data.collection.generation.distributed_contracts import (
     CoordinatorHeartbeat,
@@ -22,9 +25,15 @@ from icgs.data.collection.generation.distributed_contracts import (
     WorkerResult,
 )
 from icgs.data.collection.generation.distributed_planner import DistributedPlanner
-from icgs.data.collection.generation.distributed_publication import HuggingFaceBatchPublisher
+from icgs.data.collection.generation.distributed_publication import (
+    HuggingFaceBatchPublisher,
+    PublicationReceipt,
+)
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue, MalformedReadyResult
-from icgs.data.collection.generation.distributed_validation import ingest_validated_result, validate_closed_result
+from icgs.data.collection.generation.distributed_validation import (
+    ingest_validated_result,
+    validate_closed_result,
+)
 from icgs.data.collection.generation.distributed_validation import ValidationFailure
 
 
@@ -129,18 +138,59 @@ def _manifest_from_closed_queue(
     from icgs.data.collection.generation.distributed_contracts import GenerationJob, WorkerResult
 
     manifest = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
+    source_run_ids: set[str] = set()
     for state in states:
         for directory in sorted((queue.root / state).iterdir()):
-            if not directory.is_dir():
+            if not stat.S_ISDIR(directory.lstat().st_mode):
                 continue
+            for name in ("job.json", "result.json"):
+                path = directory / name
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError(f"closed queue {name} must be a regular file: {path}")
             job = GenerationJob.from_dict(json.loads((directory / "job.json").read_text(encoding="utf-8")))
             result = WorkerResult.from_dict(json.loads((directory / "result.json").read_text(encoding="utf-8")))
+            receipt_path = directory / "publication_receipt.json"
+            if state == "published" and archive_profile is not None and receipt_path.exists():
+                row = queue._validate_saved_receipt_only_record(
+                    directory,
+                    job.job_id,
+                    archive_profile=archive_profile,
+                )
+                collection, identity_key, identity = (
+                    ("episodes", "episode_id", result.episode_id)
+                    if result.episode_id is not None
+                    else ("failure_attempts", "attempt_id", result.attempt_id)
+                )
+                if (
+                    row.get(identity_key) != identity
+                ):
+                    raise ValueError("published per-job receipt manifest row identity mismatch")
+                rows = manifest[collection]
+                previous = next((item for item in rows if item.get(identity_key) == identity), None)
+                if previous is not None and previous != row:
+                    raise ValueError(f"immutable published manifest row conflict: {identity}")
+                if previous is None:
+                    rows.append(row)
+                source_run_ids.add(job.run_id)
+                continue
             validated = (
                 validate_closed_result(job, result, archive_profile=archive_profile)
                 if archive_profile is not None
                 else validate_closed_result(job, result)
             )
             manifest = ingest_validated_result(manifest, validated)
+            source_run_ids.add(job.run_id)
+    if archive_profile is not None:
+        manifest.update({
+            "source_run_ids": sorted(source_run_ids),
+            "dataset_identity": archive_profile.dataset_identity,
+            "archive_format_id": archive_profile.archive_format_id,
+            "episode_schema_version": archive_profile.episode_schema_version,
+            "archive_profile": archive_profile.as_dict(),
+            "view_status": "PROVISIONAL",
+            "total_episodes": len(manifest["episodes"]),
+            "total_failure_attempts": len(manifest["failure_attempts"]),
+        })
     return manifest
 
 
@@ -183,6 +233,216 @@ def _merge_manifests(remote: Mapping[str, object], local: Mapping[str, object]) 
     if source_run_ids:
         merged["source_run_ids"] = sorted(source_run_ids)
     return merged
+
+
+def _validate_runtime_run_binding(run: RunConfig, runtime: GenerationRuntimeConfig) -> None:
+    runtime_values = {
+        "run_id": runtime.run.run_id,
+        "run_root": runtime.run.run_root,
+        "worker_count": runtime.run.worker_count,
+        "publish_interval_s": runtime.run.publish_interval_s,
+        "hf_repo": runtime.run.hf_repo or "33bit/icgs",
+        "hf_subfolder": runtime.run.hf_subfolder or "generation",
+        "publication_enabled": runtime.run.publication_enabled,
+        "validation_mode": runtime.run.validation_mode,
+        "distribution_mode": runtime.run.distribution_mode,
+        "resume_from_hf": runtime.run.resume_from_hf,
+    }
+    for name, expected in runtime_values.items():
+        if getattr(run, name) != expected:
+            raise ValueError(f"runtime config {name} does not match run config")
+
+
+def _snapshot_revision(path: str | Path) -> str | None:
+    parts = Path(path).parts
+    try:
+        index = parts.index("snapshots")
+        value = parts[index + 1]
+    except (ValueError, IndexError):
+        return None
+    if (
+        len(value) in {40, 64}
+        and all(character in "0123456789abcdef" for character in value)
+    ):
+        return value
+    return None
+
+
+def _recover_interrupted_archive_publication(
+    queue: FilesystemJobQueue,
+    run: RunConfig,
+    archive_profile,
+    *,
+    token: str,
+    downloader,
+) -> None:
+    """Recover commit OIDs after HF accepted a commit but the process stopped before persisting them."""
+    local_receipt_path = queue.root / "publication_receipt.json"
+    if local_receipt_path.is_symlink():
+        raise ValueError("pending publication receipt may not be a symlink")
+    if not local_receipt_path.exists():
+        return None
+    if not local_receipt_path.is_file():
+        raise ValueError("pending publication receipt must be a regular file")
+    try:
+        local_receipt = PublicationReceipt.from_dict(
+            json.loads(local_receipt_path.read_text(encoding="utf-8"))
+        )
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        raise ValueError("pending publication receipt is malformed")
+    if local_receipt.status not in {"PREPARED", "DATA_COMMITTED", "DEFERRED"}:
+        return None
+    if local_receipt.archive_profile != archive_profile.as_dict():
+        raise ValueError("pending publication receipt archive profile mismatch")
+    if (
+        local_receipt.run_id != run.run_id
+        or local_receipt.source_run_id != run.run_id
+        or local_receipt.prefix != run.hf_subfolder
+        or not local_receipt.job_ids
+    ):
+        raise ValueError("pending publication receipt run/job identity mismatch")
+    for name in ("data_commit_oid", "commit_oid"):
+        value = getattr(local_receipt, name)
+        if value is not None and (
+            not isinstance(value, str)
+            or len(value) not in {40, 64}
+            or any(character not in "0123456789abcdef" for character in value)
+        ):
+            raise ValueError(f"pending publication receipt has invalid {name}")
+    if (
+        local_receipt.dataset_manifest_sha256 is None
+        or local_receipt.artifact_hashes is None
+        or not local_receipt.artifact_hashes
+    ):
+        raise ValueError("pending archive publication receipt is missing immutable hashes")
+
+    local_manifest_path = queue.root / "publication_manifest.json"
+    if local_receipt.data_commit_oid is None:
+        try:
+            remote_manifest_path = downloader(
+                repo_id=run.hf_repo,
+                repo_type="dataset",
+                filename=f"{run.hf_subfolder}/dataset_manifest.json",
+                token=token,
+                force_download=True,
+                revision=None,
+            )
+            remote_manifest_bytes = Path(remote_manifest_path).read_bytes()
+        except (FileNotFoundError, EntryNotFoundError, LocalEntryNotFoundError):
+            return None
+        except Exception as error:
+            raise RuntimeError(
+                "cannot reconcile pending archive data commit; refusing a potentially duplicate upload"
+            ) from error
+        remote_manifest_sha = hashlib.sha256(remote_manifest_bytes).hexdigest()
+        if remote_manifest_sha == local_receipt.dataset_manifest_sha256:
+            revision = _snapshot_revision(remote_manifest_path)
+            if revision is None:
+                raise ValueError(
+                    "remote dataset manifest matches the pending batch but its commit OID is unavailable"
+                )
+            if local_manifest_path.is_symlink() or not local_manifest_path.is_file():
+                raise ValueError("pending publication is missing its local dataset manifest")
+            if hashlib.sha256(local_manifest_path.read_bytes()).hexdigest() != remote_manifest_sha:
+                raise ValueError("pending local dataset manifest changed during commit recovery")
+            local_receipt = replace(
+                local_receipt,
+                status="DATA_COMMITTED",
+                data_commit_oid=revision,
+                updated_at_s=time.time(),
+            )
+            _atomic_json(local_receipt_path, local_receipt.as_dict())
+
+    if local_receipt.data_commit_oid is None or local_receipt.commit_oid is not None:
+        return None
+
+    snapshot_path = queue.root / "publication_receipt_to_verify.json"
+    try:
+        remote_receipt_path = downloader(
+            repo_id=run.hf_repo,
+            repo_type="dataset",
+            filename=f"{run.hf_subfolder}/publication_receipt.json",
+            token=token,
+            force_download=True,
+            revision=None,
+        )
+        remote_receipt_bytes = Path(remote_receipt_path).read_bytes()
+    except (FileNotFoundError, EntryNotFoundError, LocalEntryNotFoundError):
+        return None
+    except Exception as error:
+        raise RuntimeError(
+            "cannot reconcile pending archive receipt commit; refusing a potentially duplicate commit"
+        ) from error
+
+    receipt_revision = None
+    if (
+        snapshot_path.is_file()
+        and not snapshot_path.is_symlink()
+        and remote_receipt_bytes == snapshot_path.read_bytes()
+    ):
+        try:
+            snapshot_receipt = PublicationReceipt.from_dict(
+                json.loads(remote_receipt_bytes)
+            )
+        except (TypeError, ValueError, json.JSONDecodeError) as error:
+            raise ValueError("pending receipt verification snapshot is malformed") from error
+        fields = (
+            "run_id",
+            "job_ids",
+            "data_commit_oid",
+            "artifact_hashes",
+            "source_run_id",
+            "dataset_identity",
+            "archive_format_id",
+            "episode_schema_version",
+            "archive_profile",
+            "dataset_manifest_sha256",
+            "prefix",
+        )
+        if any(
+            getattr(snapshot_receipt, field) != getattr(local_receipt, field)
+            for field in fields
+        ):
+            raise ValueError("remote receipt snapshot identity mismatch")
+        receipt_revision = _snapshot_revision(remote_receipt_path)
+        if receipt_revision is None:
+            raise ValueError("remote publication receipt snapshot has no commit OID")
+    else:
+        try:
+            remote_receipt = PublicationReceipt.from_dict(json.loads(remote_receipt_bytes))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            remote_receipt = None
+        if remote_receipt is not None and (
+            remote_receipt.status in {"VERIFIED", "COMPLETE"}
+            and remote_receipt.run_id == local_receipt.run_id
+            and remote_receipt.job_ids == local_receipt.job_ids
+            and remote_receipt.data_commit_oid == local_receipt.data_commit_oid
+            and remote_receipt.dataset_manifest_sha256 == local_receipt.dataset_manifest_sha256
+            and remote_receipt.artifact_hashes == local_receipt.artifact_hashes
+            and remote_receipt.source_run_id == local_receipt.source_run_id
+            and remote_receipt.dataset_identity == local_receipt.dataset_identity
+            and remote_receipt.archive_format_id == local_receipt.archive_format_id
+            and remote_receipt.episode_schema_version == local_receipt.episode_schema_version
+            and remote_receipt.archive_profile == local_receipt.archive_profile
+            and remote_receipt.prefix == local_receipt.prefix
+        ):
+            candidate_revision = remote_receipt.commit_oid
+            if (
+                isinstance(candidate_revision, str)
+                and len(candidate_revision) in {40, 64}
+                and all(character in "0123456789abcdef" for character in candidate_revision)
+            ):
+                receipt_revision = candidate_revision
+    if receipt_revision is None:
+        return None
+    local_receipt = replace(
+        local_receipt,
+        status="DATA_COMMITTED",
+        commit_oid=receipt_revision,
+        updated_at_s=time.time(),
+    )
+    _atomic_json(local_receipt_path, local_receipt.as_dict())
+    return None
 
 
 def _validate_resume_manifest(
@@ -247,30 +507,108 @@ def _validate_resume_manifest(
 
 
 def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tuple[str, ...], revision: str, token: str) -> None:
+    if (
+        not isinstance(revision, str)
+        or len(revision) not in {40, 64}
+        or any(character not in "0123456789abcdef" for character in revision)
+    ):
+        raise ValueError("remote verification requires a pinned commit OID")
+
+    def digest(path: Path) -> str:
+        value = hashlib.sha256()
+        with path.open("rb") as stream:
+            for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+                value.update(block)
+        return value.hexdigest()
+
+    def verify_file(filename: str, local_path: Path, expected_hash: str) -> None:
+        if local_path.is_symlink() or not local_path.is_file():
+            raise ValueError(f"local publication artifact is not a regular file: {filename}")
+        local_hash = digest(local_path)
+        if local_hash != expected_hash:
+            raise ValueError(f"local hash mismatch for {filename}")
+        # A fresh cache per file bounds disk lifetime and prevents this
+        # verification pass from reading stale entries in the shared HF cache.
+        with tempfile.TemporaryDirectory(prefix="icgs-hf-verify-") as scratch:
+            remote_path = hf_hub_download(
+                repo_id=run.hf_repo,
+                repo_type="dataset",
+                filename=filename,
+                revision=revision,
+                token=token,
+                force_download=True,
+                cache_dir=scratch,
+            )
+            remote = Path(remote_path)
+            if not remote.is_file():
+                raise ValueError(f"remote artifact download is not a regular file: {filename}")
+            if digest(remote) != expected_hash:
+                raise ValueError(f"remote hash mismatch for {filename}")
+
+    run_root = queue.root.parent.resolve(strict=True)
     for job_id in job_ids:
         directory = queue.root / "ingested" / job_id
         result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
+        worker_result = WorkerResult.from_dict(result)
         result_root = Path(result["result_dir"])
+        if result_root.is_symlink() or not result_root.is_absolute() or ".." in result_root.parts:
+            raise ValueError(f"remote verification result_dir is not a real absolute path: {job_id}")
+        lexical_root = Path(os.path.abspath(result_root))
+        if not lexical_root.is_relative_to(run_root) or lexical_root == run_root:
+            raise ValueError(f"remote verification result_dir escapes the run root: {job_id}")
+        current = run_root
+        for part in lexical_root.relative_to(run_root).parts:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError(f"remote verification result_dir traverses a symlink: {job_id}")
+        resolved_root = result_root.resolve(strict=True)
+        if not resolved_root.is_relative_to(run_root) or resolved_root == run_root:
+            raise ValueError(f"remote verification result_dir escapes the run root: {job_id}")
         prefix = (
             f"{run.hf_subfolder}/episodes/{result['program_id']}/{result['episode_id']}"
             if result.get("episode_id")
             else f"{run.hf_subfolder}/attempts/{result['program_id']}/{result['attempt_id']}"
         )
-        for path in sorted(result_root.rglob("*")):
-            if not path.is_file():
-                continue
-            remote = hf_hub_download(
-                repo_id=run.hf_repo,
-                repo_type="dataset",
-                filename=f"{prefix}/{path.relative_to(result_root).as_posix()}",
-                revision=revision,
-                token=token,
-                force_download=True,
+        if not worker_result.file_sha256:
+            raise ValueError(f"remote verification artifact inventory is empty: {job_id}")
+        for relative, expected_hash in sorted(worker_result.file_sha256.items()):
+            local_path = resolved_root / relative
+            verify_file(f"{prefix}/{relative}", local_path, expected_hash)
+
+    manifest_path = queue.root / "publication_manifest.json"
+    if manifest_path.is_symlink() or not manifest_path.is_file():
+        raise ValueError("remote verification requires the local dataset manifest")
+    manifest_hash = digest(manifest_path)
+    receipt_path = queue.root / "publication_receipt.json"
+    if receipt_path.is_file() and not receipt_path.is_symlink():
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        expected_manifest_hash = receipt.get("dataset_manifest_sha256")
+        if expected_manifest_hash is not None and expected_manifest_hash != manifest_hash:
+            raise ValueError("local dataset manifest hash disagrees with publication receipt")
+    verify_file(
+        f"{run.hf_subfolder}/dataset_manifest.json",
+        manifest_path,
+        manifest_hash,
+    )
+    control_files = [
+        (
+            f"{run.hf_subfolder}/resume_receipt.json",
+            queue.root / "resume_receipt.json",
+        ),
+        *[
+            (
+                f"{run.hf_subfolder}/views/{view}.json",
+                queue.root / "views" / f"{view}.json",
             )
-            local_hash = hashlib.sha256(path.read_bytes()).hexdigest()
-            remote_hash = hashlib.sha256(Path(remote).read_bytes()).hexdigest()
-            if local_hash != remote_hash:
-                raise ValueError(f"remote hash mismatch for {job_id}/{path.name}")
+            for view in ("D_geom", "D_temporal", "D_dyn", "D_task")
+        ],
+        (
+            f"{run.hf_subfolder}/publication_receipt.json",
+            queue.root / "publication_receipt_to_verify.json",
+        ),
+    ]
+    for filename, local_path in control_files:
+        verify_file(filename, local_path, digest(local_path))
 
 
 class CoordinatorControlPlane:
@@ -320,12 +658,7 @@ class CoordinatorControlPlane:
             if actual_runtime_sha != expected_runtime_sha:
                 raise ValueError("runtime config digest mismatch")
         runtime = GenerationRuntimeConfig.from_file(configured_runtime_path, check_paths=False)
-        if runtime.run.run_root != run.run_root or runtime.run.run_id != run.run_id:
-            raise ValueError("runtime config run identity does not match run config")
-        if runtime.run.distribution_mode != run.distribution_mode:
-            raise ValueError("runtime config distribution mode does not match run config")
-        if runtime.run.resume_from_hf != run.resume_from_hf:
-            raise ValueError("runtime config resume mode does not match run config")
+        _validate_runtime_run_binding(run, runtime)
         queue = FilesystemJobQueue(run.run_root + "/queue")
         approved = json.loads(Path(payload["approved_manifest"]).read_text(encoding="utf-8"))
         approved_bytes = Path(payload["approved_manifest"]).read_bytes()
@@ -372,6 +705,14 @@ class CoordinatorControlPlane:
             )
         except Exception as error:
             remote_error = error
+        if runtime.archive_profile is not None and run.publication_enabled:
+            _recover_interrupted_archive_publication(
+                queue,
+                run,
+                runtime.archive_profile,
+                token=token,
+                downloader=hf_hub_download,
+            )
         if run.resume_from_hf:
             if remote_error is not None:
                 raise RuntimeError(

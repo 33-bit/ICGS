@@ -177,13 +177,13 @@ The implementation must keep these ownership boundaries:
 - `HuggingFaceBatchPublisher` publishes all canonical chunks/manifests/debug metadata and records the remote revision.
 - `FilesystemJobQueue.mark_published(job_id, *, retention: Literal["keep", "receipt_only"]) -> Path` retains receipts/hashes and optionally prunes only after verified remote publication.
 
-- [ ] Upload the complete archive inventory for each success/valid-failure episode and complete attempt inventory for crash/invalid results.
-- [ ] Keep HF `dataset_manifest.json`, `resume_receipt.json`, publication receipt, per-episode manifests, and artifact hashes consistent with the new archive identity.
-- [ ] Mark prefix views as `PROVISIONAL` until finalization; never label cumulative batch IDs as final training samples.
-- [ ] Add an explicit receipt-only retention path that refuses to prune before remote hash verification and keeps local queue receipts, remote commit OID, artifact hashes, and source run identity.
-- [ ] Add idempotency tests for retry after remote commit, remote verification failure, local result already pruned, duplicate publication, and resume from remote manifest with no local episode payload.
-- [ ] Keep default bounded validation in `keep` mode; enable `receipt_only` only in the new production archive profile.
-- [ ] Run focused publication/queue/worker tests without network or HF credentials.
+- [x] Upload the complete archive inventory for each success/valid-failure episode and complete attempt inventory for crash/invalid results.
+- [x] Keep HF `dataset_manifest.json`, `resume_receipt.json`, publication receipt, per-episode manifests, and artifact hashes consistent with the new archive identity.
+- [x] Mark prefix views as `PROVISIONAL` until finalization; never label cumulative batch IDs as final training samples.
+- [x] Add an explicit receipt-only retention path that refuses to prune before remote hash verification and keeps local queue receipts, remote commit OID, artifact hashes, and source run identity.
+- [x] Add idempotency tests for retry after remote commit, remote verification failure, local result already pruned, duplicate publication, and resume from remote manifest with no local episode payload.
+- [x] Keep default bounded validation in `keep` mode; enable `receipt_only` only in the new production archive profile.
+- [x] Run focused publication/queue/worker tests without network or HF credentials.
 
 ### Task 2.3: Extend resume bootstrap for HF-only recovery
 
@@ -353,13 +353,31 @@ Local plan gates are pure fixture/unit/L0 checks. No simulator, download, prepro
 - [ ] Phase 4 — Local migration and capacity instrumentation.
 - [ ] Phase 5 — Current owner documentation and local acceptance.
 
-Task 2.1 is locally implemented. `validate_closed_result(..., archive_profile=...)`
+Tasks 2.1 and 2.2 are locally implemented. `validate_closed_result(..., archive_profile=...)`
 uses the canonical archive validator before ingestion and emits episode/attempt
 rows with relative HF archive references, source/profile identities, and every
 file hash. Profile-aware publisher operation construction revalidates the queue
 result before upload. Legacy configs continue through the original dense-JSON
-validation path. Full archive publication, receipt-only pruning, remote resume,
-and remote acceptance remain open for later tasks.
+publication path. Task 2.2 publishes the complete file inventory and dataset
+manifest hash, binds provisional views and receipts to archive identity, verifies
+each remote file in an owned per-file cache at a pinned revision, and prunes only
+after a verified receipt is durably bound to the job/run/source/hash inventory.
+Receipt-only queue receipts retain the manifest row needed to rebuild local
+planner state after payload pruning. HF-only resume bootstrap/identity validation
+remains Task 2.3; remote acceptance and production run authorization remain later
+gates.
+
+Task 2.2 rulings: validation mode rejects `receipt_only`; the checked-in bounded
+validation profile remains `keep`. A data-commit timeout before an OID is known
+retries the same ingested batch; after a successful data commit, retries reuse
+its recorded data revision and, after the receipt commit, retry byte verification
+against the same returned receipt-commit OID. Verification failures leave the
+local result payload in place. Archive files, dataset manifest, resume receipt,
+four provisional views and the exact receipt snapshot are downloaded sequentially
+into distinct temporary `cache_dir` directories; each cache is removed before the
+next file, and no shared HF cache participates. After a process interruption, the
+coordinator reconciles the latest remote manifest/receipt revision before another
+archive upload is allowed.
 
 Phase 0.2 TDD evidence (`/tmp/icgs-generation-hf-archive.koAE1D`, system CPython 3.14.4, NumPy 2.4.4, pytest 8.4.2):
 
@@ -388,6 +406,28 @@ Archive boundary review hardening (writer/reader/validator only; worker/material
 - Manifest validation now checks array references and their semantic roles, piece range continuity/coverage, point offsets and packed masks, required T/T+1 arrays, optional state/label references and boundary alignment, and attempt prefix counts/identity. It rejects truncated chunks and checks NPZ ZIP member sizes before decompression in both validation and read paths.
 - `max_chunk_bytes` is defined against the sum of uncompressed `.npy` ZIP member sizes, including headers; writer preflight accounts for those headers.
 - Targeted RED/GREEN evidence was collected for attempt-token and sensitive-key redaction, cross-role rho/point aliasing, differing logical ranges, long attempt prefixes, missing arrays/references, malformed ranges/masks, and bounded streaming validation. Review-round-2 fixes also require a measured-prefix reference for non-null `valid_observation_until` and compare the source attempt value to the timeline. The current suite is **PASS: 88 paired config/archive tests (40 archive tests)** on CPython 3.11.15 / NumPy 1.26.4; `python3 -B scripts/validate_fast.py` is **PASS: 22 L0 tests**, with two pre-existing `SyntaxWarning`s in `tests/test_task_router.py`; `git diff --check` is **PASS**. VPS, HF, simulator, training, and L1–L4 gates are **NOT RUN** by scope. Task 1.3 integration remains pending scoped re-review.
+
+Task 2.2 local evidence (2026-09-25; `/tmp/icgs-generation-hf-archive.koAE1D`; venv CPython 3.11.15, NumPy 1.26.4, pytest 8.4.2):
+
+- RED/GREEN: receipt-only queue tests first failed because `mark_published` did not accept a retention mode; validation-profile tests first failed because `receipt_only` was accepted in validation mode; remote-verification tests first failed because downloads had no owned `cache_dir`; pruned-manifest recovery first failed because it required local payload. Each now passes against the real queue/publisher/coordinator with only HF calls replaced by local fakes.
+- `PYTHONPATH=src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m pytest -q tests/test_generation_publication.py tests/test_generation_queue.py tests/test_generation_config.py tests/test_generation_worker.py` — **PASS, 118 passed**.
+- `PYTHONPATH=src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m pytest -q tests/test_generation*.py tests/test_capacity_probe.py` — **PASS, 351 passed**.
+- `python3 -B scripts/validate_fast.py` — **PASS, 22 L0 tests**; interpreter was CPython 3.14.4 and emitted two existing invalid-escape `SyntaxWarning`s from `tests/test_task_router.py`.
+- `git diff --check` — **PASS**, no output. HF network/API, simulator, preprocessing workload, training, robot motion, and C1–C5 live published-checkpoint gates — **NOT RUN**; tests used local fake download/API seams only.
+- Residual scope: full remote-manifest resume validation is Task 2.3; remote HF acceptance and production run authorization remain later gates. Local fixtures do not establish a live HF repo’s download/commit behavior.
+
+Task 2.2 reviewer-fix verification (2026-09-25; same worktree/environment; these
+counts supersede the earlier 351-test generation-suite run above):
+
+- RED/GREEN: the pinned verifier test first failed because it omitted resume/view/publication receipt files; it now checks archive artifacts, dataset manifest, resume receipt, publication receipt snapshot and each of the four views at one OID, using one fresh temporary cache per download.
+- RED/GREEN: queue tests first accepted a missing outside-run result path when a per-job receipt already existed and accepted mutated planner-facing row fields. Receipt-only transitions now validate result-root containment even for already-pruned payloads; row reconstruction checks plan-derived split/subset/kind/scene/asset/intervention identities plus a canonical manifest-row digest.
+- RED/GREEN: interrupted data-commit and receipt-commit tests simulate an accepted remote commit followed by local OID-write interruption. Recovery reuses the recorded dataset revision or exact receipt snapshot revision; retry does not reupload archive payloads.
+- `PYTHONPATH=src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m pytest -q tests/test_generation_publication.py` — **PASS, 43 passed**; queue — **PASS, 39 passed**; control — **PASS, 45 passed**.
+- `PYTHONPATH=src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m pytest -q tests/test_generation*.py tests/test_capacity_probe.py` — **PASS, 382 passed**.
+- `PYTHONPATH=src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m unittest discover -s tests -p 'test_*.py' -q` — **721 passed, 10 skipped, 0 failures/errors**; not a complete full-suite PASS. Skips: four original-source differential tests (no `IP_LEGACY_SOURCE_ROOT`), RLBench unavailable, CUDA RNG and CUDA-resume fixture not available/implemented, published-checkpoint integration opt-in, and two Lightning tests unavailable.
+- `python3 -B scripts/validate_fast.py` — **PASS, 22 L0 tests**, system CPython 3.14.4; two pre-existing invalid-escape `SyntaxWarning`s in `tests/test_task_router.py`.
+- `git diff --check` — **PASS**. Live HF/API calls, simulator, preprocessing workloads, training, robot motion, and C1–C5 — **NOT RUN**. All remote behavior in tests used local fakes.
+- Legacy non-archive receipt retry behavior is intentionally unchanged; if verification fails after a known legacy receipt commit, that path may recommit the receipt. The new archive profile retries verification at the pinned known OID without reuploading archive payloads.
 
 Task 1.3 local integration evidence: both materializers route through `EpisodeArchiveWriter` only when `ICGS_GENERATION_ARCHIVE_PROFILE` is present; legacy configs preserve their prior JSON/layout paths. Archive-profile success/valid-failure episodes use `episode.manifest.json`, crash/invalid results use `attempt.manifest.json`, and worker result detection rejects legacy JSON in archive mode. Optional RGB/depth/mask/joint/object modalities are omitted when unavailable. Focused generation integration tests are recorded in the implementation report; distributed archive validation/publication/resume/view work remains pending.
 

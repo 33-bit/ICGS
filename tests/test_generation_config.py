@@ -285,6 +285,7 @@ def test_archive_profile_is_opt_in_and_roundtrips_without_changing_legacy_defaul
     assert legacy.archive_profile is None
     assert "archive_profile" not in legacy.as_dict()
 
+    payload["run"]["validation_mode"] = False
     payload["archive_profile"] = _archive_profile(retention="receipt_only", chunk_boundaries=64)
     runtime = _config_api("GenerationRuntimeConfig").from_dict(payload)
 
@@ -326,6 +327,8 @@ def test_archive_profile_accepts_bounded_and_production_retention_modes(
     tmp_path: Path, retention: str
 ):
     payload = _portable_payload(tmp_path)
+    if retention == "receipt_only":
+        payload["run"]["validation_mode"] = False
     payload["archive_profile"] = _archive_profile(retention=retention)
 
     runtime = _config_api("GenerationRuntimeConfig").from_dict(payload)
@@ -335,6 +338,14 @@ def test_archive_profile_accepts_bounded_and_production_retention_modes(
     assert '"local_artifact_retention":"' + retention + '"' in resolved[
         "ICGS_GENERATION_ARCHIVE_PROFILE"
     ]
+
+
+def test_validation_runtime_rejects_receipt_only_archive_retention(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    payload["archive_profile"] = _archive_profile(retention="receipt_only")
+
+    with pytest.raises(ValueError, match="validation mode.*keep"):
+        _config_api("GenerationRuntimeConfig").from_dict(payload)
 
 
 @pytest.mark.parametrize(

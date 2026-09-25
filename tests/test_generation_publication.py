@@ -74,7 +74,11 @@ def _job() -> GenerationJob:
         program_id="T01", split="train", episode_index=1,
         episode_id="episode-t01-00001", episode_kind="nominal", scene_seed=1,
         collection_seed=20260920,
-        randomization={"scene_signature": "sig-1", "asset_instance_id": "asset-1"},
+        randomization={
+            "scene_signature": "sig-1",
+            "asset_instance_id": "asset-1",
+            "asset_family_id": "family-1",
+        },
         intervention=None,
     )
     return GenerationJob.create(
@@ -109,10 +113,15 @@ def _queue(tmp_path: Path):
     return queue, job
 
 
-def _archive_queue(tmp_path: Path):
+def _archive_queue(
+    tmp_path: Path,
+    *,
+    retention: str = "keep",
+    outcome: str = "success",
+):
     from icgs.data.collection.generation.episode_record import assemble_episode
 
-    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention=retention)
     queue = FilesystemJobQueue(tmp_path / "archive-queue")
     job = _job()
     queue.enqueue(job)
@@ -145,7 +154,7 @@ def _archive_queue(tmp_path: Path):
             "before_boundary": 0,
             "after_boundary": 1,
         }],
-        outcome="success",
+        outcome=outcome,
     )
     result_dir = tmp_path / "archive-result"
     EpisodeArchiveWriter(profile).write_episode(
@@ -168,7 +177,7 @@ def _archive_queue(tmp_path: Path):
         attempt_id=job.attempt_id,
         episode_id=job.episode_id,
         program_id=job.program_id,
-        outcome="success",
+        outcome=outcome,
         result_dir=str(result_dir),
         file_sha256=hashes,
         timeline={"actions": 1, "observations": 2, "durations": 1},
@@ -186,6 +195,39 @@ def test_publish_due_only_after_300_seconds_or_force(tmp_path: Path):
     assert receipt is not None
     assert receipt.job_ids == (job.job_id,)
     assert publisher.remote_manifest["episodes"][0]["episode_id"] == job.episode_id
+
+
+def test_legacy_receipt_commit_uses_a_stable_verification_snapshot(tmp_path: Path):
+    queue, job = _queue(tmp_path)
+
+    class SnapshotApi(FakeApi):
+        def __init__(self):
+            super().__init__()
+            self.receipt_snapshot_bytes = None
+            self.receipt_paths = []
+
+        def create_commit(self, **kwargs):
+            for operation in kwargs["operations"]:
+                if operation.path_in_repo.endswith("/publication_receipt.json"):
+                    self.receipt_paths.append(Path(operation.path_or_fileobj))
+                    self.receipt_snapshot_bytes = Path(operation.path_or_fileobj).read_bytes()
+            return super().create_commit(**kwargs)
+
+    revisions = []
+    api = SnapshotApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        remote_verify=lambda job_ids, revision, _token: revisions.append((job_ids, revision)),
+    )
+
+    completed = publisher.publish_due(now_s=300.0, force=False)
+
+    assert completed is not None and completed.status == "COMPLETE"
+    assert revisions == [((job.job_id,), "c" * 40)]
+    assert api.receipt_snapshot_bytes is not None
+    assert json.loads(api.receipt_snapshot_bytes)["status"] == "DATA_COMMITTED"
+    assert api.receipt_paths[-1] == queue.root / "publication_receipt_to_verify.json"
+    assert not (queue.root / "publication_receipt_to_verify.json").exists()
 
 
 def test_complete_receipt_does_not_block_the_next_ingested_batch(tmp_path: Path):
@@ -304,8 +346,51 @@ def test_operations_use_meaningful_episode_path(tmp_path: Path):
     assert any("/views/" in path for path in paths)
 
 
-def test_archive_operations_revalidate_complete_inventory_before_publication(tmp_path: Path):
-    queue, job, result, profile = _archive_queue(tmp_path)
+def test_publication_refuses_result_directory_outside_run_root(tmp_path: Path):
+    queue, job = _queue(tmp_path)
+    stored_result_path = queue.root / "ingested" / job.job_id / "result.json"
+    stored_result = json.loads(stored_result_path.read_text(encoding="utf-8"))
+    outside_root = tmp_path.parent / f"{tmp_path.name}-outside-result"
+    outside_root.mkdir()
+    original_root = Path(stored_result["result_dir"])
+    for path in original_root.iterdir():
+        (outside_root / path.name).write_bytes(path.read_bytes())
+    stored_result["result_dir"] = str(outside_root)
+    stored_result_path.write_text(json.dumps(stored_result), encoding="utf-8")
+    publisher = HuggingFaceBatchPublisher(_run(), FakeApi(), "secret", queue)
+
+    with pytest.raises(ValueError, match="beneath the run root"):
+        publisher._operations(
+            (job.job_id,),
+            {"manifest_version": 3, "episodes": [], "failure_attempts": []},
+        )
+
+    assert (queue.root / "ingested" / job.job_id / "result.json").is_file()
+
+
+def test_legacy_publication_receipt_omits_archive_only_identity_fields(tmp_path: Path):
+    queue, _job_value = _queue(tmp_path)
+    publisher = HuggingFaceBatchPublisher(_run(), FakeApi(), "secret", queue)
+
+    publisher._operations(
+        (_job_value.job_id,),
+        {"manifest_version": 3, "episodes": [], "failure_attempts": []},
+    )
+
+    receipt = json.loads((queue.root / "publication_receipt.json").read_text(encoding="utf-8"))
+    assert set(receipt).isdisjoint({
+        "source_run_id", "dataset_identity", "archive_format_id",
+        "episode_schema_version", "archive_profile", "dataset_manifest_sha256",
+    })
+
+
+@pytest.mark.parametrize("outcome", ["success", "valid_failure"])
+def test_archive_operations_revalidate_complete_episode_inventory_before_publication(
+    tmp_path: Path,
+    outcome: str,
+):
+    queue, job, result, profile = _archive_queue(tmp_path, outcome=outcome)
+    assert result.outcome == outcome
     publisher = HuggingFaceBatchPublisher(
         _run(), FakeApi(), "secret", queue, last_success_s=0.0,
         archive_profile=profile,
@@ -335,6 +420,667 @@ def test_archive_operations_revalidate_complete_inventory_before_publication(tmp
 
     with pytest.raises(ValueError, match="checksum mismatch"):
         publisher._operations((job.job_id,), manifest)
+
+
+@pytest.mark.parametrize("outcome", ["simulator_crash", "invalid_observation"])
+def test_archive_operations_upload_complete_attempt_inventory(
+    tmp_path: Path,
+    outcome: str,
+):
+    profile = ArchiveProfileConfig(chunk_boundaries=2)
+    queue = FilesystemJobQueue(tmp_path / "attempt-queue")
+    job = _job()
+    queue.enqueue(job)
+    assert queue.claim("000") == job
+    result_dir = tmp_path / "attempt-result"
+    EpisodeArchiveWriter(profile).write_attempt(
+        {
+            "schema_version": "icgs_episode_v2",
+            "attempt_id": job.attempt_id,
+            "episode_id": None,
+            "program_id": job.program_id,
+            "split": job.plan.split,
+            "episode_kind": job.plan.episode_kind,
+            "outcome": outcome,
+            "valid_observation_until": None,
+        },
+        prefix_arrays=(
+            {"actions": np.asarray([[0.01]], dtype=np.float64)}
+            if outcome == "simulator_crash"
+            else {}
+        ),
+        debug_metadata={
+            "source_run_id": job.run_id,
+            "code_revision": job.code_revision,
+            "preprocessing_identity": "publication_attempt_fixture_v1",
+            "job": job.as_dict(),
+        },
+        output_dir=result_dir,
+    )
+    hashes = {
+        str(path.relative_to(result_dir)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in result_dir.rglob("*") if path.is_file()
+    }
+    result = WorkerResult(
+        job_id=job.job_id,
+        attempt_id=job.attempt_id,
+        episode_id=None,
+        program_id=job.program_id,
+        outcome=outcome,
+        result_dir=str(result_dir),
+        file_sha256=hashes,
+        timeline=None,
+    )
+    queue.publish_ready("000", result)
+    queue.mark_ingested(result)
+
+    publisher = HuggingFaceBatchPublisher(
+        _run(), FakeApi(), "secret", queue, archive_profile=profile,
+    )
+    manifest = publisher._manifest_from_states(("ingested",))
+    operations = publisher._operations((job.job_id,), manifest)
+    prefix = f"{_run().hf_subfolder}/attempts/{job.program_id}/{job.attempt_id}/"
+    attempt_paths = {
+        operation.path_in_repo
+        for operation in operations
+        if operation.path_in_repo.startswith(prefix)
+    }
+
+    assert manifest["episodes"] == []
+    assert manifest["failure_attempts"][0]["outcome"] == outcome
+    assert attempt_paths == {prefix + relative for relative in hashes}
+
+
+@pytest.mark.parametrize(
+    "remote_mismatch",
+    [
+        "none",
+        "archive",
+        "dataset_manifest",
+        "resume_receipt",
+        "publication_receipt",
+        "view_D_geom",
+        "view_D_temporal",
+        "view_D_dyn",
+        "view_D_task",
+    ],
+)
+def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache(
+    tmp_path: Path, monkeypatch, remote_mismatch: str,
+):
+    from scripts import generation_coordinator as coordinator
+
+    queue, job, result, profile = _archive_queue(tmp_path)
+    run = _run()
+    publisher = HuggingFaceBatchPublisher(
+        run, FakeApi(), "secret", queue, archive_profile=profile,
+    )
+    local = publisher._manifest_from_states(("ingested",))
+    manifest = publisher._merge_manifest(
+        local, {"manifest_version": 3, "episodes": [], "failure_attempts": []},
+    )
+    publisher._operations((job.job_id,), manifest)
+    prefix = f"{run.hf_subfolder}/episodes/{job.program_id}/{job.episode_id}"
+    remote_sources = {
+        f"{prefix}/{relative}": Path(result.result_dir) / relative
+        for relative in result.file_sha256
+    }
+    remote_sources[f"{run.hf_subfolder}/dataset_manifest.json"] = (
+        queue.root / "publication_manifest.json"
+    )
+    remote_sources[f"{run.hf_subfolder}/resume_receipt.json"] = (
+        queue.root / "resume_receipt.json"
+    )
+    receipt_snapshot = queue.root / "publication_receipt_to_verify.json"
+    receipt_snapshot.write_bytes((queue.root / "publication_receipt.json").read_bytes())
+    remote_sources[f"{run.hf_subfolder}/publication_receipt.json"] = receipt_snapshot
+    mutable_receipt_path = queue.root / "publication_receipt.json"
+    mutable_receipt = json.loads(mutable_receipt_path.read_text(encoding="utf-8"))
+    mutable_receipt["status"] = "VERIFIED"
+    mutable_receipt["commit_oid"] = "c" * 40
+    mutable_receipt_path.write_text(json.dumps(mutable_receipt), encoding="utf-8")
+    for view in ("D_geom", "D_temporal", "D_dyn", "D_task"):
+        remote_sources[f"{run.hf_subfolder}/views/{view}.json"] = (
+            queue.root / "views" / f"{view}.json"
+        )
+    first_archive_filename = sorted(
+        filename for filename in remote_sources
+        if "/episodes/" in filename or "/attempts/" in filename
+    )[0]
+    metadata_paths = {
+        "dataset_manifest": f"{run.hf_subfolder}/dataset_manifest.json",
+        "resume_receipt": f"{run.hf_subfolder}/resume_receipt.json",
+        "publication_receipt": f"{run.hf_subfolder}/publication_receipt.json",
+        **{
+            f"view_{view}": f"{run.hf_subfolder}/views/{view}.json"
+            for view in ("D_geom", "D_temporal", "D_dyn", "D_task")
+        },
+    }
+    changed_filename = (
+        first_archive_filename if remote_mismatch == "archive"
+        else metadata_paths.get(remote_mismatch)
+    )
+    calls = []
+
+    def fake_download(**kwargs):
+        cache_dir = Path(kwargs["cache_dir"])
+        assert kwargs["revision"] == "c" * 40
+        source = remote_sources[kwargs["filename"]]
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        downloaded = cache_dir / "downloaded.bin"
+        contents = source.read_bytes()
+        if remote_mismatch != "none" and kwargs["filename"] == changed_filename:
+            contents += b"remote mutation"
+        downloaded.write_bytes(contents)
+        calls.append((kwargs["filename"], kwargs["revision"], cache_dir))
+        return str(downloaded)
+
+    monkeypatch.setattr(coordinator, "hf_hub_download", fake_download)
+
+    if remote_mismatch != "none":
+        with pytest.raises(ValueError, match="remote hash mismatch"):
+            coordinator._verify_remote_batch(
+                queue, run, (job.job_id,), "c" * 40, "local-test-token",
+            )
+    else:
+        coordinator._verify_remote_batch(
+            queue, run, (job.job_id,), "c" * 40, "local-test-token",
+        )
+
+    if remote_mismatch == "archive":
+        assert len(calls) == 1
+    elif remote_mismatch != "none":
+        assert calls[-1][0] == changed_filename
+    else:
+        assert {filename for filename, _revision, _cache in calls} == set(remote_sources)
+    assert len({cache for _filename, _revision, cache in calls}) == len(calls)
+    assert all(not cache.exists() for _filename, _revision, cache in calls)
+
+
+def test_published_receipt_only_job_reconstructs_manifest_without_episode_payload(
+    tmp_path: Path,
+):
+    from scripts import generation_coordinator as coordinator
+
+    queue, job, _result, profile = _archive_queue(tmp_path, retention="receipt_only")
+    publisher = HuggingFaceBatchPublisher(
+        _run(), FakeApi(), "secret", queue, archive_profile=profile,
+    )
+    local = publisher._manifest_from_states(("ingested",))
+    manifest = publisher._merge_manifest(
+        local, {"manifest_version": 3, "episodes": [], "failure_attempts": []},
+    )
+    publisher._operations(
+        (job.job_id,),
+        manifest,
+        PublicationReceipt(
+            run_id=job.run_id,
+            source_run_id=job.run_id,
+            job_ids=(job.job_id,),
+            status="VERIFIED",
+            data_commit_oid="d" * 40,
+            commit_oid="c" * 40,
+            artifact_hashes=publisher._artifact_hashes((job.job_id,)),
+            dataset_identity=profile.dataset_identity,
+            archive_format_id=profile.archive_format_id,
+            episode_schema_version=profile.episode_schema_version,
+            archive_profile=profile.as_dict(),
+            prefix=_run().hf_subfolder,
+        ),
+    )
+
+    queue.mark_published(job.job_id, retention="receipt_only")
+    assert not Path(_result.result_dir).exists()
+
+    reconstructed = coordinator._manifest_from_closed_queue(
+        queue, states=("published",), archive_profile=profile,
+    )
+    resumed = coordinator._merge_manifests(manifest, reconstructed)
+
+    assert reconstructed["episodes"] == manifest["episodes"]
+    assert resumed["episodes"] == manifest["episodes"]
+    assert not Path(_result.result_dir).exists()
+
+
+@pytest.mark.parametrize("field", ["split", "preprocessing_identity", "source_lineage_id"])
+def test_coordinator_rejects_tampered_published_manifest_row_after_pruning(
+    tmp_path: Path,
+    field: str,
+):
+    from scripts import generation_coordinator as coordinator
+
+    queue, job, _result, profile = _archive_queue(tmp_path, retention="receipt_only")
+    publisher = HuggingFaceBatchPublisher(
+        _run(), FakeApi(), "secret", queue, archive_profile=profile,
+    )
+    local = publisher._manifest_from_states(("ingested",))
+    manifest = publisher._merge_manifest(
+        local, {"manifest_version": 3, "episodes": [], "failure_attempts": []},
+    )
+    publisher._operations(
+        (job.job_id,),
+        manifest,
+        PublicationReceipt(
+            run_id=job.run_id,
+            job_ids=(job.job_id,),
+            status="VERIFIED",
+            data_commit_oid="d" * 40,
+            commit_oid="c" * 40,
+            artifact_hashes=publisher._artifact_hashes((job.job_id,)),
+            source_run_id=job.run_id,
+            dataset_identity=profile.dataset_identity,
+            archive_format_id=profile.archive_format_id,
+            episode_schema_version=profile.episode_schema_version,
+            archive_profile=profile.as_dict(),
+            prefix=_run().hf_subfolder,
+        ),
+    )
+    published = queue.mark_published(job.job_id, retention="receipt_only")
+    receipt_path = published / "publication_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["manifest_row"][field] = "tampered-value"
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="manifest row|identity|preprocessing"):
+        coordinator._manifest_from_closed_queue(
+            queue, states=("published",), archive_profile=profile,
+        )
+
+
+def test_archive_verification_failure_keeps_payload_and_retries_same_revision(
+    tmp_path: Path,
+):
+    queue, job, result, profile = _archive_queue(tmp_path, retention="receipt_only")
+
+    class SequencedApi(FakeApi):
+        def create_commit(self, **kwargs):
+            self.calls.append(kwargs)
+            oid = "d" * 40 if len(self.calls) == 1 else "e" * 40
+            return type("Commit", (), {"oid": oid})()
+
+    revisions = []
+
+    def verify(_job_ids, revision, _token):
+        revisions.append(revision)
+        if len(revisions) == 1:
+            raise ValueError("remote hash mismatch")
+
+    api = SequencedApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        archive_profile=profile, remote_verify=verify,
+    )
+
+    with pytest.raises(ValueError, match="remote hash mismatch"):
+        publisher.publish_due(now_s=300.0, force=False)
+
+    receipt_after_failure = json.loads(
+        (queue.root / "publication_receipt.json").read_text(encoding="utf-8")
+    )
+    assert receipt_after_failure["status"] == "DATA_COMMITTED"
+    assert receipt_after_failure["data_commit_oid"] == "d" * 40
+    assert receipt_after_failure["commit_oid"] == "e" * 40
+    assert queue.counts().ingested == 1
+    assert queue.counts().published == 0
+    assert Path(result.result_dir).is_dir()
+    snapshot_path = queue.root / "publication_receipt_to_verify.json"
+    assert snapshot_path.is_file()
+    assert api.calls[1]["operations"][0].path_or_fileobj == str(snapshot_path)
+
+    completed = publisher.publish_due(now_s=301.0, force=False)
+
+    assert completed is not None and completed.status == "COMPLETE"
+    assert revisions == ["e" * 40, "e" * 40]
+    assert len(api.calls) == 3
+    operation_paths = [
+        [operation.path_in_repo for operation in call["operations"]]
+        for call in api.calls
+    ]
+    assert any("/episodes/" in path for path in operation_paths[0])
+    assert all(not any("/episodes/" in path for path in paths) for paths in operation_paths[1:])
+    assert queue.counts().published == 1
+    assert not Path(result.result_dir).exists()
+    completed_receipt = json.loads(
+        (queue.root / "publication_receipt.json").read_text(encoding="utf-8")
+    )
+    assert completed_receipt["source_run_id"] == job.run_id
+    assert completed_receipt["artifact_hashes"] == {
+        f"{job.job_id}/{relative}": digest
+        for relative, digest in result.file_sha256.items()
+    }
+    assert completed_receipt["dataset_manifest_sha256"] == hashlib.sha256(
+        (queue.root / "publication_manifest.json").read_bytes()
+    ).hexdigest()
+    assert not snapshot_path.exists()
+    resume_receipt = json.loads(
+        (queue.root / "resume_receipt.json").read_text(encoding="utf-8")
+    )
+    assert resume_receipt["dataset_manifest_revision"] == "d" * 40
+    assert publisher.publish_due(now_s=302.0, force=True).status == "COMPLETE"
+    assert len(api.calls) == 3
+
+
+def test_archive_receipt_retry_reuses_committed_data_revision_without_reupload(
+    tmp_path: Path,
+):
+    queue, job, result, profile = _archive_queue(tmp_path, retention="receipt_only")
+
+    class ReceiptTimeoutApi(FakeApi):
+        def create_commit(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                oid = "d" * 40
+            elif len(self.calls) == 2:
+                raise RuntimeError("RequestTimeout while committing receipt")
+            else:
+                oid = ("e" if len(self.calls) == 3 else "f") * 40
+            return type("Commit", (), {"oid": oid})()
+
+    revisions = []
+    api = ReceiptTimeoutApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+        publication_config=PublicationConfig(
+            retry_attempts=1, retry_cooldown_s=0.0, rate_limit_cooldown_s=0.0,
+        ),
+        remote_verify=lambda _job_ids, revision, _token: revisions.append(revision),
+    )
+
+    assert publisher.publish_due(now_s=300.0, force=False) is None
+    deferred = json.loads(
+        (queue.root / "publication_receipt.json").read_text(encoding="utf-8")
+    )
+    assert deferred["status"] == "DEFERRED"
+    assert deferred["data_commit_oid"] == "d" * 40
+    assert Path(result.result_dir).is_dir()
+    assert queue.counts().published == 0
+
+    completed = publisher.publish_due(now_s=301.0, force=False)
+
+    assert completed is not None and completed.status == "COMPLETE"
+    assert deferred["data_commit_oid"] == "d" * 40
+    assert revisions == ["e" * 40]
+    assert len(api.calls) == 4
+    operation_paths = [
+        [operation.path_in_repo for operation in call["operations"]]
+        for call in api.calls
+    ]
+    assert any("/episodes/" in path for path in operation_paths[0])
+    assert all(not any("/episodes/" in path for path in paths) for paths in operation_paths[1:])
+    assert not Path(result.result_dir).exists()
+    assert queue.counts().published == 1
+    assert publisher.pending_job_ids() == ()
+
+
+def test_archive_data_commit_timeout_retries_same_ingested_batch(tmp_path: Path):
+    queue, job, result, profile = _archive_queue(tmp_path, retention="receipt_only")
+
+    class DataTimeoutApi(FakeApi):
+        def create_commit(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                raise RuntimeError("RequestTimeout while committing archive")
+            oid = {2: "d", 3: "e"}.get(len(self.calls), "f") * 40
+            return type("Commit", (), {"oid": oid})()
+
+    revisions = []
+    api = DataTimeoutApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+        publication_config=PublicationConfig(
+            retry_attempts=1, retry_cooldown_s=0.0, rate_limit_cooldown_s=0.0,
+        ),
+        remote_verify=lambda _job_ids, revision, _token: revisions.append(revision),
+    )
+
+    assert publisher.publish_due(now_s=300.0, force=False) is None
+    deferred = json.loads(
+        (queue.root / "publication_receipt.json").read_text(encoding="utf-8")
+    )
+    assert deferred["status"] == "DEFERRED"
+    assert deferred["data_commit_oid"] is None
+    assert Path(result.result_dir).is_dir()
+
+    completed = publisher.publish_due(now_s=301.0, force=False)
+
+    assert completed is not None and completed.status == "COMPLETE"
+    assert revisions == ["e" * 40]
+    assert len(api.calls) == 4
+    assert queue.counts().published == 1
+    assert not Path(result.result_dir).exists()
+    assert completed.job_ids == (job.job_id,)
+
+
+def test_coordinator_recovers_data_revision_after_local_receipt_write_crash(
+    tmp_path: Path,
+):
+    from scripts import generation_coordinator as coordinator
+
+    queue, job, result, profile = _archive_queue(tmp_path, retention="receipt_only")
+    remote_root = tmp_path / "remote" / "snapshots" / ("d" * 40)
+
+    class CommittingApi(FakeApi):
+        def create_commit(self, **kwargs):
+            self.calls.append(kwargs)
+            for operation in kwargs["operations"]:
+                destination = remote_root / operation.path_in_repo
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                destination.write_bytes(Path(operation.path_or_fileobj).read_bytes())
+            return type("Commit", (), {"oid": "d" * 40})()
+
+    first_api = CommittingApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), first_api, "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+        remote_verify=lambda _job_ids, _revision, _token: None,
+        publication_config=PublicationConfig(
+            retry_attempts=1, retry_cooldown_s=0.0, rate_limit_cooldown_s=0.0,
+        ),
+    )
+    original_write = publisher._write_publication_receipt
+
+    def interrupt_local_oid_persistence(receipt):
+        if receipt.status == "DATA_COMMITTED" and receipt.data_commit_oid == "d" * 40:
+            raise RuntimeError("simulated stop before local OID persistence")
+        original_write(receipt)
+
+    publisher._write_publication_receipt = interrupt_local_oid_persistence
+    with pytest.raises(RuntimeError, match="local OID persistence"):
+        publisher.publish_due(now_s=300.0, force=False)
+
+    assert len(first_api.calls) == 1
+    assert any(
+        "/episodes/" in operation.path_in_repo
+        for operation in first_api.calls[0]["operations"]
+    )
+    pending = json.loads((queue.root / "publication_receipt.json").read_text())
+    assert pending["status"] == "PREPARED"
+    assert pending["data_commit_oid"] is None
+    remote_manifest = remote_root / _run().hf_subfolder / "dataset_manifest.json"
+
+    def download(**kwargs):
+        if kwargs["filename"].endswith("/dataset_manifest.json"):
+            return str(remote_manifest)
+        if kwargs["filename"].endswith("/publication_receipt.json"):
+            return str(remote_root / kwargs["filename"])
+        raise FileNotFoundError(kwargs["filename"])
+
+    coordinator._recover_interrupted_archive_publication(
+        queue,
+        _run(),
+        profile,
+        token="secret",
+        downloader=download,
+    )
+
+    recovered = json.loads((queue.root / "publication_receipt.json").read_text())
+    assert recovered["status"] == "DATA_COMMITTED"
+    assert recovered["data_commit_oid"] == "d" * 40
+
+    api = FakeApi()
+    verified_revisions = []
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+        remote_verify=lambda _job_ids, revision, _token: verified_revisions.append(revision),
+        publication_config=PublicationConfig(
+            retry_attempts=1, retry_cooldown_s=0.0, rate_limit_cooldown_s=0.0,
+        ),
+    )
+    completed = publisher.publish_due(now_s=300.0, force=False)
+    assert completed is not None and completed.status == "COMPLETE"
+    assert len(api.calls) == 2
+    assert verified_revisions == ["c" * 40]
+    assert all(
+        not any("/episodes/" in operation.path_in_repo for operation in call["operations"])
+        for call in api.calls
+    )
+    assert recovered["data_commit_oid"] == "d" * 40
+    assert not Path(result.result_dir).exists()
+
+
+def test_coordinator_recovers_receipt_commit_oid_from_exact_remote_snapshot(
+    tmp_path: Path,
+):
+    from dataclasses import replace
+    from scripts import generation_coordinator as coordinator
+
+    queue, job, result, profile = _archive_queue(tmp_path, retention="receipt_only")
+    publisher = HuggingFaceBatchPublisher(
+        _run(), FakeApi(), "secret", queue, archive_profile=profile,
+    )
+    local = publisher._manifest_from_states(("ingested",))
+    manifest = publisher._merge_manifest(
+        local, {"manifest_version": 3, "episodes": [], "failure_attempts": []},
+    )
+    prepared = PublicationReceipt(
+        run_id=job.run_id,
+        job_ids=(job.job_id,),
+        status="PREPARED",
+        artifact_hashes=publisher._artifact_hashes((job.job_id,)),
+        prefix=_run().hf_subfolder,
+    )
+    publisher._operations((job.job_id,), manifest, prepared)
+    current = PublicationReceipt.from_dict(
+        json.loads((queue.root / "publication_receipt.json").read_text())
+    )
+    candidate = replace(current, status="DATA_COMMITTED", data_commit_oid="d" * 40)
+    publisher._write_publication_receipt(candidate)
+    snapshot_path = publisher._ensure_verification_receipt_snapshot(candidate)
+    remote_root = tmp_path / "remote" / "snapshots" / ("e" * 40)
+    remote_receipt = remote_root / _run().hf_subfolder / "publication_receipt.json"
+    remote_receipt.parent.mkdir(parents=True)
+    remote_receipt.write_bytes(snapshot_path.read_bytes())
+
+    coordinator._recover_interrupted_archive_publication(
+        queue,
+        _run(),
+        profile,
+        token="secret",
+        downloader=lambda **_kwargs: str(remote_receipt),
+    )
+
+    recovered = PublicationReceipt.from_dict(
+        json.loads((queue.root / "publication_receipt.json").read_text())
+    )
+    assert recovered.status == "DATA_COMMITTED"
+    assert recovered.data_commit_oid == "d" * 40
+    assert recovered.commit_oid == "e" * 40
+
+    api = FakeApi()
+    verified_revisions = []
+    resumed_publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+        remote_verify=lambda _job_ids, revision, _token: verified_revisions.append(revision),
+    )
+    completed = resumed_publisher.publish_due(now_s=300.0, force=False)
+
+    assert completed is not None and completed.status == "COMPLETE"
+    assert verified_revisions == ["e" * 40]
+    assert len(api.calls) == 1
+    assert all(
+        "/episodes/" not in operation.path_in_repo
+        for operation in api.calls[0]["operations"]
+    )
+    assert not Path(result.result_dir).exists()
+
+
+def test_archive_metadata_and_prefix_views_remain_provisional_and_revision_bound(
+    tmp_path: Path,
+):
+    queue, job, result, profile = _archive_queue(tmp_path)
+    publisher = HuggingFaceBatchPublisher(
+        _run(), FakeApi(), "secret", queue, last_success_s=0.0,
+        archive_profile=profile,
+    )
+    local = publisher._manifest_from_states(("ingested",))
+    manifest = publisher._merge_manifest(
+        local,
+        {"manifest_version": 3, "episodes": [], "failure_attempts": []},
+    )
+    receipt = PublicationReceipt(
+        run_id=job.run_id,
+        job_ids=(job.job_id,),
+        artifact_hashes=publisher._artifact_hashes((job.job_id,)),
+        prefix=_run().hf_subfolder,
+        created_at_s=1.0,
+        updated_at_s=1.0,
+    )
+
+    publisher._operations((job.job_id,), manifest, receipt)
+
+    dataset_path = queue.root / "publication_manifest.json"
+    dataset_manifest = json.loads(dataset_path.read_text(encoding="utf-8"))
+    assert dataset_manifest["archive_profile"] == profile.as_dict()
+    assert dataset_manifest["dataset_identity"] == profile.dataset_identity
+    assert dataset_manifest["archive_format_id"] == profile.archive_format_id
+    assert dataset_manifest["episode_schema_version"] == profile.episode_schema_version
+    assert dataset_manifest["view_status"] == "PROVISIONAL"
+    assert "result_dir" not in dataset_manifest["episodes"][0]
+    assert dataset_manifest["episodes"][0]["archive_ref"] == (
+        f"episodes/{job.program_id}/{job.episode_id}"
+    )
+
+    resume = json.loads((queue.root / "resume_receipt.json").read_text(encoding="utf-8"))
+    assert resume["source_run_ids"] == [job.run_id]
+    assert resume["dataset_identity"] == profile.dataset_identity
+    assert resume["archive_format_id"] == profile.archive_format_id
+    assert resume["episode_schema_version"] == profile.episode_schema_version
+    assert resume["dataset_manifest_sha256"] == hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+
+    remote_receipt = json.loads((queue.root / "publication_receipt.json").read_text(encoding="utf-8"))
+    assert remote_receipt["source_run_id"] == job.run_id
+    assert remote_receipt["dataset_identity"] == profile.dataset_identity
+    assert remote_receipt["archive_format_id"] == profile.archive_format_id
+    assert remote_receipt["episode_schema_version"] == profile.episode_schema_version
+    assert remote_receipt["artifact_hashes"] == receipt.artifact_hashes
+
+    for view in ("D_geom", "D_temporal", "D_dyn", "D_task"):
+        view_payload = json.loads((queue.root / "views" / f"{view}.json").read_text(encoding="utf-8"))
+        assert view_payload["status"] == "PROVISIONAL"
+        assert view_payload["archive_refs"] == [
+            f"episodes/{job.program_id}/{job.episode_id}"
+        ]
+        assert "episode_ids" not in view_payload
+        assert "schema_version" not in view_payload
+
+
+def test_validation_publisher_rejects_receipt_only_archive_retention(tmp_path: Path):
+    queue, _job_value = _queue(tmp_path)
+    run = RunConfig(
+        run_id="run-1", run_root="/content/run",
+        code_revision="a" * 40, approved_manifest_sha256="b" * 64,
+        hf_subfolder="validation/validation-test", validation_mode=True,
+    )
+    profile = ArchiveProfileConfig(local_artifact_retention="receipt_only")
+
+    with pytest.raises(ValueError, match="validation mode.*keep"):
+        HuggingFaceBatchPublisher(
+            run, FakeApi(), "secret", queue, archive_profile=profile,
+        )
 
 
 def test_publication_limits_large_lfs_commit_concurrency(tmp_path: Path):

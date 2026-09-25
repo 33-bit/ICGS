@@ -536,6 +536,41 @@ def test_coordinator_open_rejects_tampered_runtime_snapshot(tmp_path: Path, monk
         )
 
 
+def test_coordinator_open_rejects_run_config_validation_mode_mismatch_before_remote_io(
+    tmp_path: Path, monkeypatch,
+):
+    config = _runtime_config(tmp_path, publication_enabled=True)
+    run_json = generation_launch.persist_run_config(
+        config,
+        Path("artifacts/composition/approved_composition_manifest.json"),
+        code_revision="a" * 40,
+    )
+    token = tmp_path / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_payload["run"]["validation_mode"] = False
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+    remote = tmp_path / "remote-manifest.json"
+    remote.write_text(json.dumps({
+        "manifest_version": 3,
+        "source_run_ids": [],
+        "episodes": [],
+        "failure_attempts": [],
+    }), encoding="utf-8")
+    calls = []
+    monkeypatch.setattr(
+        generation_coordinator_module,
+        "hf_hub_download",
+        lambda **kwargs: calls.append(kwargs) or str(remote),
+    )
+
+    with pytest.raises(ValueError, match="validation_mode.*run config"):
+        CoordinatorControlPlane.open(run_json, api_factory=lambda: object(), token_path=token)
+
+    assert calls == []
+
+
 def test_no_stop_call_in_control_sources():
     for name in (
         "scripts/generation_launch.py",

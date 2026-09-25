@@ -23,7 +23,10 @@ from icgs.data.collection.generation.distributed_contracts import (
     ValidationReceipt,
     WorkerResult,
 )
-from icgs.data.collection.generation.diversity import train_subset_for_sample
+from icgs.data.collection.generation.diversity import (
+    scene_signature as _scene_signature,
+    train_subset_for_sample,
+)
 from icgs.data.collection.generation.episode_archive import (
     EpisodeArchiveReader,
     validate_archive_manifest,
@@ -599,6 +602,82 @@ def _archive_manifest_entry(
     }
 
 
+def validate_archive_manifest_row_identity(
+    job: GenerationJob,
+    result: WorkerResult,
+    row: Mapping[str, Any],
+    profile: ArchiveProfileConfig,
+) -> dict[str, Any]:
+    """Recheck the immutable row projection retained after payload pruning."""
+    if not isinstance(row, Mapping):
+        raise ValueError("archive manifest row must be an object")
+    if not isinstance(profile, ArchiveProfileConfig):
+        raise TypeError("profile must be an ArchiveProfileConfig")
+    archive_kind = "episode" if result.episode_id is not None else "attempt"
+    if (
+        result.job_id != job.job_id
+        or result.attempt_id != job.attempt_id
+        or result.program_id != job.program_id
+        or (archive_kind == "episode" and result.episode_id != job.episode_id)
+        or (archive_kind == "attempt" and result.episode_id is not None)
+    ):
+        raise ValueError("archive result identity does not match its job")
+    archive_ref = (
+        f"episodes/{job.program_id}/{job.episode_id}"
+        if archive_kind == "episode"
+        else f"attempts/{job.program_id}/{job.attempt_id}"
+    )
+    manifest_name = "episode.manifest.json" if archive_kind == "episode" else "attempt.manifest.json"
+    expected = {
+        "archive_ref": archive_ref,
+        "archive_manifest": f"{archive_ref}/{manifest_name}",
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "dataset_identity": profile.dataset_identity,
+        "job_id": job.job_id,
+        "run_id": job.run_id,
+        "manifest_sha256": job.manifest_sha256,
+        "retry_generation": job.retry_generation,
+        "source_run_id": job.run_id,
+        "code_revision": job.code_revision,
+        "attempt_id": job.attempt_id,
+        "episode_id": result.episode_id,
+        "program_id": job.program_id,
+        "outcome": result.outcome,
+        "attempt_plan": job.plan.as_dict(),
+        "file_sha256": dict(result.file_sha256),
+        "split": "dev" if job.plan.split == "development" else job.plan.split,
+        "subset": _planned_archive_subset(job),
+        "episode_kind": job.plan.episode_kind,
+        "scene_signature": (
+            job.plan.randomization.get("scene_signature")
+            or _scene_signature(job.plan.randomization)
+        ),
+        "scene_seed": job.plan.scene_seed,
+        "episode_index": job.plan.episode_index,
+    }
+    intervention = job.plan.intervention or {}
+    expected.update({
+        "asset_instance_id": job.plan.randomization.get("asset_instance_id"),
+        "asset_family_id": job.plan.randomization.get("asset_family_id"),
+        "intervention_id": intervention.get("intervention_id"),
+        "source_episode_id": intervention.get("source_episode_id"),
+        "base_episode_id": intervention.get("base_episode_id"),
+    })
+    for field, value in expected.items():
+        if field not in row or row[field] != value:
+            raise ValueError(f"archive manifest row immutable identity mismatch: {field}")
+    for field in ("preprocessing_identity",):
+        value = row.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"archive manifest row requires nonblank {field}")
+    if archive_kind == "episode":
+        value = row.get("source_lineage_id")
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("archive manifest row requires nonblank source_lineage_id")
+    return dict(row)
+
+
 def validate_closed_result(
     job: GenerationJob,
     result: WorkerResult,
@@ -659,6 +738,9 @@ def validate_closed_result(
             "attempt_id": job.attempt_id,
             "episode_id": None,
             "program_id": job.program_id,
+            "asset_instance_id": job.plan.randomization.get("asset_instance_id"),
+            "asset_family_id": job.plan.randomization.get("asset_family_id"),
+            "source_lineage_id": job.plan.randomization.get("source_lineage_id"),
             "outcome": result.outcome,
             "episode_kind": job.plan.episode_kind,
             "split": "dev" if job.plan.split == "development" else job.plan.split,
@@ -666,6 +748,9 @@ def validate_closed_result(
             "scene_signature": job.plan.randomization.get("scene_signature"),
             "scene_seed": job.plan.scene_seed,
             "episode_index": job.plan.episode_index,
+            "intervention_id": (job.plan.intervention or {}).get("intervention_id"),
+            "source_episode_id": (job.plan.intervention or {}).get("source_episode_id"),
+            "base_episode_id": (job.plan.intervention or {}).get("base_episode_id"),
             "attempt_plan": job.plan.as_dict(),
         }
         if type(archive_payload["timeline"].get("valid_observation_until")) is int:
@@ -812,6 +897,7 @@ __all__ = [
     "ingest_validated_result",
     "load_validation_plan",
     "validate_validation_receipt",
+    "validate_archive_manifest_row_identity",
     "validate_closed_result",
     "write_validation_receipt",
 ]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -59,6 +60,12 @@ class PublicationReceipt:
     data_commit_oid: str | None = None
     commit_oid: str | None = None
     artifact_hashes: dict[str, str] | None = None
+    source_run_id: str | None = None
+    dataset_identity: str | None = None
+    archive_format_id: str | None = None
+    episode_schema_version: str | None = None
+    archive_profile: dict[str, Any] | None = None
+    dataset_manifest_sha256: str | None = None
     prefix: str = ""
     path_count: int = 0
     created_at_s: float = 0.0
@@ -74,6 +81,28 @@ class PublicationReceipt:
             raise ValueError("job_ids must be a tuple")
         if self.artifact_hashes is not None and not isinstance(self.artifact_hashes, dict):
             raise ValueError("artifact_hashes must be an object or null")
+        if self.archive_profile is not None and not isinstance(self.archive_profile, dict):
+            raise ValueError("archive_profile must be an object or null")
+        identity = (
+            self.source_run_id,
+            self.dataset_identity,
+            self.archive_format_id,
+            self.episode_schema_version,
+        )
+        if any(value is not None for value in identity):
+            if any(not isinstance(value, str) or not value.strip() for value in identity):
+                raise ValueError("archive publication identity fields must be nonblank strings")
+            if self.source_run_id != self.run_id:
+                raise ValueError("publication source_run_id must match run_id")
+        if self.dataset_manifest_sha256 is not None and (
+            len(self.dataset_manifest_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in self.dataset_manifest_sha256)
+        ):
+            raise ValueError("dataset_manifest_sha256 must be a lowercase SHA256 digest")
+        if self.archive_profile is not None:
+            for key in ("dataset_identity", "archive_format_id", "episode_schema_version"):
+                if self.archive_profile.get(key) != getattr(self, key):
+                    raise ValueError(f"publication archive profile disagrees with {key}")
 
     def as_dict(self) -> dict[str, Any]:
         payload = {
@@ -92,6 +121,24 @@ class PublicationReceipt:
             "last_error": self.last_error,
             "next_retry_s": self.next_retry_s,
         }
+        if any((
+            self.source_run_id,
+            self.dataset_identity,
+            self.archive_format_id,
+            self.episode_schema_version,
+            self.archive_profile,
+            self.dataset_manifest_sha256,
+        )):
+            payload.update({
+                "source_run_id": self.source_run_id,
+                "dataset_identity": self.dataset_identity,
+                "archive_format_id": self.archive_format_id,
+                "episode_schema_version": self.episode_schema_version,
+                "archive_profile": (
+                    dict(self.archive_profile) if self.archive_profile is not None else None
+                ),
+                "dataset_manifest_sha256": self.dataset_manifest_sha256,
+            })
         return payload
 
     @classmethod
@@ -108,6 +155,16 @@ class PublicationReceipt:
             data_commit_oid=values.get("data_commit_oid") or values.get("commit_oid"),
             commit_oid=values.get("commit_oid"),
             artifact_hashes=dict(values.get("artifact_hashes") or {}),
+            source_run_id=values.get("source_run_id"),
+            dataset_identity=values.get("dataset_identity"),
+            archive_format_id=values.get("archive_format_id"),
+            episode_schema_version=values.get("episode_schema_version"),
+            archive_profile=(
+                dict(values["archive_profile"])
+                if isinstance(values.get("archive_profile"), Mapping)
+                else None
+            ),
+            dataset_manifest_sha256=values.get("dataset_manifest_sha256"),
             prefix=str(values.get("prefix", "")),
             path_count=int(values.get("path_count", 0)),
             created_at_s=float(values.get("created_at_s", 0.0)),
@@ -132,6 +189,20 @@ def _same_identity(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
     )
 
 
+def _canonical_json_bytes(payload: Any) -> bytes:
+    return (json.dumps(payload, indent=2, sort_keys=True, allow_nan=False) + "\n").encode("utf-8")
+
+
+def _atomic_write_bytes(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(path.name + f".tmp-{os.getpid()}-{time.time_ns()}")
+    with temporary.open("wb") as stream:
+        stream.write(content)
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+
+
 def reconcile_publication(
     receipt: PublicationReceipt | Mapping[str, Any],
     remote_manifest: Mapping[str, Any],
@@ -147,10 +218,19 @@ def reconcile_publication(
         raise ValueError("immutable publication identity conflict: job_ids")
     for key, local_value in (
         ("run_id", local.run_id),
+        ("source_run_id", local.source_run_id),
         ("prefix", local.prefix),
         ("data_commit_oid", local.data_commit_oid),
+        ("dataset_identity", local.dataset_identity),
+        ("archive_format_id", local.archive_format_id),
+        ("episode_schema_version", local.episode_schema_version),
+        ("dataset_manifest_sha256", local.dataset_manifest_sha256),
     ):
-        remote_value_for_key = remote.get(key)
+        remote_value_for_key = remote.get(key) or remote_manifest.get(key)
+        if remote_value_for_key is None and isinstance(remote.get("archive_profile"), Mapping):
+            remote_value_for_key = remote["archive_profile"].get(key)
+        if remote_value_for_key is None and isinstance(remote_manifest.get("archive_profile"), Mapping):
+            remote_value_for_key = remote_manifest["archive_profile"].get(key)
         if local_value and remote_value_for_key and remote_value_for_key != local_value:
             raise ValueError(f"immutable publication identity conflict: {key}")
     expected_hashes = dict(local.artifact_hashes or {})
@@ -210,6 +290,12 @@ class HuggingFaceBatchPublisher:
         self.run = run
         if archive_profile is not None and not isinstance(archive_profile, ArchiveProfileConfig):
             raise TypeError("archive_profile must be an ArchiveProfileConfig or None")
+        if (
+            run.validation_mode
+            and archive_profile is not None
+            and archive_profile.local_artifact_retention != "keep"
+        ):
+            raise ValueError("validation mode requires local_artifact_retention=keep")
         self.archive_profile = archive_profile
         self.api = api
         self._token = token
@@ -233,15 +319,11 @@ class HuggingFaceBatchPublisher:
 
     def _write_retry_state(self, *, next_retry_s: float, error: str) -> None:
         self._retry_state_path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self._retry_state_path.with_name(
-            self._retry_state_path.name + f".tmp-{os.getpid()}-{time.time_ns()}"
-        )
-        temporary.write_text(json.dumps({
+        _atomic_write_bytes(self._retry_state_path, _canonical_json_bytes({
             "next_retry_s": next_retry_s,
             "error": error[:2000],
             "updated_at_s": time.time(),
-        }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        os.replace(temporary, self._retry_state_path)
+        }))
 
     def _defer_transient_failure(self, now_s: float, error: BaseException) -> None:
         status = getattr(getattr(error.__cause__, "response", None), "status_code", None)
@@ -314,15 +396,48 @@ class HuggingFaceBatchPublisher:
     def _publication_receipt_path(self) -> Path:
         return self.queue.root / "publication_receipt.json"
 
+    @property
+    def _verification_receipt_path(self) -> Path:
+        return self.queue.root / "publication_receipt_to_verify.json"
+
     def _write_publication_receipt(self, receipt: PublicationReceipt) -> None:
-        path = self._publication_receipt_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = path.with_name(path.name + f".partial-{os.getpid()}-{time.time_ns()}")
-        temporary.write_text(
-            json.dumps(receipt.as_dict(), indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
+        _atomic_write_bytes(
+            self._publication_receipt_path,
+            _canonical_json_bytes(receipt.as_dict()),
         )
-        os.replace(temporary, path)
+
+    def _ensure_verification_receipt_snapshot(self, receipt: PublicationReceipt) -> Path:
+        """Return the immutable receipt bytes used by pinned remote verification."""
+        path = self._verification_receipt_path
+        if path.is_symlink():
+            raise ValueError("publication receipt verification snapshot may not be a symlink")
+        if path.exists():
+            if not path.is_file():
+                raise ValueError("publication receipt verification snapshot must be a regular file")
+            try:
+                snapshot = PublicationReceipt.from_dict(
+                    json.loads(path.read_text(encoding="utf-8"))
+                )
+            except (OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+                raise ValueError("publication receipt verification snapshot is malformed") from error
+            immutable_fields = (
+                "run_id",
+                "job_ids",
+                "data_commit_oid",
+                "artifact_hashes",
+                "source_run_id",
+                "dataset_identity",
+                "archive_format_id",
+                "episode_schema_version",
+                "archive_profile",
+                "dataset_manifest_sha256",
+                "prefix",
+            )
+            if any(getattr(snapshot, name) != getattr(receipt, name) for name in immutable_fields):
+                raise ValueError("publication receipt verification snapshot identity conflict")
+            return path
+        _atomic_write_bytes(path, _canonical_json_bytes(receipt.as_dict()))
+        return path
 
     def _read_publication_receipt(self) -> PublicationReceipt | None:
         try:
@@ -352,6 +467,24 @@ class HuggingFaceBatchPublisher:
             for relative, digest in dict(result.get("file_sha256") or {}).items():
                 hashes[f"{job_id}/{relative}"] = str(digest)
         return hashes
+
+    def _bind_archive_receipt(
+        self,
+        receipt: PublicationReceipt,
+        manifest: Mapping[str, Any],
+    ) -> PublicationReceipt:
+        if self.archive_profile is None:
+            return receipt
+        manifest_sha256 = hashlib.sha256(_canonical_json_bytes(manifest)).hexdigest()
+        return replace(
+            receipt,
+            source_run_id=self.run.run_id,
+            dataset_identity=self.archive_profile.dataset_identity,
+            archive_format_id=self.archive_profile.archive_format_id,
+            episode_schema_version=self.archive_profile.episode_schema_version,
+            archive_profile=self.archive_profile.as_dict(),
+            dataset_manifest_sha256=manifest_sha256,
+        )
 
     def _select_manifest(self, manifest: Mapping[str, Any], job_ids: tuple[str, ...]) -> dict[str, Any]:
         episode_ids: set[str] = set()
@@ -396,6 +529,19 @@ class HuggingFaceBatchPublisher:
         merged["source_run_ids"] = sorted(source_run_ids)
         merged["total_episodes"] = len(merged["episodes"])
         merged["total_failure_attempts"] = len(merged["failure_attempts"])
+        if self.archive_profile is not None:
+            archive_identity = {
+                "archive_profile": self.archive_profile.as_dict(),
+                "dataset_identity": self.archive_profile.dataset_identity,
+                "archive_format_id": self.archive_profile.archive_format_id,
+                "episode_schema_version": self.archive_profile.episode_schema_version,
+                "view_status": "PROVISIONAL",
+            }
+            for key, expected in archive_identity.items():
+                previous = remote.get(key)
+                if previous is not None and previous != expected:
+                    raise ValueError(f"remote archive identity conflict: {key}")
+            merged.update(archive_identity)
         return merged
 
     def _manifest_from_states(self, states: tuple[str, ...]) -> dict[str, Any]:
@@ -406,7 +552,9 @@ class HuggingFaceBatchPublisher:
                 if not path.is_dir():
                     continue
                 result = json.loads((path / "result.json").read_text(encoding="utf-8"))
-                result_root = Path(result["result_dir"])
+                result_root = self.queue.resolve_result_root(
+                    str(result["result_dir"]), require_exists=True,
+                )
                 if self.archive_profile is not None:
                     job = GenerationJob.from_dict(
                         json.loads((path / "job.json").read_text(encoding="utf-8"))
@@ -448,7 +596,9 @@ class HuggingFaceBatchPublisher:
         for job_id in job_ids:
             directory = self.queue.root / "ingested" / job_id
             result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
-            result_root = Path(result["result_dir"])
+            result_root = self.queue.resolve_result_root(
+                str(result["result_dir"]), require_exists=True,
+            )
             if self.archive_profile is not None:
                 job = GenerationJob.from_dict(
                     json.loads((directory / "job.json").read_text(encoding="utf-8"))
@@ -499,7 +649,9 @@ class HuggingFaceBatchPublisher:
                     path_or_fileobj=str(path),
                 ))
         manifest_path = self.queue.root / "publication_manifest.json"
-        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        manifest_bytes = _canonical_json_bytes(manifest)
+        _atomic_write_bytes(manifest_path, manifest_bytes)
+        manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
         operations.append(CommitOperationAdd(
             path_in_repo=f"{self.run.hf_subfolder}/dataset_manifest.json",
             path_or_fileobj=str(manifest_path),
@@ -510,7 +662,7 @@ class HuggingFaceBatchPublisher:
             program = str(row.get("program_id")); outcome = str(row.get("outcome", "success"))
             counts.setdefault(program, {}).setdefault(outcome, 0)
             counts[program][outcome] += 1
-        resume_path.write_text(json.dumps({
+        resume_payload: dict[str, Any] = {
             "receipt_version": 1,
             "status": "RUNNING",
             "run_id": self.run.run_id,
@@ -519,28 +671,59 @@ class HuggingFaceBatchPublisher:
             "failure_attempts": len(manifest.get("failure_attempts") or []),
             "per_program_outcomes": counts,
             "updated_at_s": time.time(),
-        }, indent=2) + "\n", encoding="utf-8")
+        }
+        if self.archive_profile is not None:
+            resume_payload.update({
+                "source_run_id": self.run.run_id,
+                "source_run_ids": list(manifest.get("source_run_ids") or (self.run.run_id,)),
+                "dataset_identity": self.archive_profile.dataset_identity,
+                "archive_format_id": self.archive_profile.archive_format_id,
+                "episode_schema_version": self.archive_profile.episode_schema_version,
+                "archive_profile": self.archive_profile.as_dict(),
+                "dataset_manifest_sha256": manifest_sha256,
+                "dataset_manifest_revision": receipt.data_commit_oid if receipt is not None else None,
+            })
+        _atomic_write_bytes(resume_path, _canonical_json_bytes(resume_payload))
         operations.append(CommitOperationAdd(
             path_in_repo=f"{self.run.hf_subfolder}/resume_receipt.json",
             path_or_fileobj=str(resume_path),
         ))
         view_root = self.queue.root / "views"
+        archive_refs = [
+            str(row["archive_ref"])
+            for row in manifest.get("episodes") or []
+            if isinstance(row, Mapping) and isinstance(row.get("archive_ref"), str)
+        ]
         for view in ("D_geom", "D_temporal", "D_dyn", "D_task"):
             view_path = view_root / f"{view}.json"
             view_path.parent.mkdir(parents=True, exist_ok=True)
-            view_path.write_text(json.dumps({
-                "view": view,
-                "schema_version": "icgs_episode_v2",
-                "episode_ids": [row.get("episode_id") for row in manifest.get("episodes") or []],
-                "pointers_only": True,
-            }, indent=2) + "\n", encoding="utf-8")
+            if self.archive_profile is None:
+                view_payload = {
+                    "view": view,
+                    "schema_version": "icgs_episode_v2",
+                    "episode_ids": [row.get("episode_id") for row in manifest.get("episodes") or []],
+                    "pointers_only": True,
+                }
+            else:
+                view_payload = {
+                    "view": view,
+                    "status": "PROVISIONAL",
+                    "view_status": "PROVISIONAL",
+                    "dataset_identity": self.archive_profile.dataset_identity,
+                    "archive_format_id": self.archive_profile.archive_format_id,
+                    "episode_schema_version": self.archive_profile.episode_schema_version,
+                    "dataset_manifest_sha256": manifest_sha256,
+                    "archive_refs": archive_refs,
+                    "pointers_only": True,
+                }
+            _atomic_write_bytes(view_path, _canonical_json_bytes(view_payload))
             operations.append(CommitOperationAdd(
                 path_in_repo=f"{self.run.hf_subfolder}/views/{view}.json",
                 path_or_fileobj=str(view_path),
             ))
         publication_path = self._publication_receipt_path
-        publication_payload = (
-            receipt.as_dict()
+        bound_receipt = self._bind_archive_receipt(
+            receipt
             if receipt is not None
             else PublicationReceipt(
                 run_id=self.run.run_id,
@@ -548,12 +731,15 @@ class HuggingFaceBatchPublisher:
                 prefix=self.run.hf_subfolder,
                 created_at_s=time.time(),
                 updated_at_s=time.time(),
-            ).as_dict()
+            ),
+            manifest,
         )
-        publication_path.write_text(
-            json.dumps(publication_payload, indent=2, sort_keys=True) + "\n",
-            encoding="utf-8",
-        )
+        if (
+            self.archive_profile is not None
+            and bound_receipt.dataset_manifest_sha256 != manifest_sha256
+        ):
+            raise ValueError("publication receipt dataset manifest hash does not match operations")
+        _atomic_write_bytes(publication_path, _canonical_json_bytes(bound_receipt.as_dict()))
         operations.append(CommitOperationAdd(
             path_in_repo=f"{self.run.hf_subfolder}/publication_receipt.json",
             path_or_fileobj=str(publication_path),
@@ -582,15 +768,44 @@ class HuggingFaceBatchPublisher:
                 local_receipt = None
         if local_receipt is not None:
             reconciled = reconcile_publication(local_receipt, remote)
+            if (
+                self.archive_profile is not None
+                and local_receipt.status not in {"VERIFIED", "COMPLETE"}
+                and reconciled.status == "VERIFIED"
+            ):
+                # Matching receipt metadata is not a remote byte verification.
+                # Keep the archived batch in its committed state until the
+                # coordinator verifies every file at the pinned revision.
+                reconciled = replace(
+                    local_receipt,
+                    status=(
+                        "DATA_COMMITTED"
+                        if local_receipt.data_commit_oid
+                        else local_receipt.status
+                    ),
+                )
             if reconciled.status == "VERIFIED":
                 return self._complete_verified(reconciled, now_s)
             if local_receipt.status == "COMPLETE":
                 return local_receipt
             if local_receipt.status in {"DATA_COMMITTED", "DEFERRED"}:
+                if self.archive_profile is not None and self.remote_verify is None:
+                    raise ValueError("archive publication requires remote hash verification")
                 next_retry_s = local_receipt.next_retry_s or 0.0
                 if now_s < next_retry_s and reconciled.status != "VERIFIED":
                     return None
-                return self._commit_receipt(reconciled, now_s)
+                if self.archive_profile is None or local_receipt.data_commit_oid:
+                    return self._commit_receipt(reconciled, now_s)
+                # A transient failure before Hugging Face returned a data OID
+                # has no immutable revision to verify. Retry the same ingested
+                # batch; once an OID is recorded, subsequent retries use it.
+                local_receipt = replace(
+                    local_receipt,
+                    status="PREPARED",
+                    commit_oid=None,
+                    last_error=None,
+                    next_retry_s=None,
+                )
 
         if (
             local_receipt is None
@@ -609,6 +824,8 @@ class HuggingFaceBatchPublisher:
         )
         if not job_ids:
             return None
+        if self.archive_profile is not None and self.remote_verify is None:
+            raise ValueError("archive publication requires remote hash verification")
         source_manifest = self._batch_manifest() if local_manifest is None else local_manifest
         local_manifest_slice = self._select_manifest(source_manifest, job_ids)
         plan = self.plan_batch(local_manifest_slice, remote)
@@ -622,6 +839,7 @@ class HuggingFaceBatchPublisher:
             created_at_s=now,
             updated_at_s=now,
         )
+        prepared = self._bind_archive_receipt(prepared, plan["manifest"])
         operations = self._operations(job_ids, plan["manifest"], prepared)
         prepared = replace(prepared, path_count=len(operations), updated_at_s=now)
         self._write_publication_receipt(prepared)
@@ -674,17 +892,26 @@ class HuggingFaceBatchPublisher:
         receipt: PublicationReceipt,
         now_s: float,
     ) -> PublicationReceipt | None:
+        if self.archive_profile is not None:
+            return self._commit_archive_receipt(receipt, now_s)
         if receipt.status == "VERIFIED":
-            return self._complete_verified(receipt, now_s)
+            completed = self._complete_verified(receipt, now_s)
+            self._verification_receipt_path.unlink(missing_ok=True)
+            return completed
         publication_path = self._publication_receipt_path
         self._write_publication_receipt(receipt)
+        verification_path = (
+            self._ensure_verification_receipt_snapshot(receipt)
+            if self.remote_verify is not None
+            else publication_path
+        )
         try:
             final_commit = self._with_transient_retry(lambda: self.api.create_commit(
                 repo_id=self.run.hf_repo,
                 repo_type="dataset",
                 operations=[CommitOperationAdd(
                     path_in_repo=f"{self.run.hf_subfolder}/publication_receipt.json",
-                    path_or_fileobj=str(publication_path),
+                    path_or_fileobj=str(verification_path),
                 )],
                 commit_message=f"Finalize generation publication receipt ({len(receipt.job_ids)} results)",
                 token=self._token,
@@ -709,6 +936,16 @@ class HuggingFaceBatchPublisher:
         )
         self._write_publication_receipt(verified)
         if self.remote_verify is not None:
+            if (
+                self.archive_profile is not None
+                and (
+                    self._verification_receipt_path.is_symlink()
+                    or not self._verification_receipt_path.is_file()
+                )
+            ):
+                raise ValueError(
+                    "archive publication is missing the exact receipt bytes used for verification"
+                )
             try:
                 self._with_transient_retry(
                     lambda: self.remote_verify(receipt.job_ids, receipt_oid, self._token)
@@ -717,7 +954,153 @@ class HuggingFaceBatchPublisher:
                 self._defer_transient_failure(now_s, error)
                 self._write_publication_receipt(self._deferred_receipt(verified, now_s, error))
                 return None
-        return self._complete_verified(verified, now_s)
+        completed = self._complete_verified(verified, now_s)
+        self._verification_receipt_path.unlink(missing_ok=True)
+        return completed
+
+    def _commit_archive_receipt(
+        self,
+        receipt: PublicationReceipt,
+        now_s: float,
+    ) -> PublicationReceipt | None:
+        """Verify immutable archive bytes before publishing verified state or pruning."""
+        if receipt.status == "VERIFIED":
+            completed = self._complete_verified(receipt, now_s)
+            self._verification_receipt_path.unlink(missing_ok=True)
+            return completed
+        if self.remote_verify is None:
+            raise ValueError("archive publication requires remote hash verification")
+        if not receipt.data_commit_oid:
+            raise ValueError("archive receipt is missing its data commit OID")
+
+        candidate = replace(
+            receipt,
+            status="DATA_COMMITTED",
+            updated_at_s=now_s,
+            last_error=None,
+            next_retry_s=None,
+        )
+        if not candidate.commit_oid:
+            publication_path = self._publication_receipt_path
+            resume_path = self.queue.root / "resume_receipt.json"
+            try:
+                resume_payload = json.loads(resume_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as error:
+                raise ValueError("archive publication is missing its resume receipt") from error
+            if resume_payload.get("dataset_manifest_sha256") != candidate.dataset_manifest_sha256:
+                raise ValueError("resume receipt dataset manifest hash mismatch")
+            resume_payload["dataset_manifest_revision"] = candidate.data_commit_oid
+            _atomic_write_bytes(resume_path, _canonical_json_bytes(resume_payload))
+            self._write_publication_receipt(candidate)
+            verification_path = self._ensure_verification_receipt_snapshot(candidate)
+            metadata_operations = [
+                CommitOperationAdd(
+                    path_in_repo=f"{self.run.hf_subfolder}/publication_receipt.json",
+                    path_or_fileobj=str(verification_path),
+                ),
+                CommitOperationAdd(
+                    path_in_repo=f"{self.run.hf_subfolder}/resume_receipt.json",
+                    path_or_fileobj=str(resume_path),
+                ),
+            ]
+            try:
+                receipt_commit = self._with_transient_retry(lambda: self.api.create_commit(
+                    repo_id=self.run.hf_repo,
+                    repo_type="dataset",
+                    operations=metadata_operations,
+                    commit_message=f"Record committed generation archive ({len(receipt.job_ids)} results)",
+                    token=self._token,
+                    num_threads=self.publication_config.upload_threads,
+                ))
+            except _TransientPublicationDeferred as error:
+                self._defer_transient_failure(now_s, error)
+                self._write_publication_receipt(self._deferred_receipt(candidate, now_s, error))
+                return None
+            receipt_oid = str(
+                getattr(receipt_commit, "oid", getattr(receipt_commit, "commit_hash", ""))
+            )
+            if not receipt_oid:
+                raise RuntimeError("Hugging Face archive receipt commit returned no revision")
+            candidate = replace(candidate, commit_oid=receipt_oid)
+            self._write_publication_receipt(candidate)
+
+        try:
+            if (
+                self._verification_receipt_path.is_symlink()
+                or not self._verification_receipt_path.is_file()
+            ):
+                raise ValueError(
+                    "archive publication is missing the exact receipt bytes used for verification"
+                )
+            self._with_transient_retry(
+                lambda: self.remote_verify(candidate.job_ids, candidate.commit_oid, self._token)
+            )
+        except _TransientPublicationDeferred as error:
+            self._defer_transient_failure(now_s, error)
+            self._write_publication_receipt(self._deferred_receipt(candidate, now_s, error))
+            return None
+        except Exception as error:
+            failed = replace(
+                candidate,
+                status="DATA_COMMITTED",
+                updated_at_s=now_s,
+                last_error=str(error)[:2000],
+                next_retry_s=None,
+            )
+            self._write_publication_receipt(failed)
+            raise
+
+        verified = replace(
+            candidate,
+            status="VERIFIED",
+            updated_at_s=now_s,
+            last_error=None,
+            next_retry_s=None,
+        )
+        # The verified receipt is a metadata-only commit. Its commit_oid names
+        # the earlier pinned revision whose complete archive inventory passed
+        # verification; dataset_manifest_revision remains the data commit OID.
+        snapshot_path = self.queue.root / (
+            f".publication-receipt-verified-{os.getpid()}-{time.time_ns()}.json"
+        )
+        _atomic_write_bytes(snapshot_path, _canonical_json_bytes(verified.as_dict()))
+        try:
+            final_commit = self._with_transient_retry(lambda: self.api.create_commit(
+                repo_id=self.run.hf_repo,
+                repo_type="dataset",
+                operations=[CommitOperationAdd(
+                    path_in_repo=f"{self.run.hf_subfolder}/publication_receipt.json",
+                    path_or_fileobj=str(snapshot_path),
+                )],
+                commit_message=f"Verify generation archive receipt ({len(receipt.job_ids)} results)",
+                token=self._token,
+                num_threads=self.publication_config.upload_threads,
+            ))
+        except _TransientPublicationDeferred as error:
+            self._defer_transient_failure(now_s, error)
+            self._write_publication_receipt(self._deferred_receipt(candidate, now_s, error))
+            return None
+        except Exception as error:
+            failed = replace(
+                candidate,
+                status="DATA_COMMITTED",
+                updated_at_s=now_s,
+                last_error=str(error)[:2000],
+                next_retry_s=None,
+            )
+            self._write_publication_receipt(failed)
+            raise
+        finally:
+            snapshot_path.unlink(missing_ok=True)
+        final_oid = str(
+            getattr(final_commit, "oid", getattr(final_commit, "commit_hash", ""))
+        )
+        if not final_oid:
+            raise RuntimeError("Hugging Face verified receipt commit returned no revision")
+        self._write_publication_receipt(verified)
+        completed = self._complete_verified(verified, now_s)
+        self._verification_receipt_path.unlink(missing_ok=True)
+        return completed
 
     def _complete_verified(
         self,
@@ -727,7 +1110,12 @@ class HuggingFaceBatchPublisher:
         verified = replace(receipt, status="VERIFIED", updated_at_s=now_s)
         self._write_publication_receipt(verified)
         for job_id in verified.job_ids:
-            self.queue.mark_published(job_id)
+            retention = (
+                self.archive_profile.local_artifact_retention
+                if self.archive_profile is not None
+                else "keep"
+            )
+            self.queue.mark_published(job_id, retention=retention)
         complete = replace(
             verified,
             status="COMPLETE",
@@ -739,6 +1127,7 @@ class HuggingFaceBatchPublisher:
         self.last_success_s = now_s
         self.receipts.append(complete)
         self._clear_retry_state()
+        self._verification_receipt_path.unlink(missing_ok=True)
         return complete
 
 

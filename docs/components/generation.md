@@ -59,10 +59,12 @@ before ingestion and the publisher revalidates it immediately before upload.
 Validated dataset rows contain HF-relative archive references and complete file
 hash inventories, not absolute local result paths. Success and `valid_failure`
 remain episode rows; crashes and invalid observations remain attempt rows. Legacy
-configs without `archive_profile` retain their JSON/layout behavior. Receipt-only
-retention, HF-only resume, final-view publication, and remote acceptance remain
-pending; this profile is not yet an end-to-end production collection path. See the
-[active implementation plan](../plans/active/generation-storage-and-view-finalization.md)
+configs without `archive_profile` retain their JSON/layout behavior. Verified
+receipt-only pruning now retains a per-job queue receipt and manifest row; it is
+rejected in validation mode, whose checked-in profile remains `keep`. Full HF-only
+resume bootstrap, final-view publication, remote acceptance and production-run
+authorization remain pending, so this is not yet an end-to-end production
+collection path. See the [active implementation plan](../plans/active/generation-storage-and-view-finalization.md)
 for current phase evidence.
 
 ## Distributed lifecycle
@@ -76,6 +78,12 @@ Workers have no Hugging Face token. The coordinator alone validates results,
 updates quota state and publishes. Temporary directories containing `.partial-`
 are not queue entries. Remote conflicts fail closed; matching immutable hashes
 may be reconciled during an explicit resume.
+
+For the archive profile, receipt-only retention follows pinned-revision byte
+verification of every archive file, the dataset manifest, resume receipt,
+publication receipt snapshot and all four provisional views. Per-file downloads
+use independent temporary caches. Interrupted commits are reconciled from the
+remote revision and exact local receipt snapshot before another upload is allowed.
 
 ### Resume after losing local state
 

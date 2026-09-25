@@ -293,6 +293,12 @@ class GenerationRuntimeConfig:
             raise ValueError("run must be a RuntimeRunConfig")
         if self.archive_profile is not None and not isinstance(self.archive_profile, ArchiveProfileConfig):
             raise ValueError("archive_profile must be an ArchiveProfileConfig or null")
+        if (
+            self.run.validation_mode
+            and self.archive_profile is not None
+            and self.archive_profile.local_artifact_retention != "keep"
+        ):
+            raise ValueError("validation mode requires local_artifact_retention=keep")
         width = max(3, len(str(self.run.worker_count - 1)))
         worker_ids = self.machine.worker_ids or tuple(
             f"{index:0{width}d}" for index in range(self.run.worker_count)

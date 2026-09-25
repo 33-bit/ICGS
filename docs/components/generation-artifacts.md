@@ -233,7 +233,7 @@ are not episode data:
 | `queue/claimed/<worker>/*` | Claimed job and lease metadata | Until ready/recovery |
 | `queue/ready/<job>/` | Closed worker result awaiting validation | Until ingested/quarantined |
 | `queue/ingested/<job>/` | Validated result awaiting HF publication | Until published |
-| `queue/published/<job>/` | Published immutable local receipt/result | Resume/audit state |
+| `queue/published/<job>/` | Published immutable local receipt/result; receipt-only rows retain the planner manifest row and its digest | Resume/audit state |
 | `queue/quarantined/<job>/validation_failure.json` | Malformed/invalid result diagnostic | Required failure evidence |
 | `queue/heartbeats/*` | Worker/coordinator lease and heartbeat | Liveness/recovery |
 | `run.json` | Run identity, manifest digest, runtime snapshot path and quota bound | Resume contract |
@@ -241,6 +241,7 @@ are not episode data:
 | `launch.json` | Worker/coordinator/watchdog PIDs and restart counters | Operations/debug |
 | `coordinator-heartbeat.json` | Phase, queue counts, planner progress and publication state | Operations/debug |
 | `publication_receipt.json` | HF data/receipt commit state and hashes | Resume/reconciliation |
+| `publication_receipt_to_verify.json` | Exact receipt bytes uploaded at the pinned verification revision | Keep until verified queue transition succeeds |
 | `publication_manifest.json` | Local manifest sent to HF | Publication input |
 | `resume_receipt.json` | Remote-resume/run progress summary | HF resume |
 
@@ -382,6 +383,7 @@ paths plus the complete per-file SHA256 map. They do not contain absolute local
 reconstructed on another machine. `success` and `valid_failure` stay episode rows;
 `simulator_crash` and `invalid_observation` stay attempt rows. With the archive
 profile absent, the legacy `episode.json`, layout, telemetry, and `attempt.json`
-paths remain unchanged. Remote publication acceptance, pruning, and HF-only resume
-remain pending integration in the active implementation plan. Until those steps
-pass, the legacy inventory above describes the end-to-end distributed path.
+paths remain unchanged. Verified receipt-only local pruning is implemented;
+HF-only resume bootstrap and remote publication acceptance remain pending in the
+active implementation plan. Until those gates pass, the legacy inventory above
+describes the end-to-end distributed path.

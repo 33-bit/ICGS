@@ -289,6 +289,282 @@ def test_ready_ingested_published_state_machine(tmp_path: Path):
     assert counts.ingested == 0
 
 
+def _receipt_only_queue_fixture(tmp_path: Path, *, job_id: str = "job-receipt-only"):
+    import hashlib
+
+    run_root = tmp_path / "run"
+    queue = FilesystemJobQueue(run_root / "queue")
+    job = _job(job_id=job_id)
+    result_dir = run_root / "results" / job_id
+    result_dir.mkdir(parents=True)
+    (result_dir / "episode_manifest.json").write_bytes(b"canonical archive manifest\n")
+    relative = "episode_manifest.json"
+    digest = hashlib.sha256((result_dir / relative).read_bytes()).hexdigest()
+    result = replace(
+        _result(job, result_dir),
+        file_sha256={relative: digest},
+    )
+    queue.enqueue(job)
+    assert queue.claim("000") == job
+    queue.publish_ready("000", result)
+    queue.mark_ingested(result)
+    return queue, job, result, result_dir
+
+
+def _write_verified_archive_receipt(queue, job, result, *, wrong_artifact_hash: bool = False):
+    import hashlib
+    from icgs.data.collection.generation.diversity import train_subset_for_sample
+
+    profile = {
+        "dataset_identity": "icgs-primary-v3-archive-v1",
+        "archive_format_id": "icgs_npz_chunked_v1",
+        "episode_schema_version": "icgs_episode_archive_v1",
+        "local_artifact_retention": "receipt_only",
+    }
+    row = {
+        "archive_ref": f"episodes/{job.program_id}/{job.episode_id}",
+        "archive_manifest": (
+            f"episodes/{job.program_id}/{job.episode_id}/episode.manifest.json"
+        ),
+        "archive_format_id": profile["archive_format_id"],
+        "episode_schema_version": profile["episode_schema_version"],
+        "dataset_identity": profile["dataset_identity"],
+        "job_id": job.job_id,
+        "run_id": job.run_id,
+        "manifest_sha256": job.manifest_sha256,
+        "retry_generation": job.retry_generation,
+        "source_run_id": job.run_id,
+        "code_revision": job.code_revision,
+        "preprocessing_identity": "receipt_only_queue_fixture_v1",
+        "attempt_id": job.attempt_id,
+        "episode_id": job.episode_id,
+        "program_id": job.program_id,
+        "split": "dev" if job.plan.split == "development" else job.plan.split,
+        "subset": (
+            train_subset_for_sample(job.plan.randomization)
+            if job.plan.split == "train" else None
+        ),
+        "episode_kind": job.plan.episode_kind,
+        "scene_signature": job.plan.randomization.get("scene_signature"),
+        "scene_seed": job.plan.scene_seed,
+        "episode_index": job.plan.episode_index,
+        "asset_instance_id": job.plan.randomization.get("asset_instance_id"),
+        "asset_family_id": job.plan.randomization.get("asset_family_id"),
+        "source_lineage_id": "lineage-1",
+        "intervention_id": (job.plan.intervention or {}).get("intervention_id"),
+        "source_episode_id": (job.plan.intervention or {}).get("source_episode_id"),
+        "base_episode_id": (job.plan.intervention or {}).get("base_episode_id"),
+        "outcome": result.outcome,
+        "attempt_plan": job.plan.as_dict(),
+        "file_sha256": dict(result.file_sha256),
+    }
+    manifest = {
+        "manifest_version": 3,
+        "source_run_ids": [job.run_id],
+        "archive_profile": profile,
+        "dataset_identity": profile["dataset_identity"],
+        "archive_format_id": profile["archive_format_id"],
+        "episode_schema_version": profile["episode_schema_version"],
+        "episodes": [row],
+        "failure_attempts": [],
+    }
+    manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
+    (queue.root / "publication_manifest.json").write_bytes(manifest_bytes)
+    artifact_hash = "0" * 64 if wrong_artifact_hash else result.file_sha256["episode_manifest.json"]
+    receipt = {
+        "status": "VERIFIED",
+        "run_id": job.run_id,
+        "source_run_id": job.run_id,
+        "job_ids": [job.job_id],
+        "data_commit_oid": "d" * 40,
+        "commit_oid": "c" * 40,
+        "artifact_hashes": {f"{job.job_id}/episode_manifest.json": artifact_hash},
+        **profile,
+        "archive_profile": profile,
+        "dataset_manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+    }
+    (queue.root / "publication_receipt.json").write_text(
+        json.dumps(receipt), encoding="utf-8",
+    )
+
+
+def test_receipt_only_retention_refuses_to_prune_without_verified_remote_receipt(
+    tmp_path: Path,
+):
+    queue, job, result, result_dir = _receipt_only_queue_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="verified publication receipt"):
+        queue.mark_published(job.job_id, retention="receipt_only")
+
+    assert (result_dir / "episode_manifest.json").is_file()
+    assert (queue.root / "ingested" / job.job_id / "result.json").is_file()
+
+
+def test_receipt_only_retention_keeps_job_receipt_and_prunes_only_verified_payload(
+    tmp_path: Path,
+):
+    queue, job, result, result_dir = _receipt_only_queue_fixture(tmp_path)
+    _write_verified_archive_receipt(queue, job, result)
+
+    published = queue.mark_published(job.job_id, retention="receipt_only")
+
+    assert published == queue.root / "published" / job.job_id
+    assert not result_dir.exists()
+    per_job = json.loads((published / "publication_receipt.json").read_text(encoding="utf-8"))
+    assert per_job["source_run_id"] == job.run_id
+    assert per_job["commit_oid"] == "c" * 40
+    assert per_job["artifact_hashes"] == {
+        "episode_manifest.json": result.file_sha256["episode_manifest.json"]
+    }
+    assert per_job["manifest_row"]["archive_ref"] == "episodes/T01/episode-t01-000017"
+    assert (published / "job.json").is_file()
+    assert not (published / "episode_manifest.json").exists()
+    assert queue.mark_published(job.job_id, retention="receipt_only") == published
+
+
+def test_receipt_only_retention_rejects_receipt_hash_mismatch_without_pruning(
+    tmp_path: Path,
+):
+    queue, job, result, result_dir = _receipt_only_queue_fixture(tmp_path)
+    _write_verified_archive_receipt(queue, job, result, wrong_artifact_hash=True)
+
+    with pytest.raises(ValueError, match="artifact hash|verified publication receipt"):
+        queue.mark_published(job.job_id, retention="receipt_only")
+
+    assert (result_dir / "episode_manifest.json").is_file()
+
+
+def test_receipt_only_retention_never_prunes_payload_outside_run_root(tmp_path: Path):
+    queue, job, result, _result_dir = _receipt_only_queue_fixture(tmp_path)
+    outside_root = tmp_path / "outside-run"
+    outside_root.mkdir()
+    outside_file = outside_root / "episode_manifest.json"
+    outside_file.write_bytes(b"canonical archive manifest\n")
+    _write_verified_archive_receipt(queue, job, result)
+    stored_result_path = queue.root / "ingested" / job.job_id / "result.json"
+    stored_result = json.loads(stored_result_path.read_text(encoding="utf-8"))
+    stored_result["result_dir"] = str(outside_root)
+    stored_result_path.write_text(json.dumps(stored_result), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="beneath the run root"):
+        queue.mark_published(job.job_id, retention="receipt_only")
+
+    assert outside_file.is_file()
+    assert (queue.root / "ingested" / job.job_id / "result.json").is_file()
+
+
+def test_receipt_only_existing_job_receipt_rejects_missing_result_path_outside_run_root(
+    tmp_path: Path,
+):
+    queue, job, result, _result_dir = _receipt_only_queue_fixture(tmp_path)
+    _write_verified_archive_receipt(queue, job, result)
+    source = queue.root / "ingested" / job.job_id
+    _stored_job, _stored_result, per_job_receipt = queue._receipt_only_binding(
+        job.job_id, source,
+    )
+    (source / "publication_receipt.json").write_text(
+        json.dumps(per_job_receipt), encoding="utf-8",
+    )
+    stored_result_path = source / "result.json"
+    stored_result = json.loads(stored_result_path.read_text(encoding="utf-8"))
+    outside_missing_result = tmp_path / "outside-run" / "already-pruned-result"
+    stored_result["result_dir"] = str(outside_missing_result)
+    stored_result_path.write_text(json.dumps(stored_result), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="run root"):
+        queue.mark_published(job.job_id, retention="receipt_only")
+
+    assert source.is_dir()
+    assert not (queue.root / "published" / job.job_id).exists()
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "attempt_plan",
+        "split",
+        "subset",
+        "episode_kind",
+        "scene_signature",
+        "scene_seed",
+        "episode_index",
+        "asset_instance_id",
+        "asset_family_id",
+        "intervention_id",
+        "source_episode_id",
+        "base_episode_id",
+        "preprocessing_identity",
+    ],
+)
+def test_receipt_only_retention_rejects_manifest_row_with_tampered_planner_identity(
+    tmp_path: Path,
+    field: str,
+):
+    import hashlib
+
+    queue, job, result, result_dir = _receipt_only_queue_fixture(tmp_path)
+    _write_verified_archive_receipt(queue, job, result)
+    manifest_path = queue.root / "publication_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if field == "attempt_plan":
+        manifest["episodes"][0][field]["episode_index"] += 1
+    elif field == "episode_index":
+        manifest["episodes"][0][field] += 1
+    elif field in {"scene_seed"}:
+        manifest["episodes"][0][field] += 1
+    elif field in {"source_episode_id", "base_episode_id", "intervention_id"}:
+        manifest["episodes"][0][field] = "forged-id"
+    elif field == "preprocessing_identity":
+        manifest["episodes"][0][field] = " "
+    else:
+        manifest["episodes"][0][field] = "forged-value"
+    manifest_bytes = (json.dumps(manifest, indent=2, sort_keys=True) + "\n").encode()
+    manifest_path.write_bytes(manifest_bytes)
+    receipt_path = queue.root / "publication_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["dataset_manifest_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="manifest row.*identity|attempt_plan|preprocessing"):
+        queue.mark_published(job.job_id, retention="receipt_only")
+
+    assert (result_dir / "episode_manifest.json").is_file()
+
+
+def test_receipt_only_idempotent_publish_rejects_corrupted_saved_queue_receipt(
+    tmp_path: Path,
+):
+    queue, job, result, _result_dir = _receipt_only_queue_fixture(tmp_path)
+    _write_verified_archive_receipt(queue, job, result)
+    published = queue.mark_published(job.job_id, retention="receipt_only")
+    per_job_path = published / "publication_receipt.json"
+    per_job = json.loads(per_job_path.read_text(encoding="utf-8"))
+    per_job["artifact_hashes"]["episode_manifest.json"] = "0" * 64
+    per_job_path.write_text(json.dumps(per_job), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="receipt|hash|inventory"):
+        queue.mark_published(job.job_id, retention="receipt_only")
+
+
+def test_receipt_only_prune_resumes_after_interrupted_partial_directory_removal(
+    tmp_path: Path,
+):
+    queue, job, _result, result_dir = _receipt_only_queue_fixture(tmp_path)
+    _write_verified_archive_receipt(queue, job, _result)
+    source = queue.root / "ingested" / job.job_id
+    _stored_job, _payload, per_job_receipt = queue._receipt_only_binding(job.job_id, source)
+    (source / "publication_receipt.json").write_text(
+        json.dumps(per_job_receipt), encoding="utf-8",
+    )
+    (result_dir / "episode_manifest.json").unlink()
+
+    published = queue.mark_published(job.job_id, retention="receipt_only")
+
+    assert published == queue.root / "published" / job.job_id
+    assert not result_dir.exists()
+    assert (published / "publication_receipt.json").is_file()
+
+
 def test_iter_ready_ignores_atomic_partial_directories(tmp_path: Path):
     queue = FilesystemJobQueue(tmp_path)
     job = _job(job_id="job-closed")
