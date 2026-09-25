@@ -248,8 +248,8 @@ native filter.
 NumPy 2.4.4, PyTorch 2.11.0, PyG 2.5.0, SciPy 1.17.1, pytest 8.4.2; Open3D was
 not installed.
 
-- **PASS** — `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_archive.py tests/test_generation_views.py` (56 passed; no skips after fix round 1; initial commit review requested three Important corrections).
-- **PASS** — `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation*.py tests/test_capacity_probe.py` (435 passed; one Python multiprocessing fork deprecation warning).
+- **PASS** — `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation_archive.py tests/test_generation_views.py tests/test_generation.py` (87 passed; no skips after fix rounds 1–2; review round 1 requested archive hash/role/modality corrections, round 2 requested legacy sequence-role parity).
+- **PASS** — `PYTHONPATH=src python3 -B -m pytest -q tests/test_generation*.py tests/test_capacity_probe.py` (436 passed; one Python multiprocessing fork deprecation warning).
 - **PASS** — `python3 -B scripts/validate_fast.py` (22 harness self-tests passed; L0 syntax, local links, boundaries, and generation naming passed; two existing invalid-escape `SyntaxWarning`s from `tests/test_task_router.py`).
 - **NOT RUN** — actual Open3D statistical-outlier filtering; unavailable in this environment. No HF access/publication, training, simulator, full preprocessing, or C1–C5 execution was run for this bounded task. Archive-backed `icgs train` integration and automatic run metadata persistence remain NOT IMPLEMENTED.
 

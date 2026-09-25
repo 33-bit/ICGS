@@ -185,6 +185,27 @@ def test_archive_index_rejects_unknown_role(tmp_path: Path):
         list(index.sample_refs("D_geom", "trian"))
 
 
+def test_legacy_record_views_reject_unknown_role_and_split_subset_leakage():
+    train_missing_subset = _episode("legacy-train-missing", subset=None)
+    train_missing_subset["provenance"].pop("subset")
+    train_arbitrary_subset = _episode("legacy-train-arbitrary", subset="unassigned")
+    held_out_with_subset = _episode("legacy-eval-subset", split="dev", subset="train_core")
+    held_out = _episode("legacy-eval", split="dev")
+
+    with pytest.raises(ValueError, match="role"):
+        build_generation_view([train_missing_subset], "D_geom", role="trian", mix=False)
+    assert build_generation_view([train_missing_subset], "D_geom", role="train", mix=False) == []
+    assert build_generation_view([train_arbitrary_subset], "D_geom", role="train", mix=False) == []
+    assert build_generation_view([held_out_with_subset], "D_geom", role="evaluation", mix=False) == []
+    assert len(build_generation_view([held_out], "D_geom", role="evaluation", mix=False)) == 6
+    assert len(build_generation_view(
+        [train_missing_subset, train_arbitrary_subset, held_out_with_subset, held_out],
+        "D_geom",
+        role="all",
+        mix=False,
+    )) == 24
+
+
 @pytest.mark.parametrize(
     ("field", "invalid"),
     [("split", "mystery"), ("subset", "unassigned"), ("subset", None)],

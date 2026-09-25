@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 SUPPORTED_GENERATION_VIEWS = GENERATION_PROTOCOL.views
 _HELD_OUT_SPLITS = frozenset({"dev", "test", "development"})
+_SUPPORTED_ROLES = frozenset({"train", "validation", "evaluation", "all"})
 
 
 def _outcome(provenance: Mapping[str, Any]) -> str:
@@ -22,21 +23,21 @@ def _outcome(provenance: Mapping[str, Any]) -> str:
 
 
 def _include_record(provenance: Mapping[str, Any], role: str) -> bool:
+    if role not in _SUPPORTED_ROLES:
+        raise ValueError(f"unsupported generation view role: {role!r}")
     if _outcome(provenance) in {"simulator_crash", "invalid_observation"}:
         return False
     split = provenance.get("split")
     subset = provenance.get("subset") or provenance.get("train_subset")
     if role == "train":
-        if split in _HELD_OUT_SPLITS:
-            return False
-        if subset == GENERATION_PROTOCOL.validation:
-            return False
-        return True
+        return split == "train" and subset == GENERATION_PROTOCOL.train_on
     if role == "validation":
         return split == "train" and subset == GENERATION_PROTOCOL.validation
     if role == "evaluation":
-        return split in _HELD_OUT_SPLITS
-    return True
+        return split in _HELD_OUT_SPLITS and subset is None
+    if role == "all":
+        return True
+    raise ValueError(f"unsupported generation view role: {role!r}")
 
 
 def build_generation_view(

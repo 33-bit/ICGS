@@ -475,6 +475,7 @@ class ViewTests(unittest.TestCase):
     def test_training_views_exclude_eval_and_train_val(self):
         eval_record = _episode_record(n_actions=4, episode_id="ep_eval")
         eval_record["provenance"]["split"] = "dev"
+        eval_record["provenance"]["subset"] = None
         eval_record["provenance"]["episode_kind"] = "perturbed"
         self.assertEqual(build_generation_view([eval_record], "D_geom"), [])
         self.assertEqual(len(build_generation_view([eval_record], "D_geom", role="evaluation")), 5)
