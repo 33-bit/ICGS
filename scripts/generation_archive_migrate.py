@@ -27,6 +27,7 @@ from icgs.data.collection.generation.episode_archive import (
     EpisodeArchiveReader,
     EpisodeArchiveWriter,
     _canonical_json,
+    _npz_uncompressed_member_bytes,
     _redact_sensitive,
     validate_archive_manifest,
 )
@@ -39,6 +40,7 @@ _COMMIT_OID = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _SAFE_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 _MAX_RECEIPT_BYTES = 16 * 1024 * 1024
 _COPY_BLOCK_BYTES = 1 << 20
+_DEFAULT_MAX_DECODED_SIDECAR_BYTES = 1024**3
 
 
 class MigrationError(RuntimeError):
@@ -150,8 +152,16 @@ class _SourceRecord:
 class V2ArtifactReader:
     """Read and validate one local copy of one immutable ``icgs_episode_v2`` artifact."""
 
-    def __init__(self, artifact_dir: str | Path) -> None:
+    def __init__(
+        self,
+        artifact_dir: str | Path,
+        *,
+        max_decoded_sidecar_bytes: int = _DEFAULT_MAX_DECODED_SIDECAR_BYTES,
+    ) -> None:
+        if type(max_decoded_sidecar_bytes) is not int or max_decoded_sidecar_bytes <= 0:
+            raise ValueError("max_decoded_sidecar_bytes must be a positive integer")
         self.root = Path(artifact_dir).absolute()
+        self.max_decoded_sidecar_bytes = max_decoded_sidecar_bytes
         self._loaded: _SourceRecord | None = None
         self._partial_hashes: dict[str, dict[str, Any]] = {}
         self._declared_hashes: dict[str, dict[str, Any]] = {}
@@ -199,7 +209,7 @@ class V2ArtifactReader:
         actual_paths = {
             path.relative_to(root).as_posix()
             for path in root.rglob("*")
-            if path.is_file() and path.name != "artifact_manifest.json"
+            if path.is_file() and path.relative_to(root).as_posix() != "artifact_manifest.json"
         }
         if actual_paths != set(expected):
             missing = sorted(set(expected) - actual_paths)
@@ -217,6 +227,11 @@ class V2ArtifactReader:
             "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
             "bytes": len(manifest_bytes),
         }
+        _preflight_decoded_sidecars(
+            root,
+            actual_paths,
+            max_decoded_sidecar_bytes=self.max_decoded_sidecar_bytes,
+        )
 
         episode_path, attempt_path = root / "episode.json", root / "attempt.json"
         if episode_path.is_file() == attempt_path.is_file():
@@ -397,14 +412,14 @@ def migrate_episode(
         source_record = _redact_sensitive(dict(source.record))
         safe_execution = _redact_sensitive(dict(source.execution))
         safe_sidecars = _redact_sensitive(dict(source.sidecar_metadata))
+        if not _semantic_equal(source.record, source_record):
+            raise ValueError("security redaction would alter v2 semantics; refusing non-lossless migration")
         identity_values, identity_warnings = _required_archive_identity(
             identity_payload,
             source.record,
             source.execution,
         )
         warnings.extend(identity_warnings)
-        if _semantic_equal(source.record, source_record) is False:
-            warnings.append("sensitive_metadata_redacted_in_target_semantics")
 
         migration_metadata = {
             "source_identity": identity_payload,
@@ -1001,6 +1016,61 @@ def _numeric_dtype_warnings(record: Mapping[str, Any], typed_paths: set[str]) ->
     return output
 
 
+def _npy_uncompressed_array_bytes(path: Path, name: str) -> int:
+    try:
+        with path.open("rb") as stream:
+            version = np.lib.format.read_magic(stream)
+            if version == (1, 0):
+                shape, _fortran_order, dtype = np.lib.format.read_array_header_1_0(stream)
+            elif version == (2, 0):
+                shape, _fortran_order, dtype = np.lib.format.read_array_header_2_0(stream)
+            elif version == (3, 0):
+                # NumPy has no public generic header reader for the UTF-8 v3 format.
+                shape, _fortran_order, dtype = np.lib.format._read_array_header(stream, version)
+            else:
+                raise ValueError("unsupported NPY format version")
+            header_bytes = stream.tell()
+    except Exception as error:
+        raise ValueError(f"v2 sidecar is not a safe NPY file: {name}") from error
+
+    dtype = np.dtype(dtype)
+    if dtype.hasobject or dtype.kind not in "biufc":
+        raise ValueError(f"v2 binary sidecar must contain numeric/boolean arrays only: {name}")
+    element_count = 1
+    for dimension in shape:
+        if type(dimension) is not int or dimension < 0:
+            raise ValueError(f"v2 NPY sidecar has an invalid array shape: {name}")
+        element_count *= dimension
+    return header_bytes + element_count * dtype.itemsize
+
+
+def _preflight_decoded_sidecars(
+    root: Path,
+    relative_paths: set[str],
+    *,
+    max_decoded_sidecar_bytes: int,
+) -> int:
+    decoded_bytes = 0
+    for relative in sorted(relative_paths):
+        path = root.joinpath(*PurePosixPath(relative).parts)
+        if path.suffix == ".npz":
+            try:
+                size = _npz_uncompressed_member_bytes(path)
+            except Exception as error:
+                raise ValueError(f"cannot preflight v2 NPZ sidecar: {relative}") from error
+        elif path.suffix == ".npy":
+            size = _npy_uncompressed_array_bytes(path, relative)
+        else:
+            continue
+        decoded_bytes += size
+        if decoded_bytes > max_decoded_sidecar_bytes:
+            raise ValueError(
+                "decoded sidecar aggregate exceeds max-decoded-sidecar-bytes "
+                f"({decoded_bytes} > {max_decoded_sidecar_bytes}): {relative}"
+            )
+    return decoded_bytes
+
+
 def _load_npz(path: Path, name: str) -> dict[str, np.ndarray]:
     try:
         with np.load(path, allow_pickle=False) as loaded:
@@ -1294,6 +1364,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-source-bytes", type=_positive_int, default=2 * 1024**3)
     parser.add_argument("--max-target-bytes", type=_positive_int, default=2 * 1024**3)
     parser.add_argument("--max-scratch-bytes", type=_positive_int, default=8 * 1024**3)
+    parser.add_argument(
+        "--max-decoded-sidecar-bytes",
+        type=_positive_int,
+        default=_DEFAULT_MAX_DECODED_SIDECAR_BYTES,
+        help="aggregate uncompressed NPZ/NPY array bytes allowed before sidecar loading",
+    )
     parser.add_argument("--chunk-boundaries", type=_positive_int, default=64)
     parser.add_argument("--max-chunk-bytes", type=_positive_int, default=256 * 1024**2)
     return parser
@@ -1732,7 +1808,10 @@ def main(argv: list[str] | None = None) -> int:
                 max_scratch_bytes=args.max_scratch_bytes,
                 max_target_bytes=args.max_target_bytes,
             )
-            source_reader = V2ArtifactReader(source_root)
+            source_reader = V2ArtifactReader(
+                source_root,
+                max_decoded_sidecar_bytes=args.max_decoded_sidecar_bytes,
+            )
             source = source_reader.read()
             _validate_source_identity(identity, source)
             target_head = api.repo_info(
@@ -1798,6 +1877,7 @@ def main(argv: list[str] | None = None) -> int:
             }, indent=2, sort_keys=True))
         return 0
     except Exception as error:
+        safe_error_text = _redact_sensitive(str(error))
         if failure_receipt_path is None and getattr(args, "receipt_dir", None):
             try:
                 args.receipt_dir.mkdir(parents=True, exist_ok=True)
@@ -1829,9 +1909,13 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 _write_exclusive_json(failure_receipt_path, payload)
             except Exception as receipt_error:
-                print(f"migration failed: {error}; failure receipt write also failed: {receipt_error}")
+                safe_receipt_error_text = _redact_sensitive(str(receipt_error))
+                print(
+                    "migration failed: "
+                    f"{safe_error_text}; failure receipt write also failed: {safe_receipt_error_text}"
+                )
                 return 2
-        print(f"migration failed: {error}")
+        print(f"migration failed: {safe_error_text}")
         if failure_receipt_path is not None:
             print(f"failure receipt: {failure_receipt_path}")
         return 2

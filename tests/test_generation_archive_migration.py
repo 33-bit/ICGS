@@ -53,12 +53,31 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _plain(value):
+    if isinstance(value, np.ndarray):
+        return _plain(value.tolist())
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, dict):
+        return {key: _plain(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(item) for item in value]
+    return value
+
+
 def _inventory(root: Path, *, filename: str = "artifact_manifest.json") -> dict[str, dict[str, object]]:
     return {
         path.relative_to(root).as_posix(): {"sha256": _sha256(path), "bytes": path.stat().st_size}
         for path in sorted(root.rglob("*"))
-        if path.is_file() and path.name != filename
+        if path.is_file() and path.relative_to(root).as_posix() != filename
     }
+
+
+def _complete_v2_inventory(root: Path) -> dict[str, dict[str, object]]:
+    inventory = _inventory(root)
+    manifest = root / "artifact_manifest.json"
+    inventory["artifact_manifest.json"] = {"sha256": _sha256(manifest), "bytes": manifest.stat().st_size}
+    return inventory
 
 
 def _episode_record(outcome: str = "success") -> dict:
@@ -426,6 +445,7 @@ def _cli_args(tmp_path: Path, identity: dict[str, str]) -> list[str]:
         "--max-source-bytes", "10000000",
         "--max-target-bytes", "10000000",
         "--max-scratch-bytes", "30000000",
+        "--max-decoded-sidecar-bytes", "10000000",
         "--chunk-boundaries", "1",
     ]
 
@@ -439,6 +459,7 @@ def test_success_episode_migration_recovers_typed_layout_values_and_preserves_de
 
     reader = EpisodeArchiveReader(target.output_dir / "episode.manifest.json")
     restored = reader.to_episode_record()
+    assert _plain(restored) == _plain(expected)
     np.testing.assert_array_equal(reader.observation(0)["points"], np.asarray(expected["online_observations"][0]["points"], dtype=np.float32))
     assert reader.observation(0)["points"].dtype == np.float32
     assert reader.observation(0)["T_w_e"].dtype == np.float64
@@ -461,6 +482,110 @@ def test_success_episode_migration_recovers_typed_layout_values_and_preserves_de
     assert receipt.timeline_counts["transitions"] == 1
     assert any("dtype" in warning for warning in receipt.conversion_warnings)
     assert (target.receipt_path).is_file()
+
+
+def test_sensitive_episode_semantic_change_is_rejected_with_redacted_receipt(tmp_path: Path) -> None:
+    _require_migration_api()
+    source = tmp_path / "v2-sensitive-field"
+    record = _write_episode_fixture(source, "success")
+    record["provenance"]["intervention_params"] = {"api_key": "fixture-secret-should-not-leak"}
+    _json_write(source / "episode.json", record)
+    artifact_manifest = json.loads((source / "artifact_manifest.json").read_text(encoding="utf-8"))
+    artifact_manifest["files"] = _inventory(source)
+    _json_write(source / "artifact_manifest.json", artifact_manifest)
+    source_before = {
+        path.relative_to(source).as_posix(): path.read_bytes()
+        for path in source.rglob("*") if path.is_file()
+    }
+    target, profile, failure_path = _target(tmp_path, name="sensitive")
+
+    with pytest.raises(MigrationError, match="redaction would alter v2 semantics"):
+        migrate_episode(
+            V2ArtifactReader(source), target,
+            source_identity=_identity(), target_profile=profile,
+        )
+
+    failure_text = failure_path.read_text(encoding="utf-8")
+    assert "fixture-secret-should-not-leak" not in failure_text
+    assert "redaction would alter v2 semantics" in failure_text
+    assert not target.output_dir.exists()
+    assert {
+        path.relative_to(source).as_posix(): path.read_bytes()
+        for path in source.rglob("*") if path.is_file()
+    } == source_before
+
+
+def test_compressed_sidecar_decoded_budget_is_checked_before_numpy_load(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _require_migration_api()
+    source = tmp_path / "v2-compressed-sidecar"
+    _write_episode_fixture(source, "success")
+    compressed_sidecar = source / "extra" / "highly_compressible.npz"
+    compressed_sidecar.parent.mkdir(parents=True)
+    np.savez_compressed(compressed_sidecar, payload=np.zeros(600 * 1024, dtype=np.uint8))
+    second_compressed_sidecar = source / "extra" / "also_compressible.npz"
+    np.savez_compressed(second_compressed_sidecar, payload=np.zeros(600 * 1024, dtype=np.uint8))
+    assert compressed_sidecar.stat().st_size < 1024 * 1024
+    assert second_compressed_sidecar.stat().st_size < 1024 * 1024
+    artifact_manifest = json.loads((source / "artifact_manifest.json").read_text(encoding="utf-8"))
+    artifact_manifest["files"] = _inventory(source)
+    _json_write(source / "artifact_manifest.json", artifact_manifest)
+    target, profile, failure_path = _target(tmp_path, name="decoded-sidecar-budget")
+
+    def unexpected_load(*_args, **_kwargs):
+        pytest.fail("NumPy loading started before aggregate decoded-sidecar preflight")
+
+    monkeypatch.setattr(np, "load", unexpected_load)
+    with pytest.raises(MigrationError, match="decoded sidecar.*max-decoded-sidecar-bytes"):
+        migrate_episode(
+            V2ArtifactReader(source, max_decoded_sidecar_bytes=1024 * 1024),
+            target,
+            source_identity=_identity(),
+            target_profile=profile,
+        )
+
+    failure = json.loads(failure_path.read_text(encoding="utf-8"))
+    assert failure["status"] == "failed"
+    assert "max-decoded-sidecar-bytes" in failure["error"]["message"]
+    assert not target.output_dir.exists()
+
+
+def test_npy_declared_shape_is_bounded_before_numpy_load(tmp_path: Path, monkeypatch) -> None:
+    _require_migration_api()
+    source = tmp_path / "v2-large-npy-header"
+    _write_episode_fixture(source, "success")
+    large_sidecar = source / "extra" / "large.npy"
+    large_sidecar.parent.mkdir(parents=True)
+    with large_sidecar.open("wb") as stream:
+        np.lib.format.write_array_header_1_0(stream, {
+            "descr": np.dtype(np.uint8).str,
+            "fortran_order": False,
+            "shape": (4 * 1024 * 1024,),
+        })
+    assert large_sidecar.stat().st_size < 1024
+    artifact_manifest = json.loads((source / "artifact_manifest.json").read_text(encoding="utf-8"))
+    artifact_manifest["files"] = _inventory(source)
+    _json_write(source / "artifact_manifest.json", artifact_manifest)
+    target, profile, failure_path = _target(tmp_path, name="npy-decoded-sidecar-budget")
+
+    def unexpected_load(*_args, **_kwargs):
+        pytest.fail("NumPy loading started before aggregate decoded-sidecar preflight")
+
+    monkeypatch.setattr(np, "load", unexpected_load)
+    with pytest.raises(MigrationError, match="decoded sidecar.*max-decoded-sidecar-bytes"):
+        migrate_episode(
+            V2ArtifactReader(source, max_decoded_sidecar_bytes=1024 * 1024),
+            target,
+            source_identity=_identity(),
+            target_profile=profile,
+        )
+
+    failure = json.loads(failure_path.read_text(encoding="utf-8"))
+    assert failure["status"] == "failed"
+    assert "max-decoded-sidecar-bytes" in failure["error"]["message"]
+    assert not target.output_dir.exists()
 
 
 def test_valid_failure_episode_remains_an_episode_archive(tmp_path: Path) -> None:
@@ -557,6 +682,42 @@ def test_source_hash_mismatch_is_rejected_and_recorded(tmp_path: Path) -> None:
     assert not target.output_dir.exists()
 
 
+def test_nested_artifact_manifest_name_is_included_in_source_hash_inventory(tmp_path: Path) -> None:
+    _require_migration_api()
+    source = tmp_path / "v2-nested-manifest-name"
+    _write_episode_fixture(source, "success")
+    nested = source / "debug" / "artifact_manifest.json"
+    _json_write(nested, {"debug_artifact": "kept"})
+    artifact_manifest = json.loads((source / "artifact_manifest.json").read_text(encoding="utf-8"))
+    artifact_manifest["files"] = _inventory(source)
+    _json_write(source / "artifact_manifest.json", artifact_manifest)
+
+    receipt, target, _failure_path = _run_migration(source, tmp_path)
+
+    assert receipt.source_artifact_hashes["debug/artifact_manifest.json"] == {
+        "sha256": _sha256(nested), "bytes": nested.stat().st_size,
+    }
+    reader = EpisodeArchiveReader(target.output_dir / "episode.manifest.json")
+    assert reader.debug_metadata["source_sidecars"]["debug/artifact_manifest.json"] == {"debug_artifact": "kept"}
+
+
+def test_unlisted_nested_artifact_manifest_name_is_rejected(tmp_path: Path) -> None:
+    _require_migration_api()
+    source = tmp_path / "v2-unlisted-nested-manifest"
+    _write_episode_fixture(source, "success")
+    _json_write(source / "extra" / "artifact_manifest.json", {"not_in_inventory": True})
+    target, profile, failure_path = _target(tmp_path, name="unlisted-nested-manifest")
+
+    with pytest.raises(MigrationError, match="inventory is incomplete"):
+        migrate_episode(
+            V2ArtifactReader(source), target,
+            source_identity=_identity(), target_profile=profile,
+        )
+
+    assert json.loads(failure_path.read_text(encoding="utf-8"))["status"] == "failed"
+    assert not target.output_dir.exists()
+
+
 def test_identical_migration_rerun_reuses_verified_archive_without_rewriting(tmp_path: Path) -> None:
     _require_migration_api()
     source = tmp_path / "v2-idempotent"
@@ -589,6 +750,21 @@ def test_hf_cli_publishes_only_selected_source_and_reuses_identical_target_offli
     assert main(args) == 0
     committed_count = len(hub.commit_calls)
     assert committed_count == 1
+    local_receipt_path = tmp_path / "cli-receipts" / "episode-T01-episode-migrate-0001.json"
+    receipt = json.loads(local_receipt_path.read_text(encoding="utf-8"))
+    assert receipt["source_artifact_hashes"] == _complete_v2_inventory(source)
+    target_revision = hub.branches[identity["target_repo_id"]]["main"]
+    target_snapshot = hub.revisions[identity["target_repo_id"]][target_revision]
+    remote_target_inventory = {
+        path.removeprefix(identity["target_artifact_path"] + "/"): {
+            "sha256": hashlib.sha256(payload).hexdigest(),
+            "bytes": len(payload),
+        }
+        for path, payload in target_snapshot.items()
+        if path.startswith(identity["target_artifact_path"] + "/")
+    }
+    assert receipt["target_archive_hashes"] == remote_target_inventory
+    assert set(remote_target_inventory) == set(receipt["target_archive_hashes"])
     assert main(args) == 0
 
     source_tree_queries = [path for repo_id, _revision, path in hub.list_calls if repo_id == identity["source_repo_id"]]
@@ -596,6 +772,132 @@ def test_hf_cli_publishes_only_selected_source_and_reuses_identical_target_offli
     assert len(hub.commit_calls) == committed_count
     assert {path: path.read_bytes() for path in source.rglob("*") if path.is_file()} == original_source_bytes
     assert hub.revisions[identity["source_repo_id"]][identity["source_revision"]] == original_remote_source
+
+
+def test_hf_cli_enforces_decoded_sidecar_byte_cap_before_loading(tmp_path: Path, monkeypatch) -> None:
+    _require_migration_api()
+    source = tmp_path / "v2-hf-compressed-sidecar"
+    _write_episode_fixture(source, "success")
+    compressed_sidecar = source / "extra" / "highly_compressible.npz"
+    compressed_sidecar.parent.mkdir(parents=True)
+    np.savez_compressed(compressed_sidecar, payload=np.zeros(2 * 1024 * 1024, dtype=np.uint8))
+    artifact_manifest = json.loads((source / "artifact_manifest.json").read_text(encoding="utf-8"))
+    artifact_manifest["files"] = _inventory(source)
+    _json_write(source / "artifact_manifest.json", artifact_manifest)
+    hub, identity = _fake_hub_for_source(source)
+    _install_fake_hub(monkeypatch, hub)
+    from scripts.generation_archive_migrate import main
+    args = _cli_args(tmp_path, identity)
+    args[args.index("--max-decoded-sidecar-bytes") + 1] = str(1024 * 1024)
+
+    def unexpected_load(*_args, **_kwargs):
+        pytest.fail("NumPy loading started before CLI decoded-sidecar preflight")
+
+    monkeypatch.setattr(np, "load", unexpected_load)
+    assert main(args) == 2
+    failure_paths = list((tmp_path / "cli-receipts").glob("*.failure.json"))
+    assert len(failure_paths) == 1
+    failure = json.loads(failure_paths[0].read_text(encoding="utf-8"))
+    assert "max-decoded-sidecar-bytes" in failure["error"]["message"]
+    assert not hub.commit_calls
+
+
+def test_hf_cli_redacts_migration_exception_from_stdout_and_failure_receipt(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    _require_migration_api()
+    source = tmp_path / "v2-hf-secret-error"
+    _write_episode_fixture(source, "success")
+    hub, identity = _fake_hub_for_source(source)
+
+    def fail_commit(**_kwargs):
+        raise RuntimeError("upload rejected api_key=fixture-api-secret token=fixture-token-secret")
+
+    monkeypatch.setattr(hub, "create_commit", fail_commit)
+    _install_fake_hub(monkeypatch, hub)
+    from scripts.generation_archive_migrate import main
+
+    assert main(_cli_args(tmp_path, identity)) == 2
+    stdout = capsys.readouterr().out
+    failure_paths = list((tmp_path / "cli-receipts").glob("*.failure.json"))
+    assert len(failure_paths) == 1
+    failure_text = failure_paths[0].read_text(encoding="utf-8")
+
+    for secret in ("fixture-api-secret", "fixture-token-secret"):
+        assert secret not in stdout
+        assert secret not in failure_text
+    assert "api_key=[REDACTED]" in stdout
+    assert "token=[REDACTED]" in stdout
+    assert "api_key=[REDACTED]" in failure_text
+    assert "token=[REDACTED]" in failure_text
+
+
+def test_hf_cli_redacts_failure_receipt_write_exception_from_stdout(tmp_path: Path, monkeypatch, capsys) -> None:
+    _require_migration_api()
+    source = tmp_path / "v2-hf-receipt-write-error"
+    _write_episode_fixture(source, "success")
+    hub, identity = _fake_hub_for_source(source)
+
+    def fail_commit(**_kwargs):
+        raise RuntimeError("api_key=fixture-upload-secret")
+
+    monkeypatch.setattr(hub, "create_commit", fail_commit)
+    _install_fake_hub(monkeypatch, hub)
+    from scripts import generation_archive_migrate
+
+    original_write = generation_archive_migrate._write_exclusive_json
+
+    def fail_failure_receipt(path, payload):
+        if Path(path).name.endswith(".failure.json"):
+            raise OSError("secret=fixture-receipt-write-secret")
+        return original_write(path, payload)
+
+    monkeypatch.setattr(generation_archive_migrate, "_write_exclusive_json", fail_failure_receipt)
+
+    assert generation_archive_migrate.main(_cli_args(tmp_path, identity)) == 2
+    stdout = capsys.readouterr().out
+    assert "fixture-upload-secret" not in stdout
+    assert "fixture-receipt-write-secret" not in stdout
+    assert "api_key=[REDACTED]" in stdout
+    assert "secret=[REDACTED]" in stdout
+
+
+def test_hf_cli_rejects_post_commit_corruption_before_writing_success_receipt(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    _require_migration_api()
+    source = tmp_path / "v2-hf-post-commit-corruption"
+    _write_episode_fixture(source, "success")
+    hub, identity = _fake_hub_for_source(source)
+    original_create_commit = hub.create_commit
+
+    def create_then_corrupt(**kwargs):
+        commit = original_create_commit(**kwargs)
+        snapshot = hub.revisions[identity["target_repo_id"]][commit.oid]
+        remote_path = next(
+            path for path in snapshot
+            if path.startswith(identity["target_artifact_path"] + "/")
+        )
+        payload = snapshot[remote_path]
+        snapshot[remote_path] = payload[:-1] + bytes([payload[-1] ^ 0x01])
+        return commit
+
+    monkeypatch.setattr(hub, "create_commit", create_then_corrupt)
+    _install_fake_hub(monkeypatch, hub)
+    from scripts.generation_archive_migrate import main
+
+    assert main(_cli_args(tmp_path, identity)) == 2
+    stdout = capsys.readouterr().out
+    assert "verification hash mismatch" in stdout
+    assert len(hub.commit_calls) == 1
+    assert not (tmp_path / "cli-receipts" / "episode-T01-episode-migrate-0001.json").exists()
+    failure_paths = list((tmp_path / "cli-receipts").glob("*.failure.json"))
+    assert len(failure_paths) == 1
+    assert json.loads(failure_paths[0].read_text(encoding="utf-8"))["status"] == "failed"
 
 
 def test_hf_cli_rejects_nested_target_prefix_before_hub_access(tmp_path: Path, monkeypatch) -> None:
