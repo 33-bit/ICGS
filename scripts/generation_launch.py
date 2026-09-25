@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import time
 
 from huggingface_hub import hf_hub_download
@@ -23,9 +24,15 @@ from icgs.data.collection.generation.distributed_validation import (
 )
 from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
 try:
-    from scripts.generation_coordinator import load_remote_manifest
+    from scripts.generation_coordinator import (
+        load_remote_manifest, _snapshot_revision, _require_pinned_revision,
+        _download_pinned_file,
+    )
 except ModuleNotFoundError:  # direct ``python scripts/generation_launch.py`` entrypoint
-    from generation_coordinator import load_remote_manifest
+    from generation_coordinator import (
+        load_remote_manifest, _snapshot_revision, _require_pinned_revision,
+        _download_pinned_file,
+    )
 
 
 def validate_smoke_receipt(path: str | Path, *, expected_program_ids) -> None:
@@ -157,26 +164,40 @@ def preflight_resume_manifest(
         raise ValueError("resume_from_hf credential file is empty")
     filename = f"{config.run.hf_subfolder}/dataset_manifest.json"
     try:
-        remote_path = downloader(
-            repo_id=config.run.hf_repo,
-            repo_type="dataset",
-            filename=filename,
-            token=token,
-            force_download=True,
-        )
+        with tempfile.TemporaryDirectory(prefix="icgs-hf-preflight-") as scratch:
+            remote_path = downloader(
+                repo_id=config.run.hf_repo, repo_type="dataset", filename=filename,
+                token=token, force_download=True,
+                **({"cache_dir": scratch} if config.archive_profile is not None else {}),
+            )
+            remote_bytes = Path(remote_path).read_bytes()
+            if config.archive_profile is not None:
+                revision = _require_pinned_revision(_snapshot_revision(remote_path))
+                remote_bytes = _download_pinned_file(
+                    downloader, config.run, token, revision, filename, Path(scratch),
+                    hashlib.sha256(remote_bytes).hexdigest(),
+                ).read_bytes()
+            else:
+                parts = Path(remote_path).parts
+                revision = parts[parts.index("snapshots") + 1] if "snapshots" in parts else None
     except Exception as error:
-        raise RuntimeError("resume_from_hf requires a readable remote dataset manifest") from error
-    remote_bytes = Path(remote_path).read_bytes()
+        message = (
+            "resume_from_hf requires a readable pinned remote dataset manifest"
+            if config.archive_profile is not None
+            else "resume_from_hf requires a readable remote dataset manifest"
+        )
+        raise RuntimeError(message) from error
     try:
         approved_payload = json.loads(Path(approved_manifest).read_text(encoding="utf-8"))
         catalog = approved_payload.get("catalog")
         if not isinstance(catalog, list):
             raise ValueError("approved manifest catalog must be a list")
-        approved_program_ids = {
-            str(row["program_id"])
+        approved_rows = {
+            str(row["program_id"]): row
             for row in catalog
             if isinstance(row, dict) and isinstance(row.get("program_id"), str)
         }
+        approved_program_ids = set(approved_rows)
         resume_run = RunConfig(
             run_id=config.run.run_id,
             run_root=config.run.run_root,
@@ -196,13 +217,12 @@ def preflight_resume_manifest(
             resume_run,
             archive_profile=config.archive_profile,
             approved_program_ids=approved_program_ids,
+            approved_rows=approved_rows if config.archive_profile is not None else None,
             remote_manifest_sha256=hashlib.sha256(remote_bytes).hexdigest(),
             manifest_bytes=remote_bytes,
         )
     except Exception as error:
         raise RuntimeError("remote resume manifest failed immutable validation") from error
-    parts = Path(remote_path).parts
-    revision = parts[parts.index("snapshots") + 1] if "snapshots" in parts else None
     bootstrap = {
         "run_id": config.run.run_id,
         "remote_manifest_sha256": hashlib.sha256(remote_bytes).hexdigest(),

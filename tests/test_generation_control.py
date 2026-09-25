@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 import json
 import os
 import hashlib
 import shlex
+import shutil
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -41,7 +43,7 @@ from icgs.data.collection.generation.distributed_contracts import (
 from icgs.data.collection.generation.batch import AttemptPlan
 from icgs.data.collection.generation.distributed_planner import DistributedPlanner
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
-from icgs.data.collection.generation.distributed_validation import ValidatedResult
+from icgs.data.collection.generation.distributed_validation import ValidatedResult, validate_closed_result
 
 
 def _runtime_config(tmp_path: Path, *, publication_enabled: bool = False):
@@ -99,7 +101,7 @@ def _archive_resume_plan(*, episode_id: str, episode_kind: str = "nominal") -> A
         collection_seed=20260920,
         randomization={
             "scene_signature": f"signature-{episode_id}",
-            "asset_instance_id": "asset-1",
+            "asset_instance_id": "T01-asset-17",
             "asset_family_id": "family-1",
             "scene_seed": 17,
         },
@@ -154,7 +156,7 @@ def _archive_resume_row(
         "scene_signature": plan.randomization["scene_signature"],
         "scene_seed": plan.scene_seed,
         "episode_index": plan.episode_index,
-        "asset_instance_id": "asset-1",
+        "asset_instance_id": "T01-asset-17",
         "asset_family_id": "family-1",
         "source_lineage_id": "lineage-1" if is_episode else None,
         "outcome": outcome,
@@ -473,8 +475,9 @@ def test_remote_resume_manifest_merge_rejects_immutable_conflict():
         _merge_manifests(remote, local)
 
 
-def test_archive_resume_manifest_validates_identity_and_remote_file_hashes():
-    profile = _archive_resume_profile()
+def test_archive_resume_manifest_validates_identity_and_remote_file_hashes(tmp_path: Path, monkeypatch):
+    _, _, manifest, prefix_root, _ = _complete_archive_remote(tmp_path, monkeypatch)
+    profile = ArchiveProfileConfig.from_dict(manifest["archive_profile"])
     run = RunConfig(
         run_id="new-run",
         run_root="/tmp/new-run",
@@ -482,39 +485,11 @@ def test_archive_resume_manifest_validates_identity_and_remote_file_hashes():
         approved_manifest_sha256="b" * 64,
         resume_from_hf=True,
     )
-    manifest = _archive_resume_manifest(profile)
-    manifest["episodes"] = [manifest["episodes"][0]]
-    manifest["failure_attempts"] = []
     row = manifest["episodes"][0]
-    remote_files = {}
-    chunk_content = b"archive chunk\n"
-    row["file_sha256"]["data/chunk-00000.npz"] = hashlib.sha256(chunk_content).hexdigest()
-    archive_payload = {
-        "archive_format_id": profile.archive_format_id,
-        "episode_schema_version": profile.episode_schema_version,
-        "dataset_identity": profile.dataset_identity,
-        "archive_profile": profile.as_dict(),
-        "archive_kind": "episode",
-        "episode_id": row["episode_id"],
-        "attempt_id": row["attempt_id"],
-        "program_id": row["program_id"],
-        "outcome": row["outcome"],
-        "source_run_id": row["source_run_id"],
-        "code_revision": row["code_revision"],
-        "preprocessing_identity": row["preprocessing_identity"],
-        "chunk_inventory": [{
-            "path": "data/chunk-00000.npz",
-            "sha256": row["file_sha256"]["data/chunk-00000.npz"],
-        }],
+    remote_files = {
+        f"{row['archive_ref']}/{relative}": (prefix_root / row["archive_ref"] / relative).read_bytes()
+        for relative in row["file_sha256"]
     }
-    archive_content = json.dumps(archive_payload, sort_keys=True).encode("utf-8")
-    row["file_sha256"]["episode.manifest.json"] = hashlib.sha256(archive_content).hexdigest()
-    for relative in ("artifact_manifest.json", "debug.json"):
-        content = f"{relative}\n".encode()
-        row["file_sha256"][relative] = hashlib.sha256(content).hexdigest()
-        remote_files[f"{row['archive_ref']}/{relative}"] = content
-    remote_files[f"{row['archive_ref']}/data/chunk-00000.npz"] = chunk_content
-    remote_files[row["archive_manifest"]] = archive_content
 
     loaded = load_remote_manifest(
         manifest,
@@ -524,7 +499,7 @@ def test_archive_resume_manifest_validates_identity_and_remote_file_hashes():
         remote_files=remote_files,
     )
 
-    assert loaded["episodes"][0]["archive_ref"] == "episodes/T01/episode-old-success"
+    assert loaded["episodes"][0]["archive_ref"] == row["archive_ref"]
     assert loaded["failure_attempts"] == []
 
     remote_files["episodes/T01/unlisted/extra.bin"] = b"unlisted"
@@ -783,11 +758,28 @@ def test_coordinator_resume_requires_and_consumes_remote_manifest(tmp_path: Path
     assert control.planner.counts("T01").nominal_successes == 1
 
 
-def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(
-    tmp_path: Path,
-    monkeypatch,
-):
-    profile = _archive_resume_profile()
+def _complete_archive_remote(tmp_path: Path, monkeypatch):
+    from test_generation_publication import _archive_queue, _job
+
+    fixture_job = _job()
+    fixture_job = replace(fixture_job, plan=replace(
+        fixture_job.plan,
+        randomization={**fixture_job.plan.randomization,
+                       "scene_seed": fixture_job.plan.scene_seed,
+                       "asset_instance_id": "T01-asset-1"},
+    ))
+    _source_queue, job, result, profile = _archive_queue(
+        tmp_path / "source", retention="receipt_only", job=fixture_job,
+    )
+    row = validate_closed_result(job, result, archive_profile=profile).episode_entry
+    manifest = {
+        "manifest_version": 3, "source_run_ids": [job.run_id],
+        "dataset_identity": profile.dataset_identity,
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "archive_profile": profile.as_dict(), "view_status": "PROVISIONAL",
+        "episodes": [row], "failure_attempts": [],
+    }
     config_payload = _runtime_config(tmp_path, publication_enabled=True).as_dict()
     config_payload["run"].update({
         "run_id": "new-archive-run",
@@ -796,7 +788,10 @@ def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(
     })
     config_payload["archive_profile"] = profile.as_dict()
     config = GenerationRuntimeConfig.from_dict(config_payload)
-    approved = Path("artifacts/composition/approved_composition_manifest.json")
+    approved_payload = json.loads(Path("artifacts/composition/approved_composition_manifest.json").read_text())
+    next(item for item in approved_payload["catalog"] if item["program_id"] == "T01")["asset_family_id"] = "family-1"
+    approved = tmp_path / "approved.json"
+    approved.write_text(json.dumps(approved_payload), encoding="utf-8")
     run_json = generation_launch.persist_run_config(
         config,
         approved,
@@ -807,14 +802,64 @@ def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(
     run_payload = json.loads(run_json.read_text(encoding="utf-8"))
     run_payload["hf_token_path"] = str(token)
     run_json.write_text(json.dumps(run_payload), encoding="utf-8")
-    remote = tmp_path / "dataset_manifest.json"
-    remote.write_text(json.dumps(_archive_resume_manifest(profile)), encoding="utf-8")
+    revision = "c" * 40
+    remote_root = tmp_path / "snapshots" / revision
+    prefix_root = remote_root / config.run.hf_subfolder
+    prefix_root.mkdir(parents=True)
+    dataset_path = prefix_root / "dataset_manifest.json"
+    dataset_path.write_text(json.dumps(manifest), encoding="utf-8")
+    archive_root = prefix_root / row["archive_ref"]
+    shutil.copytree(result.result_dir, archive_root)
+    dataset_sha = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+    (prefix_root / "resume_receipt.json").write_text(json.dumps({
+        "run_id": job.run_id, "source_run_id": job.run_id,
+        "source_run_ids": [job.run_id], "episodes": 1, "failure_attempts": 0,
+        "dataset_identity": profile.dataset_identity,
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "archive_profile": profile.as_dict(),
+        "dataset_manifest_sha256": dataset_sha,
+        "dataset_manifest_revision": "d" * 40,
+    }), encoding="utf-8")
+    (prefix_root / "publication_receipt.json").write_text(json.dumps({
+        "receipt_version": 2, "run_id": job.run_id, "source_run_id": job.run_id,
+        "job_ids": [job.job_id], "status": "VERIFIED",
+        "data_commit_oid": "d" * 40, "commit_oid": "e" * 40,
+        "artifact_hashes": {f"{job.job_id}/{relative}": digest for relative, digest in row["file_sha256"].items()},
+        "dataset_identity": profile.dataset_identity,
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "archive_profile": profile.as_dict(),
+        "dataset_manifest_sha256": dataset_sha,
+        "prefix": config.run.hf_subfolder,
+    }), encoding="utf-8")
+    bootstrap = Path(config.run.run_root) / "control" / "resume_bootstrap.json"
+    bootstrap.write_text(json.dumps({
+        "run_id": config.run.run_id, "remote_revision": revision,
+        "remote_manifest_sha256": dataset_sha,
+    }), encoding="utf-8")
+    downloads = []
+    def download(**kwargs):
+        downloads.append(kwargs)
+        pinned = kwargs.get("revision")
+        if "revision" in kwargs:
+            assert pinned == revision
+        path = remote_root / kwargs["filename"]
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        if pinned is None:
+            return str(path)
+        assert kwargs.get("cache_dir")
+        cached = Path(kwargs["cache_dir"]) / "snapshots" / revision / kwargs["filename"]
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(path, cached)
+        return str(cached)
+    monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
+    return run_json, token, manifest, prefix_root, downloads
 
-    monkeypatch.setattr(
-        generation_coordinator_module,
-        "hf_hub_download",
-        lambda **kwargs: str(remote),
-    )
+
+def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(tmp_path: Path, monkeypatch):
+    run_json, token, manifest, prefix_root, downloads = _complete_archive_remote(tmp_path, monkeypatch)
     control = CoordinatorControlPlane.open(
         run_json,
         api_factory=lambda: object(),
@@ -823,11 +868,182 @@ def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(
 
     assert control.queue.counts().ingested == 0
     assert control.queue.counts().published == 0
-    assert len(control.manifest["episodes"]) == 2
-    assert len(control.manifest["failure_attempts"]) == 1
+    assert len(control.manifest["episodes"]) == 1
+    assert len(control.manifest["failure_attempts"]) == 0
     assert control.planner.counts("T01").nominal_successes == 1
-    assert control.planner.counts("T01").nominal_valid_failures == 1
-    assert control.planner.counts("T01").nominal_crashes == 1
+    assert {item["filename"] for item in downloads} == {
+        f"{prefix_root.relative_to(prefix_root.parents[1])}/{relative}"
+        for relative in ("dataset_manifest.json", "resume_receipt.json", "publication_receipt.json")
+    } | {
+        f"{prefix_root.relative_to(prefix_root.parents[1])}/{manifest['episodes'][0]['archive_ref']}/{relative}"
+        for relative in manifest["episodes"][0]["file_sha256"]
+    }
+
+
+def test_archive_preflight_pins_local_fake_manifest(tmp_path: Path, monkeypatch):
+    run_json, token, _, _, downloads = _complete_archive_remote(tmp_path, monkeypatch)
+    run_payload = json.loads(run_json.read_text())
+    config = GenerationRuntimeConfig.from_file(run_payload["runtime_config_path"], check_paths=False)
+    bootstrap = generation_launch.preflight_resume_manifest(
+        config, token_path=token, run_root=config.run.run_root,
+        approved_manifest=run_payload["approved_manifest"],
+        downloader=generation_coordinator_module.hf_hub_download,
+    )
+    assert bootstrap["remote_revision"] == "c" * 40
+    assert downloads[0].get("revision") is None
+    assert all(call.get("revision") == "c" * 40 for call in downloads[1:])
+    assert len(downloads) == 2
+
+
+def _refresh_archive_remote_hashes(manifest: dict, prefix_root: Path) -> None:
+    row = manifest["episodes"][0]
+    archive = prefix_root / row["archive_ref"]
+    manifest_path = archive / "episode.manifest.json"
+    artifact_path = archive / "artifact_manifest.json"
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    artifact["files"]["episode.manifest.json"]["bytes"] = manifest_path.stat().st_size
+    artifact["files"]["episode.manifest.json"]["sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    artifact_path.write_text(json.dumps(artifact), encoding="utf-8")
+    row["file_sha256"] = {
+        str(path.relative_to(archive)): hashlib.sha256(path.read_bytes()).hexdigest()
+        for path in archive.rglob("*") if path.is_file()
+    }
+    dataset_path = prefix_root / "dataset_manifest.json"
+    dataset_path.write_text(json.dumps(manifest), encoding="utf-8")
+    dataset_sha = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+    for receipt_name in ("resume_receipt.json", "publication_receipt.json"):
+        path = prefix_root / receipt_name
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        receipt["dataset_manifest_sha256"] = dataset_sha
+        if receipt_name == "publication_receipt.json":
+            receipt["artifact_hashes"] = {
+                f"{row['job_id']}/{relative}": digest
+                for relative, digest in row["file_sha256"].items()
+            }
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+
+
+@pytest.mark.parametrize("missing", [
+    "episode.manifest.json", "artifact_manifest.json", "debug.json", "data/chunk-00000.npz",
+])
+def test_archive_resume_rejects_missing_pinned_file(tmp_path: Path, monkeypatch, missing: str):
+    run_json, token, manifest, prefix_root, _ = _complete_archive_remote(tmp_path, monkeypatch)
+    (prefix_root / manifest["episodes"][0]["archive_ref"] / missing).unlink()
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(run_json, api_factory=lambda: object(), token_path=token)
+    assert isinstance(failure.value.__cause__, FileNotFoundError)
+
+
+def test_archive_resume_rejects_unpinned_revision(tmp_path: Path, monkeypatch):
+    run_json, token, _, _, downloads = _complete_archive_remote(tmp_path, monkeypatch)
+    bootstrap_path = Path(json.loads(run_json.read_text())["run"]["run_root"]) / "control" / "resume_bootstrap.json"
+    bootstrap = json.loads(bootstrap_path.read_text())
+    bootstrap["remote_revision"] = None
+    bootstrap_path.write_text(json.dumps(bootstrap), encoding="utf-8")
+    with pytest.raises(ValueError, match="pinned lowercase HF commit OID"):
+        CoordinatorControlPlane.open(run_json, api_factory=lambda: object(), token_path=token)
+    assert downloads == []
+
+
+@pytest.mark.parametrize("receipt_name,field", [
+    ("resume_receipt.json", "dataset_manifest_sha256"),
+    ("resume_receipt.json", "dataset_manifest_revision"),
+    ("publication_receipt.json", "dataset_manifest_sha256"),
+    ("publication_receipt.json", "artifact_hashes"),
+])
+def test_archive_resume_rejects_receipt_mismatch(tmp_path: Path, monkeypatch, receipt_name: str, field: str):
+    run_json, token, _, prefix_root, _ = _complete_archive_remote(tmp_path, monkeypatch)
+    receipt_path = prefix_root / receipt_name
+    receipt = json.loads(receipt_path.read_text())
+    if field == "artifact_hashes":
+        receipt[field] = {}
+    elif field == "dataset_manifest_revision":
+        receipt[field] = "0" * 40
+    else:
+        receipt[field] = "0" * 64
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(run_json, api_factory=lambda: object(), token_path=token)
+    assert "receipt" in str(failure.value.__cause__)
+
+
+@pytest.mark.parametrize("malformation", ["duplicate_chunk", "omitted_chunk", "omitted_array_spec"])
+def test_archive_resume_rejects_self_consistent_malformed_archive(
+    tmp_path: Path, monkeypatch, malformation: str,
+):
+    run_json, token, manifest, prefix_root, _ = _complete_archive_remote(tmp_path, monkeypatch)
+    archive_path = prefix_root / manifest["episodes"][0]["archive_ref"] / "episode.manifest.json"
+    archive = json.loads(archive_path.read_text())
+    if malformation == "duplicate_chunk":
+        archive["chunk_inventory"].append(dict(archive["chunk_inventory"][0]))
+    elif malformation == "omitted_chunk":
+        archive["chunk_inventory"].clear()
+    else:
+        archive["array_specs"].pop(next(iter(archive["array_specs"])))
+    archive_path.write_text(json.dumps(archive), encoding="utf-8")
+    _refresh_archive_remote_hashes(manifest, prefix_root)
+    bootstrap_path = Path(json.loads(run_json.read_text())["run"]["run_root"]) / "control" / "resume_bootstrap.json"
+    bootstrap = json.loads(bootstrap_path.read_text())
+    bootstrap["remote_manifest_sha256"] = hashlib.sha256((prefix_root / "dataset_manifest.json").read_bytes()).hexdigest()
+    bootstrap_path.write_text(json.dumps(bootstrap), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(run_json, api_factory=lambda: object(), token_path=token)
+    assert any(word in str(failure.value.__cause__) for word in ("chunk", "array"))
+
+
+@pytest.mark.parametrize("field,value,message", [
+    ("split", "test", "split disagrees with catalog"),
+    ("episode_kind", "unknown", "episode_kind is invalid"),
+])
+def test_archive_resume_rejects_self_consistent_invalid_plan(field: str, value: str, message: str):
+    profile = _archive_resume_profile()
+    run = RunConfig(run_id="new-run", run_root="/tmp/new-run", code_revision="a" * 40,
+                    approved_manifest_sha256="b" * 64, resume_from_hf=True)
+    manifest = _archive_resume_manifest(profile)
+    row = manifest["episodes"][0]
+    row[field] = value
+    row["attempt_plan"][field] = value
+    with pytest.raises(ValueError, match=message):
+        load_remote_manifest(manifest, run, archive_profile=profile, approved_program_ids={"T01"})
+
+
+def test_archive_resume_rejects_asset_family_outside_approved_catalog():
+    profile = _archive_resume_profile()
+    run = RunConfig(run_id="new-run", run_root="/tmp/new-run", code_revision="a" * 40,
+                    approved_manifest_sha256="b" * 64, resume_from_hf=True)
+    manifest = _archive_resume_manifest(profile)
+    with pytest.raises(ValueError, match="asset_family_id disagrees with approved catalog"):
+        load_remote_manifest(manifest, run, archive_profile=profile,
+                             approved_rows={"T01": {"asset_family_id": "approved-family"}})
+
+
+def test_archive_resume_rejects_self_consistent_invalid_asset_instance():
+    profile = _archive_resume_profile()
+    run = RunConfig(run_id="new-run", run_root="/tmp/new-run", code_revision="a" * 40,
+                    approved_manifest_sha256="b" * 64, resume_from_hf=True)
+    manifest = _archive_resume_manifest(profile)
+    row = manifest["episodes"][0]
+    row["asset_instance_id"] = "unrelated-asset"
+    row["attempt_plan"]["randomization"]["asset_instance_id"] = "unrelated-asset"
+    with pytest.raises(ValueError, match="asset_instance_id disagrees with planner seed"):
+        load_remote_manifest(manifest, run, archive_profile=profile, approved_program_ids={"T01"})
+
+
+def test_archive_resume_restores_success_valid_failure_and_crash_quota_without_payload():
+    profile = _archive_resume_profile()
+    run = RunConfig(run_id="new-run", run_root="/tmp/new-run", code_revision="a" * 40,
+                    approved_manifest_sha256="b" * 64, resume_from_hf=True)
+    manifest = load_remote_manifest(
+        _archive_resume_manifest(profile), run, archive_profile=profile,
+        approved_program_ids={"T01"},
+    )
+    approved = json.loads(Path("artifacts/composition/approved_composition_manifest.json").read_text())
+    row = next(item for item in approved["catalog"] if item["program_id"] == "T01")
+    planner = DistributedPlanner.from_manifest(run, {"T01": row}, manifest)
+    counts = planner.counts("T01")
+    assert counts.nominal_successes == 1
+    assert counts.nominal_valid_failures == 1
+    assert counts.nominal_crashes == 1
 
 
 def test_coordinator_resume_reuses_launcher_pinned_revision(tmp_path: Path, monkeypatch):

@@ -61,8 +61,9 @@ hash inventories, not absolute local result paths. Success and `valid_failure`
 remain episode rows; crashes and invalid observations remain attempt rows. Legacy
 configs without `archive_profile` retain their JSON/layout behavior. Verified
 receipt-only pruning now retains a per-job queue receipt and manifest row; it is
-rejected in validation mode, whose checked-in profile remains `keep`. Full HF-only
-resume bootstrap, final-view publication, remote acceptance and production-run
+rejected in validation mode, whose checked-in profile remains `keep`. HF-only
+archive resume bootstrap is locally implemented and tested with a complete fake
+remote tree. Final-view publication, live remote acceptance and production-run
 authorization remain pending, so this is not yet an end-to-end production
 collection path. See the [active implementation plan](../plans/active/generation-storage-and-view-finalization.md)
 for current phase evidence.
@@ -95,7 +96,13 @@ The manifest must be schema version 3, identify its source run(s), contain
 unique immutable `episode_id`/`attempt_id` rows, and preserve any serialized
 `attempt_plan`. Missing, malformed, conflicting, or unavailable remote state
 fails closed. The fetched revision and SHA256 are written to
-`control/resume_bootstrap.json` and reused by the coordinator.
+`control/resume_bootstrap.json` and reused by the coordinator. Archive-profile
+resume requires a lowercase 40- or 64-character HF commit OID. Before restoring
+planner state, the coordinator checks both remote receipts against the manifest,
+downloads and hashes every declared archive file at that revision through owned
+temporary scratch, and runs the canonical archive validator. Attempt plans must
+also match the program catalog's split, allowed kind, and approved asset family.
+Legacy resume behavior is unchanged.
 
 The resume command requires a coordinator-only credential path:
 

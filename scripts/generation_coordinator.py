@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 from pathlib import PurePosixPath
+import shutil
 import stat
 import tempfile
 import time
@@ -39,6 +40,9 @@ from icgs.data.collection.generation.distributed_validation import (
 )
 from icgs.data.collection.generation.distributed_validation import ValidationFailure
 from icgs.data.collection.generation.diversity import scene_signature, train_subset_for_sample
+from icgs.data.collection.generation.steps import get_generation_program
+from icgs.data.collection.generation.perturbations import applicable_perturbations
+from icgs.data.collection.generation.episode_archive import validate_archive_manifest
 
 
 MAX_READY_PER_TICK = 100
@@ -315,6 +319,128 @@ def _snapshot_revision(path: str | Path) -> str | None:
     ):
         return value
     return None
+
+
+def _require_pinned_revision(value: Any) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) not in {40, 64}
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise ValueError("archive resume requires a pinned lowercase HF commit OID")
+    return value
+
+
+def _download_pinned_file(
+    downloader, run: RunConfig, token: str, revision: str, filename: str,
+    scratch: Path, expected_sha256: str | None = None,
+) -> Path:
+    _require_pinned_revision(revision)
+    remote = Path(downloader(
+        repo_id=run.hf_repo, repo_type="dataset", filename=filename,
+        token=token, force_download=True, revision=revision, cache_dir=str(scratch),
+    ))
+    if not remote.is_file() or not remote.resolve().is_relative_to(scratch.resolve()):
+        raise ValueError(f"remote archive file is missing or outside owned scratch: {filename}")
+    if expected_sha256 is not None:
+        digest = hashlib.sha256()
+        with remote.open("rb") as stream:
+            for block in iter(lambda: stream.read(1 << 20), b""):
+                digest.update(block)
+        if digest.hexdigest() != expected_sha256:
+            raise ValueError(f"remote archive hash mismatch: {filename}")
+    return remote
+
+
+def _verify_archive_resume_files(
+    manifest: Mapping[str, Any], run: RunConfig, profile: ArchiveProfileConfig,
+    *, token: str, revision: str, downloader, manifest_sha256: str,
+) -> None:
+    """Validate one complete archive at a time, releasing scratch after each row."""
+    prefix = run.hf_subfolder
+    with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-control-") as owned:
+        scratch = Path(owned)
+        resume = json.loads(_download_pinned_file(
+            downloader, run, token, revision, f"{prefix}/resume_receipt.json", scratch,
+        ).read_bytes())
+        publication = PublicationReceipt.from_dict(json.loads(_download_pinned_file(
+            downloader, run, token, revision, f"{prefix}/publication_receipt.json", scratch,
+        ).read_bytes()))
+        expected_identity = {
+            "dataset_identity": profile.dataset_identity,
+            "archive_format_id": profile.archive_format_id,
+            "episode_schema_version": profile.episode_schema_version,
+            "archive_profile": profile.as_dict(),
+            "dataset_manifest_sha256": manifest_sha256,
+        }
+        if not isinstance(resume, Mapping):
+            raise ValueError("remote archive resume receipt must be an object")
+        for field, expected in expected_identity.items():
+            if resume.get(field) != expected or getattr(publication, field) != expected:
+                raise ValueError(f"remote archive receipt {field} mismatch")
+        if (
+            publication.status not in {"VERIFIED", "COMPLETE"}
+            or publication.run_id not in manifest["source_run_ids"]
+            or publication.source_run_id != publication.run_id
+            or publication.prefix != prefix
+            or resume.get("run_id") != publication.run_id
+            or resume.get("source_run_id") != publication.run_id
+            or resume.get("source_run_ids") != manifest["source_run_ids"]
+            or resume.get("episodes") != len(manifest["episodes"])
+            or resume.get("failure_attempts") != len(manifest["failure_attempts"])
+            or _require_pinned_revision(resume.get("dataset_manifest_revision")) != publication.data_commit_oid
+        ):
+            raise ValueError("remote archive resume/publication receipt identity mismatch")
+        _require_pinned_revision(publication.commit_oid)
+        rows = list(manifest["episodes"]) + list(manifest["failure_attempts"])
+        by_job = {row["job_id"]: row for row in rows}
+        if not publication.job_ids or any(job not in by_job for job in publication.job_ids):
+            raise ValueError("remote publication receipt job_ids are not in dataset manifest")
+        receipt_hashes = {
+            f"{job}/{relative}": digest
+            for job in publication.job_ids
+            for relative, digest in by_job[job]["file_sha256"].items()
+        }
+        if publication.artifact_hashes != receipt_hashes:
+            raise ValueError("remote publication receipt artifact hashes mismatch")
+
+    for row in rows:
+        with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-archive-") as owned:
+            scratch = Path(owned)
+            archive = scratch / "archive"
+            archive.mkdir()
+            for relative, digest in sorted(row["file_sha256"].items()):
+                filename = f"{prefix}/{row['archive_ref']}/{relative}"
+                target = archive / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-file-") as fetch:
+                    remote = _download_pinned_file(
+                        downloader, run, token, revision, filename, Path(fetch), digest,
+                    )
+                    shutil.copyfile(remote, target)
+            manifest_name = "episode.manifest.json" if row["episode_id"] is not None else "attempt.manifest.json"
+            validate_archive_manifest(archive / manifest_name)
+            payload = json.loads((archive / manifest_name).read_text(encoding="utf-8"))
+            for field in ("archive_format_id", "episode_schema_version", "dataset_identity", "archive_kind", "episode_id", "attempt_id", "program_id", "outcome", "source_run_id", "code_revision", "preprocessing_identity", "split", "subset"):
+                expected = (
+                    ("episode" if row["episode_id"] is not None else "attempt")
+                    if field == "archive_kind" else row.get(field)
+                )
+                if field in {"archive_format_id", "episode_schema_version", "dataset_identity"}:
+                    expected = getattr(profile, field)
+                if payload.get(field) != expected:
+                    raise ValueError(f"remote archive {field} disagrees with dataset row")
+            debug = json.loads((archive / "debug.json").read_text(encoding="utf-8"))
+            if not isinstance(debug, Mapping):
+                raise ValueError("remote archive debug metadata must be an object")
+            job = debug.get("job_identity") or debug.get("job")
+            embedded_plan = (
+                job.get("plan") if isinstance(job, Mapping) else None
+            ) or debug.get("_plan") or debug.get("plan")
+            if embedded_plan != row["attempt_plan"]:
+                raise ValueError("remote archive attempt_plan disagrees with debug provenance")
+            if isinstance(job, Mapping) and job.get("job_id") != row["job_id"]:
+                raise ValueError("remote archive job_id disagrees with debug provenance")
 
 
 def _recover_interrupted_archive_publication(
@@ -651,6 +777,7 @@ def _validate_archive_resume_manifest(
     profile: ArchiveProfileConfig,
     *,
     approved_program_ids: set[str] | None = None,
+    approved_rows: Mapping[str, Mapping[str, Any]] | None = None,
     remote_files: Mapping[str, Any] | None = None,
     remote_manifest_sha256: str | None = None,
     manifest_bytes: bytes | None = None,
@@ -804,6 +931,46 @@ def _validate_archive_resume_manifest(
                 raise ValueError("remote archive row attempt_plan is malformed") from error
             if plan.program_id != row.get("program_id"):
                 raise ValueError("remote archive attempt_plan program identity mismatch")
+            try:
+                catalog_split = get_generation_program(plan.program_id).split
+            except (KeyError, ValueError) as error:
+                raise ValueError("remote archive attempt_plan uses unknown catalog program") from error
+            if plan.split != catalog_split:
+                raise ValueError("remote archive attempt_plan split disagrees with catalog")
+            if plan.episode_kind not in {"nominal", "perturbed"}:
+                raise ValueError("remote archive attempt_plan episode_kind is invalid")
+            if not isinstance(plan.randomization, Mapping):
+                raise ValueError("remote archive attempt_plan randomization must be an object")
+            for field in ("asset_instance_id", "asset_family_id"):
+                asset = plan.randomization.get(field)
+                if not isinstance(asset, str) or not asset.strip():
+                    raise ValueError(f"remote archive attempt_plan {field} is invalid")
+            if plan.randomization["asset_instance_id"] != f"{plan.program_id}-asset-{plan.scene_seed}":
+                raise ValueError("remote archive attempt_plan asset_instance_id disagrees with planner seed")
+            if plan.randomization.get("scene_seed") != plan.scene_seed:
+                raise ValueError("remote archive attempt_plan randomization scene_seed mismatch")
+            for field, expected in (("program_id", plan.program_id), ("split", plan.split)):
+                declared = plan.randomization.get(field)
+                if declared is not None and declared != expected:
+                    raise ValueError(f"remote archive attempt_plan randomization {field} mismatch")
+            if approved_rows is not None:
+                approved_row = approved_rows.get(plan.program_id)
+                if approved_row is None:
+                    raise ValueError("remote archive attempt_plan program is not approved")
+                expected_family = approved_row.get("asset_family_id")
+                if plan.randomization["asset_family_id"] != expected_family:
+                    raise ValueError("remote archive attempt_plan asset_family_id disagrees with approved catalog")
+            if plan.episode_kind == "nominal" and plan.intervention is not None:
+                raise ValueError("remote archive nominal attempt_plan cannot have intervention")
+            if plan.episode_kind == "perturbed":
+                intervention = plan.intervention
+                if not isinstance(intervention, Mapping):
+                    raise ValueError("remote archive perturbed attempt_plan requires intervention")
+                kind = intervention.get("kind") or intervention.get("intervention_type")
+                if kind not in applicable_perturbations(plan.program_id):
+                    raise ValueError("remote archive attempt_plan intervention kind is invalid for program")
+                if intervention.get("intervention_id") != f"{kind}_v1":
+                    raise ValueError("remote archive attempt_plan intervention_id mismatch")
             if f"att-{plan.episode_id}" != row.get("attempt_id"):
                 raise ValueError("remote archive attempt_plan attempt identity mismatch")
             if collection == "episodes" and plan.episode_id != row.get("episode_id"):
@@ -856,6 +1023,17 @@ def _validate_archive_resume_manifest(
         unexpected = sorted(set(remote_file_inventory) - expected_remote_files)
         if unexpected:
             raise ValueError(f"remote archive contains files outside the declared inventory: {unexpected}")
+        for collection in ("episodes", "failure_attempts"):
+            for row in validated[collection]:
+                with tempfile.TemporaryDirectory(prefix="icgs-resume-fixture-") as owned:
+                    root = Path(owned)
+                    for relative in row["file_sha256"]:
+                        source_key = f"{row['archive_ref']}/{relative}"
+                        target = root / relative
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        target.write_bytes(_remote_file_bytes(remote_file_inventory[source_key]))
+                    name = "episode.manifest.json" if collection == "episodes" else "attempt.manifest.json"
+                    validate_archive_manifest(root / name)
     return validated
 
 
@@ -865,17 +1043,17 @@ def load_remote_manifest(
     *,
     archive_profile: ArchiveProfileConfig | None = None,
     approved_program_ids: set[str] | None = None,
+    approved_rows: Mapping[str, Mapping[str, Any]] | None = None,
     remote_files: Mapping[str, Any] | None = None,
     remote_manifest_sha256: str | None = None,
     manifest_bytes: bytes | None = None,
 ) -> dict[str, Any]:
     """Parse and validate a legacy or lossless archive resume manifest.
 
-    ``remote_files`` is an optional test/integration seam keyed by each row's
-    HF-relative ``archive_ref/<file>`` path. When supplied, it is treated as a
-    complete inventory and every declared file is hash-checked; normal bootstrap
-    uses the already verified immutable row inventory and performs structural
-    validation without downloading the raw chunks.
+    ``remote_files`` is a complete local fixture seam keyed by each row's
+    HF-relative ``archive_ref/<file>`` path. The coordinator downloads every
+    declared archive file at one pinned revision and invokes the canonical
+    validator before using the returned rows for planning.
     """
     if isinstance(manifest, (str, Path)):
         manifest_path = Path(manifest)
@@ -893,6 +1071,7 @@ def load_remote_manifest(
         run,
         archive_profile,
         approved_program_ids=approved_program_ids,
+        approved_rows=approved_rows,
         remote_files=remote_files,
         remote_manifest_sha256=remote_manifest_sha256,
         manifest_bytes=manifest_bytes,
@@ -1078,16 +1257,23 @@ class CoordinatorControlPlane:
                 raise ValueError("resume bootstrap run_id does not match run config")
             remote_revision = bootstrap.get("remote_revision")
             bootstrap_manifest_sha256 = bootstrap.get("remote_manifest_sha256")
+        if runtime.archive_profile is not None and run.resume_from_hf:
+            remote_revision = _require_pinned_revision(remote_revision)
         try:
-            remote_path = hf_hub_download(
-                repo_id=run.hf_repo,
-                repo_type="dataset",
-                filename=f"{run.hf_subfolder}/dataset_manifest.json",
-                token=token,
-                force_download=True,
-                revision=remote_revision,
-            )
-            remote_bytes = Path(remote_path).read_bytes()
+            if runtime.archive_profile is not None and run.resume_from_hf:
+                with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-manifest-") as scratch:
+                    remote_path = _download_pinned_file(
+                        hf_hub_download, run, token, remote_revision,
+                        f"{run.hf_subfolder}/dataset_manifest.json", Path(scratch),
+                    )
+                    remote_bytes = remote_path.read_bytes()
+            else:
+                remote_path = hf_hub_download(
+                    repo_id=run.hf_repo, repo_type="dataset",
+                    filename=f"{run.hf_subfolder}/dataset_manifest.json",
+                    token=token, force_download=True, revision=remote_revision,
+                )
+                remote_bytes = Path(remote_path).read_bytes()
             remote_manifest_sha256 = hashlib.sha256(remote_bytes).hexdigest()
             if bootstrap_manifest_sha256 and remote_manifest_sha256 != bootstrap_manifest_sha256:
                 raise ValueError("remote resume manifest digest changed after preflight")
@@ -1096,9 +1282,16 @@ class CoordinatorControlPlane:
                 run,
                 archive_profile=runtime.archive_profile,
                 approved_program_ids=set(rows),
+                approved_rows=rows if runtime.archive_profile is not None else None,
                 remote_manifest_sha256=remote_manifest_sha256,
                 manifest_bytes=remote_bytes,
             )
+            if runtime.archive_profile is not None and run.resume_from_hf:
+                _verify_archive_resume_files(
+                    remote_manifest, run, runtime.archive_profile, token=token,
+                    revision=remote_revision, downloader=hf_hub_download,
+                    manifest_sha256=remote_manifest_sha256,
+                )
         except Exception as error:
             remote_error = error
         if runtime.archive_profile is not None and run.publication_enabled:

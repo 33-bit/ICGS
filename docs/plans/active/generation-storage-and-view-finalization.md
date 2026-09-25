@@ -196,11 +196,19 @@ The implementation must keep these ownership boundaries:
 - `load_remote_manifest()` validates the new dataset/archive identity and returns immutable episode/attempt rows plus archive manifest references.
 - `DistributedPlanner.from_manifest()` restores uniqueness/quota state without local episode binaries.
 
-- [ ] Validate new archive/schema identity, source run disjointness, episode/attempt uniqueness, plan identity, split/subset, and per-episode manifest references.
-- [ ] Prove resume can reconstruct planner state after local `result_dir` payloads are absent but HF manifest/receipts are available.
-- [ ] Preserve valid failures and failure attempts during resume; never reset quota because a local payload was pruned.
-- [ ] Add tests for malformed remote archive manifest, conflicting immutable row, missing chunk reference, matching remote hash, and disjoint new run ID.
-- [ ] Run the resume/control test subset and L0.
+- [x] Validate new archive/schema identity, source run disjointness, episode/attempt uniqueness, plan identity, catalog split/kind/asset constraints, split/subset, and per-episode manifest references.
+- [x] Prove resume can reconstruct planner state after local `result_dir` payloads are absent but pinned HF manifest/receipts and the complete archive inventory are available (local fake HF tree).
+- [x] Preserve valid failures and failure attempts during resume; never reset quota because a local payload was pruned.
+- [x] Add tests for malformed remote archive manifest, conflicting immutable row, missing chunk reference, matching remote hash, disjoint new run ID, receipts, and self-consistent malformed chunk/array inventories.
+- [x] Run the resume/control test subset and L0.
+
+Local evidence (macOS, Python 3.14.4, fixture-only): `PYTHONPATH=src python3 -B -m
+pytest -q tests/test_generation_control.py tests/test_generation_planner.py
+tests/test_generation_publication.py tests/test_generation_queue.py` PASS 167/167;
+`PYTHONPATH=src python3 -B -m pytest -q tests/test_generation*.py
+tests/test_capacity_probe.py` PASS 416/416; `python3 -B scripts/validate_fast.py`
+PASS (22 harness tests); `git diff --check` PASS. No live HF, simulator, or full
+generation run was selected.
 
 ## Phase 3 — Lazy HF archive reader and training views
 
@@ -348,12 +356,12 @@ Local plan gates are pure fixture/unit/L0 checks. No simulator, download, prepro
 - [x] Phase 0.2 — Added an opt-in immutable archive profile. Legacy runtime configs still parse with `archive_profile=None`; the checked-in bounded validation example selects the archive format with `keep` retention. Profiles also bound each NPZ chunk to 256 MiB of total uncompressed ZIP member bytes, including `.npy` headers; the writer streams `.npy` scratch pieces and records a local staging byte upper bound that includes spool plus final files.
 - [x] Recorded implementation rulings: `numpy.savez_compressed` has no `allow_pickle` argument, so archive writes reject object arrays and readers use `numpy.load(..., allow_pickle=False)`; dated audits remain historical evidence and current storage behavior belongs in current owner docs.
 - [x] Phase 1 — Canonical archive writer/reader and both materialization paths. Archive core, both opt-in materializers, archive-manifest worker handoff/detection, and scoped review corrections are locally tested.
-- [ ] Phase 2 — New-profile validation, complete HF publication, receipt-only retention, and HF-only resume.
+- [x] Phase 2 — Local implementation of new-profile validation, complete HF publication, receipt-only retention, and HF-only resume; live HF acceptance remains a later gate.
 - [ ] Phase 3 — Lazy archive readers and revision-bound provisional/final views.
 - [ ] Phase 4 — Local migration and capacity instrumentation.
 - [ ] Phase 5 — Current owner documentation and local acceptance.
 
-Tasks 2.1 and 2.2 are locally implemented. `validate_closed_result(..., archive_profile=...)`
+Tasks 2.1, 2.2, and 2.3 are locally implemented. `validate_closed_result(..., archive_profile=...)`
 uses the canonical archive validator before ingestion and emits episode/attempt
 rows with relative HF archive references, source/profile identities, and every
 file hash. Profile-aware publisher operation construction revalidates the queue
@@ -363,9 +371,13 @@ manifest hash, binds provisional views and receipts to archive identity, verifie
 each remote file in an owned per-file cache at a pinned revision, and prunes only
 after a verified receipt is durably bound to the job/run/source/hash inventory.
 Receipt-only queue receipts retain the manifest row needed to rebuild local
-planner state after payload pruning. HF-only resume bootstrap/identity validation
-remains Task 2.3; remote acceptance and production run authorization remain later
-gates.
+planner state after payload pruning. Task 2.3 now requires a pinned lowercase HF
+revision, checks both remote control receipts against the manifest and latest batch,
+downloads and hashes every row file through owned bounded scratch, invokes the
+canonical archive validator, and checks AttemptPlan against catalog split/kind/asset
+rules before planner construction. Local fake HF tests cover allowed recovery and
+targeted malformed cases; live HF acceptance and production run authorization
+remain later gates.
 
 Task 2.2 rulings: validation mode rejects `receipt_only`; the checked-in bounded
 validation profile remains `keep`. A data-commit timeout before an OID is known
