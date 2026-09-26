@@ -399,7 +399,15 @@ def migrate_episode(
         source_hashes = source.source_artifact_hashes
         _validate_source_identity(identity_payload, source)
         source_record = _redact_sensitive(dict(source.record))
-        if not _semantic_equal(source.record, source_record):
+        safe_execution = _redact_sensitive(dict(source.execution))
+        safe_sidecars = _redact_sensitive(dict(source.sidecar_metadata))
+        safe_artifact_manifest = _redact_sensitive(dict(source.artifact_manifest))
+        if any((
+            not _semantic_equal(source.record, source_record),
+            not _semantic_equal(source.execution, safe_execution),
+            not _semantic_equal(source.sidecar_metadata, safe_sidecars),
+            not _semantic_equal(source.artifact_manifest, safe_artifact_manifest),
+        )):
             raise ValueError("security redaction would alter v2 semantics; refusing non-lossless migration")
         target_identity = _target_identity(identity_payload, target_profile)
 
@@ -412,8 +420,6 @@ def migrate_episode(
             )
 
         warnings = list(source.warnings)
-        safe_execution = _redact_sensitive(dict(source.execution))
-        safe_sidecars = _redact_sensitive(dict(source.sidecar_metadata))
         identity_values, identity_warnings = _required_archive_identity(
             identity_payload,
             source.record,
@@ -437,7 +443,7 @@ def migrate_episode(
             "v2_migration": migration_metadata,
             "source_execution": safe_execution,
             "source_sidecars": safe_sidecars,
-            "source_artifact_manifest": _redact_sensitive(dict(source.artifact_manifest)),
+            "source_artifact_manifest": safe_artifact_manifest,
         }
         if source.kind == "episode":
             target_writer.archive_writer.write_episode(
@@ -460,7 +466,7 @@ def migrate_episode(
         roundtrip = _validate_and_read_target(target_writer.output_dir, source.kind)
         _verify_source_roundtrip(
             source, roundtrip, source_record, safe_execution, safe_sidecars,
-            identity_payload, target_identity,
+            safe_artifact_manifest, identity_payload, target_identity,
         )
         target_hashes = _file_inventory(target_writer.output_dir)
         receipt = MigrationReceipt(
@@ -680,6 +686,7 @@ def _reuse_existing_migration(
         safe_record,
         _redact_sensitive(dict(source.execution)),
         _redact_sensitive(dict(source.sidecar_metadata)),
+        _redact_sensitive(dict(source.artifact_manifest)),
         source_identity,
         target_identity,
     )
@@ -704,6 +711,7 @@ def _verify_source_roundtrip(
     source_record: Mapping[str, Any],
     safe_execution: Mapping[str, Any],
     safe_sidecars: Mapping[str, Any],
+    safe_artifact_manifest: Mapping[str, Any],
     source_identity: Mapping[str, Any],
     target_identity: Mapping[str, Any],
 ) -> None:
@@ -726,6 +734,8 @@ def _verify_source_roundtrip(
         raise ValueError("reconstructed archive changed unique execution/debug metadata")
     if not _semantic_equal(debug.get("source_sidecars", {}), safe_sidecars):
         raise ValueError("reconstructed archive changed unique v2 sidecar metadata")
+    if not _semantic_equal(debug.get("source_artifact_manifest", {}), safe_artifact_manifest):
+        raise ValueError("reconstructed archive changed unique v2 artifact-manifest metadata")
     migration = debug.get("v2_migration", {})
     if migration.get("source_identity") != dict(source_identity):
         raise ValueError("reconstructed archive is not bound to the selected immutable v2 source")

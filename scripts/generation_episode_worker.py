@@ -53,6 +53,36 @@ def live_poses(names) -> dict:
     return poses
 
 
+def _timed_wrist_depth_arrays(timed: list[dict]) -> dict[str, np.ndarray]:
+    """Return captured numeric wrist-depth frames with their source boundaries."""
+    frames: list[np.ndarray] = []
+    boundaries: list[int] = []
+    for index, observation in enumerate(timed):
+        value = observation.get("wrist_depth")
+        if value is None:
+            continue
+        try:
+            frame = np.asarray(value)
+        except (TypeError, ValueError):
+            return {}
+        if frame.ndim == 0 or frame.dtype.hasobject or frame.dtype.kind not in "biufc":
+            return {}
+        frames.append(frame)
+        boundaries.append(index)
+    if not frames:
+        return {}
+    try:
+        stacked = np.stack(frames)
+    except (TypeError, ValueError):
+        return {}
+    if stacked.dtype.hasobject or stacked.dtype.kind not in "biufc":
+        return {}
+    return {
+        "wrist_depth_frames": stacked,
+        "wrist_depth_frame_boundaries": np.asarray(boundaries, dtype=np.int64),
+    }
+
+
 def _write_episode(write_dir: Path, row: dict) -> None:
     from icgs.data.collection.generation.batch import plan_program_attempts, bounds_from_row
     from icgs.data.collection.generation.episode_record import assemble_episode, classify_generation_outcome
@@ -218,6 +248,7 @@ def _write_episode(write_dir: Path, row: dict) -> None:
                         np.asarray(item["point_valid"]) for item in timed
                     ]),
                 })
+                prefix.update(_timed_wrist_depth_arrays(timed))
             debug = {
                 key: value for key, value in row.items()
                 if key not in {"_timed_obs", "_actions"}
@@ -293,6 +324,7 @@ def _write_episode(write_dir: Path, row: dict) -> None:
             _archive_record(record),
             raw_arrays={
                 "actions": np.asarray(() if actions_value is None else actions_value),
+                **_timed_wrist_depth_arrays(timed),
             },
             debug_metadata=execution,
             output_dir=write_dir,
@@ -459,6 +491,7 @@ def run_program(env, spec, plan=None) -> dict:
     from icgs.data.collection.generation.attempt_prep import prepare_attempt
     from icgs.data.collection.generation.simulator_randomization import apply_sensor_randomization
 
+    capture_wrist_depth = bool(os.environ.get("ICGS_GENERATION_ARCHIVE_PROFILE", "").strip())
     task_cls = load_task_class(spec)
     task = env.get_task(task_cls)
     desc, obs = task.reset()
@@ -555,6 +588,10 @@ def run_program(env, spec, plan=None) -> dict:
             "T_w_e": T,
             "grip": actual_grip,
         }
+        if capture_wrist_depth:
+            wrist_depth = getattr(raw_obs, "wrist_depth", None)
+            if wrist_depth is not None:
+                row["wrist_depth"] = wrist_depth
         for key in ("joint_positions", "joint_velocities"):
             value = getattr(raw_obs, key, None)
             if value is not None:

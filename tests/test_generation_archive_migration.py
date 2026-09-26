@@ -515,6 +515,93 @@ def test_sensitive_episode_semantic_change_is_rejected_with_redacted_receipt(tmp
     } == source_before
 
 
+def _add_sensitive_debug_field(source: Path, location: str, secret: str) -> None:
+    if location == "execution":
+        execution_path = source / "execution.json"
+        execution = json.loads(execution_path.read_text(encoding="utf-8"))
+        execution["api_key"] = secret
+        _json_write(execution_path, execution)
+    elif location == "sidecar":
+        _json_write(source / "debug_metadata.json", {"api_key": secret})
+    elif location == "artifact_manifest":
+        manifest_path = source / "artifact_manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["api_key"] = secret
+        _json_write(manifest_path, manifest)
+        return
+    else:
+        raise AssertionError(f"unknown sensitive debug field location: {location}")
+
+    manifest_path = source / "artifact_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"] = _inventory(source)
+    _json_write(manifest_path, manifest)
+
+
+@pytest.mark.parametrize("location", ["execution", "sidecar", "artifact_manifest"])
+def test_sensitive_debug_metadata_redaction_is_rejected_before_fresh_migration(
+    tmp_path: Path,
+    location: str,
+) -> None:
+    _require_migration_api()
+    source = tmp_path / f"v2-sensitive-{location}"
+    _write_episode_fixture(source, "success")
+    secret = f"fixture-{location}-api-key-secret"
+    _add_sensitive_debug_field(source, location, secret)
+    target, profile, failure_path = _target(tmp_path, name=f"sensitive-{location}")
+
+    with pytest.raises(MigrationError, match="redaction would alter v2 semantics"):
+        migrate_episode(
+            V2ArtifactReader(source), target,
+            source_identity=_identity(), target_profile=profile,
+        )
+
+    failure_text = failure_path.read_text(encoding="utf-8")
+    assert "redaction would alter v2 semantics" in failure_text
+    assert secret not in failure_text
+    assert not target.output_dir.exists()
+    assert not target.receipt_path.exists()
+
+
+@pytest.mark.parametrize("location", ["execution", "sidecar", "artifact_manifest"])
+def test_sensitive_debug_metadata_redaction_is_rejected_before_existing_target_reuse(
+    tmp_path: Path,
+    monkeypatch,
+    location: str,
+) -> None:
+    _require_migration_api()
+    from scripts import generation_archive_migrate
+
+    source = tmp_path / f"v2-sensitive-existing-{location}"
+    _write_episode_fixture(source, "success")
+    secret = f"fixture-existing-{location}-api-key-secret"
+    _add_sensitive_debug_field(source, location, secret)
+    source_reader = V2ArtifactReader(source)
+    target, profile, failure_path = _target(tmp_path, name=f"existing-sensitive-{location}")
+    identity = _identity()
+
+    # Seed a canonical archive and receipt matching the prior implementation's
+    # redacted debug payload, then verify the current migration refuses reuse.
+    with monkeypatch.context() as setup_patch:
+        setup_patch.setattr(generation_archive_migrate, "_semantic_equal", lambda *_args: True)
+        migrate_episode(
+            source_reader, target,
+            source_identity=identity, target_profile=profile,
+        )
+    original_receipt = target.receipt_path.read_bytes()
+
+    with pytest.raises(MigrationError, match="redaction would alter v2 semantics"):
+        migrate_episode(
+            source_reader, target,
+            source_identity=identity, target_profile=profile,
+        )
+
+    failure_text = failure_path.read_text(encoding="utf-8")
+    assert "redaction would alter v2 semantics" in failure_text
+    assert secret not in failure_text
+    assert target.receipt_path.read_bytes() == original_receipt
+
+
 def test_existing_lossy_migration_rerun_rejects_sensitive_source_with_failure_receipt(
     tmp_path: Path,
     monkeypatch,

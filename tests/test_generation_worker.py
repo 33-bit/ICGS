@@ -5,7 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 import subprocess
 import sys
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -240,6 +240,170 @@ def test_archive_result_detection_requires_canonical_manifest_without_legacy_fal
     (candidate / "episode.json").write_text("{}", encoding="utf-8")
     with pytest.raises(ValueError, match="legacy"):
         generation_worker._archive_result_payload(candidate, config)
+
+
+def _worker_episode_materialization_row(*, outcome: str, depth_frames: list[np.ndarray | None]) -> dict:
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1,
+        episode_id="episode-t01-worker-depth-000001", episode_kind="nominal", scene_seed=7,
+        collection_seed=20260920,
+        randomization={
+            "scene_signature": "worker-depth-signature",
+            "asset_instance_id": "worker-depth-asset",
+            "asset_family_id": "worker-depth-family",
+            "camera_profile_id": "rlbench-wrist-depth-v1",
+        },
+        intervention=None,
+    )
+    observations = []
+    for index, depth in enumerate(depth_frames):
+        observation = {
+            "points": np.asarray([[index + 0.1, 0.2, 0.3]], dtype=np.float32),
+            "point_valid": np.asarray([True], dtype=np.bool_),
+            "T_w_e": np.eye(4, dtype=np.float64),
+            "grip": index % 2,
+            "joint_positions": np.asarray([index], dtype=np.float64),
+            "joint_velocities": np.asarray([0.0], dtype=np.float64),
+        }
+        if depth is not None:
+            observation["wrist_depth"] = depth
+        observations.append(observation)
+    return {
+        "program_id": "T01",
+        "_plan": plan.as_dict(),
+        "_binding": {
+            "program_id": "T01",
+            "split": "train",
+            "asset_family_id": "worker-depth-family",
+            "source_lineage_id": "worker-depth-lineage",
+            "events": [],
+        },
+        "success": outcome == "success",
+        "result_class": None if outcome in {"success", "valid_failure"} else outcome,
+        "_timed_obs": observations,
+        "_actions": [np.asarray([0.1, 0.2], dtype=np.float32)],
+        "_robot_states": [
+            {
+                "T_w_e": item["T_w_e"],
+                "grip": item["grip"],
+                "joint_positions": item["joint_positions"],
+                "joint_velocities": item["joint_velocities"],
+            }
+            for item in observations
+        ],
+        "_object_states": [{}, {}],
+        "_task_labels": {},
+    }
+
+
+def _load_generation_episode_worker_without_simulator(monkeypatch):
+    import importlib.util
+
+    package_names = (
+        "pyrep",
+        "pyrep.objects",
+        "rlbench",
+        "rlbench.action_modes",
+    )
+    for name in package_names:
+        package = ModuleType(name)
+        package.__path__ = []
+        monkeypatch.setitem(sys.modules, name, package)
+    external_modules = {
+        "pyrep.objects.object": {"Object": type("Object", (), {})},
+        "pyrep.objects.shape": {"Shape": type("Shape", (), {})},
+        "rlbench.action_modes.action_mode": {"MoveArmThenGripper": type("MoveArmThenGripper", (), {})},
+        "rlbench.action_modes.arm_action_modes": {"EndEffectorPoseViaIK": type("EndEffectorPoseViaIK", (), {})},
+        "rlbench.action_modes.gripper_action_modes": {"Discrete": type("Discrete", (), {})},
+        "rlbench.environment": {"Environment": type("Environment", (), {})},
+        "rlbench.observation_config": {"ObservationConfig": type("ObservationConfig", (), {})},
+    }
+    for name, attributes in external_modules.items():
+        module = ModuleType(name)
+        for attribute, value in attributes.items():
+            setattr(module, attribute, value)
+        monkeypatch.setitem(sys.modules, name, module)
+
+    script_path = Path("scripts/generation_episode_worker.py").resolve()
+    spec = importlib.util.spec_from_file_location("generation_episode_worker_materializer_test", script_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("outcome", ["success", "valid_failure"])
+def test_archive_profile_episode_materializer_preserves_captured_wrist_depth(
+    tmp_path: Path,
+    monkeypatch,
+    outcome: str,
+):
+    generation_episode_worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(profile.as_dict()))
+    monkeypatch.delenv("ICGS_GENERATION_BINDING_JSON", raising=False)
+    monkeypatch.delenv("ICGS_GENERATION_JOB_IDENTITY", raising=False)
+    depth = np.asarray([[0.125, 0.25], [0.5, 0.75]], dtype=np.float32)
+    output = tmp_path / f"episode-{outcome}"
+
+    generation_episode_worker._write_episode(
+        output,
+        _worker_episode_materialization_row(outcome=outcome, depth_frames=[None, depth]),
+    )
+
+    reader = EpisodeArchiveReader(output / "episode.manifest.json")
+    np.testing.assert_array_equal(reader.raw_arrays["wrist_depth_frames"], depth[np.newaxis, ...])
+    np.testing.assert_array_equal(
+        reader.raw_arrays["wrist_depth_frame_boundaries"], np.asarray([1], dtype=np.int64)
+    )
+
+
+def test_archive_profile_episode_materializer_omits_unavailable_wrist_depth(
+    tmp_path: Path,
+    monkeypatch,
+):
+    generation_episode_worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(profile.as_dict()))
+    monkeypatch.delenv("ICGS_GENERATION_BINDING_JSON", raising=False)
+    monkeypatch.delenv("ICGS_GENERATION_JOB_IDENTITY", raising=False)
+    output = tmp_path / "episode-no-depth"
+
+    generation_episode_worker._write_episode(
+        output,
+        _worker_episode_materialization_row(outcome="success", depth_frames=[None, None]),
+    )
+
+    reader = EpisodeArchiveReader(output / "episode.manifest.json")
+    assert "wrist_depth_frames" not in reader.raw_arrays
+    assert "wrist_depth_frame_boundaries" not in reader.raw_arrays
+
+
+def test_archive_profile_attempt_materializer_preserves_captured_wrist_depth_prefix(
+    tmp_path: Path,
+    monkeypatch,
+):
+    generation_episode_worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(profile.as_dict()))
+    monkeypatch.delenv("ICGS_GENERATION_BINDING_JSON", raising=False)
+    monkeypatch.delenv("ICGS_GENERATION_JOB_IDENTITY", raising=False)
+    depth = np.asarray([[0.125, 0.25], [0.5, 0.75]], dtype=np.float32)
+    output = tmp_path / "attempt-depth"
+
+    generation_episode_worker._write_episode(
+        output,
+        _worker_episode_materialization_row(outcome="simulator_crash", depth_frames=[None, depth]),
+    )
+
+    reader = EpisodeArchiveReader(output / "attempt.manifest.json")
+    np.testing.assert_array_equal(reader.raw_arrays["wrist_depth_frames"], depth[np.newaxis, ...])
+    np.testing.assert_array_equal(
+        reader.raw_arrays["wrist_depth_frame_boundaries"], np.asarray([1], dtype=np.int64)
+    )
 
 
 def test_archive_profile_worker_propagates_identity_and_writes_canonical_failure(tmp_path: Path):
