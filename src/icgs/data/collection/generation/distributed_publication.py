@@ -847,6 +847,8 @@ class HuggingFaceBatchPublisher:
         remote_manifest: Mapping[str, Any] | None = None,
         local_manifest: Mapping[str, Any] | None = None,
     ) -> PublicationReceipt | None:
+        if self.archive_profile is not None:
+            self.queue.assert_no_orphan_archive_scratch()
         self._validate_prefix()
         remote = self.remote_manifest if remote_manifest is None else dict(remote_manifest)
         local_receipt = self._read_publication_receipt()
@@ -950,6 +952,8 @@ class HuggingFaceBatchPublisher:
         operations = self._operations(job_ids, plan["manifest"], prepared)
         prepared = replace(prepared, path_count=len(operations), updated_at_s=now)
         self._write_publication_receipt(prepared)
+        if self.archive_profile is not None:
+            self.queue.assert_no_orphan_archive_scratch()
         try:
             data_commit = self._with_transient_retry(lambda: self.api.create_commit(
                 repo_id=self.run.hf_repo,
@@ -1071,6 +1075,7 @@ class HuggingFaceBatchPublisher:
         now_s: float,
     ) -> PublicationReceipt | None:
         """Verify immutable archive bytes before publishing verified state or pruning."""
+        self.queue.assert_no_orphan_archive_scratch()
         if receipt.status == "VERIFIED":
             completed = self._complete_verified(receipt, now_s)
             self._verification_receipt_path.unlink(missing_ok=True)
@@ -1110,6 +1115,7 @@ class HuggingFaceBatchPublisher:
                     path_or_fileobj=str(resume_path),
                 ),
             ]
+            self.queue.assert_no_orphan_archive_scratch()
             try:
                 receipt_commit = self._with_transient_retry(lambda: self.api.create_commit(
                     repo_id=self.run.hf_repo,

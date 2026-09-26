@@ -6,7 +6,9 @@ import importlib
 import hashlib
 import json
 import os
+import signal
 import sys
+import time
 import traceback
 from pathlib import Path
 
@@ -18,6 +20,32 @@ if _SOURCE_ROOT.is_dir() and str(_SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(_SOURCE_ROOT))
 
 _DEFAULT_MANIFEST = _REPO_ROOT / "artifacts" / "composition" / "approved_composition_manifest.json"
+
+
+class _GenerationTimeoutSignal(TimeoutError):
+    pass
+
+
+def _raise_for_generation_timeout(signum, frame) -> None:
+    raise _GenerationTimeoutSignal("generation worker received SIGTERM timeout; preserving captured prefix")
+
+
+def _begin_archive_write_marker(write_root: Path, program_id: str, attempt_id: str | None) -> Path:
+    write_root.mkdir(parents=True, exist_ok=True)
+    marker = write_root / (
+        f".{program_id}.archive-write-in-progress-{os.getpid()}-{time.time_ns()}"
+    )
+    payload = json.dumps({
+        "program_id": program_id,
+        "attempt_id": attempt_id,
+        "pid": os.getpid(),
+        "write_started_at_s": time.time(),
+    }, sort_keys=True).encode("utf-8") + b"\n"
+    with marker.open("xb") as stream:
+        stream.write(payload)
+        stream.flush()
+        os.fsync(stream.fileno())
+    return marker
 
 from icgs.data.collection.generation.compiler import compile_generation_catalog
 from icgs.data.collection.generation.expert import plan_step
@@ -982,6 +1010,7 @@ def main() -> int:
     results = []
     env = None
     write_root_value = os.environ.get("ICGS_GENERATION_WRITE_EPISODE")
+    archive_profile_enabled = bool(os.environ.get("ICGS_GENERATION_ARCHIVE_PROFILE", "").strip())
     try:
         for program_id in wanted:
             spec = compiled[program_id]
@@ -1002,30 +1031,50 @@ def main() -> int:
                 plan = attempt_from_dict(payload)
             captured_prefix = (
                 {}
-                if os.environ.get("ICGS_GENERATION_ARCHIVE_PROFILE", "").strip()
+                if archive_profile_enabled
                 else None
             )
+            previous_sigterm = None
             try:
-                row = run_program(env, spec, plan=plan, capture=captured_prefix)
-            except Exception as exc:
-                row = {
-                    "program_id": program_id,
-                    "family": spec.family,
-                    "success": False,
-                    "result_class": "simulator_crash",
-                    "error": f"{type(exc).__name__}: {exc}",
-                    "traceback": traceback.format_exc()[-2000:],
-                    "events": [event["primitive"] for event in spec.events],
-                    "routine": [step["type"] for step in spec.routine],
-                    "_plan": None if plan is None else plan.as_dict(),
-                }
-                if captured_prefix is not None:
-                    row.update(captured_prefix)
-            results.append(row)
-            public = {k: v for k, v in row.items() if not k.startswith("_")}
-            print(json.dumps(public), flush=True)
-            if write_root_value:
-                _write_episode(Path(write_root_value) / program_id, row)
+                if archive_profile_enabled:
+                    previous_sigterm = signal.signal(signal.SIGTERM, _raise_for_generation_timeout)
+                try:
+                    row = run_program(env, spec, plan=plan, capture=captured_prefix)
+                except Exception as exc:
+                    row = {
+                        "program_id": program_id,
+                        "family": spec.family,
+                        "success": False,
+                        "result_class": "simulator_crash",
+                        "error": f"{type(exc).__name__}: {exc}",
+                        "traceback": traceback.format_exc()[-2000:],
+                        "timeout": isinstance(exc, _GenerationTimeoutSignal),
+                        "events": [event["primitive"] for event in spec.events],
+                        "routine": [step["type"] for step in spec.routine],
+                        "_plan": None if plan is None else plan.as_dict(),
+                    }
+                    if captured_prefix is not None:
+                        row.update(captured_prefix)
+                results.append(row)
+                public = {k: v for k, v in row.items() if not k.startswith("_")}
+                print(json.dumps(public), flush=True)
+                if write_root_value:
+                    write_root = Path(write_root_value)
+                    write_marker = None
+                    if archive_profile_enabled:
+                        write_marker = _begin_archive_write_marker(
+                            write_root, program_id, row.get("_plan", {}).get("episode_id")
+                            if isinstance(row.get("_plan"), dict) else None,
+                        )
+                        if previous_sigterm is not None:
+                            signal.signal(signal.SIGTERM, previous_sigterm)
+                            previous_sigterm = None
+                    _write_episode(write_root / program_id, row)
+                    if write_marker is not None:
+                        write_marker.unlink(missing_ok=True)
+            finally:
+                if previous_sigterm is not None:
+                    signal.signal(signal.SIGTERM, previous_sigterm)
     finally:
         if env is not None:
             try:

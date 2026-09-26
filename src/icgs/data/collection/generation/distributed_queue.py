@@ -64,6 +64,10 @@ class MalformedReadyResult:
     error: Exception
 
 
+class GenerationSafetyStop(RuntimeError):
+    """Raised when a run-root recovery marker blocks further automatic work."""
+
+
 class FilesystemJobQueue:
     _STATES = ("pending", "claimed", "ready", "ingested", "published", "quarantined")
 
@@ -85,6 +89,250 @@ class FilesystemJobQueue:
         finally:
             fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
             stream.close()
+
+    @property
+    def safety_stop_path(self) -> Path:
+        return self.root.parent / "control" / "generation-safety-stop.json"
+
+    def _assert_run_active_unlocked(self) -> None:
+        marker = self.safety_stop_path
+        if not marker.exists() and not marker.is_symlink():
+            return
+        try:
+            if marker.is_symlink() or not marker.is_file():
+                raise ValueError("safety stop marker is not a regular file")
+            receipt = _read_json(marker)
+            action = receipt.get("recovery_action")
+            if not isinstance(action, str) or not action.strip():
+                raise ValueError("safety stop marker has no recovery action")
+        except Exception as error:
+            raise GenerationSafetyStop(
+                f"generation safety stop is present but unreadable at {marker}; "
+                "preserve the run tree and inspect the marker before resuming"
+            ) from error
+        raise GenerationSafetyStop(f"generation safety stop at {marker}: {action}")
+
+    def assert_run_active(self) -> None:
+        with self._operation_lock():
+            self._assert_run_active_unlocked()
+
+    def _active_claim_generations_unlocked(self, now_s: float) -> set[tuple[str, int]]:
+        active: set[tuple[str, int]] = set()
+        claimed_root = self.root / "claimed"
+        if claimed_root.is_symlink() or not claimed_root.is_dir():
+            raise ValueError(f"queue state must be a real directory: {claimed_root}")
+        for worker_root in sorted(claimed_root.iterdir()):
+            if worker_root.is_symlink() or not worker_root.is_dir():
+                continue
+            lease_path = self._worker_lease_path(worker_root.name)
+            if lease_path.is_symlink() or not lease_path.is_file():
+                continue
+            try:
+                lease = _read_json(lease_path)
+            except (OSError, ValueError, json.JSONDecodeError):
+                continue
+            if float(lease.get("lease_expires_at_s", 0.0)) <= now_s:
+                continue
+            for job_path in sorted(worker_root.glob("*.json")):
+                if job_path.name.endswith(".claim.json") or job_path.is_symlink():
+                    continue
+                try:
+                    job = GenerationJob.from_dict(_read_json(job_path))
+                    claim = _read_json(worker_root / f"{job.job_id}.claim.json")
+                except (OSError, ValueError, json.JSONDecodeError):
+                    continue
+                worker_instance_id = claim.get("worker_instance_id")
+                if (
+                    claim.get("job_id") == job.job_id
+                    and claim.get("worker_id") == worker_root.name
+                    and worker_instance_id
+                    and lease.get("worker_instance_id") == worker_instance_id
+                    and lease.get("job_id") == job.job_id
+                ):
+                    active.add((job.job_id, job.retry_generation))
+        return active
+
+    @staticmethod
+    def _inventory_preserved_paths(paths: list[Path], run_root: Path) -> list[dict[str, Any]]:
+        entries: list[dict[str, Any]] = []
+        seen: set[Path] = set()
+        for root in paths:
+            items = [root]
+            if root.is_dir() and not root.is_symlink():
+                items.extend(sorted(root.rglob("*")))
+            for path in items:
+                absolute = path.absolute()
+                if absolute in seen:
+                    continue
+                seen.add(absolute)
+                try:
+                    relative = path.relative_to(run_root).as_posix()
+                    info = path.lstat()
+                except (OSError, ValueError):
+                    relative = os.path.relpath(path, run_root).replace(os.sep, "/")
+                    entries.append({"path": relative, "bytes": 0, "kind": "unreadable"})
+                    continue
+                if path.is_symlink():
+                    link_bytes = os.fsencode(os.readlink(path))
+                    entries.append({
+                        "path": relative,
+                        "bytes": len(link_bytes),
+                        "sha256": hashlib.sha256(link_bytes).hexdigest(),
+                        "kind": "symlink",
+                    })
+                elif path.is_file():
+                    digest = hashlib.sha256()
+                    byte_count = 0
+                    try:
+                        with path.open("rb") as stream:
+                            while chunk := stream.read(1024 * 1024):
+                                digest.update(chunk)
+                                byte_count += len(chunk)
+                    except OSError:
+                        entries.append({"path": relative, "bytes": int(info.st_size), "kind": "unreadable"})
+                    else:
+                        entries.append({
+                            "path": relative,
+                            "bytes": byte_count,
+                            "sha256": digest.hexdigest(),
+                            "kind": "file",
+                        })
+                elif path.is_dir():
+                    entries.append({"path": relative, "bytes": 0, "kind": "directory"})
+                else:
+                    entries.append({"path": relative, "bytes": int(info.st_size), "kind": "other"})
+        return entries
+
+    def assert_no_orphan_archive_scratch(self) -> None:
+        """Trip the run stop before new work if abandoned writer scratch is discoverable."""
+        with self._operation_lock():
+            self._assert_run_active_unlocked()
+            run_root = self.root.parent.resolve()
+            output_root = run_root / "staging" / "worker-results"
+            if output_root.is_symlink():
+                raise GenerationSafetyStop(
+                    f"generation safety stop: staging result root is a symlink: {output_root}"
+                )
+            if not output_root.is_dir():
+                return
+            active_generations = self._active_claim_generations_unlocked(time.time())
+            orphan_roots: list[Path] = []
+            orphan_jobs: set[str] = set()
+            for job_root in sorted(output_root.iterdir()):
+                if job_root.is_symlink() or not job_root.is_dir():
+                    continue
+                for retry_root in sorted(job_root.iterdir()):
+                    if retry_root.is_symlink() or not retry_root.is_dir() or not retry_root.name.startswith("retry-"):
+                        continue
+                    try:
+                        retry_generation = int(retry_root.name.removeprefix("retry-"))
+                    except ValueError:
+                        retry_generation = -1
+                    if (job_root.name, retry_generation) in active_generations:
+                        continue
+                    for child in sorted(retry_root.iterdir()):
+                        if child.name.startswith(".") and any(
+                            token in child.name
+                            for token in (
+                                ".archive-spool-",
+                                ".partial-",
+                                ".archive-write-in-progress-",
+                            )
+                        ):
+                            orphan_roots.append(child)
+                            orphan_jobs.add(job_root.name)
+            if not orphan_roots:
+                return
+            entries = self._inventory_preserved_paths(orphan_roots, run_root)
+            receipt = {
+                "schema_version": "icgs_generation_safety_stop_v1",
+                "reason": "discoverable_orphan_archive_scratch",
+                "created_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "job_ids": sorted(orphan_jobs),
+                "preserved_bytes": sum(item["bytes"] for item in entries if item["kind"] == "file"),
+                "preserved_files": entries,
+                "recovery_action": (
+                    "Keep every listed path unchanged. Verify its fate against the pinned Hugging Face "
+                    "publication receipts and artifact hashes; recover or archive unmatched bytes before "
+                    "starting a disjoint run. Do not delete listed paths until their HF fate is known."
+                ),
+            }
+            try:
+                self._trip_safety_stop_unlocked(receipt)
+            except Exception as error:
+                raise GenerationSafetyStop(
+                    "generation safety stop: abandoned archive scratch was found but its receipt could "
+                    f"not be persisted; preserve the run tree and inspect {output_root} before resuming"
+                ) from error
+            raise GenerationSafetyStop(
+                f"generation safety stop: found {receipt['preserved_bytes']} bytes of abandoned archive "
+                f"scratch; inspect {self.safety_stop_path} before resuming"
+            )
+
+    def _trip_safety_stop_unlocked(self, receipt: dict[str, Any]) -> Path:
+        if not isinstance(receipt, dict) or not receipt:
+            raise ValueError("safety stop receipt must be a nonempty object")
+        marker = self.safety_stop_path
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        if marker.exists() or marker.is_symlink():
+            try:
+                if marker.is_symlink() or not marker.is_file():
+                    raise ValueError("safety stop marker is not a regular file")
+                existing = _read_json(marker)
+                if not isinstance(existing.get("recovery_action"), str):
+                    raise ValueError("safety stop marker has no recovery action")
+            except Exception as error:
+                incident_root = marker.parent / "generation-safety-stop-incidents"
+                incident_root.mkdir(parents=True, exist_ok=True)
+                job_id = str(receipt.get("job_id", "unknown"))
+                self._validate_job_component(job_id)
+                retry = receipt.get("retry_generation", 0)
+                if type(retry) is not int or retry < 0:
+                    retry = 0
+                suffix = f"{job_id}.retry-{retry}.{time.time_ns()}.json"
+                incident_path = incident_root / suffix
+                _atomic_write(incident_path, receipt)
+                raise GenerationSafetyStop(
+                    f"generation safety stop marker at {marker} is unreadable; "
+                    f"orphan incident receipt was preserved at {incident_path}"
+                ) from error
+            incidents = existing.get("incidents")
+            if not isinstance(incidents, list):
+                incidents = [{
+                    key: value for key, value in existing.items()
+                    if key not in {"incidents", "incident_count"}
+                }]
+            incidents = [item for item in incidents if isinstance(item, dict)]
+            incidents.append(dict(receipt))
+            preserved_files = []
+            for incident in incidents:
+                incident_files = incident.get("preserved_files", [])
+                if isinstance(incident_files, list):
+                    preserved_files.extend(item for item in incident_files if isinstance(item, dict))
+
+            def regular_file_bytes(item: dict[str, Any]) -> int:
+                if item.get("kind") != "file":
+                    return 0
+                value = item.get("bytes", 0)
+                return value if type(value) is int and value >= 0 else 0
+
+            existing.update({
+                "incidents": incidents,
+                "incident_count": len(incidents),
+                "preserved_files": preserved_files,
+                "preserved_bytes": sum(regular_file_bytes(item) for item in preserved_files),
+            })
+            _atomic_write(marker, existing)
+            return marker
+        receipt = dict(receipt)
+        receipt.setdefault("incident_count", 1)
+        receipt.setdefault("incidents", [dict(receipt)])
+        _atomic_write(marker, receipt)
+        return marker
+
+    def trip_safety_stop(self, receipt: dict[str, Any]) -> Path:
+        with self._operation_lock():
+            return self._trip_safety_stop_unlocked(receipt)
 
     def _find_job(self, state: str, job_id: str) -> Path | None:
         if state not in self._STATES:
@@ -204,6 +452,7 @@ class FilesystemJobQueue:
     def enqueue(self, job: GenerationJob) -> Path:
         expected = _canonical_json(job.as_dict())
         with self._operation_lock():
+            self._assert_run_active_unlocked()
             for state in self._STATES:
                 existing = self._find_job(state, job.job_id)
                 if existing is None:
@@ -225,7 +474,9 @@ class FilesystemJobQueue:
         host_id: str | None = None,
         lease_s: float = 1800.0,
     ) -> GenerationJob | None:
+        self.assert_no_orphan_archive_scratch()
         with self._operation_lock():
+            self._assert_run_active_unlocked()
             if worker_instance_id is not None:
                 self._register_worker_unlocked(
                     worker_id,
@@ -289,6 +540,7 @@ class FilesystemJobQueue:
         worker_instance_id: str | None = None,
     ) -> Path:
         with self._operation_lock():
+            self._assert_run_active_unlocked()
             self._assert_worker_lease(worker_id, worker_instance_id)
             worker_dir = self.root / "claimed" / worker_id
             claimed = worker_dir / f"{result.job_id}.json"
@@ -384,6 +636,7 @@ class FilesystemJobQueue:
 
     def mark_ingested(self, result: WorkerResult) -> Path:
         with self._operation_lock():
+            self._assert_run_active_unlocked()
             source = self.root / "ready" / result.job_id
             target = self.root / "ingested" / result.job_id
             if target.exists():
@@ -401,6 +654,7 @@ class FilesystemJobQueue:
             raise ValueError("quarantine result identity does not match job_id")
 
         with self._operation_lock():
+            self._assert_run_active_unlocked()
             ready_root = self.root / "ready"
             quarantine_root = self.root / "quarantined"
             for state_root in (ready_root, quarantine_root):
@@ -714,6 +968,7 @@ class FilesystemJobQueue:
             raise ValueError("retention must be keep or receipt_only")
         self._validate_job_component(job_id)
         with self._operation_lock():
+            self._assert_run_active_unlocked()
             for state in ("ingested", "published"):
                 state_root = self.root / state
                 if state_root.is_symlink() or not state_root.is_dir():
@@ -826,4 +1081,4 @@ class FilesystemJobQueue:
         )
 
 
-__all__ = ["FilesystemJobQueue", "MalformedReadyResult"]
+__all__ = ["FilesystemJobQueue", "GenerationSafetyStop", "MalformedReadyResult"]

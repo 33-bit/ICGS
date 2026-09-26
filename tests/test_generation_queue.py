@@ -264,6 +264,88 @@ def test_late_result_from_replaced_worker_lease_is_fenced(tmp_path: Path):
         )
 
 
+def test_run_safety_stop_forbids_new_claims_and_ready_publication(tmp_path: Path):
+    run_root = tmp_path / "run"
+    queue = FilesystemJobQueue(run_root / "queue")
+    job = _job(job_id="job-stop")
+    queue.enqueue(job)
+    claimed = queue.claim(
+        "000", host_id="host-a", worker_instance_id="instance-a", lease_s=120.0,
+    )
+    assert claimed == job
+    queue.enqueue(_job(job_id="job-pending"))
+
+    queue.trip_safety_stop({
+        "reason": "orphan_archive_scratch_after_timeout",
+        "recovery_action": "Preserve the scratch files until HF fate is verified.",
+    })
+    queue.trip_safety_stop({
+        "reason": "orphan_archive_scratch_after_worker_error",
+        "job_id": "job-concurrent-orphan",
+        "recovery_action": "Preserve the additional scratch files until HF fate is verified.",
+        "preserved_files": [{"path": "worker-results/job-concurrent/piece.npy", "bytes": 4, "kind": "file"}],
+    })
+
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        queue.publish_ready(
+            "000", _result(job, tmp_path / "result"), worker_instance_id="instance-a",
+        )
+    assert not list((queue.root / "ready").iterdir())
+    receipt = json.loads(queue.safety_stop_path.read_text(encoding="utf-8"))
+    assert receipt["incident_count"] == 2
+    assert receipt["preserved_bytes"] == 4
+    assert receipt["preserved_files"][0]["path"] == "worker-results/job-concurrent/piece.npy"
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        queue.claim("001")
+    assert queue.counts().pending == 1
+
+
+def test_claim_discovery_stops_on_abandoned_archive_scratch(tmp_path: Path):
+    run_root = tmp_path / "run"
+    queue = FilesystemJobQueue(run_root / "queue")
+    job = replace(_job(job_id="job-abandoned"), output_root=str(run_root / "staging"))
+    queue.enqueue(job)
+    orphan = (
+        run_root / "staging" / "worker-results" / job.job_id / "retry-0"
+        / ".T01.archive-spool-abandoned" / "chunk-00000" / "piece.npy"
+    )
+    orphan.parent.mkdir(parents=True)
+    orphan.write_bytes(b"unarchived")
+
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        queue.claim("000")
+
+    assert orphan.read_bytes() == b"unarchived"
+    assert queue.counts().pending == 1
+    receipt = json.loads(queue.safety_stop_path.read_text(encoding="utf-8"))
+    assert receipt["reason"] == "discoverable_orphan_archive_scratch"
+    assert receipt["preserved_bytes"] == len(b"unarchived")
+
+
+def test_claim_discovery_allows_scratch_for_a_live_claim(tmp_path: Path):
+    run_root = tmp_path / "run"
+    queue = FilesystemJobQueue(run_root / "queue")
+    first = replace(_job(job_id="job-live"), output_root=str(run_root / "staging"))
+    second = replace(_job(job_id="job-next", index=18), output_root=str(run_root / "staging"))
+    queue.enqueue(first)
+    assert queue.claim(
+        "000", host_id="host-a", worker_instance_id="instance-a", lease_s=120.0,
+    ) == first
+    queue.write_heartbeat(
+        "000", first.job_id, host_id="host-a", worker_instance_id="instance-a", lease_s=120.0,
+    )
+    scratch = (
+        run_root / "staging" / "worker-results" / first.job_id / "retry-0"
+        / ".T01.archive-spool-live" / "piece.npy"
+    )
+    scratch.parent.mkdir(parents=True)
+    scratch.write_bytes(b"active")
+    queue.enqueue(second)
+
+    assert queue.claim("001", host_id="host-b", worker_instance_id="instance-b") == second
+    assert not queue.safety_stop_path.exists()
+
+
 def test_ready_ingested_published_state_machine(tmp_path: Path):
     queue = FilesystemJobQueue(tmp_path)
     job = _job()

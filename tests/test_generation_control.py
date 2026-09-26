@@ -2809,3 +2809,75 @@ def test_validation_max_jobs_persists_across_coordinator_restart_and_open(tmp_pa
     assert restarted._refill() == 0
     counts = restarted.queue.counts()
     assert sum((counts.pending, counts.claimed, counts.ready, counts.ingested, counts.published)) == 7
+
+
+def test_restarted_coordinator_refuses_to_publish_ingested_rows_after_safety_stop(tmp_path: Path):
+    run_root = tmp_path / "stopped-run"
+    queue = FilesystemJobQueue(run_root / "queue")
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1,
+        episode_id="episode-t01-stopped", episode_kind="nominal", scene_seed=7,
+        collection_seed=20260920,
+        randomization={"scene_signature": "stopped-signature", "asset_instance_id": "stopped-asset"},
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id="job-stopped-ingested", run_id="stopped-run",
+        attempt_id="att-episode-t01-stopped", episode_id=plan.episode_id,
+        program_id="T01", plan=plan, code_revision="a" * 40,
+        manifest_sha256="b" * 64, output_root=str(run_root),
+    )
+    queue.enqueue(job)
+    assert queue.claim("000") == job
+    result_dir = run_root / "result"
+    result_dir.mkdir(parents=True)
+    (result_dir / "episode.json").write_text("{}", encoding="utf-8")
+    result = WorkerResult(
+        job_id=job.job_id, attempt_id=job.attempt_id, episode_id=job.episode_id,
+        program_id=job.program_id, outcome="success", result_dir=str(result_dir),
+        file_sha256={"episode.json": "c" * 64},
+        timeline={"actions": 0, "observations": 1, "durations": 0},
+    )
+    queue.publish_ready("000", result)
+    queue.mark_ingested(result)
+    queue.trip_safety_stop({
+        "reason": "orphan_archive_scratch_after_timeout",
+        "recovery_action": "Preserve scratch files until HF fate is verified.",
+    })
+
+    class Planner:
+        def quota_complete(self):
+            return True
+
+        def snapshot(self):
+            return SimpleNamespace(as_dict=lambda: {})
+
+    class Publisher:
+        def __init__(self):
+            self.calls = []
+
+        def publish_due(self, **kwargs):
+            self.calls.append(kwargs)
+
+    run = RunConfig(
+        run_id="stopped-run", run_root=str(run_root), code_revision="a" * 40,
+        approved_manifest_sha256="b" * 64, worker_count=1,
+        hf_subfolder="validation/stopped-run",
+        validation_mode=True, validation_max_jobs=1,
+    )
+    publisher = Publisher()
+    coordinator = CoordinatorControlPlane(
+        run, queue, Planner(), publisher,
+        {"manifest_version": 3, "episodes": [], "failure_attempts": []},
+    )
+
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        coordinator.tick(now_s=10.0)
+
+    assert publisher.calls == []
+    assert coordinator.status == "FAILED"
+    assert queue.counts().ingested == 1
+    assert queue.counts().pending == 0
+    heartbeat = json.loads((run_root / "control" / "coordinator-heartbeat.json").read_text())
+    assert heartbeat["status"] == "FAILED"
+    assert heartbeat["phase"] == "safety_stop"

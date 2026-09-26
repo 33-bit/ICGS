@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
+import signal
 import subprocess
 import sys
 from types import ModuleType, SimpleNamespace
@@ -407,6 +408,8 @@ def _run_episode_worker_main_with_stub_task(
 
         def step(self, _action):
             self.step_count += 1
+            if failure == "term_signal_after_prefix" and self.step_count == 2:
+                signal.raise_signal(signal.SIGTERM)
             if failure == "step_raises_after_prefix" and self.step_count == 2:
                 raise RuntimeError("simulator failed after one captured action")
             if failure == "snapshot_raises_after_action":
@@ -484,6 +487,15 @@ def _run_episode_worker_main_with_stub_task(
     else:
         monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(archive_profile.as_dict()))
 
+    if failure == "term_during_write":
+        class DefaultTermination(BaseException):
+            pass
+
+        def interrupted_writer(_output_dir, _row):
+            raise DefaultTermination("SIGTERM used the restored default disposition")
+
+        monkeypatch.setattr(generation_episode_worker, "_write_episode", interrupted_writer)
+
     assert generation_episode_worker.main() == 0
     return write_root / program_id
 
@@ -550,6 +562,44 @@ def test_archive_episode_worker_main_writes_only_the_captured_crash_prefix(
     assert "wrist_depth" not in debug_text
     assert "_timed_obs" not in debug
     assert "_actions" not in debug
+    assert not list(result_dir.parent.glob(".T01.archive-write-in-progress-*"))
+
+
+def test_archive_episode_worker_converts_sigterm_to_captured_prefix_attempt(
+    tmp_path: Path, monkeypatch,
+):
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    result_dir = _run_episode_worker_main_with_stub_task(
+        monkeypatch,
+        tmp_path,
+        failure="term_signal_after_prefix",
+        archive_profile=profile,
+    )
+
+    reader = EpisodeArchiveReader(result_dir / "attempt.manifest.json")
+    assert reader.manifest.payload["outcome"] == "simulator_crash"
+    assert reader.manifest.payload["timeline"]["observations"] == 2
+    assert reader.manifest.payload["timeline"]["transitions"] == 1
+    assert reader.raw_arrays["points"].shape == (4, 3)
+    assert reader.raw_arrays["actions"].shape == (1, 8)
+    assert reader.debug_metadata["timeout"] is True
+
+
+def test_sigterm_during_archive_write_leaves_discoverable_write_marker(
+    tmp_path: Path, monkeypatch,
+):
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    with pytest.raises(BaseException, match="restored default disposition"):
+        _run_episode_worker_main_with_stub_task(
+            monkeypatch, tmp_path, failure="term_during_write", archive_profile=profile,
+        )
+
+    attempt_root = tmp_path / "episodes"
+    markers = list(attempt_root.glob(".T01.archive-write-in-progress-*"))
+    assert len(markers) == 1
+    marker = json.loads(markers[0].read_text(encoding="utf-8"))
+    assert marker["program_id"] == "T01"
+    assert marker["attempt_id"] is None
 
 
 def test_legacy_episode_worker_exception_keeps_v2_empty_prefix_output(
@@ -691,6 +741,296 @@ def test_archive_profile_worker_propagates_identity_and_writes_canonical_failure
     )
     assert validated.attempt_entry is not None
     assert validated.attempt_entry["outcome"] == "simulator_crash"
+
+
+def test_archive_worker_preserves_orphan_spool_and_stops_run_after_timeout(tmp_path: Path):
+    base = _runtime_config(tmp_path)
+    payload = base.as_dict()
+    payload["archive_profile"] = ArchiveProfileConfig(chunk_boundaries=2).as_dict()
+    config = GenerationRuntimeConfig.from_dict(payload)
+    queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1,
+        episode_id="episode-t01-orphan", episode_kind="nominal", scene_seed=7,
+        collection_seed=20260920,
+        randomization={"scene_signature": "signature-orphan", "asset_instance_id": "asset-orphan"},
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id="job-orphan", run_id=config.run.run_id, attempt_id=f"att-{plan.episode_id}",
+        episode_id=plan.episode_id, program_id="T01", plan=plan,
+        code_revision="a" * 40, manifest_sha256="b" * 64,
+        output_root=str(Path(config.run.run_root) / "staging"),
+    )
+    queue.enqueue(job)
+    approved_manifest = Path(config.run.run_root) / "approved.json"
+    approved_manifest.write_text(json.dumps({"catalog": [{"program_id": "T01"}]}), encoding="utf-8")
+    orphan_bytes = b"unarchived numeric data must remain recoverable"
+    orphan_path = None
+
+    def runner(command, **kwargs):
+        nonlocal orphan_path
+        attempt_root = Path(kwargs["env"]["ICGS_GENERATION_WRITE_EPISODE"])
+        orphan_path = attempt_root / ".T01.archive-spool-timeout" / "chunk-00000" / "piece.npy"
+        orphan_path.parent.mkdir(parents=True)
+        orphan_path.write_bytes(orphan_bytes)
+        raise subprocess.TimeoutExpired(command, 33, output="stopped", stderr="timeout")
+
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        generation_worker.run_worker(
+            "000", queue, config=config, approved_manifest=str(approved_manifest),
+            once=True, runner=runner,
+        )
+
+    assert orphan_path is not None and orphan_path.read_bytes() == orphan_bytes
+    stop_path = Path(config.run.run_root) / "control" / "generation-safety-stop.json"
+    receipt = json.loads(stop_path.read_text(encoding="utf-8"))
+    assert receipt["job_id"] == job.job_id
+    assert receipt["reason"] == "orphan_archive_scratch_after_timeout"
+    assert receipt["preserved_bytes"] == len(orphan_bytes)
+    assert receipt["recovery_action"]
+    assert any(
+        row["path"] == orphan_path.relative_to(config.run.run_root).as_posix()
+        and row["bytes"] == len(orphan_bytes)
+        and row["sha256"] == __import__("hashlib").sha256(orphan_bytes).hexdigest()
+        for row in receipt["preserved_files"]
+    )
+    assert not list((queue.root / "ready").iterdir())
+    assert not (orphan_path.parents[2] / "T01" / "attempt.manifest.json").exists()
+
+
+def test_worker_adds_concurrent_orphan_to_existing_run_stop_receipt(tmp_path: Path):
+    import hashlib
+
+    run_root = tmp_path / "run"
+    queue = FilesystemJobQueue(run_root / "queue")
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1,
+        episode_id="episode-t01-concurrent-stop", episode_kind="nominal", scene_seed=7,
+        collection_seed=20260920,
+        randomization={"scene_signature": "signature-concurrent", "asset_instance_id": "asset-concurrent"},
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id="job-concurrent-stop", run_id="run-concurrent-stop",
+        attempt_id=f"att-{plan.episode_id}", episode_id=plan.episode_id,
+        program_id=plan.program_id, plan=plan, code_revision="a" * 40,
+        manifest_sha256="b" * 64, output_root=str(run_root / "staging"),
+    )
+    queue.trip_safety_stop({
+        "reason": "other_worker_orphan",
+        "job_id": "job-other-worker",
+        "recovery_action": "Preserve the first worker's scratch until HF fate is verified.",
+        "preserved_files": [{"path": "worker-results/other/piece.npy", "bytes": 5, "kind": "file"}],
+    })
+    attempt_root = run_root / "staging" / "worker-results" / job.job_id / "retry-0"
+    orphan = attempt_root / ".T01.archive-spool-concurrent" / "piece.npy"
+    orphan.parent.mkdir(parents=True)
+    payload = b"second orphan"
+    orphan.write_bytes(payload)
+
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        generation_worker._stop_run_for_orphan_scratch(
+            queue, job, attempt_root, attempt_root / "T01",
+            archive_closed=False, timeout=True,
+        )
+
+    receipt = json.loads(queue.safety_stop_path.read_text(encoding="utf-8"))
+    assert receipt["incident_count"] == 2
+    assert receipt["preserved_bytes"] == 5 + len(payload)
+    assert receipt["incidents"][1]["job_id"] == job.job_id
+    assert any(
+        item["path"] == orphan.relative_to(run_root).as_posix()
+        and item["sha256"] == hashlib.sha256(payload).hexdigest()
+        for item in receipt["preserved_files"]
+    )
+    assert orphan.read_bytes() == payload
+
+
+def test_orphan_stop_marker_write_failure_keeps_bytes_and_clears_claim(
+    tmp_path: Path, monkeypatch,
+):
+    run_root = tmp_path / "run"
+    queue = FilesystemJobQueue(run_root / "queue")
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1,
+        episode_id="episode-t01-marker-failure", episode_kind="nominal", scene_seed=7,
+        collection_seed=20260920,
+        randomization={"scene_signature": "signature-marker-failure", "asset_instance_id": "asset-marker-failure"},
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id="job-marker-failure", run_id="run-marker-failure",
+        attempt_id=f"att-{plan.episode_id}", episode_id=plan.episode_id,
+        program_id=plan.program_id, plan=plan, code_revision="a" * 40,
+        manifest_sha256="b" * 64, output_root=str(run_root / "staging"),
+    )
+    queue.enqueue(job)
+    assert queue.claim("000", host_id="host-a", worker_instance_id="instance-a") == job
+    queue.write_heartbeat("000", job.job_id, host_id="host-a", worker_instance_id="instance-a")
+    orphan = (
+        run_root / "staging" / "worker-results" / job.job_id / "retry-0"
+        / ".T01.archive-spool-marker-failure" / "piece.npy"
+    )
+    orphan.parent.mkdir(parents=True)
+    orphan.write_bytes(b"preserve this")
+    monkeypatch.setattr(queue, "trip_safety_stop", lambda _receipt: (_ for _ in ()).throw(OSError("disk full")))
+    cleared = []
+
+    with pytest.raises(RuntimeError, match="receipt could not be written"):
+        generation_worker._stop_run_for_orphan_scratch(
+            queue,
+            job,
+            orphan.parents[1],
+            orphan.parents[1] / "T01",
+            archive_closed=False,
+            timeout=True,
+            on_marker_failure=lambda: cleared.append(queue.write_heartbeat(
+                "000", None, host_id="host-a", worker_instance_id="instance-a",
+            )),
+        )
+
+    assert orphan.read_bytes() == b"preserve this"
+    assert cleared
+    assert not queue.safety_stop_path.exists()
+    monkeypatch.undo()
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        queue.claim("001", host_id="host-b", worker_instance_id="instance-b")
+    assert queue.safety_stop_path.is_file()
+    assert orphan.read_bytes() == b"preserve this"
+
+
+def test_generation_process_timeout_uses_term_grace_before_kill(monkeypatch):
+    events = []
+
+    class Process:
+        returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def send_signal(self, sig):
+            events.append(("signal", sig))
+            self.returncode = -sig
+
+        def wait(self, timeout=None):
+            events.append(("wait", timeout))
+            if self.returncode is None:
+                raise subprocess.TimeoutExpired("episode.py", timeout)
+            return self.returncode
+
+        def kill(self):
+            events.append(("kill", None))
+            self.returncode = -9
+
+        def communicate(self):
+            return "prefix saved", "terminated gracefully"
+
+    process = Process()
+    monkeypatch.setattr(generation_worker.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(generation_worker.time, "monotonic", iter([0.0, 0.0, 1.0]).__next__)
+    monkeypatch.setattr(generation_worker.time, "sleep", lambda _: None)
+
+    with pytest.raises(subprocess.TimeoutExpired) as error:
+        generation_worker._run_generation_process(
+            ["python", "episode.py"], env={}, timeout_s=1,
+            heartbeat=lambda: None, heartbeat_interval_s=0.1, timeout_grace_s=10,
+        )
+
+    assert error.value.output == "prefix saved"
+    assert ("signal", signal.SIGTERM) in events
+    assert not any(event[0] == "kill" for event in events)
+
+
+def test_generation_process_timeout_kills_only_after_grace_expires(monkeypatch):
+    events = []
+
+    class Process:
+        returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def send_signal(self, sig):
+            events.append(("signal", sig))
+
+        def wait(self, timeout=None):
+            events.append(("wait", timeout))
+            if self.returncode is None:
+                raise subprocess.TimeoutExpired("episode.py", timeout)
+            return self.returncode
+
+        def kill(self):
+            events.append(("kill", None))
+            self.returncode = -signal.SIGKILL
+
+        def communicate(self):
+            return "partial output", "killed after grace"
+
+    process = Process()
+    monkeypatch.setattr(generation_worker.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(generation_worker.time, "monotonic", iter([0.0, 0.0, 1.0]).__next__)
+    monkeypatch.setattr(generation_worker.time, "sleep", lambda _: None)
+
+    with pytest.raises(subprocess.TimeoutExpired):
+        generation_worker._run_generation_process(
+            ["python", "episode.py"], env={}, timeout_s=1,
+            heartbeat=lambda: None, heartbeat_interval_s=0.1, timeout_grace_s=10,
+        )
+
+    assert events == [
+        ("signal", signal.SIGTERM),
+        ("wait", 10),
+        ("kill", None),
+        ("wait", None),
+    ]
+
+
+def test_generation_process_stops_when_run_safety_marker_appears(monkeypatch):
+    events = []
+    checks = 0
+
+    class Process:
+        returncode = None
+
+        def poll(self):
+            return self.returncode
+
+        def send_signal(self, sig):
+            events.append(("signal", sig))
+            self.returncode = -sig
+
+        def wait(self, timeout=None):
+            events.append(("wait", timeout))
+            return self.returncode
+
+        def kill(self):
+            events.append(("kill", None))
+            self.returncode = -signal.SIGKILL
+
+        def communicate(self):
+            return "captured prefix", "stopped"
+
+    process = Process()
+    monkeypatch.setattr(generation_worker.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(generation_worker.time, "monotonic", iter([0.0, 0.0, 1.0]).__next__)
+    monkeypatch.setattr(generation_worker.time, "sleep", lambda _: None)
+
+    def stop_check():
+        nonlocal checks
+        checks += 1
+        if checks == 2:
+            raise RuntimeError("generation safety stop appeared")
+
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        generation_worker._run_generation_process(
+            ["python", "episode.py"], env={}, timeout_s=20,
+            heartbeat=lambda: None, heartbeat_interval_s=10,
+            timeout_grace_s=10, stop_check=stop_check, stop_check_interval_s=1,
+        )
+
+    assert checks == 2
+    assert events == [("signal", signal.SIGTERM), ("wait", 10)]
 
 
 @pytest.mark.parametrize("outcome", ["simulator_crash", "invalid_observation"])

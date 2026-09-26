@@ -9,16 +9,21 @@ import json
 import os
 from pathlib import Path
 import shutil
+import signal
 import subprocess
 import time
 import traceback
 import uuid
+from typing import Any
 from icgs.data.collection.generation.distributed_contracts import (
     GenerationJob,
     GenerationRuntimeConfig,
     WorkerResult,
 )
-from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+from icgs.data.collection.generation.distributed_queue import (
+    FilesystemJobQueue,
+    GenerationSafetyStop,
+)
 from icgs.data.collection.generation.episode_archive import EpisodeArchiveWriter
 
 
@@ -163,6 +168,146 @@ def _write_archive_worker_attempt(
     )
 
 
+def _hash_file_stream(path: Path) -> tuple[int, str]:
+    digest = hashlib.sha256()
+    byte_count = 0
+    with path.open("rb") as stream:
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            byte_count += len(chunk)
+            digest.update(chunk)
+    return byte_count, digest.hexdigest()
+
+
+def _orphan_archive_scratch_inventory(
+    attempt_root: Path,
+    candidate: Path,
+    *,
+    program_id: str,
+    run_root: Path,
+    archive_closed: bool,
+) -> list[dict[str, Any]]:
+    """Inventory unclosed writer scratch without changing or deleting any bytes."""
+    roots = []
+    if attempt_root.is_dir() and not attempt_root.is_symlink():
+        roots.extend(
+            child for child in sorted(attempt_root.iterdir())
+            if child.name.startswith((
+                f".{program_id}.archive-spool-",
+                f".{program_id}.partial-",
+                f".{program_id}.archive-write-in-progress-",
+            ))
+        )
+    if not archive_closed and candidate.is_dir() and not candidate.is_symlink():
+        if any(candidate.iterdir()):
+            roots.append(candidate)
+
+    entries: list[dict[str, Any]] = []
+    seen: set[Path] = set()
+    for root in roots:
+        paths = [root]
+        if root.is_dir() and not root.is_symlink():
+            paths.extend(sorted(root.rglob("*")))
+        for path in paths:
+            absolute = path.absolute()
+            if absolute in seen:
+                continue
+            seen.add(absolute)
+            try:
+                relative = path.relative_to(run_root).as_posix()
+                info = path.lstat()
+            except (OSError, ValueError):
+                relative = os.path.relpath(path, run_root).replace(os.sep, "/")
+                entries.append({"path": relative, "bytes": 0, "kind": "unreadable"})
+                continue
+            if path.is_symlink():
+                link_bytes = os.fsencode(os.readlink(path))
+                entries.append({
+                    "path": relative,
+                    "bytes": len(link_bytes),
+                    "sha256": hashlib.sha256(link_bytes).hexdigest(),
+                    "kind": "symlink",
+                })
+            elif path.is_file():
+                try:
+                    byte_count, digest = _hash_file_stream(path)
+                except OSError:
+                    entries.append({"path": relative, "bytes": int(info.st_size), "kind": "unreadable"})
+                else:
+                    entries.append({
+                        "path": relative,
+                        "bytes": byte_count,
+                        "sha256": digest,
+                        "kind": "file",
+                    })
+            elif path.is_dir():
+                entries.append({"path": relative, "bytes": 0, "kind": "directory"})
+            else:
+                entries.append({"path": relative, "bytes": int(info.st_size), "kind": "other"})
+    return entries
+
+
+def _stop_run_for_orphan_scratch(
+    queue: FilesystemJobQueue,
+    job: GenerationJob,
+    attempt_root: Path,
+    candidate: Path,
+    *,
+    archive_closed: bool,
+    timeout: bool,
+    on_marker_failure=None,
+) -> None:
+    run_root = queue.root.parent.resolve()
+    entries = _orphan_archive_scratch_inventory(
+        attempt_root,
+        candidate,
+        program_id=job.program_id,
+        run_root=run_root,
+        archive_closed=archive_closed,
+    )
+    if not entries:
+        return
+    receipt = {
+        "schema_version": "icgs_generation_safety_stop_v1",
+        "run_id": job.run_id,
+        "job_id": job.job_id,
+        "attempt_id": job.attempt_id,
+        "retry_generation": job.retry_generation,
+        "program_id": job.program_id,
+        "reason": (
+            "orphan_archive_scratch_after_timeout"
+            if timeout else "orphan_archive_scratch_after_worker_error"
+        ),
+        "created_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "preserved_bytes": sum(int(item["bytes"]) for item in entries if item["kind"] == "file"),
+        "preserved_files": entries,
+        "recovery_action": (
+            "Keep every listed path unchanged. Stop this run, establish whether each byte was committed "
+            "to the pinned Hugging Face revision using publication receipts and hashes, and recover or "
+            "archive any unmatched bytes before starting a disjoint run. Do not delete these paths "
+            "until their HF fate is known."
+        ),
+    }
+    try:
+        queue.trip_safety_stop(receipt)
+    except Exception as error:
+        if on_marker_failure is not None:
+            try:
+                on_marker_failure()
+            except Exception:
+                pass
+        raise GenerationSafetyStop(
+            "generation safety stop: orphan scratch was preserved but the run receipt could not "
+            f"be written at {queue.safety_stop_path}; recovery scan is required before any new claim"
+        ) from error
+    raise GenerationSafetyStop(
+        f"generation safety stop: preserved {receipt['preserved_bytes']} orphan archive bytes; "
+        f"inspect {queue.safety_stop_path} before resuming"
+    )
+
+
 class SimulatorSlotPool:
     """Cross-process semaphore for memory-heavy simulator launches.
 
@@ -212,6 +357,9 @@ def _run_generation_process(
     timeout_s: int,
     heartbeat,
     heartbeat_interval_s: float,
+    timeout_grace_s: float = 0.0,
+    stop_check=None,
+    stop_check_interval_s: float = 1.0,
 ):
     """Run one simulator process while renewing the owning worker lease."""
     process = subprocess.Popen(
@@ -223,26 +371,53 @@ def _run_generation_process(
     )
     started = time.monotonic()
     next_heartbeat = started
-    while True:
-        now = time.monotonic()
-        if now >= next_heartbeat:
-            heartbeat()
-            next_heartbeat = now + heartbeat_interval_s
-        returncode = process.poll()
-        if returncode is not None:
-            heartbeat()
-            stdout, stderr = process.communicate()
-            return subprocess.CompletedProcess(command, returncode, stdout, stderr)
-        if now - started >= timeout_s:
+    next_stop_check = started
+    if stop_check is not None and stop_check_interval_s <= 0:
+        raise ValueError("stop_check_interval_s must be positive")
+
+    def terminate_bounded() -> None:
+        if process.poll() is not None:
+            return
+        if timeout_grace_s > 0:
+            process.send_signal(signal.SIGTERM)
+            try:
+                process.wait(timeout=timeout_grace_s)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+        else:
             process.kill()
-            stdout, stderr = process.communicate()
-            raise subprocess.TimeoutExpired(
-                command,
-                timeout_s,
-                output=stdout,
-                stderr=stderr,
-            )
-        time.sleep(min(heartbeat_interval_s, max(0.01, timeout_s - (now - started))))
+            process.wait()
+
+    try:
+        while True:
+            now = time.monotonic()
+            if stop_check is not None and now >= next_stop_check:
+                stop_check()
+                next_stop_check = now + stop_check_interval_s
+            if now >= next_heartbeat:
+                heartbeat()
+                next_heartbeat = now + heartbeat_interval_s
+            returncode = process.poll()
+            if returncode is not None:
+                heartbeat()
+                stdout, stderr = process.communicate()
+                return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+            if now - started >= timeout_s:
+                terminate_bounded()
+                stdout, stderr = process.communicate()
+                raise subprocess.TimeoutExpired(
+                    command,
+                    timeout_s,
+                    output=stdout,
+                    stderr=stderr,
+                )
+            time.sleep(min(heartbeat_interval_s, max(0.01, timeout_s - (now - started))))
+    except BaseException:
+        if process.poll() is None:
+            terminate_bounded()
+            process.communicate()
+        raise
 
 
 def run_worker(
@@ -295,6 +470,16 @@ def run_worker(
             worker_instance_id=worker_instance_id,
             lease_s=lease_s,
         )
+
+        def release_claim_after_stop_write_failure() -> None:
+            queue.write_heartbeat(
+                worker_id,
+                None,
+                host_id=config.machine.host_id,
+                worker_instance_id=worker_instance_id,
+                lease_s=lease_s,
+            )
+
         try:
             plan_path = Path(job.output_root) / "plans" / f"{job.job_id}.retry-{job.retry_generation}.json"
             plan_path.parent.mkdir(parents=True, exist_ok=True)
@@ -335,21 +520,28 @@ def run_worker(
             with SimulatorSlotPool(Path(job.output_root).parent, config):
                 if runner is None:
                     heartbeat_job_id = job.job_id
-                    process = _run_generation_process(
-                        command,
-                        env=env,
-                        timeout_s=config.machine.worker_timeout_s,
-                        heartbeat=lambda: queue.write_heartbeat(
+
+                    def heartbeat_owned_job() -> None:
+                        queue.write_heartbeat(
                             worker_id,
                             heartbeat_job_id,
                             host_id=config.machine.host_id,
                             worker_instance_id=worker_instance_id,
                             lease_s=lease_s,
-                        ),
+                        )
+
+                    process = _run_generation_process(
+                        command,
+                        env=env,
+                        timeout_s=config.machine.worker_timeout_s,
+                        heartbeat=heartbeat_owned_job,
                         heartbeat_interval_s=max(
                             1.0,
                             min(30.0, lease_s / 3.0),
                         ),
+                        timeout_grace_s=10.0 if config.archive_profile is not None else 0.0,
+                        stop_check=(queue.assert_run_active if config.archive_profile is not None else None),
+                        stop_check_interval_s=1.0,
                     )
                 else:
                     process = runner(
@@ -365,10 +557,17 @@ def run_worker(
             candidate = output_root / job.program_id
             archive_payload = _archive_result_payload(candidate, config, job=job)
             if config.archive_profile is not None:
+                _stop_run_for_orphan_scratch(
+                    queue,
+                    job,
+                    output_root,
+                    candidate,
+                    archive_closed=archive_payload is not None,
+                    timeout=False,
+                    on_marker_failure=release_claim_after_stop_write_failure,
+                )
                 if archive_payload is None:
                     outcome = "simulator_crash" if process.returncode else "invalid_observation"
-                    if candidate.exists():
-                        shutil.rmtree(candidate)
                     _write_archive_worker_attempt(
                         candidate,
                         job,
@@ -452,6 +651,19 @@ def run_worker(
                     archive_payload = _archive_result_payload(result_dir, config, job=job)
                 except Exception:
                     pass
+                _stop_run_for_orphan_scratch(
+                    queue,
+                    job,
+                    result_dir.parent,
+                    result_dir,
+                    archive_closed=archive_payload is not None,
+                    timeout=isinstance(exc, subprocess.TimeoutExpired),
+                    on_marker_failure=release_claim_after_stop_write_failure,
+                )
+                try:
+                    queue.assert_run_active()
+                except GenerationSafetyStop:
+                    raise
                 if archive_payload is not None and archive_payload.get("archive_kind") in {"episode", "attempt"}:
                     outcome = str(archive_payload.get("outcome"))
                     if archive_payload.get("archive_kind") == "episode" and outcome in {"success", "valid_failure"}:
@@ -490,8 +702,6 @@ def run_worker(
                         if once:
                             return 0
                         continue
-                if result_dir.exists():
-                    shutil.rmtree(result_dir)
                 _write_archive_worker_attempt(
                     result_dir,
                     job,

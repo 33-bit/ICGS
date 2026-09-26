@@ -33,7 +33,11 @@ from icgs.data.collection.generation.distributed_publication import (
     HuggingFaceBatchPublisher,
     PublicationReceipt,
 )
-from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue, MalformedReadyResult
+from icgs.data.collection.generation.distributed_queue import (
+    FilesystemJobQueue,
+    GenerationSafetyStop,
+    MalformedReadyResult,
+)
 from icgs.data.collection.generation.distributed_validation import (
     ingest_validated_result,
     validate_closed_result,
@@ -1761,6 +1765,28 @@ class CoordinatorControlPlane:
         self._last_progress_at_s = now_s
         self._last_progress_kind = kind
 
+    def _assert_run_active(self, now_s: float) -> None:
+        check = getattr(self.queue, "assert_run_active", None)
+        if not callable(check):
+            return
+        try:
+            discover_orphans = getattr(self.queue, "assert_no_orphan_archive_scratch", None)
+            if callable(discover_orphans):
+                discover_orphans()
+            else:
+                check()
+        except GenerationSafetyStop as error:
+            self.status = "FAILED"
+            self._publication = {
+                "phase": "safety_stop",
+                "last_error": {
+                    "exception_type": type(error).__name__,
+                    "exception_message": str(error),
+                },
+            }
+            self._write_heartbeat(now_s, phase="safety_stop")
+            raise
+
     def process_ready_result(
         self,
         result: WorkerResult | MalformedReadyResult,
@@ -1774,6 +1800,7 @@ class CoordinatorControlPlane:
             if now_s is None
             else now_s
         )
+        self._assert_run_active(now)
         source_path = self.queue.root / "ready" / result.job_id
         job = None
         inventory_root = source_path
@@ -1806,7 +1833,11 @@ class CoordinatorControlPlane:
                 else validate_closed_result(job, result)
             )
             updated_manifest = ingest_validated_result(self.manifest, validated)
+        except GenerationSafetyStop as error:
+            self._assert_run_active(now)
+            raise error
         except Exception as error:
+            self._assert_run_active(now)
             failure = ValidationFailure.capture(
                 job,
                 result if isinstance(result, WorkerResult) else None,
@@ -1821,7 +1852,11 @@ class CoordinatorControlPlane:
                 ),
                 result_dir=inventory_root,
             )
-            self.queue.quarantine_ready(result.job_id, failure)
+            try:
+                self.queue.quarantine_ready(result.job_id, failure)
+            except GenerationSafetyStop:
+                self._assert_run_active(now)
+                raise
             self._last_validation_error = {
                 "job_id": failure.job_id,
                 "exception_type": failure.exception_type,
@@ -1840,15 +1875,18 @@ class CoordinatorControlPlane:
     def tick(self, *, now_s: float | None = None) -> None:
         now = time.time() if now_s is None else now_s
         self._tick_started_at_s = now
+        self._assert_run_active(now)
         self._write_heartbeat(now, phase="tick_start")
         self.queue.recover_stale(now_s=now, stale_after_s=1800.0)
         for result in self.queue.iter_ready()[:MAX_READY_PER_TICK]:
             self.process_ready_result(result)
         self._write_heartbeat(now, phase="refill")
+        self._assert_run_active(now)
         refilled = self._refill()
         if refilled:
             self._record_progress(now, "jobs_refilled")
         self._write_heartbeat(now, phase="refill")
+        self._assert_run_active(now)
         complete = self.planner.quota_complete()
         self._publication = {"phase": "publication_in_progress", "started_at_s": now}
         self._write_heartbeat(now, phase="publication_in_progress")
@@ -1858,6 +1896,8 @@ class CoordinatorControlPlane:
                 local_manifest=self.manifest,
             )
         except Exception as error:
+            if isinstance(error, GenerationSafetyStop):
+                self._assert_run_active(now)
             self._publication = {
                 "phase": "error",
                 "started_at_s": now,

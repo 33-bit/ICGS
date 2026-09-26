@@ -7,6 +7,7 @@ from icgs.data.collection.generation.capacity_probe import (
     CapacityStage,
     categorize_artifact_bytes,
     extract_result_metrics,
+    measure_staging_tree_bytes,
     preflight_stage_capacity,
 )
 from icgs.data.collection.generation.distributed_contracts import (
@@ -324,8 +325,8 @@ def test_extract_result_metrics_without_loading_prior_episodes(tmp_path):
     metrics = extract_result_metrics(result_dir)
     assert metrics["boundaries"] == 55
     assert metrics["raw_points"] == 112640
-    assert metrics["local_peak_bytes"] == 2500000
-    assert metrics["local_peak_bytes_semantic"] == "local_peak_bytes_upper_bound"
+    assert metrics["writer_peak_bytes_upper_bound"] == 2500000
+    assert metrics["writer_peak_bytes_semantic"] == "archive_writer_reported_upper_bound"
     assert metrics["archive_profile"]["dataset_identity"] == "icgs-primary-v3-archive-v1"
     assert metrics["bytes_by_category"]["manifests"] > 0
     assert metrics["bytes_by_category"]["debug"] > 0
@@ -663,7 +664,8 @@ def test_compact_profile_validation_and_receipt_instrumentation(tmp_path, monkey
     assert receipt["status"] == "PASS"
     assert validated_profiles == [base.archive_profile]
     assert receipt["archive_profile"] == archive_prof
-    assert receipt["local_peak_bytes_semantic"] == "local_peak_bytes_upper_bound"
+    assert receipt["staging_peak_semantic"] == "sampled_lower_bound"
+    assert receipt["staging_sample_interval_s"] == 1.0
     assert "bytes_by_category" in receipt
     assert receipt["bytes_by_category"]["chunks"] > 0
     assert receipt["bytes_by_category"]["manifests"] > 0
@@ -675,14 +677,154 @@ def test_compact_profile_validation_and_receipt_instrumentation(tmp_path, monkey
     res0 = receipt["results"][0]
     assert res0["boundaries"] == 32
     assert res0["raw_points"] == 65536
-    assert res0["local_peak_bytes"] == 1200000
-    assert res0["local_peak_bytes_semantic"] == "local_peak_bytes_upper_bound"
+    assert res0["writer_peak_bytes_upper_bound"] == 1200000
+    assert res0["writer_peak_bytes_semantic"] == "archive_writer_reported_upper_bound"
     assert res0["archive_profile"] == archive_prof
     assert res0["bytes_by_category"]["chunks"] > 0
     assert res0["bytes_by_category"]["manifests"] > 0
     assert res0["bytes_by_category"]["debug"] > 0
     assert res0["bytes_by_category"]["views"] > 0
     assert res0["bytes_by_category"]["receipts"] > 0
+
+
+def test_stage_tree_measurement_includes_hidden_writer_scratch(tmp_path):
+    stage_root = tmp_path / "stage"
+    result = stage_root / "worker-results" / "job-1" / "retry-0" / "T01"
+    result.mkdir(parents=True)
+    (result / "debug.json").write_bytes(b"{}")
+    spool = result.parent / ".T01.archive-spool-orphan" / "chunk-00000" / "piece.npy"
+    spool.parent.mkdir(parents=True)
+    spool.write_bytes(b"captured-but-unarchived")
+
+    measured = measure_staging_tree_bytes(stage_root)
+
+    assert measured == {"bytes": 25, "writer_scratch_bytes": 23, "errors": []}
+
+
+def test_capacity_stage_fails_when_sibling_writer_spool_exceeds_cap(
+    tmp_path: Path, monkeypatch,
+):
+    import json
+    import time
+    from types import SimpleNamespace
+    from icgs.data.collection.generation.distributed_contracts import WorkerResult
+
+    stage = CapacityStage(
+        name="sampled-cap-stage",
+        worker_count=1,
+        simulator_slots=1,
+        max_jobs=1,
+        max_result_bytes=100_000,
+        max_staging_bytes=2_000_000,
+    )
+    probe = CapacityProbeConfig(
+        run_id="sampled-cap",
+        hf_subfolder="validation/sampled-cap",
+        max_total_jobs=1,
+        max_runtime_s=300,
+        stages=(stage,),
+        max_result_bytes=100_000,
+        max_total_staging_bytes=3_000_000,
+    )
+    base_payload = {
+        "machine": {
+            "repo_root": str(tmp_path),
+            "python_executable": str(tmp_path / "python"),
+            "simulator_root": str(tmp_path),
+            "rlbench_root": str(tmp_path),
+            "display_base": 1,
+            "display_width": 100,
+            "display_height": 100,
+            "simulator_slots": 1,
+            "worker_timeout_s": 60,
+        },
+        "run": {
+            "run_id": "base",
+            "run_root": str(tmp_path / "base-run"),
+            "worker_count": 1,
+            "hf_subfolder": "validation/sampled-cap",
+            "publication_enabled": False,
+            "validation_mode": True,
+        },
+        "archive_profile": ArchiveProfileConfig().as_dict(),
+    }
+    base = GenerationRuntimeConfig.from_dict(base_payload)
+    job = _make_job("job-tiny-result", "episode-tiny-result")
+    result_dir_holder = {}
+    queue_root_holder = {}
+
+    class Queue:
+        def __init__(self, root):
+            self.root = Path(root)
+            self.root.mkdir(parents=True)
+            queue_root_holder["root"] = self.root
+
+        def counts(self):
+            return SimpleNamespace(ready=1, pending=0, claimed=0)
+
+        def iter_ready(self):
+            return [WorkerResult(
+                job_id=job.job_id,
+                attempt_id=job.attempt_id,
+                episode_id=job.episode_id,
+                program_id=job.program_id,
+                outcome="success",
+                result_dir=str(result_dir_holder["path"]),
+                file_sha256={"debug.json": "0" * 64},
+                timeline={"observations": 1, "actions": 0, "durations": 0},
+            )]
+
+    class FinishedProcess:
+        def poll(self):
+            return 0
+
+    class GoodDisk:
+        free = 100_000_000
+
+    def launch_worker(command, **kwargs):
+        runtime_path = Path(command[command.index("--runtime-config") + 1])
+        stage_root = Path(json.loads(runtime_path.read_text())["run"]["run_root"])
+        result_dir = stage_root / "worker-results" / job.job_id / "retry-0" / "T01"
+        result_dir.mkdir(parents=True)
+        (result_dir / "debug.json").write_bytes(b"{}")
+        result_dir_holder["path"] = result_dir
+        job_path = queue_root_holder["root"] / "ready" / job.job_id / "job.json"
+        job_path.parent.mkdir(parents=True)
+        job_path.write_text(json.dumps(job.as_dict()), encoding="utf-8")
+        orphan = result_dir.parent / ".T01.archive-spool-orphan" / "chunk-00000" / "piece.npy"
+        orphan.parent.mkdir(parents=True)
+        orphan.write_bytes(b"x" * 2_000_001)
+        return FinishedProcess()
+
+    monkeypatch.setattr("icgs.data.collection.generation.capacity_probe.shutil.disk_usage", lambda _: GoodDisk())
+    monkeypatch.setattr(generation_capacity_probe.shutil, "disk_usage", lambda _: GoodDisk())
+    monkeypatch.setattr(generation_capacity_probe, "FilesystemJobQueue", Queue)
+    monkeypatch.setattr(generation_capacity_probe, "enqueue_fixed_jobs", lambda *args: [job.job_id])
+    monkeypatch.setattr(generation_capacity_probe.DistributedPlanner, "from_manifest", lambda *args: object())
+    monkeypatch.setattr(generation_capacity_probe.subprocess, "Popen", launch_worker)
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: 32 * 1024**3)
+    monkeypatch.setattr(
+        generation_capacity_probe,
+        "validate_closed_result",
+        lambda *args, **kwargs: SimpleNamespace(outcome="success"),
+    )
+
+    receipt = generation_capacity_probe.run_stage(
+        base,
+        probe,
+        stage,
+        output_root=tmp_path / "capacity-output",
+        approved_manifest=Path("artifacts/composition/approved_composition_manifest.json").resolve(),
+        code_revision="a" * 40,
+        deadline=time.monotonic() + 60,
+    )
+
+    assert receipt["artifact_bytes"] == 2
+    assert receipt["stage_peak_bytes_sampled_lower_bound"] > stage.max_staging_bytes
+    assert receipt["stage_writer_scratch_peak_bytes_sampled_lower_bound"] > stage.max_staging_bytes
+    assert receipt["staging_peak_semantic"] == "sampled_lower_bound"
+    assert receipt["status"] == "FAIL"
+    assert any("SampledStageStagingCapExceeded" in row["error"] for row in receipt["invalid_results"])
 
 
 def test_archive_profile_requires_explicit_caps_before_worker_launch(tmp_path, monkeypatch):

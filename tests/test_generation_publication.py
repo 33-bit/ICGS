@@ -1751,6 +1751,25 @@ def test_validation_publisher_rejects_receipt_only_archive_retention(tmp_path: P
         )
 
 
+def test_archive_publisher_refuses_run_with_safety_stop(tmp_path: Path):
+    queue, _job_value, _result, profile = _archive_queue(tmp_path)
+    api = FakeApi()
+    publisher = HuggingFaceBatchPublisher(
+        _run(), api, "secret", queue, archive_profile=profile,
+        remote_verify=lambda *_: None,
+    )
+    queue.trip_safety_stop({
+        "reason": "orphan_archive_scratch_after_timeout",
+        "recovery_action": "Preserve scratch files until HF fate is verified.",
+    })
+
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        publisher.publish_due(now_s=300.0, force=True)
+
+    assert api.calls == []
+    assert queue.counts().ingested == 1
+
+
 def test_publication_limits_large_lfs_commit_concurrency(tmp_path: Path):
     queue, _job_value = _queue(tmp_path)
     api = FakeApi()

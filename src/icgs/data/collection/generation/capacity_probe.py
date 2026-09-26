@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -205,6 +206,48 @@ def categorize_artifact_bytes(result_dir: str | Path) -> dict[str, int]:
     return categories
 
 
+def measure_staging_tree_bytes(root: str | Path) -> dict[str, Any]:
+    """Measure apparent bytes in a tree without following symlinks."""
+    base = Path(root)
+    total = 0
+    writer_scratch = 0
+    errors: list[str] = []
+    if base.is_symlink():
+        return {"bytes": 0, "writer_scratch_bytes": 0, "errors": [f"staging root is a symlink: {base}"]}
+    if not base.is_dir():
+        return {"bytes": 0, "writer_scratch_bytes": 0, "errors": [f"staging root is not a directory: {base}"]}
+    pending = [base]
+    while pending:
+        directory = pending.pop()
+        try:
+            entries = list(os.scandir(directory))
+        except OSError as error:
+            errors.append(f"cannot scan {directory}: {type(error).__name__}: {error}")
+            continue
+        for entry in entries:
+            try:
+                if entry.is_symlink():
+                    errors.append(f"staging tree contains a symlink: {entry.path}")
+                elif entry.is_dir(follow_symlinks=False):
+                    pending.append(Path(entry.path))
+                elif entry.is_file(follow_symlinks=False):
+                    size = entry.stat(follow_symlinks=False).st_size
+                    total += size
+                    relative_parts = Path(entry.path).relative_to(base).parts
+                    if any(
+                        ".archive-spool-" in part
+                        or ".partial-" in part
+                        or ".archive-write-in-progress-" in part
+                        for part in relative_parts
+                    ):
+                        writer_scratch += size
+                else:
+                    errors.append(f"staging tree contains a nonregular path: {entry.path}")
+            except OSError as error:
+                errors.append(f"cannot inspect {entry.path}: {type(error).__name__}: {error}")
+    return {"bytes": total, "writer_scratch_bytes": writer_scratch, "errors": errors}
+
+
 def extract_result_metrics(
     result_dir: str | Path,
     *,
@@ -228,7 +271,7 @@ def extract_result_metrics(
 
     boundaries = 0
     raw_points = 0
-    local_peak_bytes = None
+    writer_peak_bytes_upper_bound = None
     archive_profile = fallback_profile
 
     if manifest_payload is not None:
@@ -237,7 +280,7 @@ def extract_result_metrics(
 
         local_write_limits = manifest_payload.get("local_write_limits")
         if isinstance(local_write_limits, dict) and "local_peak_bytes_upper_bound" in local_write_limits:
-            local_peak_bytes = int(local_write_limits["local_peak_bytes_upper_bound"])
+            writer_peak_bytes_upper_bound = int(local_write_limits["local_peak_bytes_upper_bound"])
 
         timeline = manifest_payload.get("timeline")
         if isinstance(timeline, dict) and "observations" in timeline:
@@ -270,8 +313,8 @@ def extract_result_metrics(
         "boundaries": boundaries,
         "raw_points": raw_points,
         "archive_profile": archive_profile,
-        "local_peak_bytes": local_peak_bytes,
-        "local_peak_bytes_semantic": "local_peak_bytes_upper_bound",
+        "writer_peak_bytes_upper_bound": writer_peak_bytes_upper_bound,
+        "writer_peak_bytes_semantic": "archive_writer_reported_upper_bound",
     }
 
 

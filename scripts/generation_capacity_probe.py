@@ -26,6 +26,7 @@ if str(ROOT / "src") not in sys.path:
 from icgs.data.collection.generation.capacity_probe import (
     CapacityProbeConfig,
     extract_result_metrics,
+    measure_staging_tree_bytes,
     preflight_stage_capacity,
 )
 from icgs.data.collection.generation.distributed_contracts import (
@@ -105,16 +106,91 @@ def _free_memory_bytes() -> int | None:
     return None
 
 
-def wait_for_ready_results(queue, processes, *, expected_jobs: int, deadline: float) -> dict:
-    """Finish at the last closed result; extra idle workers need not exit first."""
+def wait_for_ready_results(
+    queue,
+    processes,
+    *,
+    expected_jobs: int,
+    deadline: float,
+    stage_root: Path | None = None,
+    stage_cap_bytes: int | None = None,
+    total_root: Path | None = None,
+    total_cap_bytes: int | None = None,
+    poll_interval_s: float = 1.0,
+) -> dict:
+    """Wait for results while sampling visible staging bytes as a lower bound."""
+    if poll_interval_s <= 0:
+        raise ValueError("poll_interval_s must be positive")
     minimum_free = _free_memory_bytes()
+    stage_peak = 0
+    total_peak = 0
+    stage_writer_scratch_peak = 0
+
+    def sample_tree(
+        root: Path | None,
+        previous_peak: int,
+        previous_scratch_peak: int = 0,
+    ) -> tuple[int, int, list[str]]:
+        if root is None:
+            return previous_peak, previous_scratch_peak, []
+        measured = measure_staging_tree_bytes(root)
+        value = int(measured["bytes"])
+        scratch = int(measured["writer_scratch_bytes"])
+        return max(previous_peak, value), max(previous_scratch_peak, scratch), list(measured["errors"])
+
     while True:
+        stage_peak, stage_writer_scratch_peak, stage_errors = sample_tree(
+            stage_root, stage_peak, stage_writer_scratch_peak,
+        )
+        total_peak, _total_scratch_peak, total_errors = sample_tree(total_root, total_peak)
+        measurement_errors = stage_errors + total_errors
+        capacity_violations = []
+        if stage_cap_bytes is not None and stage_peak > stage_cap_bytes:
+            capacity_violations.append({
+                "scope": "stage",
+                "measured_bytes": stage_peak,
+                "cap_bytes": stage_cap_bytes,
+                "semantic": "sampled_lower_bound",
+            })
+        if total_cap_bytes is not None and total_peak > total_cap_bytes:
+            capacity_violations.append({
+                "scope": "total",
+                "measured_bytes": total_peak,
+                "cap_bytes": total_cap_bytes,
+                "semantic": "sampled_lower_bound",
+            })
+        if measurement_errors or capacity_violations:
+            stop_processes(processes)
+            counts = queue.counts()
+            return {
+                "ready": counts.ready,
+                "active_workers_at_completion": sum(
+                    process.poll() is None for process in processes if process is not None
+                ),
+                "minimum_available_memory_bytes": minimum_free,
+                "stage_peak_bytes_sampled_lower_bound": stage_peak if stage_root is not None else None,
+                "stage_writer_scratch_peak_bytes_sampled_lower_bound": (
+                    stage_writer_scratch_peak if stage_root is not None else None
+                ),
+                "total_peak_bytes_sampled_lower_bound": total_peak if total_root is not None else None,
+                "sample_interval_s": poll_interval_s,
+                "measurement_errors": measurement_errors,
+                "capacity_violations": capacity_violations,
+            }
         counts = queue.counts()
         if counts.ready == expected_jobs:
             return {
                 "ready": counts.ready,
                 "active_workers_at_completion": sum(process.poll() is None for process in processes),
                 "minimum_available_memory_bytes": minimum_free,
+                "stage_peak_bytes_sampled_lower_bound": stage_peak if stage_root is not None else None,
+                "stage_writer_scratch_peak_bytes_sampled_lower_bound": (
+                    stage_writer_scratch_peak if stage_root is not None else None
+                ),
+                "total_peak_bytes_sampled_lower_bound": total_peak if total_root is not None else None,
+                "sample_interval_s": poll_interval_s,
+                "measurement_errors": [],
+                "capacity_violations": [],
             }
         if counts.ready > expected_jobs:
             raise RuntimeError("capacity queue exceeded fixed job cap")
@@ -127,7 +203,7 @@ def wait_for_ready_results(queue, processes, *, expected_jobs: int, deadline: fl
                 raise RuntimeError("capacity probe stopped: less than 8 GiB memory available")
         if all(process.poll() is not None for process in processes if process is not None):
             raise RuntimeError("all workers exited before all results became ready")
-        time.sleep(1)
+        time.sleep(poll_interval_s)
 
 
 def run_stage(
@@ -172,6 +248,16 @@ def run_stage(
         {"manifest_version": 3, "episodes": [], "failure_attempts": []},
     )
     job_ids = enqueue_fixed_jobs(planner, queue, stage.max_jobs)
+    effective_max_result_bytes = (
+        stage.max_result_bytes
+        if stage.max_result_bytes is not None
+        else probe.max_result_bytes
+    )
+    effective_max_staging_bytes = (
+        stage.max_staging_bytes
+        if stage.max_staging_bytes is not None
+        else probe.max_total_staging_bytes
+    )
     environment = runtime.resolved_environment()
     for key in ("ICGS_HF_TOKEN_PATH", "HF_TOKEN", "HUGGINGFACE_HUB_TOKEN", "HF_ACCESS_TOKEN"):
         environment.pop(key, None)
@@ -197,26 +283,77 @@ def run_stage(
             processes.append(process)
         completion = wait_for_ready_results(
             queue, processes, expected_jobs=len(job_ids), deadline=deadline,
+            stage_root=root,
+            stage_cap_bytes=effective_max_staging_bytes,
+            total_root=output_root,
+            total_cap_bytes=probe.max_total_staging_bytes,
         )
         results_elapsed = time.monotonic() - started
     finally:
         stop_processes(processes)
     cleanup_elapsed = time.monotonic() - started - results_elapsed
     returncodes = [process.poll() for process in processes]
+    final_stage = measure_staging_tree_bytes(root)
+    final_total = measure_staging_tree_bytes(output_root)
+    stage_peak_bytes = max(
+        int(completion.get("stage_peak_bytes_sampled_lower_bound") or 0),
+        int(final_stage["bytes"]),
+    )
+    stage_writer_scratch_peak_bytes = max(
+        int(completion.get("stage_writer_scratch_peak_bytes_sampled_lower_bound") or 0),
+        int(final_stage["writer_scratch_bytes"]),
+    )
+    total_peak_bytes = max(
+        int(completion.get("total_peak_bytes_sampled_lower_bound") or 0),
+        int(final_total["bytes"]),
+    )
     ready = queue.iter_ready()
     outcomes = Counter()
     artifact_bytes = 0
     invalid = []
-    effective_max_result_bytes = (
-        stage.max_result_bytes
-        if stage.max_result_bytes is not None
-        else probe.max_result_bytes
+    staging_measurement_errors = (
+        list(completion.get("measurement_errors", []))
+        + list(final_stage["errors"])
+        + list(final_total["errors"])
     )
-    effective_max_staging_bytes = (
-        stage.max_staging_bytes
-        if stage.max_staging_bytes is not None
-        else probe.max_total_staging_bytes
-    )
+    for error in staging_measurement_errors:
+        invalid.append({"stage": stage.name, "error": f"StagingMeasurementFailed: {error}"})
+    staging_capacity_violations = list(completion.get("capacity_violations", []))
+    for violation in staging_capacity_violations:
+        invalid.append({
+            "stage": stage.name,
+            "error": (
+                f"Sampled{violation['scope'].title()}StagingCapExceeded: observed at least "
+                f"{violation['measured_bytes']} bytes, exceeding {violation['cap_bytes']} bytes"
+            ),
+            "measured_bytes": violation["measured_bytes"],
+            "cap_bytes": violation["cap_bytes"],
+            "semantic": "sampled_lower_bound",
+        })
+    final_violations = []
+    if effective_max_staging_bytes is not None and stage_peak_bytes > effective_max_staging_bytes:
+        final_violations.append(("stage", stage_peak_bytes, effective_max_staging_bytes))
+    if probe.max_total_staging_bytes is not None and total_peak_bytes > probe.max_total_staging_bytes:
+        final_violations.append(("total", total_peak_bytes, probe.max_total_staging_bytes))
+    reported_scopes = {item.get("scope") for item in completion.get("capacity_violations", [])}
+    for scope, measured_bytes, cap_bytes in final_violations:
+        if scope not in reported_scopes:
+            staging_capacity_violations.append({
+                "scope": scope,
+                "measured_bytes": measured_bytes,
+                "cap_bytes": cap_bytes,
+                "semantic": "sampled_lower_bound",
+            })
+            invalid.append({
+                "stage": stage.name,
+                "error": (
+                    f"Sampled{scope.title()}StagingCapExceeded: observed at least "
+                    f"{measured_bytes} bytes, exceeding {cap_bytes} bytes"
+                ),
+                "measured_bytes": measured_bytes,
+                "cap_bytes": cap_bytes,
+                "semantic": "sampled_lower_bound",
+            })
     stage_bytes_by_category: dict[str, int] = {
         "chunks": 0,
         "manifests": 0,
@@ -262,8 +399,8 @@ def run_stage(
                 "boundaries": metrics["boundaries"],
                 "raw_points": metrics["raw_points"],
                 "archive_profile": metrics["archive_profile"],
-                "local_peak_bytes": metrics["local_peak_bytes"],
-                "local_peak_bytes_semantic": metrics["local_peak_bytes_semantic"],
+                "writer_peak_bytes_upper_bound": metrics["writer_peak_bytes_upper_bound"],
+                "writer_peak_bytes_semantic": metrics["writer_peak_bytes_semantic"],
             })
         except Exception as error:
             invalid.append({"job_id": result.job_id, "error": f"{type(error).__name__}: {error}"})
@@ -291,7 +428,13 @@ def run_stage(
         "artifact_bytes": artifact_bytes,
         "bytes_by_category": stage_bytes_by_category,
         "archive_profile": runtime.archive_profile.as_dict() if runtime.archive_profile is not None else None,
-        "local_peak_bytes_semantic": "local_peak_bytes_upper_bound",
+        "stage_peak_bytes_sampled_lower_bound": stage_peak_bytes,
+        "stage_writer_scratch_peak_bytes_sampled_lower_bound": stage_writer_scratch_peak_bytes,
+        "total_peak_bytes_sampled_lower_bound": total_peak_bytes,
+        "staging_peak_semantic": "sampled_lower_bound",
+        "staging_sample_interval_s": completion.get("sample_interval_s", 1.0),
+        "staging_measurement_errors": staging_measurement_errors,
+        "staging_capacity_violations": staging_capacity_violations,
         "minimum_available_memory_bytes": completion["minimum_available_memory_bytes"],
         "worker_returncodes": returncodes,
         "queue": counts.__dict__,
