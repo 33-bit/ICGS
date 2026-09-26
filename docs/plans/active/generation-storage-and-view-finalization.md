@@ -427,6 +427,18 @@ generation are **NOT RUN** by these local checks. The crash-prefix hardening
 identified during the scoped review is recorded below; Task 5.3 remains
 required before any full-generation authorization.
 
+**Task 5.3 view-metadata finding (2026-09-27):** Read-only review of source
+manifest revision `f3ee930e366a7ff8132a6412bd06d59c07ebdbc2` and immutable view
+output HEAD `8a3416a` found that `train/D_task` listed 841 samples but reported
+all 841 as nominal, while source-row identity gives 586 nominal and 255
+perturbed. The D_task archive refs omitted `episode_kind`, so finalization's
+per-sample kind counter defaulted every ref to nominal. The local correction
+propagates the already-validated archive provenance kind into D_task refs and
+tests final snapshot counts, membership, label pointers, and role separation.
+The published output remains unchanged; any corrected remote finalization must
+use a distinct output prefix after review. HF access and remote re-finalization
+are **NOT RUN** for this correction.
+
 **Crash-prefix follow-up (2026-09-26, commit `959aca6`):** The production
 archive-profile exception path now carries already captured observations,
 commands and state into a `simulator_crash` attempt, including the case where

@@ -129,6 +129,61 @@ def test_final_views_are_role_specific_mixed_only_for_train_temporal_and_dyn(tmp
     assert not any("att-crashed" in json.dumps(row) for row in train_geom["samples"])
 
 
+def test_final_task_view_preserves_episode_kinds_membership_labels_and_roles(tmp_path: Path):
+    records = [
+        _episode("ep-task-nominal", n_actions=7, event_t=None),
+        _episode("ep-task-perturbed", kind="perturbed", n_actions=3, event_t=None),
+        _episode("ep-task-validation", subset="train_val", n_actions=2, event_t=None),
+    ]
+    dataset_manifest = _snapshot(tmp_path / "source", records)
+    output_dir = tmp_path / "finalized" / ("c" * 40)
+
+    finalize_generation_views(
+        dataset_manifest,
+        source_revision="c" * 40,
+        role_specs=DEFAULT_ROLE_SPECS,
+        mixture_seed=41,
+        output_dir=output_dir,
+    )
+
+    train_task = json.loads((output_dir / "train" / "D_task.json").read_text())
+    validation_task = json.loads(
+        (output_dir / "validation" / "D_task.json").read_text()
+    )
+    assert train_task["role"] == "train"
+    assert train_task["mixture"]["applied"] is False
+    assert train_task["sample_count"] == 12
+    assert train_task["sample_counts_by_episode_kind"] == {
+        "nominal": 8,
+        "perturbed": 4,
+    }
+    assert {
+        (row["episode_id"], row["t"], row["episode_kind"])
+        for row in train_task["samples"]
+    } == {
+        ("ep-task-nominal", boundary, "nominal") for boundary in range(8)
+    } | {
+        ("ep-task-perturbed", boundary, "perturbed") for boundary in range(4)
+    }
+    nominal_label_ref = next(
+        row for row in train_task["samples"]
+        if row["episode_id"] == "ep-task-nominal" and row["t"] == 2
+    )
+    assert nominal_label_ref["events"] == []
+    assert nominal_label_ref["rho"] == ["ep-task-nominal", "rho", 2]
+    perturbed_label_ref = next(
+        row for row in train_task["samples"]
+        if row["episode_id"] == "ep-task-perturbed" and row["t"] == 1
+    )
+    assert perturbed_label_ref["events"] == []
+    assert perturbed_label_ref["rho"] == ["ep-task-perturbed", "rho", 1]
+    assert validation_task["role"] == "validation"
+    assert validation_task["sample_counts_by_episode_kind"] == {"nominal": 3}
+    assert {row["episode_id"] for row in validation_task["samples"]} == {
+        "ep-task-validation",
+    }
+
+
 def test_finalization_is_byte_deterministic_and_uses_source_snapshot_time(tmp_path: Path):
     dataset_manifest = _snapshot(tmp_path / "source", [
         _episode("ep-stable-nominal", n_actions=7, event_t=None),

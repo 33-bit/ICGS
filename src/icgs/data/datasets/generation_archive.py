@@ -480,6 +480,7 @@ class ArchiveDatasetIndex:
                     for event in events
                     if isinstance(event, Mapping)
                 ],
+                "episode_kind": kind,
                 "rho": (entry.episode_id, "rho", boundary) if metadata.get("rho") is not None else None,
                 "nu": (entry.episode_id, "nu", boundary) if metadata.get("nu") is not None else None,
                 "epsilon": (entry.episode_id, "epsilon", boundary) if metadata.get("epsilon") is not None else None,
