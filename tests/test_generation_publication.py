@@ -1328,13 +1328,30 @@ def test_coordinator_recovers_data_revision_after_local_receipt_write_crash(
     assert pending["status"] == "PREPARED"
     assert pending["data_commit_oid"] is None
     remote_manifest = remote_root / _run().hf_subfolder / "dataset_manifest.json"
+    download_calls = []
+    cache_roots = []
+    returned_paths = []
 
     def download(**kwargs):
-        if kwargs["filename"].endswith("/dataset_manifest.json"):
-            return str(remote_manifest)
-        if kwargs["filename"].endswith("/publication_receipt.json"):
-            return str(remote_root / kwargs["filename"])
-        raise FileNotFoundError(kwargs["filename"])
+        download_calls.append(kwargs)
+        cache_arg = kwargs.get("cache_dir")
+        if cache_arg is None:
+            if kwargs["filename"].endswith("/dataset_manifest.json"):
+                return str(remote_manifest)
+            if kwargs["filename"].endswith("/publication_receipt.json"):
+                return str(remote_root / kwargs["filename"])
+            raise FileNotFoundError(kwargs["filename"])
+        cache = Path(cache_arg)
+        cache_roots.append(cache)
+        source = remote_root / kwargs["filename"]
+        cached = cache / "snapshots" / ("d" * 40) / kwargs["filename"]
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        if not source.is_file():
+            (cache / "partial-download.tmp").write_bytes(b"partial control bytes")
+            raise FileNotFoundError(source)
+        cached.write_bytes(source.read_bytes())
+        returned_paths.append(cached)
+        return str(cached)
 
     coordinator._recover_interrupted_archive_publication(
         queue,
@@ -1347,6 +1364,12 @@ def test_coordinator_recovers_data_revision_after_local_receipt_write_crash(
     recovered = json.loads((queue.root / "publication_receipt.json").read_text())
     assert recovered["status"] == "DATA_COMMITTED"
     assert recovered["data_commit_oid"] == "d" * 40
+    assert len(download_calls) == 2
+    assert all(call.get("cache_dir") for call in download_calls)
+    assert len(cache_roots) == 2 and len(set(cache_roots)) == 2
+    assert all(not cache.exists() for cache in cache_roots)
+    assert len(returned_paths) == 2
+    assert coordinator._snapshot_revision(returned_paths[0]) == "d" * 40
 
     api = FakeApi()
     verified_revisions = []
@@ -1402,13 +1425,29 @@ def test_coordinator_recovers_receipt_commit_oid_from_exact_remote_snapshot(
     remote_receipt = remote_root / _run().hf_subfolder / "publication_receipt.json"
     remote_receipt.parent.mkdir(parents=True)
     remote_receipt.write_bytes(snapshot_path.read_bytes())
+    download_calls = []
+    cache_roots = []
+    returned_paths = []
+
+    def download(**kwargs):
+        download_calls.append(kwargs)
+        cache_arg = kwargs.get("cache_dir")
+        if cache_arg is None:
+            return str(remote_receipt)
+        cache = Path(cache_arg)
+        cache_roots.append(cache)
+        cached = cache / "snapshots" / ("e" * 40) / kwargs["filename"]
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_bytes(remote_receipt.read_bytes())
+        returned_paths.append(cached)
+        return str(cached)
 
     coordinator._recover_interrupted_archive_publication(
         queue,
         _run(),
         profile,
         token="secret",
-        downloader=lambda **_kwargs: str(remote_receipt),
+        downloader=download,
     )
 
     recovered = PublicationReceipt.from_dict(
@@ -1417,6 +1456,11 @@ def test_coordinator_recovers_receipt_commit_oid_from_exact_remote_snapshot(
     assert recovered.status == "DATA_COMMITTED"
     assert recovered.data_commit_oid == "d" * 40
     assert recovered.commit_oid == "e" * 40
+    assert len(download_calls) == 1
+    assert download_calls[0].get("cache_dir")
+    assert len(cache_roots) == 1 and not cache_roots[0].exists()
+    assert len(returned_paths) == 1
+    assert coordinator._snapshot_revision(returned_paths[0]) == "e" * 40
 
     api = FakeApi()
     verified_revisions = []
@@ -1435,6 +1479,60 @@ def test_coordinator_recovers_receipt_commit_oid_from_exact_remote_snapshot(
         for operation in api.calls[0]["operations"]
     )
     assert not Path(result.result_dir).exists()
+
+
+def test_interrupted_archive_recovery_rejects_control_file_outside_owned_cache(
+    tmp_path: Path,
+):
+    from scripts import generation_coordinator as coordinator
+
+    queue, job, _result, profile = _archive_queue(tmp_path, retention="receipt_only")
+    receipt = PublicationReceipt(
+        run_id=job.run_id,
+        job_ids=(job.job_id,),
+        status="PREPARED",
+        artifact_hashes={f"{job.job_id}/artifact_manifest.json": "a" * 64},
+        source_run_id=job.run_id,
+        dataset_identity=profile.dataset_identity,
+        archive_format_id=profile.archive_format_id,
+        episode_schema_version=profile.episode_schema_version,
+        archive_profile=profile.as_dict(),
+        dataset_manifest_sha256="b" * 64,
+        prefix=_run().hf_subfolder,
+    )
+    (queue.root / "publication_receipt.json").write_text(
+        json.dumps(receipt.as_dict()), encoding="utf-8"
+    )
+    outside = tmp_path / "outside-dataset-manifest.json"
+    outside.write_bytes(b"remote control file")
+    cache_roots = []
+    calls = []
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        cache_arg = kwargs.get("cache_dir")
+        if cache_arg is not None:
+            cache = Path(cache_arg)
+            cache_roots.append(cache)
+            (cache / "downloaded-control-file.tmp").write_bytes(b"cache bytes")
+        return str(outside)
+
+    with pytest.raises(
+        RuntimeError, match="cannot reconcile pending archive data commit"
+    ) as failure:
+        coordinator._recover_interrupted_archive_publication(
+            queue,
+            _run(),
+            profile,
+            token="secret",
+            downloader=download,
+        )
+
+    assert len(calls) == 1
+    assert calls[0].get("cache_dir")
+    assert isinstance(failure.value.__cause__, ValueError)
+    assert "outside owned scratch" in str(failure.value.__cause__)
+    assert len(cache_roots) == 1 and not cache_roots[0].exists()
 
 
 def test_archive_metadata_and_prefix_views_remain_provisional_and_revision_bound(

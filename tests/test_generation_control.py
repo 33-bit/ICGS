@@ -858,6 +858,105 @@ def _complete_archive_remote(tmp_path: Path, monkeypatch):
     return run_json, token, manifest, prefix_root, downloads
 
 
+def _archive_initial_discovery_fixture(tmp_path: Path, monkeypatch):
+    resume_run_json, _resume_token, manifest, prefix_root, _ = _complete_archive_remote(
+        tmp_path / "source", monkeypatch
+    )
+    resume_payload = json.loads(resume_run_json.read_text(encoding="utf-8"))
+    config_payload = _runtime_config(
+        tmp_path / "initial", publication_enabled=True
+    ).as_dict()
+    config_payload["run"].update({
+        "run_id": "initial-archive-discovery",
+        "validation_mode": False,
+        "resume_from_hf": False,
+    })
+    config_payload["archive_profile"] = manifest["archive_profile"]
+    config = GenerationRuntimeConfig.from_dict(config_payload)
+    run_json = generation_launch.persist_run_config(
+        config,
+        Path(resume_payload["approved_manifest"]),
+        code_revision="a" * 40,
+    )
+    token = Path(config.run.run_root) / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+    revision = prefix_root.parents[1].name
+    return run_json, token, manifest, prefix_root, revision
+
+
+def test_coordinator_archive_initial_manifest_discovery_uses_owned_cache_and_cleans_it(
+    tmp_path: Path, monkeypatch,
+):
+    run_json, token, manifest, prefix_root, revision = _archive_initial_discovery_fixture(
+        tmp_path, monkeypatch
+    )
+    remote_manifest = prefix_root / "dataset_manifest.json"
+    calls = []
+    cache_roots = []
+    returned_paths = []
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        cache_arg = kwargs.get("cache_dir")
+        if cache_arg is None:
+            return str(remote_manifest)
+        cache = Path(cache_arg)
+        cache_roots.append(cache)
+        cached = cache / "snapshots" / revision / kwargs["filename"]
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_bytes(remote_manifest.read_bytes())
+        returned_paths.append(cached)
+        return str(cached)
+
+    monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
+    control = CoordinatorControlPlane.open(
+        run_json, api_factory=lambda: object(), token_path=token
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["filename"].endswith("/dataset_manifest.json")
+    assert calls[0].get("cache_dir")
+    assert calls[0].get("revision") is None
+    assert control.publisher.remote_manifest["episodes"] == manifest["episodes"]
+    assert len(cache_roots) == 1 and not cache_roots[0].exists()
+    assert len(returned_paths) == 1 and not returned_paths[0].exists()
+    assert generation_coordinator_module._snapshot_revision(returned_paths[0]) == revision
+
+
+def test_coordinator_archive_initial_manifest_discovery_rejects_outside_cache_path(
+    tmp_path: Path, monkeypatch,
+):
+    run_json, token, _manifest, prefix_root, _revision = _archive_initial_discovery_fixture(
+        tmp_path, monkeypatch
+    )
+    remote_manifest = prefix_root / "dataset_manifest.json"
+    calls = []
+    cache_roots = []
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        cache_arg = kwargs.get("cache_dir")
+        if cache_arg is not None:
+            cache = Path(cache_arg)
+            cache_roots.append(cache)
+            temporary_copy = cache / "downloaded-control.tmp"
+            temporary_copy.write_bytes(remote_manifest.read_bytes())
+        return str(remote_manifest)
+
+    monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
+    control = CoordinatorControlPlane.open(
+        run_json, api_factory=lambda: object(), token_path=token
+    )
+
+    assert len(calls) == 1
+    assert calls[0].get("cache_dir")
+    assert len(cache_roots) == 1 and not cache_roots[0].exists()
+    assert control.publisher.remote_manifest["episodes"] == []
+
+
 def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(tmp_path: Path, monkeypatch):
     run_json, token, manifest, prefix_root, downloads = _complete_archive_remote(tmp_path, monkeypatch)
     control = CoordinatorControlPlane.open(

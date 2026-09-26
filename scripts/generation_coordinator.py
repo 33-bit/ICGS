@@ -352,6 +352,21 @@ def _download_pinned_file(
     return remote
 
 
+def _download_archive_control_file(
+    downloader, run: RunConfig, token: str, filename: str,
+    scratch: Path, revision: str | None = None,
+) -> Path:
+    remote = Path(downloader(
+        repo_id=run.hf_repo, repo_type="dataset", filename=filename,
+        token=token, force_download=True, revision=revision, cache_dir=str(scratch),
+    ))
+    if not remote.resolve().is_relative_to(scratch.resolve()):
+        raise ValueError(f"remote archive control file is outside owned scratch: {filename}")
+    if not remote.is_file():
+        raise FileNotFoundError(remote)
+    return remote
+
+
 def _verify_archive_resume_files(
     manifest: Mapping[str, Any], run: RunConfig, profile: ArchiveProfileConfig,
     *, token: str, revision: str, downloader, manifest_sha256: str,
@@ -496,15 +511,13 @@ def _recover_interrupted_archive_publication(
     local_manifest_path = queue.root / "publication_manifest.json"
     if local_receipt.data_commit_oid is None:
         try:
-            remote_manifest_path = downloader(
-                repo_id=run.hf_repo,
-                repo_type="dataset",
-                filename=f"{run.hf_subfolder}/dataset_manifest.json",
-                token=token,
-                force_download=True,
-                revision=None,
-            )
-            remote_manifest_bytes = Path(remote_manifest_path).read_bytes()
+            with tempfile.TemporaryDirectory(prefix="icgs-hf-recovery-manifest-") as owned:
+                remote_manifest_path = _download_archive_control_file(
+                    downloader, run, token,
+                    f"{run.hf_subfolder}/dataset_manifest.json", Path(owned),
+                    revision=None,
+                )
+                remote_manifest_bytes = remote_manifest_path.read_bytes()
         except (FileNotFoundError, EntryNotFoundError, LocalEntryNotFoundError):
             return None
         except Exception as error:
@@ -535,15 +548,13 @@ def _recover_interrupted_archive_publication(
 
     snapshot_path = queue.root / "publication_receipt_to_verify.json"
     try:
-        remote_receipt_path = downloader(
-            repo_id=run.hf_repo,
-            repo_type="dataset",
-            filename=f"{run.hf_subfolder}/publication_receipt.json",
-            token=token,
-            force_download=True,
-            revision=None,
-        )
-        remote_receipt_bytes = Path(remote_receipt_path).read_bytes()
+        with tempfile.TemporaryDirectory(prefix="icgs-hf-recovery-receipt-") as owned:
+            remote_receipt_path = _download_archive_control_file(
+                downloader, run, token,
+                f"{run.hf_subfolder}/publication_receipt.json", Path(owned),
+                revision=None,
+            )
+            remote_receipt_bytes = remote_receipt_path.read_bytes()
     except (FileNotFoundError, EntryNotFoundError, LocalEntryNotFoundError):
         return None
     except Exception as error:
@@ -1283,6 +1294,14 @@ class CoordinatorControlPlane:
                     remote_path = _download_pinned_file(
                         hf_hub_download, run, token, remote_revision,
                         f"{run.hf_subfolder}/dataset_manifest.json", Path(scratch),
+                    )
+                    remote_bytes = remote_path.read_bytes()
+            elif runtime.archive_profile is not None:
+                with tempfile.TemporaryDirectory(prefix="icgs-hf-initial-manifest-") as scratch:
+                    remote_path = _download_archive_control_file(
+                        hf_hub_download, run, token,
+                        f"{run.hf_subfolder}/dataset_manifest.json", Path(scratch),
+                        revision=remote_revision,
                     )
                     remote_bytes = remote_path.read_bytes()
             else:
