@@ -292,4 +292,3 @@ def preflight_stage_capacity(
                 f"preflight capacity insufficient: required {required_staging_bytes} bytes "
                 f"staging capacity, but only {free_bytes} bytes are free on {check_dir}"
             )
-

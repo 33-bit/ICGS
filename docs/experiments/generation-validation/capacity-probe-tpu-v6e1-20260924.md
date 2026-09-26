@@ -62,4 +62,3 @@ As part of the bounded capacity probe instrumentation (ADR 0015 / Task 4.2):
    - Prior to launching any worker processes in a stage or probe run, preflight checks verify available disk space against staging caps in a fail-closed manner. If disk space is insufficient, execution halts immediately with zero worker processes spawned.
    - Stage results exceeding configured per-result or staging byte limits are flagged with `ByteCapExceeded` or `StagingCapExceeded` in `invalid_results`, resulting in stage `FAIL`.
    - Legacy profile behavior is preserved unless an explicit new archive cap applies.
-

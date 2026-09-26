@@ -679,5 +679,3 @@ def test_compact_profile_validation_and_receipt_instrumentation(tmp_path, monkey
     assert res0["bytes_by_category"]["debug"] > 0
     assert res0["bytes_by_category"]["views"] > 0
     assert res0["bytes_by_category"]["receipts"] > 0
-
-
