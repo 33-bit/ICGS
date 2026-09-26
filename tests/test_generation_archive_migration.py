@@ -515,6 +515,62 @@ def test_sensitive_episode_semantic_change_is_rejected_with_redacted_receipt(tmp
     } == source_before
 
 
+def test_existing_lossy_migration_rerun_rejects_sensitive_source_with_failure_receipt(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    _require_migration_api()
+    from scripts import generation_archive_migrate
+
+    source = tmp_path / "v2-sensitive-existing-target"
+    record = _write_episode_fixture(source, "success")
+    secret = "fixture-existing-target-secret"
+    record["provenance"]["intervention_params"] = {"api_key": secret}
+    _json_write(source / "episode.json", record)
+    artifact_manifest = json.loads((source / "artifact_manifest.json").read_text(encoding="utf-8"))
+    artifact_manifest["files"] = _inventory(source)
+    _json_write(source / "artifact_manifest.json", artifact_manifest)
+
+    source_reader = V2ArtifactReader(source)
+    target, profile, failure_path = _target(tmp_path, name="existing-sensitive-target")
+    identity = _identity()
+
+    # Reproduce the prior implementation's lossy published archive while keeping
+    # its canonical manifest, hashes, and receipt otherwise valid.
+    with monkeypatch.context() as setup_patch:
+        setup_patch.setattr(generation_archive_migrate, "_semantic_equal", lambda *_args: True)
+        seeded_receipt = migrate_episode(
+            source_reader,
+            target,
+            source_identity=identity,
+            target_profile=profile,
+        )
+
+    published = EpisodeArchiveReader(target.output_dir / "episode.manifest.json").to_episode_record()
+    assert published["provenance"]["intervention_params"]["api_key"] == "[REDACTED]"
+    # Confirm the prior-bug artifact and receipt satisfy normal reuse validation.
+    assert generation_archive_migrate._reuse_existing_migration(
+        source_reader.read(),
+        target,
+        source_identity=identity,
+        target_identity=seeded_receipt.target_identity,
+    ).as_dict() == seeded_receipt.as_dict()
+    original_receipt_bytes = target.receipt_path.read_bytes()
+
+    with pytest.raises(MigrationError, match="redaction would alter v2 semantics"):
+        migrate_episode(
+            source_reader,
+            target,
+            source_identity=identity,
+            target_profile=profile,
+        )
+
+    failure_text = failure_path.read_text(encoding="utf-8")
+    assert secret not in failure_text
+    assert "redaction would alter v2 semantics" in failure_text
+    assert target.receipt_path.read_bytes() == original_receipt_bytes
+
+
 def test_compressed_sidecar_decoded_budget_is_checked_before_numpy_load(
     tmp_path: Path,
     monkeypatch,

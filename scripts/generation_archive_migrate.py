@@ -398,6 +398,9 @@ def migrate_episode(
         source = source_reader.read()
         source_hashes = source.source_artifact_hashes
         _validate_source_identity(identity_payload, source)
+        source_record = _redact_sensitive(dict(source.record))
+        if not _semantic_equal(source.record, source_record):
+            raise ValueError("security redaction would alter v2 semantics; refusing non-lossless migration")
         target_identity = _target_identity(identity_payload, target_profile)
 
         if target_writer.output_dir.exists() or target_writer.receipt_path.exists():
@@ -409,11 +412,8 @@ def migrate_episode(
             )
 
         warnings = list(source.warnings)
-        source_record = _redact_sensitive(dict(source.record))
         safe_execution = _redact_sensitive(dict(source.execution))
         safe_sidecars = _redact_sensitive(dict(source.sidecar_metadata))
-        if not _semantic_equal(source.record, source_record):
-            raise ValueError("security redaction would alter v2 semantics; refusing non-lossless migration")
         identity_values, identity_warnings = _required_archive_identity(
             identity_payload,
             source.record,
