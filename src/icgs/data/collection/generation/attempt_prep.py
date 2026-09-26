@@ -54,6 +54,10 @@ def prepare_attempt(
         layout = result["objects"]
         next_routine = result["routine"]
         intervention = {**plan.intervention, **result["intervention"]}
+        for immutable_field in ("source_episode_id", "base_episode_id"):
+            planned_value = plan.intervention.get(immutable_field)
+            if planned_value is not None:
+                intervention[immutable_field] = planned_value
     return {
         "objects": layout,
         "routine": next_routine,

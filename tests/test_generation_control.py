@@ -513,6 +513,51 @@ def test_archive_resume_manifest_validates_identity_and_remote_file_hashes(tmp_p
         )
 
 
+def test_coordinator_open_accepts_perturbed_archive_row_lineage(tmp_path: Path, monkeypatch):
+    from test_generation_publication import _job
+
+    nominal_id = "episode-t01-00000"
+    perturbed_id = "episode-t01-00001"
+    plan = _archive_resume_plan(episode_id=perturbed_id, episode_kind="perturbed")
+    plan = replace(
+        plan,
+        intervention={
+            **(plan.intervention or {}),
+            "intervention_type": "pause_hold",
+            "intervention_params": {"intervals": 4},
+            "intervention_seed": 17,
+            "application_scope": "event",
+            "application_t": None,
+            "intervention_frame": None,
+            "source_episode_id": nominal_id,
+            "base_episode_id": nominal_id,
+        },
+    )
+    fixture_job = replace(
+        _job(),
+        job_id="job-perturbed-lineage",
+        attempt_id=f"att-{perturbed_id}",
+        episode_id=perturbed_id,
+        plan=plan,
+    )
+
+    run_json, token, manifest, _prefix_root, _downloads = _complete_archive_remote(
+        tmp_path,
+        monkeypatch,
+        fixture_job=fixture_job,
+    )
+    row = manifest["episodes"][0]
+    assert row["source_episode_id"] == plan.intervention["source_episode_id"]
+    assert row["base_episode_id"] == plan.intervention["base_episode_id"]
+    control = CoordinatorControlPlane.open(
+        run_json,
+        api_factory=lambda: object(),
+        token_path=token,
+    )
+    assert control.manifest["episodes"][0]["source_episode_id"] == nominal_id
+    assert control.manifest["episodes"][0]["base_episode_id"] == nominal_id
+
+
 @pytest.mark.parametrize(
     "mutator, message",
     [
@@ -763,15 +808,21 @@ def _complete_archive_remote(
     monkeypatch,
     *,
     remote_revision: str = "d1cc82c27bc57602bf3fac40f55c6dbb59766d45",
+    fixture_job: GenerationJob | None = None,
 ):
     from test_generation_publication import _archive_queue, _job
 
-    fixture_job = _job()
+    supplied_fixture = fixture_job is not None
+    fixture_job = _job() if fixture_job is None else fixture_job
     fixture_job = replace(fixture_job, plan=replace(
         fixture_job.plan,
         randomization={**fixture_job.plan.randomization,
                        "scene_seed": fixture_job.plan.scene_seed,
-                       "asset_instance_id": "T01-asset-1"},
+                       "asset_instance_id": (
+                           fixture_job.plan.randomization.get("asset_instance_id")
+                           if supplied_fixture
+                           else "T01-asset-1"
+                       )},
     ))
     _source_queue, job, result, profile = _archive_queue(
         tmp_path / "source", retention="receipt_only", job=fixture_job,

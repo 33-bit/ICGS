@@ -370,6 +370,24 @@ class BatchPlanTests(unittest.TestCase):
         rand_x = offset.randomization["object_translation_m"]["x"]
         self.assertAlmostEqual(prepared_off["objects"]["target_a"]["pos"][0], base_x + rand_x + dx, places=4)
 
+    def test_prepare_attempt_preserves_plan_intervention_lineage(self):
+        plans = plan_program_attempts(
+            "T01",
+            n_nominal=1,
+            n_perturbed=1,
+            bounds=bounds_from_row(self.rows["T01"]),
+            asset_family_id=self.rows["T01"]["asset_family_id"],
+        )
+        perturbed = next(plan for plan in plans if plan.episode_kind == "perturbed")
+        prepared = prepare_attempt(
+            perturbed,
+            compile_generation_catalog()["T01"].objects,
+            compile_generation_catalog()["T01"].routine,
+        )
+
+        assert prepared["intervention"]["source_episode_id"] == perturbed.intervention["source_episode_id"]
+        assert prepared["intervention"]["base_episode_id"] == perturbed.intervention["base_episode_id"]
+
     def test_generation_manifest_records_perturbation_bounds_and_position_bins(self):
         targets = self.manifest["generation_targets"]
         self.assertEqual(targets["eval_perturbed_attempts_per_program"], 20)
