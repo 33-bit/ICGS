@@ -52,11 +52,11 @@ The implementation must keep these ownership boundaries:
 **Interfaces:**
 - Produces the durable `archive_format_id`, new episode schema identity, HF source-of-truth rule, provisional/final view status vocabulary, and local-retention modes used by later tasks.
 
-- [ ] Re-read ADR0015 and list its required invariants in the implementation issue/branch record.
-- [ ] Add the ADR and active plan to the documentation map.
-- [ ] Update generation lifecycle documentation to distinguish materialization-time provisional pointers from quota-complete final view snapshots.
-- [ ] Update artifact inventory to mark v2 artifacts as legacy and document the new binary inventory; explicitly state that valid failures remain full episodes.
-- [ ] Run `git diff --check` and the documentation-link portion of `python3 -B scripts/validate_fast.py`.
+- [x] Re-read ADR0015 and list its required invariants in the implementation issue/branch record.
+- [x] Add the ADR and active plan to the documentation map.
+- [x] Update generation lifecycle documentation to distinguish materialization-time provisional pointers from quota-complete final view snapshots.
+- [x] Update artifact inventory to mark v2 artifacts as legacy and document the new binary inventory; explicitly state that valid failures remain full episodes.
+- [x] Run `git diff --check` and the documentation-link portion of `python3 -B scripts/validate_fast.py`.
 
 ### Task 0.2: Add explicit archive profile configuration
 
@@ -76,10 +76,10 @@ The implementation must keep these ownership boundaries:
   - `view_status: Literal["provisional", "final"]`
 - `GenerationRuntimeConfig.archive_profile` returns the validated immutable profile.
 
-- [ ] Write rejection tests for unknown fields, nonpositive chunk sizes, unsupported archive IDs, invalid retention, and `retain_full_cloud=False` when the profile claims HF source-of-truth raw retention.
-- [ ] Write acceptance tests for the compact lossless profile and bounded validation profile.
-- [ ] Add the profile to the no-secret runtime example without changing the existing legacy profile defaults.
-- [ ] Run `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation_config.py tests/test_generation_archive.py`.
+- [x] Write rejection tests for unknown fields, nonpositive chunk sizes, unsupported archive IDs, invalid retention, and `retain_full_cloud=False` when the profile claims HF source-of-truth raw retention.
+- [x] Write acceptance tests for the compact lossless profile and bounded validation profile.
+- [x] Add the profile to the no-secret runtime example without changing the existing legacy profile defaults.
+- [x] Run `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation_config.py tests/test_generation_archive.py`.
 
 ## Phase 1 — Lossless canonical episode archive
 
@@ -99,14 +99,14 @@ The implementation must keep these ownership boundaries:
 - `EpisodeArchiveReader.iter_boundaries() -> Iterator[int]`
 - `validate_archive_manifest(manifest_path: str | Path) -> dict[str, Any]`
 
-- [ ] Define the manifest identity fields: archive format, episode schema, dataset identity, episode/attempt IDs, program/split/subset, outcome, source run, code revision, preprocessing identity, and chunk inventory.
-- [ ] Define array specs with name, dtype, shape, semantic role, chunk reference, byte count, and SHA256; reject object/pickle arrays.
-- [ ] Define required arrays for valid episodes: online points/offsets/validity, poses, grips, commands, command grips, `dt`, substeps, robot/object state references, and task-label arrays when present.
-- [ ] Define attempt archive requirements for crash/invalid records, including measured prefix arrays and explicit null episode identity.
-- [ ] Define alias entries for byte-identical online/measured arrays so deduplication is explicit and verifiable.
-- [ ] Add fixtures for success, valid failure, simulator crash, invalid observation, missing optional modality, and distinct online/measured arrays.
-- [ ] Add RED tests for manifest identity mismatch, offsets that do not end at point count, nonmonotonic offsets, missing `T+1/T/T` arrays, object dtype, pickle loading, and alias target mismatch.
-- [ ] Run the archive test file and record the expected failures before implementation.
+- [x] Define the manifest identity fields: archive format, episode schema, dataset identity, episode/attempt IDs, program/split/subset, outcome, source run, code revision, preprocessing identity, and chunk inventory.
+- [x] Define array specs with name, dtype, shape, semantic role, chunk reference, byte count, and SHA256; reject object/pickle arrays.
+- [x] Define required arrays for valid episodes: online points/offsets/validity, poses, grips, commands, command grips, `dt`, substeps, robot/object state references, and task-label arrays when present.
+- [x] Define attempt archive requirements for crash/invalid records, including measured prefix arrays and explicit null episode identity.
+- [x] Define alias entries for byte-identical online/measured arrays so deduplication is explicit and verifiable.
+- [x] Add fixtures for success, valid failure, simulator crash, invalid observation, missing optional modality, and distinct online/measured arrays.
+- [x] Add RED tests for manifest identity mismatch, offsets that do not end at point count, nonmonotonic offsets, missing `T+1/T/T` arrays, object dtype, pickle loading, and alias target mismatch.
+- [x] Run the archive test file and record the expected failures before implementation.
 
 ### Task 1.2: Implement bounded chunk writing and lossless reading
 
@@ -119,14 +119,14 @@ The implementation must keep these ownership boundaries:
 - `EpisodeArchiveWriter.write_attempt(attempt, *, prefix_arrays, debug_metadata, output_dir) -> ArchiveManifest`
 - `EpisodeArchiveReader.to_episode_record() -> dict[str, Any]` for test/compatibility reconstruction only.
 
-- [ ] Serialize one bounded NPZ chunk at a time with `np.savez_compressed` and `allow_pickle=False`; never buffer an entire dataset.
-- [ ] Preserve float32/float64 dtypes exactly for the first migration; do not quantize or convert matrices silently.
-- [ ] Store ragged cloud values plus zero-based offsets and pack boolean validity masks without changing semantic values.
-- [ ] Write each chunk to a temporary sibling, fsync/rename it, calculate SHA256/bytes, then write the manifest last through an atomic rename.
-- [ ] Store only compact scalar/string debug metadata in `debug.json`; route all numeric arrays through chunk inventory.
-- [ ] Reconstruct a v2-compatible in-memory record in tests and run the existing episode validator to prove timeline/provenance parity.
-- [ ] Add corruption tests for altered chunk bytes, altered manifest hash, truncated chunk, path traversal, symlink, missing alias target, and partial manifest.
-- [ ] Run `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation_archive.py` and require all selected tests to execute.
+- [x] Serialize one bounded NPZ chunk at a time with `np.savez_compressed`; reject object arrays before writing and read with `allow_pickle=False`, never buffering an entire dataset.
+- [x] Preserve float32/float64 dtypes exactly for the first migration; do not quantize or convert matrices silently.
+- [x] Store ragged cloud values plus zero-based offsets and pack boolean validity masks without changing semantic values.
+- [x] Write each chunk to a temporary sibling, fsync/rename it, calculate SHA256/bytes, then write the manifest last through an atomic rename.
+- [x] Store only compact scalar/string debug metadata in `debug.json`; route all numeric arrays through chunk inventory.
+- [x] Reconstruct a v2-compatible in-memory record in tests and run the existing episode validator to prove timeline/provenance parity.
+- [x] Add corruption tests for altered chunk bytes, altered manifest hash, truncated chunk, path traversal, symlink, missing alias target, and partial manifest.
+- [x] Run `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation_archive.py` and require all selected tests to execute.
 
 ### Task 1.3: Converge both materialization paths on the canonical writer
 
@@ -138,13 +138,13 @@ The implementation must keep these ownership boundaries:
 **Interfaces:**
 - Both paths call `EpisodeArchiveWriter.write_episode` or `write_attempt`; neither path writes dense point arrays to `episode.json`.
 
-- [ ] Replace the distributed writer’s dense `episode.json`, duplicate layout arrays, duplicate telemetry arrays, and array-bearing `execution.json` with one archive manifest, chunk files, and compact debug metadata.
-- [ ] Preserve all currently captured debug fields, including plan, routine, predicate distances, sensor-randomization receipt, object/robot states, errors and tracebacks.
-- [ ] Keep valid failures on the episode path and crash/invalid results on the attempt path.
-- [ ] Keep unavailable RGB/depth/mask/joint/object modalities omitted unless they are actually captured; never synthesize them.
-- [ ] Ensure per-episode provisional pointers contain only archive references and do not copy observations.
-- [ ] Add tests that assert no dense numeric arrays occur in JSON manifests/debug metadata and that valid failures have the same archive completeness as successes.
-- [ ] Run focused generation tests plus `git diff --check`.
+- [x] Replace the distributed writer’s dense `episode.json`, duplicate layout arrays, duplicate telemetry arrays, and array-bearing `execution.json` with one archive manifest, chunk files, and compact debug metadata.
+- [x] Preserve all currently captured debug fields, including plan, routine, predicate distances, sensor-randomization receipt, object/robot states, errors and tracebacks.
+- [x] Keep valid failures on the episode path and crash/invalid results on the attempt path.
+- [x] Keep unavailable RGB/depth/mask/joint/object modalities omitted unless they are actually captured; never synthesize them.
+- [x] Ensure per-episode provisional pointers contain only archive references and do not copy observations.
+- [x] Add tests that assert no dense numeric arrays occur in JSON manifests/debug metadata and that valid failures have the same archive completeness as successes.
+- [x] Run focused generation tests plus `git diff --check`.
 
 ## Phase 2 — Validation, publication, and HF-first retention
 
@@ -388,24 +388,56 @@ simulator, HF, training, C1–C5, and full generation are **NOT RUN**.
 - Modify: `tests/README.md`
 - Modify: `docs/README.md`
 
-- [ ] Document the new HF archive tree, SOT rule, archive/schema identities, valid-failure retention, provisional/final view lifecycle, and receipt-only local retention.
-- [ ] Document exact clean-machine HF reader/resume commands without embedding credentials.
-- [ ] Document that final view snapshots bind to an HF revision and are not regenerated from remembered local state.
-- [ ] Add validation commands for archive roundtrip, view finalization, remote-resume contract fixtures, and size budgets.
-- [ ] Record the current v2 artifact format as legacy historical evidence and preserve links to old manifests.
-- [ ] Run link validation and `git diff --check`.
+- [x] Document the new HF archive tree, SOT rule, archive/schema identities, valid-failure retention, provisional/final view lifecycle, and receipt-only local retention.
+- [x] Document exact clean-machine HF reader/resume commands without embedding credentials.
+- [x] Document that final view snapshots bind to an HF revision and are not regenerated from remembered local state.
+- [x] Add validation commands for archive roundtrip, view finalization, remote-resume contract fixtures, and size budgets.
+- [x] Record the current v2 artifact format as legacy historical evidence and preserve links to old manifests.
+- [x] Run link validation and `git diff --check`.
 
 ### Task 5.2: Local acceptance gates
 
 **Files:**
 - Test: all focused generation/archive/view tests; no runtime code changes in this task.
 
-- [ ] Run `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation*.py tests/test_generation_archive.py tests/test_generation_view_finalization.py tests/test_generation_archive_migration.py`.
-- [ ] Run `python3 -B scripts/validate_fast.py`.
-- [ ] Confirm no dense observation arrays exist in new JSON manifests/debug files.
-- [ ] Confirm valid failures have complete binary archives and appear in eligible view snapshots.
-- [ ] Confirm local receipt-only retention tests prune only after verified remote identity.
-- [ ] Report L1/L2/L3/L4, simulator, HF publication, full quota, and training as `NOT RUN` unless separately authorized.
+- [x] Run a superset of the listed generation tests, including archive, finalization, migration, and capacity checks, with the shared CPython 3.11 virtual environment because this worktree has no `.venv`.
+- [x] Run `python3 -B scripts/validate_fast.py`.
+- [x] Confirm no dense observation arrays exist in new JSON manifests/debug files.
+- [x] Confirm valid failures have complete binary archives and appear in eligible view snapshots.
+- [x] Confirm local receipt-only retention tests prune only after verified remote identity.
+- [x] Report L1/L2/L3/L4, simulator, HF publication, full quota, and training as `NOT RUN` unless separately authorized.
+
+**Local fixture gate execution (2026-09-26, commit `58b1d7a`):** A scoped Grok
+4.7 High re-review accepted both HF-completeness fixes: semantic redaction of
+v2 execution/sidecar/artifact-manifest metadata now fails before fresh or reuse
+migration, and the production archive-profile worker writes captured wrist-depth
+frames with source-boundary indices to episode and attempt archives. Fresh parent
+CPython 3.11.15 / NumPy 1.26.4 / pytest 8.4.2:
+`PYTHONPATH=src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m
+pytest -q tests/test_generation*.py tests/test_capacity_probe.py` — **PASS,
+507 passed, 0 skipped**. A focused six-case selection covering compact debug
+JSON, success/valid-failure archive parity, final train mixture and verified-only
+receipt pruning — **PASS, 6 passed, 0 skipped**. System CPython 3.14.4
+`python3 -B scripts/validate_fast.py` — **PASS, 22 L0 tests**, with two
+pre-existing invalid-escape warnings. `git show --check 58b1d7a` and
+`git diff --check 6f917a1..58b1d7a` — **PASS**. No selected tests were skipped.
+Live HF publication, clean-machine resume, simulator capture, actual Open3D
+SOR, native archive-backed training, full preprocessing, C1–C5 and full quota
+generation are **NOT RUN** by these local checks. The crash-prefix hardening
+identified during the scoped review is recorded below; Task 5.3 remains
+required before any full-generation authorization.
+
+**Crash-prefix follow-up (2026-09-26, commit `959aca6`):** The production
+archive-profile exception path now carries already captured observations,
+commands and state into a `simulator_crash` attempt, including the case where
+one command was issued but its post-action observation failed. A pre-capture
+exception still has an empty prefix. RED tests reproduced the former zero-prefix
+archive; GREEN tests validate the canonical attempt archive and unchanged v2
+behavior. Fresh parent CPython 3.11.15 generation/capacity — **PASS, 511 passed,
+0 skipped**; system CPython 3.14.4 L0 — **PASS, 22 tests** with the same two
+pre-existing warnings; whitespace checks — **PASS**. Grok 4.7 High approved the
+scoped handoff with no Critical, Important or Minor findings. Live HF, simulator
+and training remain **NOT RUN**.
 
 ### Task 5.3: Bounded remote acceptance
 
@@ -440,8 +472,8 @@ Local plan gates are pure fixture/unit/L0 checks. No simulator, download, prepro
 - [x] Phase 1 — Canonical archive writer/reader and both materialization paths. Archive core, both opt-in materializers, archive-manifest worker handoff/detection, and scoped review corrections are locally tested.
 - [x] Phase 2 — Local implementation of new-profile validation, complete HF publication, receipt-only retention, and HF-only resume; live HF acceptance remains a later gate.
 - [x] Phase 3 — Lazy archive readers and revision-bound provisional/final views (local implementation only; Task 5.3 live gate remains).
-- [ ] Phase 4 — Local migration and capacity instrumentation.
-- [ ] Phase 5 — Current owner documentation and local acceptance.
+- [x] Phase 4 — Local migration and capacity instrumentation; live migration and capacity measurement remain NOT RUN.
+- [ ] Phase 5 — Current owner documentation and Task 5.2 local acceptance are complete; Task 5.3 bounded remote acceptance remains open.
 
 Tasks 2.1, 2.2, and 2.3 are locally implemented. `validate_closed_result(..., archive_profile=...)`
 uses the canonical archive validator before ingestion and emits episode/attempt

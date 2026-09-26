@@ -388,6 +388,10 @@ preserved by value and listed as dtype ambiguities; migration receipts do not
 claim dtype-perfect recovery from JSON alone. Missing historical generator
 identity is marked with stable migration placeholders and warnings, while any
 original identity value present in the source is retained.
+If security redaction would change the source episode/attempt, execution,
+sidecar, or artifact-manifest semantics, the converter refuses both a new
+conversion and reuse of an existing target, writing a redacted failure receipt
+instead of claiming a lossless migration.
 
 Local evidence uses tiny fixtures and an offline fake HF client. No live HF
 migration or publication has been run; a remote migration remains a separately
@@ -468,6 +472,16 @@ Attempt strings are bounded and recursively redacted in source metadata,
 `debug.json`, and string-valued prefix metadata before they are written.
 Credential fields such as passwords, API keys, tokens, and secrets redact their
 values based on the field name even when the value itself has no token pattern.
+The production archive-profile collector also retains stackable captured numeric
+wrist-depth frames with their source-boundary indices, including measured attempt
+prefixes when present. Missing depth is omitted; no depth is reconstructed from
+point clouds. An incompatible captured depth frame is not presently preserved;
+operators must treat that as a remaining lossless-capture risk until the archive
+writer can represent it or the worker fails closed.
+If production execution raises after measurements were captured, the archive
+attempt retains the measured prefix and issued commands through the exception
+handoff. Its last command need not have a following observation; no frame is
+fabricated to make the timeline look like a valid episode.
 
 The writer/reader/integrity core, opt-in RLBench materializer, distributed episode
 worker handoff, archive-manifest result detection, and profile-aware validation
