@@ -419,6 +419,107 @@ def _load_generation_episode_worker_without_simulator(monkeypatch):
     return module
 
 
+def _write_generation_episode_worker_attempt(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    program_id: str,
+    plan_split: str,
+    binding_split: str,
+    outcome: str,
+    archive_profile: ArchiveProfileConfig | None,
+    plan_randomization: dict | None = None,
+):
+    generation_episode_worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    plan = AttemptPlan(
+        program_id=program_id,
+        split=plan_split,
+        episode_index=1,
+        episode_id=f"episode-{program_id.lower()}-materializer-attempt",
+        episode_kind="nominal",
+        scene_seed=1,
+        collection_seed=20260920,
+        randomization={
+            "scene_signature": "sig-1",
+            "asset_instance_id": f"{program_id}-asset-1",
+            **(plan_randomization or {}),
+        },
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id=f"job-{program_id}-materializer-attempt",
+        run_id="materializer-run",
+        attempt_id=f"att-{plan.episode_id}",
+        episode_id=plan.episode_id,
+        program_id=program_id,
+        plan=plan,
+        code_revision="c" * 40,
+        manifest_sha256="d" * 64,
+        output_root=str(tmp_path / "staging"),
+    )
+    binding = {
+        "program_id": program_id,
+        "asset_family_id": "materializer-family",
+        "source_lineage_id": "materializer-lineage",
+        "split": binding_split,
+        "randomization": {
+            "translation_m": {"x": [-0.012, 0.012], "y": [-0.012, 0.012], "z": [0.0, 0.0]},
+            "yaw_deg": [-30.0, 30.0],
+            "scale": [0.8, 1.2],
+            "camera_profile_id": "materializer-camera",
+        },
+    }
+    job_identity = {
+        "job_id": job.job_id,
+        "run_id": job.run_id,
+        "attempt_id": job.attempt_id,
+        "episode_id": job.episode_id,
+        "program_id": job.program_id,
+        "code_revision": job.code_revision,
+        "manifest_sha256": job.manifest_sha256,
+        "retry_generation": job.retry_generation,
+        "plan": job.plan.as_dict(),
+    }
+    monkeypatch.setenv("ICGS_GENERATION_BINDING_JSON", str(tmp_path / "missing-binding.json"))
+    monkeypatch.setenv("ICGS_GENERATION_APPROVED_MANIFEST", str(tmp_path / "missing-approved.json"))
+    monkeypatch.setenv("ICGS_GENERATION_RUN_ID", job.run_id)
+    monkeypatch.setenv("ICGS_GENERATION_CODE_REVISION", job.code_revision)
+    if archive_profile is None:
+        monkeypatch.delenv("ICGS_GENERATION_ARCHIVE_PROFILE", raising=False)
+        monkeypatch.delenv("ICGS_GENERATION_JOB_IDENTITY", raising=False)
+    else:
+        monkeypatch.setenv(
+            "ICGS_GENERATION_ARCHIVE_PROFILE",
+            json.dumps(archive_profile.as_dict()),
+        )
+        monkeypatch.setenv("ICGS_GENERATION_JOB_IDENTITY", json.dumps(job_identity))
+    output = tmp_path / "materialized-attempt"
+    generation_episode_worker._write_episode(output, {
+        "program_id": program_id,
+        "result_class": outcome,
+        "success": False,
+        "error": "simulator fixture failure",
+        "_plan": plan.as_dict(),
+        "_binding": binding,
+        "_timed_obs": [
+            {
+                "points": np.asarray([[0.1, 0.2, 0.3]], dtype=np.float32),
+                "point_valid": np.asarray([True]),
+                "T_w_e": np.eye(4, dtype=np.float64),
+                "grip": 1,
+            },
+            {
+                "points": np.asarray([[0.4, 0.5, 0.6]], dtype=np.float32),
+                "point_valid": np.asarray([True]),
+                "T_w_e": np.eye(4, dtype=np.float64),
+                "grip": 1,
+            },
+        ],
+        "_actions": np.asarray([[0.01]], dtype=np.float32),
+    })
+    return job, output, archive_profile
+
+
 def _run_episode_worker_main_with_stub_task(
     monkeypatch,
     tmp_path: Path,
@@ -608,6 +709,82 @@ def _run_episode_worker_main_with_stub_task(
             signal.signal(signal.SIGTERM, previous_injected_handler)
     assert result == 0
     return write_root / program_id
+
+
+@pytest.mark.parametrize(
+    ("program_id", "plan_split", "binding_split", "outcome", "plan_randomization", "expected_split", "expected_subset"),
+    [
+        ("T01", "train", "train", "simulator_crash", {"train_subset": "train_core"}, "train", "train_core"),
+        ("T01", "train", "train", "invalid_observation", {}, "train", "train_core"),
+        ("V01", "development", "train", "invalid_observation", {}, "dev", None),
+    ],
+)
+def test_archive_profile_episode_worker_attempt_binds_plan_split_and_subset(
+    tmp_path: Path,
+    monkeypatch,
+    program_id: str,
+    plan_split: str,
+    binding_split: str,
+    outcome: str,
+    plan_randomization: dict,
+    expected_split: str,
+    expected_subset: str | None,
+):
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    job, output, _profile = _write_generation_episode_worker_attempt(
+        tmp_path,
+        monkeypatch,
+        program_id=program_id,
+        plan_split=plan_split,
+        binding_split=binding_split,
+        outcome=outcome,
+        archive_profile=profile,
+        plan_randomization=plan_randomization,
+    )
+    result = WorkerResult(
+        job_id=job.job_id,
+        attempt_id=job.attempt_id,
+        episode_id=None,
+        program_id=job.program_id,
+        outcome=outcome,
+        result_dir=str(output),
+        file_sha256=generation_worker._file_hashes(output),
+        timeline=None,
+    )
+
+    validated = validate_closed_result(job, result, archive_profile=profile)
+
+    archive = EpisodeArchiveReader(output / "attempt.manifest.json")
+    attempt = archive.to_episode_record()
+    assert archive.manifest.payload["split"] == expected_split
+    assert archive.manifest.payload["subset"] == expected_subset
+    assert attempt["split"] == expected_split
+    assert attempt["subset"] == expected_subset
+    assert validated.attempt_entry is not None
+    assert validated.attempt_entry["split"] == expected_split
+    assert validated.attempt_entry["subset"] == expected_subset
+
+
+def test_episode_worker_v2_attempt_keeps_legacy_split_without_subset(
+    tmp_path: Path,
+    monkeypatch,
+):
+    job, output, _profile = _write_generation_episode_worker_attempt(
+        tmp_path,
+        monkeypatch,
+        program_id="V01",
+        plan_split="development",
+        binding_split="development",
+        outcome="invalid_observation",
+        archive_profile=None,
+    )
+
+    attempt = json.loads((output / "attempt.json").read_text(encoding="utf-8"))
+
+    assert attempt["attempt_id"] == job.attempt_id
+    assert attempt["split"] == "dev"
+    assert "subset" not in attempt
+    assert not (output / "attempt.manifest.json").exists()
 
 
 @pytest.mark.parametrize(

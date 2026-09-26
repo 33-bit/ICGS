@@ -258,6 +258,14 @@ def _write_episode(write_dir: Path, row: dict) -> None:
             "traceback": row.get("traceback"),
         })
         if archive_profile is not None:
+            from icgs.data.collection.generation.diversity import train_subset_for_sample
+
+            attempt["split"] = "dev" if plan.split == "development" else plan.split
+            attempt["subset"] = (
+                plan.randomization.get("train_subset")
+                or train_subset_for_sample(plan.randomization)
+                if plan.split == "train" else None
+            )
             actions_value = row.get("_actions")
             prefix: dict[str, np.ndarray] = {
                 "actions": np.asarray(() if actions_value is None else actions_value),
