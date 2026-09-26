@@ -332,6 +332,242 @@ def _load_generation_episode_worker_without_simulator(monkeypatch):
     return module
 
 
+def _run_episode_worker_main_with_stub_task(
+    monkeypatch,
+    tmp_path: Path,
+    *,
+    failure: str,
+    archive_profile: ArchiveProfileConfig | None,
+):
+    generation_episode_worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    program_id = "T01"
+    program = SimpleNamespace(
+        program_id=program_id,
+        family="basic-manipulation",
+        module="stub_task",
+        class_name="StubTask",
+        routine=[],
+        objects={},
+        conditions=[],
+        events=[],
+    )
+    generation_episode_worker.compile_generation_catalog = lambda: {program_id: program}
+    generation_episode_worker.load_task_class = lambda _spec: type("StubTaskClass", (), {})
+    generation_episode_worker.find_shape = lambda _name: None
+
+    class StubObservationConfig:
+        def __init__(self):
+            self.wrist_camera = SimpleNamespace(point_cloud=False, depth=False)
+            self.gripper_pose = False
+            self.gripper_open = False
+            self.joint_positions = False
+
+        def set_all_high_dim(self, _value):
+            pass
+
+        def set_all_low_dim(self, _value):
+            pass
+
+    class StubTip:
+        def get_position(self):
+            return np.asarray([0.0, 0.0, 0.8], dtype=np.float64)
+
+        def get_quaternion(self):
+            if failure == "before_initial_capture":
+                raise RuntimeError("tip state unavailable")
+            return np.asarray([0.0, 0.0, 0.0, 1.0], dtype=np.float64)
+
+    class StubArm:
+        def get_tip(self):
+            return tip
+
+    def observation(index: int, *, invalid_pose: bool = False):
+        pose = (
+            np.asarray([index, 0.0], dtype=np.float64)
+            if invalid_pose
+            else np.asarray([index * 0.01, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0], dtype=np.float64)
+        )
+        return SimpleNamespace(
+            wrist_point_cloud=np.asarray(
+                [[index * 0.1, 0.0, 0.8], [index * 0.1, 0.1, 0.8]], dtype=np.float32
+            ),
+            gripper_pose=pose,
+            gripper_open=1.0,
+            joint_positions=np.full((7,), index, dtype=np.float64),
+            joint_velocities=np.full((7,), index / 10.0, dtype=np.float64),
+            wrist_depth=np.asarray([[index + 0.125, index + 0.25]], dtype=np.float32),
+        )
+
+    class StubTask:
+        def __init__(self):
+            self.step_count = 0
+
+        def reset(self):
+            return ["stub task"], observation(0)
+
+        def step(self, _action):
+            self.step_count += 1
+            if failure == "step_raises_after_prefix" and self.step_count == 2:
+                raise RuntimeError("simulator failed after one captured action")
+            if failure == "snapshot_raises_after_action":
+                return observation(self.step_count, invalid_pose=True)
+            return observation(self.step_count)
+
+        def success(self):
+            return False, False
+
+    tip = StubTip()
+    task = StubTask()
+    environment = SimpleNamespace(
+        _scene=SimpleNamespace(robot=SimpleNamespace(arm=StubArm()), task=task),
+        get_task=lambda _task_class: task,
+        launch=lambda: None,
+        shutdown=lambda: None,
+    )
+    generation_episode_worker.ObservationConfig = StubObservationConfig
+    generation_episode_worker.MoveArmThenGripper = lambda **_kwargs: object()
+    generation_episode_worker.EndEffectorPoseViaIK = lambda **_kwargs: object()
+    generation_episode_worker.Discrete = lambda: object()
+    generation_episode_worker.Environment = lambda *_args, **_kwargs: environment
+
+    plan = AttemptPlan(
+        program_id=program_id,
+        split="train",
+        episode_index=1,
+        episode_id=f"episode-t01-{failure}",
+        episode_kind="nominal",
+        scene_seed=7,
+        collection_seed=20260920,
+        randomization={
+            "scene_signature": "stub-signature",
+            "asset_instance_id": "stub-asset",
+            "object_translation_m": {"x": 0.0, "y": 0.0, "z": 0.0},
+            "camera_profile_id": "stub-camera",
+        },
+        intervention=None,
+    )
+    from icgs.data.collection.generation import batch
+
+    monkeypatch.setattr(
+        batch,
+        "plan_program_attempts",
+        lambda *_args, **_kwargs: [plan],
+    )
+    binding_path = tmp_path / "binding.json"
+    binding_path.write_text(json.dumps({
+        "program_id": program_id,
+        "asset_family_id": "stub-family",
+        "source_lineage_id": "stub-lineage",
+        "split": "train",
+        "randomization": {
+            "translation_m": {
+                "x": [-0.012, 0.012],
+                "y": [-0.012, 0.012],
+                "z": [0.0, 0.0],
+            },
+            "yaw_deg": [-30.0, 30.0],
+            "scale": [0.8, 1.2],
+            "camera_profile_id": "stub-camera",
+        },
+    }), encoding="utf-8")
+    write_root = tmp_path / "episodes"
+    monkeypatch.setattr(sys, "argv", ["generation_episode_worker.py", program_id])
+    monkeypatch.setenv("ICGS_GENERATION_WRITE_EPISODE", str(write_root))
+    monkeypatch.delenv("ICGS_GENERATION_ATTEMPT_JSON", raising=False)
+    monkeypatch.setenv("ICGS_GENERATION_BINDING_JSON", str(binding_path))
+    monkeypatch.setenv("ICGS_GENERATION_RUN_ID", "stub-run")
+    monkeypatch.setenv("ICGS_GENERATION_CODE_REVISION", "c" * 40)
+    monkeypatch.setenv("ICGS_GENERATION_APPROVED_MANIFEST", str(tmp_path / "missing-approved.json"))
+    monkeypatch.delenv("ICGS_GENERATION_JOB_IDENTITY", raising=False)
+    if archive_profile is None:
+        monkeypatch.delenv("ICGS_GENERATION_ARCHIVE_PROFILE", raising=False)
+    else:
+        monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(archive_profile.as_dict()))
+
+    assert generation_episode_worker.main() == 0
+    return write_root / program_id
+
+
+@pytest.mark.parametrize(
+    ("failure", "observations", "actions", "valid_until", "depth_boundaries"),
+    [
+        ("step_raises_after_prefix", 2, 1, 1, [0, 1]),
+        ("snapshot_raises_after_action", 1, 1, 0, [0]),
+        ("before_initial_capture", 0, 0, None, []),
+    ],
+)
+def test_archive_episode_worker_main_writes_only_the_captured_crash_prefix(
+    tmp_path: Path,
+    monkeypatch,
+    failure: str,
+    observations: int,
+    actions: int,
+    valid_until: int | None,
+    depth_boundaries: list[int],
+):
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    result_dir = _run_episode_worker_main_with_stub_task(
+        monkeypatch, tmp_path, failure=failure, archive_profile=profile
+    )
+
+    manifest_path = result_dir / "attempt.manifest.json"
+    assert manifest_path.is_file()
+    assert validate_archive_manifest(manifest_path)["valid"] is True
+    archive = EpisodeArchiveReader(manifest_path)
+    assert archive.manifest.payload["outcome"] == "simulator_crash"
+    assert archive.manifest.payload["timeline"] == {
+        "observations": observations,
+        "transitions": actions,
+        "valid_observation_until": valid_until,
+    }
+    attempt = archive.to_episode_record()
+    assert attempt["outcome"] == "simulator_crash"
+    assert attempt["episode_id"] is None
+    assert attempt["terminal_t"] == (actions or None)
+    assert attempt["valid_observation_until"] == valid_until
+    arrays = archive.raw_arrays
+    assert arrays["actions"].shape[0] == actions
+    if actions:
+        np.testing.assert_array_equal(
+            arrays["actions"],
+            np.asarray([[0.0, 0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 1.0]], dtype=np.float64),
+        )
+    if observations:
+        assert arrays["T_w_e"].shape[0] == observations
+        assert arrays["point_offsets"].shape == (observations + 1,)
+        np.testing.assert_array_equal(arrays["wrist_depth_frame_boundaries"], depth_boundaries)
+        np.testing.assert_array_equal(
+            arrays["wrist_depth_frames"][:, 0, :],
+            np.asarray([[index + 0.125, index + 0.25] for index in depth_boundaries], dtype=np.float32),
+        )
+    else:
+        assert "points" not in arrays
+        assert "wrist_depth_frames" not in arrays
+
+    debug_text = (result_dir / "debug.json").read_text(encoding="utf-8")
+    debug = json.loads(debug_text)
+    assert "points" not in debug_text
+    assert "wrist_depth" not in debug_text
+    assert "_timed_obs" not in debug
+    assert "_actions" not in debug
+
+
+def test_legacy_episode_worker_exception_keeps_v2_empty_prefix_output(
+    tmp_path: Path,
+    monkeypatch,
+):
+    result_dir = _run_episode_worker_main_with_stub_task(
+        monkeypatch, tmp_path, failure="step_raises_after_prefix", archive_profile=None
+    )
+
+    assert (result_dir / "attempt.json").is_file()
+    with np.load(result_dir / "valid_prefix.npz", allow_pickle=False) as prefix:
+        assert prefix["actions"].shape == (0,)
+        assert prefix["points"].shape == (0, 3)
+        np.testing.assert_array_equal(prefix["point_offsets"], np.asarray([0], dtype=np.int64))
+        assert prefix["T_w_e"].shape == (0,)
+
+
 @pytest.mark.parametrize("outcome", ["success", "valid_failure"])
 def test_archive_profile_episode_materializer_preserves_captured_wrist_depth(
     tmp_path: Path,

@@ -487,7 +487,7 @@ def apply_prepared_layout(objects: dict) -> None:
                 pass
 
 
-def run_program(env, spec, plan=None) -> dict:
+def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
     from icgs.data.collection.generation.attempt_prep import prepare_attempt
     from icgs.data.collection.generation.simulator_randomization import apply_sensor_randomization
 
@@ -543,6 +543,14 @@ def run_program(env, spec, plan=None) -> dict:
     actions_series: list[np.ndarray] = []
     robot_states: list[dict] = []
     object_states: list[dict] = []
+    if capture is not None:
+        capture.update({
+            "_timed_obs": timed_obs,
+            "_actions": actions_series,
+            "_robot_states": robot_states,
+            "_object_states": object_states,
+            "_sensor_randomization": sensor_randomization,
+        })
 
     def _matrix_from_pose(pose) -> np.ndarray:
         value = np.asarray(pose, dtype=np.float64)
@@ -992,8 +1000,13 @@ def main() -> int:
                 from icgs.data.collection.generation.batch import attempt_from_dict
                 payload = json.loads(Path(plan_path).read_text())
                 plan = attempt_from_dict(payload)
+            captured_prefix = (
+                {}
+                if os.environ.get("ICGS_GENERATION_ARCHIVE_PROFILE", "").strip()
+                else None
+            )
             try:
-                row = run_program(env, spec, plan=plan)
+                row = run_program(env, spec, plan=plan, capture=captured_prefix)
             except Exception as exc:
                 row = {
                     "program_id": program_id,
@@ -1006,6 +1019,8 @@ def main() -> int:
                     "routine": [step["type"] for step in spec.routine],
                     "_plan": None if plan is None else plan.as_dict(),
                 }
+                if captured_prefix is not None:
+                    row.update(captured_prefix)
             results.append(row)
             public = {k: v for k, v in row.items() if not k.startswith("_")}
             print(json.dumps(public), flush=True)
