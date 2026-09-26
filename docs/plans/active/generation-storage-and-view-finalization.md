@@ -212,6 +212,25 @@ generation run was selected.
 The three rehashed profile-mismatch fixtures were RED before the production
 guard (3 failures: resume returned without raising), then GREEN after it (3/3).
 
+### Task 2.4: Bound interrupted-publication recovery downloads
+
+**Files:**
+- Modify: `scripts/generation_coordinator.py`
+- Test: `tests/test_generation_publication.py`, `tests/test_generation_control.py`
+
+**Interfaces:**
+- Archive-profile HF control-file downloads during interrupted publication
+  reconciliation and initial manifest discovery use owned, temporary cache
+  directories and preserve commit-OID discovery from the returned snapshot path.
+
+- [ ] Add RED fake-HF tests proving archive recovery and initial manifest
+      discovery supply an owned cache, reject returned files outside it, and
+      remove cache bytes after success or error.
+- [ ] Keep legacy non-archive download/retry behavior unchanged.
+- [ ] Preserve the existing fail-closed data/receipt reconciliation and exact
+      local/remote hash checks; no remote write or pruning before verification.
+- [ ] Run focused control/publication tests and L0 without contacting HF.
+
 ## Phase 3 — Lazy HF archive reader and training views
 
 ### Task 3.1: Implement lazy archive access
@@ -266,14 +285,26 @@ not installed.
 - `finalize_generation_views(dataset_manifest, *, source_revision, role_specs, mixture_seed) -> ViewFinalizationReceipt`
 - `ViewFinalizationReceipt` contains source manifest SHA256, source HF revision, view IDs, counts, mixture identity, and status.
 
-- [ ] Generate per-episode provisional pointers with `role="all"` and `mix=False`; mark them `PROVISIONAL`.
-- [ ] Build final role-specific snapshots from the complete HF dataset manifest: train=`train_core`, validation=`train_val`, evaluation=`development`+`test`.
-- [ ] Apply the 70/30 nominal/perturbed selection only to final `D_temporal` and `D_dyn` snapshots using the recorded collection seed/mixture seed.
-- [ ] Exclude crash/invalid attempts; retain valid failures when their split/subset is eligible.
-- [ ] Write view manifests with source revision/SHA256, archive identity, preprocessing identity, role, mixture, sample counts, and finalization timestamp.
-- [ ] Make finalization idempotent: same source manifest/seed produces the same bytes; conflicting source revision fails closed.
-- [ ] Test partial/provisional versus final status, changing dataset snapshot, 70/30 counts, split leakage, valid-failure retention, and deterministic re-run.
-- [ ] Run the view-finalization test subset; do not contact HF.
+- [x] Generate per-episode provisional pointers with `role="all"` and `mix=False`; mark them `PROVISIONAL`.
+- [x] Build final role-specific snapshots from the complete HF dataset manifest: train=`train_core`, validation=`train_val`, evaluation=`development`+`test`.
+- [x] Apply the 70/30 nominal/perturbed selection only to final `D_temporal` and `D_dyn` snapshots using the recorded collection seed/mixture seed.
+- [x] Exclude crash/invalid attempts; retain valid failures when their split/subset is eligible.
+- [x] Write view manifests with source revision/SHA256, archive identity, preprocessing identity, role, mixture, sample counts, and finalization timestamp.
+- [x] Make finalization idempotent: same source manifest/seed produces the same bytes; conflicting source revision fails closed.
+- [x] Test partial/provisional versus final status, changing dataset snapshot, 70/30 counts, split leakage, valid-failure retention, and deterministic re-run.
+- [x] Run the view-finalization test subset; do not contact HF.
+
+**Local acceptance (2026-09-26):** Commits `701e809` and `5b35f6e` implement
+provisional pointers plus twelve role/view snapshots at a pinned source revision.
+An independent scoped review accepted the 7:3 transition-count correction,
+source-prefix binding, pinned pointer verification, owned finalizer caches, and
+post-commit byte verification. Fresh parent CPython 3.11.15 results: archive/view/
+publication subset **118 PASS**, generation/capacity **450 PASS**, L0 **22 PASS**
+(two pre-existing invalid-escape warnings), `git show --check` **PASS**.
+Live HF publication/finalization, simulator, training, Open3D SOR, C1–C5 and
+full generation are **NOT RUN** here; Task 5.3 remains the live gate. A `FINAL`
+mixed train view now requires at least one complete 7 nominal : 3 perturbed
+transition unit in each mixed view, otherwise finalization fails before writing.
 
 ## Phase 4 — Migration tooling and bounded capacity evidence
 
@@ -288,13 +319,26 @@ not installed.
 - `migrate_episode(source_reader, target_writer, *, source_identity, target_profile) -> MigrationReceipt`
 - `MigrationReceipt` records source artifact hashes, target archive hashes, field/timeline counts, and conversion warnings.
 
-- [ ] Read one v2 episode/attempt at a time from an explicitly supplied source revision/prefix; never scan arbitrary HF paths.
-- [ ] Convert dense JSON arrays to lossless chunks and preserve provenance/debug fields.
-- [ ] Reject incomplete/malformed source artifacts rather than silently repairing them; write a migration failure receipt.
-- [ ] Verify reconstructed v2 semantics against the source before publishing the new target artifact.
-- [ ] Publish converted artifacts only to an explicitly supplied new prefix; never delete or overwrite v2 data.
-- [ ] Add tests for success, valid failure, crash attempt, invalid observation, malformed source, hash mismatch, and idempotent re-run.
-- [ ] Run migration tests against tiny local fixtures only; a remote migration job remains separately authorized.
+- [x] Read one v2 episode/attempt at a time from an explicitly supplied source revision/prefix; never scan arbitrary HF paths.
+- [x] Convert dense JSON arrays to lossless chunks and preserve provenance/debug fields.
+- [x] Reject incomplete/malformed source artifacts rather than silently repairing them; write a migration failure receipt.
+- [x] Verify reconstructed v2 semantics against the source before publishing the new target artifact.
+- [x] Publish converted artifacts only to an explicitly supplied new prefix; never delete or overwrite v2 data.
+- [x] Add tests for success, valid failure, crash attempt, invalid observation, malformed source, hash mismatch, and idempotent re-run.
+- [x] Run migration tests against tiny local fixtures only; a remote migration job remains separately authorized.
+
+**Local acceptance (2026-09-26):** Commits `0184be5`, `e950efc`, and
+`0037a93` added the explicit one-record converter, typed-sidecar reconciliation,
+source/target receipts, decoded-sidecar budget, redaction-safe failure behavior,
+and offline fake-HF publication checks. Two scoped review rounds closed a source
+semantic-parity defect, nested source-inventory omission, decoded-size/secret
+handling gaps, and a lossy-existing-target reuse hole. Fresh parent CPython
+3.11.15 results: migration **21 PASS**, generation/capacity **471 PASS**, L0
+**22 PASS** (two pre-existing invalid-escape warnings), `git show --check`
+**PASS**. Live HF migration is **NOT RUN** and requires separate authorization;
+JSON-only v2 dtype ambiguity is reported, not silently repaired. The converter
+is 1,936 lines after the fixes and remains a maintenance risk to revisit before
+any broad historical conversion job.
 
 ### Task 4.2: Add size instrumentation to the bounded capacity probe
 
@@ -376,7 +420,7 @@ Local plan gates are pure fixture/unit/L0 checks. No simulator, download, prepro
 - [x] Recorded implementation rulings: `numpy.savez_compressed` has no `allow_pickle` argument, so archive writes reject object arrays and readers use `numpy.load(..., allow_pickle=False)`; dated audits remain historical evidence and current storage behavior belongs in current owner docs.
 - [x] Phase 1 — Canonical archive writer/reader and both materialization paths. Archive core, both opt-in materializers, archive-manifest worker handoff/detection, and scoped review corrections are locally tested.
 - [x] Phase 2 — Local implementation of new-profile validation, complete HF publication, receipt-only retention, and HF-only resume; live HF acceptance remains a later gate.
-- [ ] Phase 3 — Lazy archive readers and revision-bound provisional/final views.
+- [x] Phase 3 — Lazy archive readers and revision-bound provisional/final views (local implementation only; Task 5.3 live gate remains).
 - [ ] Phase 4 — Local migration and capacity instrumentation.
 - [ ] Phase 5 — Current owner documentation and local acceptance.
 
