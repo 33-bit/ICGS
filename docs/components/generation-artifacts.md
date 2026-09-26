@@ -481,17 +481,19 @@ reconstructed on another machine. With the archive profile absent, the legacy
 `episode.json`, layout, telemetry and `attempt.json` paths remain unchanged.
 
 Per-episode `views/*.json` pointers are `PROVISIONAL` (`role: all`, `mix: false`)
-and contain archive references only. The finalizer consumes a complete
-`dataset_manifest.json` materialized from one pinned HF revision and writes
-twelve immutable `FINAL` snapshots under
+and contain archive references only. Cumulative prefix discovery views are also
+`PROVISIONAL` and `pointers_only: true`, but omit the per-episode `role` and
+`mix` fields. The finalizer consumes a complete `dataset_manifest.json`
+materialized from one pinned HF revision and writes twelve immutable `FINAL` snapshots under
 `<output-prefix>/<source-revision>/seed-<mixture-seed>/` (three roles × four
 views). Each snapshot records the source revision and manifest SHA256, archive
 and preprocessing identities, role, mixture seed, sample counts and the source
 manifest timestamp. The train `D_temporal` and `D_dyn` snapshots select complete
 7 nominal : 3 perturbed transition units; crashes and invalid attempts never
-enter a view, while eligible valid failures do. A different source revision or
-manifest hash is a conflict, not a request to rebuild from remembered local
-state.
+enter a view, while eligible valid failures do. A conflict is a byte or recorded
+source-revision/manifest mismatch at the same target directory; a different
+source revision receives its own `<source-revision>` directory and is not a
+conflict by itself.
 
 The lazy archive reader is a separate dataset API. Native `icgs train` still
 consumes PyG sample directories, does not automatically ingest archive-backed

@@ -91,10 +91,12 @@ for the legacy/new tree comparison.
 
 ### Provisional and final views
 
-Materialization and each publication batch may write four metadata-only pointers
-(`D_geom`, `D_temporal`, `D_dyn`, `D_task`) with `status: "PROVISIONAL"`,
-`role: "all"`, and `mix: false`. They are discovery indexes and do not represent
-the training mixture. The finalizer reads a complete `dataset_manifest.json`
+Materialization may write four per-episode metadata-only pointers (`D_geom`,
+`D_temporal`, `D_dyn`, `D_task`) with `status: "PROVISIONAL"`, `role: "all"`,
+and `mix: false`. They are discovery indexes and do not represent the training
+mixture. Each cumulative prefix discovery view written during publication is
+also `status: "PROVISIONAL"` and `pointers_only: true`, but intentionally omits
+the per-episode `role` and `mix` fields. The finalizer reads a complete `dataset_manifest.json`
 from one pinned HF revision, verifies every selected episode manifest, then writes
 twelve immutable role/view snapshots (`train`, `validation`, `evaluation` × the
 four views) with `status: "FINAL"`. A final snapshot records the source revision,
@@ -179,6 +181,7 @@ printed or placed in the command line.
 export HF_DATASET_REPO=ORG/DATASET
 export HF_SOURCE_REVISION=0123456789abcdef0123456789abcdef01234567
 export HF_ARCHIVE_PREFIX=icgs-primary-v3-archive-v1/episodes/T01/EPISODE_ID
+export HF_ARCHIVE_KIND=episode
 python3 -B - <<'PY'
 import json
 import os
@@ -195,10 +198,10 @@ repo = os.environ["HF_DATASET_REPO"]
 revision = os.environ["HF_SOURCE_REVISION"]
 prefix = os.environ["HF_ARCHIVE_PREFIX"].rstrip("/")
 
-with tempfile.TemporaryDirectory(prefix="icgs-archive-read-") as temporary:
+with tempfile.TemporaryDirectory(prefix="icgs-archive-read-") as temporary, \
+        tempfile.TemporaryDirectory(prefix="icgs-archive-hf-cache-") as cache_temporary:
     root = Path(temporary)
-    cache = root / "hf-cache"
-    cache.mkdir()
+    cache = Path(cache_temporary)
 
     def fetch(relative: str) -> Path:
         path = PurePosixPath(relative)
@@ -216,8 +219,19 @@ with tempfile.TemporaryDirectory(prefix="icgs-archive-read-") as temporary:
         destination.write_bytes(Path(downloaded).read_bytes())
         return destination
 
-    manifest_path = fetch("episode.manifest.json")
+    # Fetch the selected record's manifest first; crashes/invalid attempts use
+    # attempt.manifest.json instead of episode.manifest.json.
+    archive_kind = os.environ.get("HF_ARCHIVE_KIND", "episode")
+    manifest_name = {
+        "episode": "episode.manifest.json",
+        "attempt": "attempt.manifest.json",
+    }.get(archive_kind)
+    if manifest_name is None:
+        raise ValueError("HF_ARCHIVE_KIND must be episode or attempt")
+    manifest_path = fetch(manifest_name)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    if manifest.get("archive_kind") != archive_kind:
+        raise ValueError("archive manifest kind does not match HF_ARCHIVE_KIND")
     artifact_path = fetch("artifact_manifest.json")
     inventory = json.loads(artifact_path.read_text(encoding="utf-8"))["files"]
     for relative in inventory:
@@ -262,10 +276,11 @@ python3 -B scripts/generation_finalize_views.py \
 ```
 
 The finalizer never downloads numeric chunks and never rebuilds from remembered
-local state. The output path is bound to
-`<output-prefix>/<source-revision>/seed-<mixture-seed>/`; an existing snapshot
-with different bytes or a source manifest whose revision/hash changed fails
-closed.
+local state. Each source revision gets its own output directory at
+`<output-prefix>/<source-revision>/seed-<mixture-seed>/`. A conflict occurs only
+when that same target already exists with different bytes or recorded
+source-revision/manifest identity; a later source revision is a distinct target
+directory and may be finalized independently.
 
 ### Multiple hosts on one shared filesystem
 

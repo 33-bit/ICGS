@@ -111,17 +111,26 @@ artifacts or rewrite published rows.
 
 ## Final evidence
 
-Local fixture evidence on Python 3.11.15 (the storage/view implementation record,
-not a new remote run):
+Fresh local evidence on Python 3.11.15:
 
-- `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation*.py tests/test_capacity_probe.py` — **PASS, 497 passed**.
-- `python3 -B scripts/validate_fast.py` — **PASS**, 22 harness tests; L1–L4,
-  Open3D SOR and native archive-backed training integration explicitly **NOT RUN**.
-- `git diff --check` — **PASS** in the recorded implementation evidence.
+- `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation*.py` —
+  **PASS, 217 passed**.
+- `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests` — **PASS, 896 passed,
+  10 skipped, 3 warnings**.
+- `python3 -B scripts/validate_fast.py` — **PASS**, 22 harness tests; L1–L4
+  explicitly **NOT RUN**.
+- `git diff --check` — **PASS**; bytecode compilation — **PASS**.
 
 Repository-wide discovery `pytest -q` remains **FAIL** because three generated
 `output/icgs-figures*/src/test_typography.py` modules share one import name;
 this is pre-existing output-tree collection pollution, not a runtime test
-failure. The dated VPS record reports a bounded remote acceptance, but live HF
-publication/finalization on this branch, a simultaneous multi-host production
-run, simulator collection, full quota and training remain **NOT RUN**.
+failure. Live simulator, multi-host, HF resume and HF write checks remain
+**NOT RUN** until explicitly provisioned.
+
+Separate storage/view implementation evidence (recorded in
+`docs/plans/active/generation-storage-and-view-finalization.md`, 2026-09-26)
+reports `PYTHONPATH=src .venv/bin/python -B -m pytest -q
+tests/test_generation*.py tests/test_capacity_probe.py` — **PASS, 497 passed**.
+That count belongs to the storage/view plan and is not a replacement for this
+plan's dated resumable-generation evidence. Open3D SOR, native archive-backed
+training integration and live HF publication remain **NOT RUN**.
