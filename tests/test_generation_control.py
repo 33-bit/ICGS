@@ -758,7 +758,12 @@ def test_coordinator_resume_requires_and_consumes_remote_manifest(tmp_path: Path
     assert control.planner.counts("T01").nominal_successes == 1
 
 
-def _complete_archive_remote(tmp_path: Path, monkeypatch):
+def _complete_archive_remote(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    remote_revision: str = "d1cc82c27bc57602bf3fac40f55c6dbb59766d45",
+):
     from test_generation_publication import _archive_queue, _job
 
     fixture_job = _job()
@@ -802,16 +807,17 @@ def _complete_archive_remote(tmp_path: Path, monkeypatch):
     run_payload = json.loads(run_json.read_text(encoding="utf-8"))
     run_payload["hf_token_path"] = str(token)
     run_json.write_text(json.dumps(run_payload), encoding="utf-8")
-    revision = "c" * 40
-    remote_root = tmp_path / "snapshots" / revision
-    prefix_root = remote_root / config.run.hf_subfolder
-    prefix_root.mkdir(parents=True)
-    dataset_path = prefix_root / "dataset_manifest.json"
-    dataset_path.write_text(json.dumps(manifest), encoding="utf-8")
-    archive_root = prefix_root / row["archive_ref"]
-    shutil.copytree(result.result_dir, archive_root)
-    dataset_sha = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
-    (prefix_root / "resume_receipt.json").write_text(json.dumps({
+    data_revision = "740e07d6648cdf099c78bca78a9b7195d7da5d6a"
+    receipt_revision = "99bb4ee1fc49b3614b6ada358f1d02dcbe568990"
+    verified_revision = "d1cc82c27bc57602bf3fac40f55c6dbb59766d45"
+    run_prefix = config.run.hf_subfolder
+    manifest_bytes = json.dumps(manifest).encode("utf-8")
+    dataset_sha = hashlib.sha256(manifest_bytes).hexdigest()
+    artifact_hashes = {
+        f"{row['job_id']}/{relative}": digest
+        for relative, digest in row["file_sha256"].items()
+    }
+    resume_payload = {
         "run_id": job.run_id, "source_run_id": job.run_id,
         "source_run_ids": [job.run_id], "episodes": 1, "failure_attempts": 0,
         "dataset_identity": profile.dataset_identity,
@@ -819,38 +825,90 @@ def _complete_archive_remote(tmp_path: Path, monkeypatch):
         "episode_schema_version": profile.episode_schema_version,
         "archive_profile": profile.as_dict(),
         "dataset_manifest_sha256": dataset_sha,
-        "dataset_manifest_revision": "d" * 40,
-    }), encoding="utf-8")
-    (prefix_root / "publication_receipt.json").write_text(json.dumps({
+        "dataset_manifest_revision": None,
+    }
+    publication_payload = {
         "receipt_version": 2, "run_id": job.run_id, "source_run_id": job.run_id,
-        "job_ids": [job.job_id], "status": "VERIFIED",
-        "data_commit_oid": "d" * 40, "commit_oid": "e" * 40,
-        "artifact_hashes": {f"{job.job_id}/{relative}": digest for relative, digest in row["file_sha256"].items()},
+        "job_ids": [job.job_id], "status": "PREPARED",
+        "data_commit_oid": None, "commit_oid": None,
+        "artifact_hashes": artifact_hashes,
         "dataset_identity": profile.dataset_identity,
         "archive_format_id": profile.archive_format_id,
         "episode_schema_version": profile.episode_schema_version,
         "archive_profile": profile.as_dict(),
         "dataset_manifest_sha256": dataset_sha,
-        "prefix": config.run.hf_subfolder,
-    }), encoding="utf-8")
+        "prefix": run_prefix,
+    }
+    data_snapshot = {
+        f"{run_prefix}/dataset_manifest.json": manifest_bytes,
+        f"{run_prefix}/resume_receipt.json": json.dumps(resume_payload).encode("utf-8"),
+        f"{run_prefix}/publication_receipt.json": json.dumps(publication_payload).encode("utf-8"),
+    }
+    archive_root = Path(result.result_dir)
+    for path in archive_root.rglob("*"):
+        if path.is_file():
+            relative = path.relative_to(archive_root).as_posix()
+            data_snapshot[f"{run_prefix}/{row['archive_ref']}/{relative}"] = path.read_bytes()
+    receipt_snapshot = dict(data_snapshot)
+    receipt_resume = dict(resume_payload)
+    receipt_resume["dataset_manifest_revision"] = data_revision
+    receipt_publication = dict(publication_payload)
+    receipt_publication.update({
+        "status": "DATA_COMMITTED",
+        "data_commit_oid": data_revision,
+        "commit_oid": None,
+    })
+    receipt_snapshot[f"{run_prefix}/resume_receipt.json"] = json.dumps(
+        receipt_resume
+    ).encode("utf-8")
+    receipt_snapshot[f"{run_prefix}/publication_receipt.json"] = json.dumps(
+        receipt_publication
+    ).encode("utf-8")
+    verified_snapshot = dict(receipt_snapshot)
+    verified_publication = dict(receipt_publication)
+    verified_publication.update({
+        "status": "VERIFIED",
+        "commit_oid": receipt_revision,
+    })
+    verified_snapshot[f"{run_prefix}/publication_receipt.json"] = json.dumps(
+        verified_publication
+    ).encode("utf-8")
+    remote_snapshots = {
+        data_revision: data_snapshot,
+        receipt_revision: receipt_snapshot,
+        verified_revision: verified_snapshot,
+    }
+    if remote_revision not in remote_snapshots:
+        remote_snapshots[remote_revision] = dict(verified_snapshot)
+        remote_snapshots[remote_revision]["unrelated/other-prefix/marker.json"] = b"unrelated"
+    snapshot_roots = {}
+    for snapshot_oid, files in remote_snapshots.items():
+        root = tmp_path / "snapshots" / snapshot_oid
+        snapshot_roots[snapshot_oid] = root
+        for filename, content in files.items():
+            target = root / filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
+    prefix_root = snapshot_roots[remote_revision] / run_prefix
+
     bootstrap = Path(config.run.run_root) / "control" / "resume_bootstrap.json"
     bootstrap.write_text(json.dumps({
-        "run_id": config.run.run_id, "remote_revision": revision,
+        "run_id": config.run.run_id, "remote_revision": remote_revision,
         "remote_manifest_sha256": dataset_sha,
     }), encoding="utf-8")
     downloads = []
     def download(**kwargs):
         downloads.append(kwargs)
         pinned = kwargs.get("revision")
-        if "revision" in kwargs:
-            assert pinned == revision
-        path = remote_root / kwargs["filename"]
+        selected_revision = pinned or remote_revision
+        if pinned is not None:
+            assert pinned in remote_snapshots
+        path = snapshot_roots[selected_revision] / kwargs["filename"]
         if not path.is_file():
             raise FileNotFoundError(path)
-        if pinned is None:
+        if not kwargs.get("cache_dir"):
             return str(path)
-        assert kwargs.get("cache_dir")
-        cached = Path(kwargs["cache_dir"]) / "snapshots" / revision / kwargs["filename"]
+        cached = Path(kwargs["cache_dir"]) / "snapshots" / selected_revision / kwargs["filename"]
         cached.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(path, cached)
         return str(cached)
@@ -862,9 +920,9 @@ def _same_run_archive_restart_fixture(
     tmp_path: Path,
     monkeypatch,
     *,
-    remote_revision: str = "c" * 40,
+    remote_revision: str = "d1cc82c27bc57602bf3fac40f55c6dbb59766d45",
 ):
-    from test_generation_publication import FakeApi, _archive_queue, _job
+    from test_generation_publication import _archive_queue, _job
     from icgs.data.collection.generation.distributed_publication import (
         HuggingFaceBatchPublisher,
         PublicationConfig,
@@ -920,7 +978,26 @@ def _same_run_archive_restart_fixture(
         queue.root / "ingested" / first_job.job_id,
     )
 
-    api = FakeApi()
+    data_revision = "740e07d6648cdf099c78bca78a9b7195d7da5d6a"
+    receipt_revision = "99bb4ee1fc49b3614b6ada358f1d02dcbe568990"
+    verified_revision = "d1cc82c27bc57602bf3fac40f55c6dbb59766d45"
+
+    class SnapshotApi:
+        def __init__(self):
+            self.tree = {}
+            self.snapshots = {}
+            self.commit_oids = [data_revision, receipt_revision, verified_revision]
+
+        def create_commit(self, **kwargs):
+            updated = dict(self.tree)
+            for operation in kwargs["operations"]:
+                updated[operation.path_in_repo] = Path(operation.path_or_fileobj).read_bytes()
+            oid = self.commit_oids[len(self.snapshots)]
+            self.tree = updated
+            self.snapshots[oid] = dict(updated)
+            return SimpleNamespace(oid=oid)
+
+    api = SnapshotApi()
     verified_batches = []
     publisher = HuggingFaceBatchPublisher(
         RunConfig.from_dict(run_payload["run"]),
@@ -936,7 +1013,7 @@ def _same_run_archive_restart_fixture(
     )
     completed = publisher.publish_due(now_s=300.0, force=True)
     assert completed is not None and completed.status == "COMPLETE"
-    assert verified_batches == [((first_job.job_id,), "c" * 40)]
+    assert verified_batches == [((first_job.job_id,), receipt_revision)]
     assert queue.counts().published == 1
 
     second_plan = replace(
@@ -976,16 +1053,28 @@ def _same_run_archive_restart_fixture(
         (queue.root / "publication_manifest.json").read_text(encoding="utf-8")
     )
     assert len(remote_manifest["episodes"]) == 1
-    remote_root = tmp_path / "hf-snapshot" / "snapshots" / remote_revision
-    remote_manifest_path = remote_root / config.run.hf_subfolder / "dataset_manifest.json"
-    remote_manifest_path.parent.mkdir(parents=True)
-    shutil.copyfile(queue.root / "publication_manifest.json", remote_manifest_path)
+    remote_snapshots = {revision: dict(files) for revision, files in api.snapshots.items()}
+    if remote_revision not in remote_snapshots:
+        remote_snapshots[remote_revision] = dict(remote_snapshots[verified_revision])
+        remote_snapshots[remote_revision]["unrelated/other-prefix/marker.json"] = b"unrelated"
+    snapshot_roots = {}
+    for revision, files in remote_snapshots.items():
+        root = tmp_path / "hf-snapshot" / "snapshots" / revision
+        snapshot_roots[revision] = root
+        for filename, content in files.items():
+            target = root / filename
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(content)
 
     def download(**kwargs):
-        assert kwargs.get("revision") is None
-        cached = Path(kwargs["cache_dir"]) / "snapshots" / remote_revision / kwargs["filename"]
+        pinned = kwargs.get("revision")
+        selected_revision = pinned or remote_revision
+        source = snapshot_roots[selected_revision] / kwargs["filename"]
+        if not source.is_file():
+            raise FileNotFoundError(source)
+        cached = Path(kwargs["cache_dir"]) / "snapshots" / selected_revision / kwargs["filename"]
         cached.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(remote_root / kwargs["filename"], cached)
+        shutil.copyfile(source, cached)
         return str(cached)
 
     monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
@@ -1040,9 +1129,13 @@ def test_coordinator_same_run_restart_accepts_published_receipt_and_ingested_row
     assert control.publisher.remote_manifest["episodes"][0]["job_id"] in {
         path.name for path in (queue.root / "published").iterdir()
     }
+    bootstrap = json.loads(
+        (Path(control.run.run_root) / "control" / "resume_bootstrap.json").read_text()
+    )
+    assert bootstrap["remote_revision"] == "d1cc82c27bc57602bf3fac40f55c6dbb59766d45"
 
 
-def test_coordinator_same_run_restart_rejects_manifest_at_unverified_newer_hf_oid(
+def test_coordinator_same_run_restart_accepts_unrelated_repo_head_with_verified_prefix(
     tmp_path: Path, monkeypatch,
 ):
     run_json, token, _queue, _remote_manifest = _same_run_archive_restart_fixture(
@@ -1050,6 +1143,64 @@ def test_coordinator_same_run_restart_rejects_manifest_at_unverified_newer_hf_oi
         monkeypatch,
         remote_revision="f" * 40,
     )
+
+    control = CoordinatorControlPlane.open(
+        run_json,
+        api_factory=lambda: object(),
+        token_path=token,
+    )
+
+    assert len(control.manifest["episodes"]) == 2
+    assert control.publisher.remote_manifest["source_run_ids"] == ["run-1"]
+    bootstrap = json.loads(
+        (Path(control.run.run_root) / "control" / "resume_bootstrap.json").read_text()
+    )
+    assert bootstrap["remote_revision"] == "f" * 40
+
+
+def test_coordinator_same_run_restart_accepts_data_committed_receipt_after_full_hash_check(
+    tmp_path: Path, monkeypatch,
+):
+    receipt_revision = "99bb4ee1fc49b3614b6ada358f1d02dcbe568990"
+    run_json, token, _queue, _remote_manifest = _same_run_archive_restart_fixture(
+        tmp_path,
+        monkeypatch,
+        remote_revision=receipt_revision,
+    )
+
+    control = CoordinatorControlPlane.open(
+        run_json,
+        api_factory=lambda: object(),
+        token_path=token,
+    )
+
+    assert len(control.manifest["episodes"]) == 2
+    bootstrap = json.loads(
+        (Path(control.run.run_root) / "control" / "resume_bootstrap.json").read_text()
+    )
+    assert bootstrap["remote_revision"] == receipt_revision
+
+
+def test_coordinator_same_run_restart_rejects_newer_head_with_changed_archive_bytes(
+    tmp_path: Path, monkeypatch,
+):
+    head_revision = "f" * 40
+    run_json, token, _queue, _remote_manifest = _same_run_archive_restart_fixture(
+        tmp_path,
+        monkeypatch,
+        remote_revision=head_revision,
+    )
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    runtime = json.loads(Path(run_payload["runtime_config_path"]).read_text(encoding="utf-8"))
+    prefix_root = (
+        tmp_path
+        / "hf-snapshot"
+        / "snapshots"
+        / head_revision
+        / runtime["run"]["hf_subfolder"]
+    )
+    chunk = next((prefix_root / "episodes").rglob("chunk-00000.npz"))
+    chunk.write_bytes(chunk.read_bytes() + b"tampered")
 
     api_calls = []
     with pytest.raises(RuntimeError, match="archive startup requires a valid remote dataset manifest") as failure:
@@ -1059,7 +1210,7 @@ def test_coordinator_same_run_restart_rejects_manifest_at_unverified_newer_hf_oi
             token_path=token,
         )
 
-    assert "verified publication receipt OID" in str(failure.value.__cause__)
+    assert "remote archive hash mismatch" in str(failure.value.__cause__)
     assert api_calls == []
 
 
@@ -1254,6 +1405,25 @@ def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(tmp_p
     assert len(control.manifest["episodes"]) == 1
     assert len(control.manifest["failure_attempts"]) == 0
     assert control.planner.counts("T01").nominal_successes == 1
+    current_receipt = json.loads((prefix_root / "publication_receipt.json").read_text())
+    assert current_receipt["status"] == "VERIFIED"
+    assert current_receipt["commit_oid"] == "99bb4ee1fc49b3614b6ada358f1d02dcbe568990"
+    assert current_receipt["data_commit_oid"] == "740e07d6648cdf099c78bca78a9b7195d7da5d6a"
+    assert any(
+        item.get("revision") == "d1cc82c27bc57602bf3fac40f55c6dbb59766d45"
+        and item["filename"].endswith("/publication_receipt.json")
+        for item in downloads
+    )
+    assert any(
+        item.get("revision") == "99bb4ee1fc49b3614b6ada358f1d02dcbe568990"
+        and item["filename"].endswith("/publication_receipt.json")
+        for item in downloads
+    )
+    assert any(
+        item.get("revision") == "740e07d6648cdf099c78bca78a9b7195d7da5d6a"
+        and item["filename"].endswith("/dataset_manifest.json")
+        for item in downloads
+    )
     assert {item["filename"] for item in downloads} == {
         f"{prefix_root.relative_to(prefix_root.parents[1])}/{relative}"
         for relative in ("dataset_manifest.json", "resume_receipt.json", "publication_receipt.json")
@@ -1263,17 +1433,45 @@ def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(tmp_p
     }
 
 
+def test_coordinator_archive_resume_requires_verified_receipt_to_bind_data_committed_snapshot(
+    tmp_path: Path, monkeypatch,
+):
+    run_json, token, _manifest, latest_prefix, _downloads = _complete_archive_remote(
+        tmp_path, monkeypatch,
+    )
+    latest_snapshot = latest_prefix.parents[1]
+    relative_prefix = latest_prefix.relative_to(latest_snapshot)
+    prior_prefix = (
+        latest_snapshot.parent
+        / "99bb4ee1fc49b3614b6ada358f1d02dcbe568990"
+        / relative_prefix
+    )
+    prior_receipt_path = prior_prefix / "publication_receipt.json"
+    prior_receipt = json.loads(prior_receipt_path.read_text(encoding="utf-8"))
+    prior_receipt["status"] = "PREPARED"
+    prior_receipt_path.write_text(json.dumps(prior_receipt), encoding="utf-8")
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            run_json,
+            api_factory=lambda: api_calls.append(True),
+            token_path=token,
+        )
+
+    assert "DATA_COMMITTED receipt" in str(failure.value.__cause__)
+    assert api_calls == []
+
+
 def test_coordinator_archive_resume_accepts_data_committed_receipt_at_pinned_receipt_revision(
     tmp_path: Path, monkeypatch,
 ):
-    run_json, token, manifest, prefix_root, _downloads = _complete_archive_remote(
-        tmp_path, monkeypatch
+    receipt_revision = "99bb4ee1fc49b3614b6ada358f1d02dcbe568990"
+    run_json, token, manifest, prefix_root, downloads = _complete_archive_remote(
+        tmp_path,
+        monkeypatch,
+        remote_revision=receipt_revision,
     )
-    receipt_path = prefix_root / "publication_receipt.json"
-    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    receipt["status"] = "DATA_COMMITTED"
-    receipt["commit_oid"] = None
-    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
 
     control = CoordinatorControlPlane.open(
         run_json, api_factory=lambda: object(), token_path=token,
@@ -1281,6 +1479,15 @@ def test_coordinator_archive_resume_accepts_data_committed_receipt_at_pinned_rec
 
     assert control.publisher.remote_manifest["episodes"] == manifest["episodes"]
     assert control.planner.counts("T01").nominal_successes == 1
+    remote_receipt = json.loads((prefix_root / "publication_receipt.json").read_text())
+    assert remote_receipt["status"] == "DATA_COMMITTED"
+    assert remote_receipt["data_commit_oid"] == "740e07d6648cdf099c78bca78a9b7195d7da5d6a"
+    assert remote_receipt["commit_oid"] is None
+    assert any(
+        item.get("revision") == "740e07d6648cdf099c78bca78a9b7195d7da5d6a"
+        and item["filename"].endswith("/dataset_manifest.json")
+        for item in downloads
+    )
 
 
 def test_coordinator_archive_resume_rejects_data_committed_receipt_from_other_snapshot_oid(
@@ -1289,11 +1496,6 @@ def test_coordinator_archive_resume_rejects_data_committed_receipt_from_other_sn
     run_json, token, _manifest, prefix_root, _downloads = _complete_archive_remote(
         tmp_path, monkeypatch
     )
-    receipt_path = prefix_root / "publication_receipt.json"
-    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    receipt["status"] = "DATA_COMMITTED"
-    receipt["commit_oid"] = None
-    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
     ordinary_download = generation_coordinator_module.hf_hub_download
     wrong_receipt_revision = "0" * 40
 
@@ -1324,14 +1526,12 @@ def test_coordinator_archive_resume_rejects_data_committed_receipt_from_other_sn
 def test_coordinator_data_committed_resume_requires_every_archive_file_at_pinned_revision(
     tmp_path: Path, monkeypatch,
 ):
+    receipt_revision = "99bb4ee1fc49b3614b6ada358f1d02dcbe568990"
     run_json, token, manifest, prefix_root, _downloads = _complete_archive_remote(
-        tmp_path, monkeypatch
+        tmp_path,
+        monkeypatch,
+        remote_revision=receipt_revision,
     )
-    receipt_path = prefix_root / "publication_receipt.json"
-    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    receipt["status"] = "DATA_COMMITTED"
-    receipt["commit_oid"] = None
-    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
     missing_chunk = (
         prefix_root
         / manifest["episodes"][0]["archive_ref"]
@@ -1376,9 +1576,12 @@ def test_archive_preflight_pins_local_fake_manifest(tmp_path: Path, monkeypatch)
         approved_manifest=run_payload["approved_manifest"],
         downloader=generation_coordinator_module.hf_hub_download,
     )
-    assert bootstrap["remote_revision"] == "c" * 40
+    assert bootstrap["remote_revision"] == "d1cc82c27bc57602bf3fac40f55c6dbb59766d45"
     assert downloads[0].get("revision") is None
-    assert all(call.get("revision") == "c" * 40 for call in downloads[1:])
+    assert all(
+        call.get("revision") == "d1cc82c27bc57602bf3fac40f55c6dbb59766d45"
+        for call in downloads[1:]
+    )
     assert len(downloads) == 2
 
 

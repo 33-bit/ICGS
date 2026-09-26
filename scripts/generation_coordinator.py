@@ -474,6 +474,80 @@ def _verify_archive_resume_files(
             if isinstance(job, Mapping) and job.get("job_id") != row["job_id"]:
                 raise ValueError("remote archive job_id disagrees with debug provenance")
 
+    data_revision = _require_pinned_revision(publication.data_commit_oid)
+    with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-data-manifest-") as owned:
+        _download_pinned_file(
+            downloader,
+            run,
+            token,
+            data_revision,
+            f"{prefix}/dataset_manifest.json",
+            Path(owned),
+            manifest_sha256,
+        )
+
+    if publication.status == "VERIFIED":
+        receipt_revision = _require_pinned_revision(publication.commit_oid)
+        with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-verified-receipt-") as owned:
+            scratch = Path(owned)
+            prior_publication_path = _download_pinned_file(
+                downloader,
+                run,
+                token,
+                receipt_revision,
+                f"{prefix}/publication_receipt.json",
+                scratch,
+            )
+            prior_publication = PublicationReceipt.from_dict(
+                json.loads(prior_publication_path.read_bytes())
+            )
+            prior_resume_path = _download_pinned_file(
+                downloader,
+                run,
+                token,
+                receipt_revision,
+                f"{prefix}/resume_receipt.json",
+                scratch,
+            )
+            prior_resume = json.loads(prior_resume_path.read_bytes())
+            if (
+                prior_publication.status != "DATA_COMMITTED"
+                or prior_publication.commit_oid is not None
+                or prior_publication.run_id != publication.run_id
+                or prior_publication.source_run_id != publication.source_run_id
+                or prior_publication.job_ids != publication.job_ids
+                or prior_publication.data_commit_oid != publication.data_commit_oid
+                or prior_publication.artifact_hashes != publication.artifact_hashes
+                or prior_publication.dataset_identity != publication.dataset_identity
+                or prior_publication.archive_format_id != publication.archive_format_id
+                or prior_publication.episode_schema_version != publication.episode_schema_version
+                or prior_publication.archive_profile != publication.archive_profile
+                or prior_publication.dataset_manifest_sha256 != publication.dataset_manifest_sha256
+                or prior_publication.prefix != publication.prefix
+                or not isinstance(prior_resume, Mapping)
+                or prior_resume.get("run_id") != resume.get("run_id")
+                or prior_resume.get("source_run_id") != resume.get("source_run_id")
+                or prior_resume.get("source_run_ids") != resume.get("source_run_ids")
+                or prior_resume.get("episodes") != resume.get("episodes")
+                or prior_resume.get("failure_attempts") != resume.get("failure_attempts")
+                or prior_resume.get("dataset_manifest_sha256") != manifest_sha256
+                or prior_resume.get("dataset_manifest_revision") != data_revision
+                or prior_resume.get("dataset_identity") != profile.dataset_identity
+                or prior_resume.get("archive_format_id") != profile.archive_format_id
+                or prior_resume.get("episode_schema_version") != profile.episode_schema_version
+                or prior_resume.get("archive_profile") != profile.as_dict()
+            ):
+                raise ValueError("verified publication receipt does not match its pinned DATA_COMMITTED receipt")
+            _download_pinned_file(
+                downloader,
+                run,
+                token,
+                receipt_revision,
+                f"{prefix}/dataset_manifest.json",
+                scratch,
+                manifest_sha256,
+            )
+
 
 def _verify_same_run_remote_snapshot_binding(
     queue: FilesystemJobQueue,
@@ -482,8 +556,11 @@ def _verify_same_run_remote_snapshot_binding(
     manifest: Mapping[str, Any],
     manifest_bytes: bytes,
     snapshot_revision: str | None,
+    *,
+    token: str,
+    downloader,
 ) -> None:
-    """Bind same-run reuse to the exact locally verified publication snapshot."""
+    """Bind same-run reuse to local rows and the remote verified commit chain."""
     revision = _require_pinned_revision(snapshot_revision)
     manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
     receipt_path = queue.root / "publication_receipt.json"
@@ -522,8 +599,7 @@ def _verify_same_run_remote_snapshot_binding(
         or receipt.prefix != run.hf_subfolder
     ):
         raise ValueError("local same-run publication receipt identity mismatch")
-    if _require_pinned_revision(receipt.commit_oid) != revision:
-        raise ValueError("remote same-run snapshot OID differs from the verified publication receipt OID")
+    local_receipt_oid = _require_pinned_revision(receipt.commit_oid)
 
     resume = json.loads(resume_path.read_text(encoding="utf-8"))
     if not isinstance(resume, Mapping):
@@ -557,6 +633,68 @@ def _verify_same_run_remote_snapshot_binding(
     }
     if receipt.artifact_hashes != expected_hashes:
         raise ValueError("local same-run publication receipt artifact hashes mismatch")
+
+    with tempfile.TemporaryDirectory(prefix="icgs-hf-same-run-control-") as owned:
+        scratch = Path(owned)
+        remote_publication_path = _download_pinned_file(
+            downloader,
+            run,
+            token,
+            revision,
+            f"{run.hf_subfolder}/publication_receipt.json",
+            scratch,
+        )
+        remote_publication = PublicationReceipt.from_dict(
+            json.loads(remote_publication_path.read_bytes())
+        )
+        remote_resume_path = _download_pinned_file(
+            downloader,
+            run,
+            token,
+            revision,
+            f"{run.hf_subfolder}/resume_receipt.json",
+            scratch,
+        )
+        remote_resume = json.loads(remote_resume_path.read_bytes())
+    if not isinstance(remote_resume, Mapping):
+        raise ValueError("remote same-run resume receipt must be an object")
+    for field, expected in expected_identity.items():
+        if getattr(remote_publication, field) != expected or remote_resume.get(field) != expected:
+            raise ValueError(f"remote same-run receipt {field} mismatch")
+    if (
+        remote_publication.run_id != run.run_id
+        or remote_publication.source_run_id != run.run_id
+        or remote_publication.prefix != run.hf_subfolder
+        or remote_publication.job_ids != receipt.job_ids
+        or remote_publication.data_commit_oid != receipt.data_commit_oid
+        or remote_publication.artifact_hashes != receipt.artifact_hashes
+        or remote_resume.get("run_id") != run.run_id
+        or remote_resume.get("source_run_id") != run.run_id
+        or remote_resume.get("source_run_ids") != manifest.get("source_run_ids")
+        or remote_resume.get("episodes") != len(manifest.get("episodes") or ())
+        or remote_resume.get("failure_attempts") != len(manifest.get("failure_attempts") or ())
+        or _require_pinned_revision(remote_resume.get("dataset_manifest_revision"))
+        != receipt.data_commit_oid
+    ):
+        raise ValueError("remote same-run resume/publication receipt identity mismatch")
+    if remote_publication.status == "VERIFIED":
+        if _require_pinned_revision(remote_publication.commit_oid) != local_receipt_oid:
+            raise ValueError("remote VERIFIED receipt does not bind the local verified receipt OID")
+    elif remote_publication.status == "DATA_COMMITTED":
+        if remote_publication.commit_oid is not None or revision != local_receipt_oid:
+            raise ValueError("remote DATA_COMMITTED receipt is not at the local receipt commit OID")
+    else:
+        raise ValueError("remote same-run publication receipt is not verified or data-committed")
+
+    _verify_archive_resume_files(
+        manifest,
+        run,
+        profile,
+        token=token,
+        revision=revision,
+        downloader=downloader,
+        manifest_sha256=manifest_sha256,
+    )
 
 
 def _recover_interrupted_archive_publication(
@@ -1527,6 +1665,8 @@ class CoordinatorControlPlane:
                         remote_manifest,
                         remote_bytes,
                         remote_snapshot_revision,
+                        token=token,
+                        downloader=hf_hub_download,
                     )
                 if runtime.archive_profile is not None and run.resume_from_hf:
                     _verify_archive_resume_files(
@@ -1566,7 +1706,7 @@ class CoordinatorControlPlane:
                 {
                     "run_id": run.run_id,
                     "remote_manifest_sha256": remote_manifest_sha256,
-                    "remote_revision": remote_revision,
+                    "remote_revision": remote_snapshot_revision or remote_revision,
                     "source_run_ids": list(remote_manifest.get("source_run_ids") or ()),
                     "fetched_at_s": time.time(),
                 },
