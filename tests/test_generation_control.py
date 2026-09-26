@@ -1570,6 +1570,212 @@ def test_coordinator_resume_accepts_data_committed_pending_head(
     assert len(resumed.publisher.remote_manifest["episodes"]) == 5
 
 
+def test_coordinator_resume_recovers_local_data_commit_with_remote_prepared_receipt(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    _stage_resume_extension_batch(fixture, 5)
+    api = fixture["api"]
+    publisher = fixture["control"].publisher
+    original_write_receipt = publisher._write_publication_receipt
+
+    def interrupt_after_local_data_receipt(receipt):
+        original_write_receipt(receipt)
+        if receipt.status == "DATA_COMMITTED" and receipt.data_commit_oid is not None:
+            local = json.loads(
+                (fixture["control"].queue.root / "publication_receipt.json").read_text()
+            )
+            remote = json.loads(
+                api.tree[
+                    f"{fixture['config'].run.hf_subfolder}/publication_receipt.json"
+                ]
+            )
+            assert local["status"] == "DATA_COMMITTED"
+            assert local["data_commit_oid"] == api.head
+            assert remote["status"] == "PREPARED"
+            assert remote["data_commit_oid"] is None
+            raise RuntimeError("simulated stop after local data receipt persistence")
+
+    publisher._write_publication_receipt = interrupt_after_local_data_receipt
+    with pytest.raises(RuntimeError, match="after local data receipt persistence"):
+        publisher.publish_due(
+            now_s=305.0,
+            force=True,
+            local_manifest=fixture["control"].manifest,
+        )
+
+    local = json.loads(
+        (fixture["control"].queue.root / "publication_receipt.json").read_text()
+    )
+    assert local["status"] == "DATA_COMMITTED"
+    assert local["commit_oid"] is None
+    local_resume = json.loads(
+        (fixture["control"].queue.root / "resume_receipt.json").read_text()
+    )
+    assert local_resume["dataset_manifest_revision"] is None
+    data_oid = local["data_commit_oid"]
+    api.create_commit(operations=[], commit_message="unrelated repository change")
+    assert api.head != data_oid
+    commit_count = api.commit_count
+    resumed = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: api,
+        token_path=fixture["token"],
+    )
+
+    assert local["status"] == "DATA_COMMITTED"
+    assert local["commit_oid"] is None
+    assert local["data_commit_oid"] == data_oid
+    assert api.commit_count == commit_count
+    assert len(resumed.publisher.remote_manifest["episodes"]) == 5
+
+
+def test_coordinator_resume_recovers_data_committed_before_metadata_receipt_commit(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    _stage_resume_extension_batch(fixture, 5)
+    api = fixture["api"]
+    original_create_commit = api.create_commit
+
+    def interrupt_receipt_metadata_commit(**kwargs):
+        if kwargs["commit_message"].startswith("Record committed generation archive"):
+            local = json.loads(
+                (fixture["control"].queue.root / "publication_receipt.json").read_text()
+            )
+            local_resume = json.loads(
+                (fixture["control"].queue.root / "resume_receipt.json").read_text()
+            )
+            remote = json.loads(
+                api.tree[
+                    f"{fixture['config'].run.hf_subfolder}/publication_receipt.json"
+                ]
+            )
+            assert local["status"] == "DATA_COMMITTED"
+            assert local["data_commit_oid"] == api.head
+            assert local_resume["dataset_manifest_revision"] == api.head
+            assert remote["status"] == "PREPARED"
+            raise RuntimeError("simulated stop before receipt metadata commit")
+        return original_create_commit(**kwargs)
+
+    api.create_commit = interrupt_receipt_metadata_commit
+    with pytest.raises(RuntimeError, match="before receipt metadata commit"):
+        fixture["control"].publisher.publish_due(
+            now_s=305.0,
+            force=True,
+            local_manifest=fixture["control"].manifest,
+        )
+    commit_count = api.commit_count
+
+    resumed = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: api,
+        token_path=fixture["token"],
+    )
+
+    assert api.commit_count == commit_count
+    assert len(resumed.publisher.remote_manifest["episodes"]) == 5
+
+
+def test_coordinator_resume_recovers_deferred_receipt_after_data_commit(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from icgs.data.collection.generation.distributed_publication import PublicationConfig
+
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    _stage_resume_extension_batch(fixture, 5)
+    api = fixture["api"]
+    publisher = fixture["control"].publisher
+    publisher.publication_config = PublicationConfig(
+        retry_attempts=3,
+        retry_base_s=0.0,
+        retry_cooldown_s=0.0,
+        rate_limit_cooldown_s=0.0,
+    )
+    original_create_commit = api.create_commit
+    receipt_attempts = []
+
+    def defer_receipt_metadata_commit(**kwargs):
+        if kwargs["commit_message"].startswith("Record committed generation archive"):
+            receipt_attempts.append(True)
+            raise TimeoutError("simulated receipt metadata timeout")
+        return original_create_commit(**kwargs)
+
+    api.create_commit = defer_receipt_metadata_commit
+    completed = publisher.publish_due(
+        now_s=305.0,
+        force=True,
+        local_manifest=fixture["control"].manifest,
+    )
+    local = json.loads(
+        (fixture["control"].queue.root / "publication_receipt.json").read_text()
+    )
+    remote = json.loads(
+        api.tree[f"{fixture['config'].run.hf_subfolder}/publication_receipt.json"]
+    )
+    assert completed is None
+    assert len(receipt_attempts) == 3
+    assert local["status"] == "DEFERRED"
+    assert local["data_commit_oid"] == api.head
+    assert local["commit_oid"] is None
+    assert remote["status"] == "PREPARED"
+
+    commit_count = api.commit_count
+    resumed = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: api,
+        token_path=fixture["token"],
+    )
+
+    assert api.commit_count == commit_count
+    assert len(resumed.publisher.remote_manifest["episodes"]) == 5
+
+
+def test_coordinator_resume_rejects_wrong_local_data_receipt_oid(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    _stage_resume_extension_batch(fixture, 5)
+
+    def fail_remote_verification(*_args):
+        raise RuntimeError("simulated remote verification interruption")
+
+    fixture["control"].publisher.remote_verify = fail_remote_verification
+    with pytest.raises(RuntimeError, match="verification interruption"):
+        fixture["control"].publisher.publish_due(
+            now_s=305.0,
+            force=True,
+            local_manifest=fixture["control"].manifest,
+        )
+    local_receipt_path = fixture["control"].queue.root / "publication_receipt.json"
+    local_receipt = json.loads(local_receipt_path.read_text())
+    assert local_receipt["status"] == "DATA_COMMITTED"
+    assert local_receipt["commit_oid"] is not None
+    local_receipt["commit_oid"] = local_receipt["data_commit_oid"]
+    local_receipt_path.write_text(json.dumps(local_receipt), encoding="utf-8")
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            fixture["run_json"],
+            api_factory=lambda: api_calls.append(True),
+            token_path=fixture["token"],
+        )
+
+    assert "local DATA_COMMITTED receipt OID does not bind its exact remote receipt snapshot" in str(
+        failure.value.__cause__
+    )
+    assert api_calls == []
+
+
 def test_coordinator_resume_rejects_latest_head_with_another_batch_receipt(
     tmp_path: Path,
     monkeypatch,

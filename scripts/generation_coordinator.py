@@ -484,11 +484,13 @@ def _verify_archive_resume_files(
         resume_path = _download_pinned_file(
             downloader, run, token, revision, f"{prefix}/resume_receipt.json", scratch,
         )
-        resume = json.loads(resume_path.read_bytes())
+        resume_bytes = resume_path.read_bytes()
+        resume = json.loads(resume_bytes)
         publication_path = _download_pinned_file(
             downloader, run, token, revision, f"{prefix}/publication_receipt.json", scratch,
         )
-        publication = PublicationReceipt.from_dict(json.loads(publication_path.read_bytes()))
+        publication_bytes = publication_path.read_bytes()
+        publication = PublicationReceipt.from_dict(json.loads(publication_bytes))
         expected_identity = {
             "dataset_identity": profile.dataset_identity,
             "archive_format_id": profile.archive_format_id,
@@ -533,7 +535,7 @@ def _verify_archive_resume_files(
         if _snapshot_revision(publication_path) != revision:
             raise ValueError("remote publication receipt snapshot revision mismatch")
         if receipt_validator is not None:
-            receipt_validator(publication, resume, publication_path.read_bytes())
+            receipt_validator(publication, resume, publication_bytes, resume_bytes)
         if publication.status == "DATA_COMMITTED":
             if publication.commit_oid is not None:
                 raise ValueError("remote DATA_COMMITTED publication receipt must not claim a receipt commit OID")
@@ -899,9 +901,17 @@ def _verify_pending_same_run_archive_binding(
         or local_resume.get("source_run_ids") != local_manifest.get("source_run_ids")
         or local_resume.get("episodes") != len(local_manifest.get("episodes") or ())
         or local_resume.get("failure_attempts") != len(local_manifest.get("failure_attempts") or ())
-        or local_resume.get("dataset_manifest_revision") != local_receipt.data_commit_oid
     ):
         raise ValueError("local same-run pending publication receipt identity mismatch")
+    local_resume_revision = local_resume.get("dataset_manifest_revision")
+    if local_receipt.data_commit_oid is None:
+        if local_resume_revision is not None:
+            raise ValueError("local pending resume receipt claims an unbound data revision")
+    elif local_resume_revision is not None and (
+        _require_pinned_revision(local_resume_revision)
+        != _require_pinned_revision(local_receipt.data_commit_oid)
+    ):
+        raise ValueError("local pending resume receipt data revision disagrees with publication receipt")
     if (
         not local_receipt.job_ids
         or len(set(local_receipt.job_ids)) != len(local_receipt.job_ids)
@@ -1013,6 +1023,7 @@ def _verify_pending_same_run_archive_binding(
         remote_publication: PublicationReceipt,
         remote_resume: Mapping[str, Any],
         remote_publication_bytes: bytes,
+        remote_resume_bytes: bytes,
     ) -> None:
         for field, expected in {
             "dataset_identity": profile.dataset_identity,
@@ -1044,15 +1055,68 @@ def _verify_pending_same_run_archive_binding(
             ):
                 raise ValueError("remote pending publication receipt does not bind the local pending batch")
             if remote_publication.status == "PREPARED":
-                if (
-                    local_receipt.status not in {"PREPARED", "DEFERRED"}
-                    or local_receipt.data_commit_oid is not None
-                    or local_receipt.commit_oid is not None
-                    or remote_publication.data_commit_oid is not None
-                    or remote_publication.commit_oid is not None
-                    or local_resume.get("dataset_manifest_revision") is not None
-                    or remote_resume.get("dataset_manifest_revision") is not None
+                remote_is_prepared = (
+                    remote_publication.data_commit_oid is None
+                    and remote_publication.commit_oid is None
+                    and remote_resume.get("dataset_manifest_revision") is None
+                )
+                if local_receipt.status == "PREPARED" or (
+                    local_receipt.status == "DEFERRED"
+                    and local_receipt.data_commit_oid is None
                 ):
+                    local_is_prepared = (
+                        local_receipt.data_commit_oid is None
+                        and local_receipt.commit_oid is None
+                        and local_resume.get("dataset_manifest_revision") is None
+                    )
+                    if not remote_is_prepared or not local_is_prepared:
+                        raise ValueError("remote PREPARED snapshot does not bind the local pending state")
+                elif local_receipt.status in {"DATA_COMMITTED", "DEFERRED"}:
+                    data_oid = _require_pinned_revision(local_receipt.data_commit_oid)
+                    if (
+                        not remote_is_prepared
+                        or local_receipt.commit_oid is not None
+                        or local_resume.get("dataset_manifest_revision") not in {None, data_oid}
+                    ):
+                        raise ValueError("remote PREPARED snapshot does not bind the local DATA_COMMITTED state")
+                    with tempfile.TemporaryDirectory(
+                        prefix="icgs-hf-pending-data-commit-"
+                    ) as owned:
+                        scratch = Path(owned)
+                        committed_manifest = _download_pinned_file(
+                            downloader,
+                            run,
+                            token,
+                            data_oid,
+                            f"{prefix}/dataset_manifest.json",
+                            scratch,
+                            local_manifest_sha256,
+                        )
+                        committed_publication = _download_pinned_file(
+                            downloader,
+                            run,
+                            token,
+                            data_oid,
+                            f"{prefix}/publication_receipt.json",
+                            scratch,
+                        )
+                        committed_resume = _download_pinned_file(
+                            downloader,
+                            run,
+                            token,
+                            data_oid,
+                            f"{prefix}/resume_receipt.json",
+                            scratch,
+                        )
+                        if (
+                            committed_manifest.read_bytes() != local_manifest_bytes
+                            or committed_publication.read_bytes() != remote_publication_bytes
+                            or committed_resume.read_bytes() != remote_resume_bytes
+                        ):
+                            raise ValueError(
+                                "local DATA_COMMITTED OID does not bind the exact remote PREPARED data snapshot"
+                            )
+                else:
                     raise ValueError("remote PREPARED snapshot does not bind the local pending state")
             elif remote_publication.status == "DATA_COMMITTED":
                 remote_data_oid = _require_pinned_revision(remote_publication.data_commit_oid)
@@ -1072,7 +1136,45 @@ def _verify_pending_same_run_archive_binding(
                 ):
                     raise ValueError("pending DATA_COMMITTED snapshot lacks its exact local receipt bytes")
                 if local_receipt.commit_oid is not None:
-                    _require_pinned_revision(local_receipt.commit_oid)
+                    receipt_oid = _require_pinned_revision(local_receipt.commit_oid)
+                    with tempfile.TemporaryDirectory(
+                        prefix="icgs-hf-pending-receipt-oid-"
+                    ) as owned:
+                        scratch = Path(owned)
+                        pinned_manifest = _download_pinned_file(
+                            downloader,
+                            run,
+                            token,
+                            receipt_oid,
+                            f"{prefix}/dataset_manifest.json",
+                            scratch,
+                            latest_manifest_sha256,
+                        )
+                        pinned_publication = _download_pinned_file(
+                            downloader,
+                            run,
+                            token,
+                            receipt_oid,
+                            f"{prefix}/publication_receipt.json",
+                            scratch,
+                        )
+                        pinned_resume = _download_pinned_file(
+                            downloader,
+                            run,
+                            token,
+                            receipt_oid,
+                            f"{prefix}/resume_receipt.json",
+                            scratch,
+                        )
+                        pinned_controls_match = (
+                            pinned_manifest.read_bytes() == local_manifest_bytes
+                            and pinned_publication.read_bytes() == remote_publication_bytes
+                            and pinned_resume.read_bytes() == remote_resume_bytes
+                        )
+                        if not pinned_controls_match:
+                            raise ValueError(
+                                "local DATA_COMMITTED receipt OID does not bind its exact remote receipt snapshot"
+                            )
             else:
                 raise ValueError("remote pending publication receipt has an unsupported state")
         else:
