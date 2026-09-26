@@ -437,7 +437,9 @@ propagates the already-validated archive provenance kind into D_task refs and
 tests final snapshot counts, membership, label pointers, and role separation.
 The published output remains unchanged; any corrected remote finalization must
 use a distinct output prefix after review. HF access and remote re-finalization
-are **NOT RUN** for this correction.
+were **NOT RUN** at this local-fix checkpoint. The subsequent bounded live
+readback and corrected-prefix publication are recorded in the
+[2026-09-27 archive acceptance record](../../experiments/generation-validation/archive-aa869b3-20260927/README.md).
 
 **Crash-prefix follow-up (2026-09-26, commit `959aca6`):** The production
 archive-profile exception path now carries already captured observations,
@@ -456,12 +458,34 @@ and training remain **NOT RUN**.
 **Files:**
 - Evidence: `docs/experiments/generation-validation/<new-archive-acceptance>/`
 
-- [ ] Start from a fresh committed revision and a new isolated HF validation prefix.
+- [x] Start from a fresh committed revision and a new isolated HF validation prefix.
 - [ ] Run a bounded set containing success, valid failure, simulator-crash/invalid-attempt, publication, resume, and workers-only attach cases.
-- [ ] Verify every remote chunk/manifest/debug hash from a clean machine with no local result payloads.
-- [ ] Finalize views against a pinned remote dataset-manifest revision and verify deterministic sample counts/mixtures.
+- [x] Verify every declared remote chunk/manifest/debug hash for the nine bounded
+      episode archives from owned scratch; separately restore six and nine
+      episodes from disjoint roots with zero local result payloads. Failure
+      attempts remain a separate open case in the preceding checkbox.
+- [x] Finalize twelve views against a pinned nine-row manifest, correct the
+      observed `D_task` episode-kind metadata defect, and independently verify
+      exact 7:3 transition units, split separation, immutable output bytes and
+      same-target idempotency under a new corrected prefix.
 - [ ] Record bytes per episode, peak local staging bytes, upload throughput, publication commits, resume revision/SHA, and all PASS/FAIL/SKIPPED/NOT RUN states.
 - [ ] Do not authorize the 7,520-attempt production run until archive quality, HF-only recovery, final views, and storage budget gates pass.
+
+**Partial live acceptance (2026-09-27):** The
+[durable validation record](../../experiments/generation-validation/archive-aa869b3-20260927/README.md)
+contains exact code revisions, VPS environment, run roots, HF prefixes,
+per-episode bytes, pinned data/receipt/HEAD identities, full archive readbacks,
+HF-only resume and corrected FINAL-view receipts. Nine bounded episodes grew
+the HF manifest 1→2→3→4→5→6→7→8→9 across restarts; the complete nine-row
+readback and zero-payload resume **PASS**. The first immutable FINAL prefix is
+preserved as a **FAIL** for `D_task` kind counts; corrected output from reviewed
+`8a2b811` **PASS** under a distinct prefix. A second corrected prefix was
+accidentally published, its thirteen files were checked byte-identical, and
+both outputs were preserved. Task 5.3 stays open: live failure-attempt HF
+retention, receipt-only pruning, workers-only attach, a hard live-writer staging
+bound/capacity retest, native training ingestion, and full quota remain
+**NOT RUN** or unproven. No 7,520-attempt authorization follows from this
+partial gate.
 
 ## Compatibility, rollback, and recovery
 
