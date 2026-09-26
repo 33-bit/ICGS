@@ -151,6 +151,18 @@ manifest's full profile to equal the dataset/runtime profile. Attempt plans must
 also match the program catalog's split, allowed kind, and approved asset family.
 Legacy resume behavior is unchanged.
 
+If the same local run has already published archive rows, the latest pinned
+prefix must also bind to its local publication receipt chain. A stable local
+`COMPLETE`/`VERIFIED` receipt requires the exact local publication manifest and
+matching remote receipt; an unrelated newer repository commit is acceptable
+when those prefix controls are unchanged. Receipt-only retention can recover a
+pending batch from its durable per-job verified receipts. With `keep` retention,
+an interrupted later batch may have overwritten the run-level controls without
+leaving per-job receipt OIDs; that state fails closed with an instruction to
+inspect pinned HF revisions. Stable `keep` restarts and clean-machine resume
+remain supported. Persisting prior run-level controls for this pending case is
+deferred to a separate protocol change.
+
 The clean-machine resume command requires a coordinator-only credential path.
 The file contains the token, but the token value is never embedded in a command
 or committed to a runtime snapshot:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import replace
 import hashlib
 import json
 import os
@@ -26,12 +27,18 @@ from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
 try:
     from scripts.generation_coordinator import (
         load_remote_manifest, _snapshot_revision, _require_pinned_revision,
-        _download_pinned_file,
+        _download_pinned_file, _download_archive_control_file,
+        _manifest_from_closed_queue, _validate_resume_source_extension,
+        _validate_local_published_archive_rows_in_remote,
+        _verify_resume_archive_publication_binding,
     )
 except ModuleNotFoundError:  # direct ``python scripts/generation_launch.py`` entrypoint
     from generation_coordinator import (
         load_remote_manifest, _snapshot_revision, _require_pinned_revision,
-        _download_pinned_file,
+        _download_pinned_file, _download_archive_control_file,
+        _manifest_from_closed_queue, _validate_resume_source_extension,
+        _validate_local_published_archive_rows_in_remote,
+        _verify_resume_archive_publication_binding,
     )
 
 
@@ -154,7 +161,7 @@ def preflight_resume_manifest(
     approved_manifest: str | Path,
     downloader=None,
 ) -> dict[str, object] | None:
-    """Fetch and validate the immutable HF manifest before child processes start."""
+    """Validate initial HF provenance and a verified extension before child processes start."""
     if not config.run.resume_from_hf:
         return None
     downloader = hf_hub_download if downloader is None else downloader
@@ -163,30 +170,6 @@ def preflight_resume_manifest(
     if not token:
         raise ValueError("resume_from_hf credential file is empty")
     filename = f"{config.run.hf_subfolder}/dataset_manifest.json"
-    try:
-        with tempfile.TemporaryDirectory(prefix="icgs-hf-preflight-") as scratch:
-            remote_path = downloader(
-                repo_id=config.run.hf_repo, repo_type="dataset", filename=filename,
-                token=token, force_download=True,
-                **({"cache_dir": scratch} if config.archive_profile is not None else {}),
-            )
-            remote_bytes = Path(remote_path).read_bytes()
-            if config.archive_profile is not None:
-                revision = _require_pinned_revision(_snapshot_revision(remote_path))
-                remote_bytes = _download_pinned_file(
-                    downloader, config.run, token, revision, filename, Path(scratch),
-                    hashlib.sha256(remote_bytes).hexdigest(),
-                ).read_bytes()
-            else:
-                parts = Path(remote_path).parts
-                revision = parts[parts.index("snapshots") + 1] if "snapshots" in parts else None
-    except Exception as error:
-        message = (
-            "resume_from_hf requires a readable pinned remote dataset manifest"
-            if config.archive_profile is not None
-            else "resume_from_hf requires a readable remote dataset manifest"
-        )
-        raise RuntimeError(message) from error
     try:
         approved_payload = json.loads(Path(approved_manifest).read_text(encoding="utf-8"))
         catalog = approved_payload.get("catalog")
@@ -212,12 +195,193 @@ def preflight_resume_manifest(
             distribution_mode=config.run.distribution_mode,
             resume_from_hf=config.run.resume_from_hf,
         )
+    except Exception as error:
+        raise RuntimeError("remote resume manifest failed immutable validation") from error
+    bootstrap_path = Path(run_root) / "control" / "resume_bootstrap.json"
+
+    if config.archive_profile is not None:
+        try:
+            existing_bootstrap = None
+            if bootstrap_path.is_symlink():
+                raise ValueError("resume bootstrap must not be a symlink")
+            if bootstrap_path.is_file():
+                existing_bootstrap = json.loads(
+                    bootstrap_path.read_text(encoding="utf-8")
+                )
+                if (
+                    not isinstance(existing_bootstrap, dict)
+                    or existing_bootstrap.get("run_id") != config.run.run_id
+                ):
+                    raise ValueError("resume bootstrap run_id does not match runtime config")
+
+            if existing_bootstrap is None:
+                with tempfile.TemporaryDirectory(prefix="icgs-hf-preflight-") as scratch:
+                    remote_path = _download_archive_control_file(
+                        downloader,
+                        resume_run,
+                        token,
+                        filename,
+                        Path(scratch),
+                    )
+                    revision = _require_pinned_revision(_snapshot_revision(remote_path))
+                    remote_bytes = _download_pinned_file(
+                        downloader,
+                        resume_run,
+                        token,
+                        revision,
+                        filename,
+                        Path(scratch),
+                    ).read_bytes()
+                manifest_sha256 = hashlib.sha256(remote_bytes).hexdigest()
+                manifest = load_remote_manifest(
+                    json.loads(remote_bytes),
+                    resume_run,
+                    archive_profile=config.archive_profile,
+                    approved_program_ids=approved_program_ids,
+                    approved_rows=approved_rows,
+                    remote_manifest_sha256=manifest_sha256,
+                    manifest_bytes=remote_bytes,
+                )
+                bootstrap = {
+                    "run_id": config.run.run_id,
+                    "remote_manifest_sha256": manifest_sha256,
+                    "remote_revision": revision,
+                    "source_run_ids": list(manifest.get("source_run_ids") or ()),
+                    "fetched_at_s": time.time(),
+                }
+                latest_revision = revision
+                latest_sha256 = manifest_sha256
+            else:
+                initial_revision = _require_pinned_revision(
+                    existing_bootstrap.get("remote_revision")
+                )
+                initial_sha256 = existing_bootstrap.get("remote_manifest_sha256")
+                if (
+                    not isinstance(initial_sha256, str)
+                    or len(initial_sha256) != 64
+                    or any(character not in "0123456789abcdef" for character in initial_sha256)
+                ):
+                    raise ValueError("resume bootstrap initial manifest SHA256 is invalid")
+                with tempfile.TemporaryDirectory(prefix="icgs-hf-preflight-initial-") as scratch:
+                    initial_path = _download_pinned_file(
+                        downloader,
+                        resume_run,
+                        token,
+                        initial_revision,
+                        filename,
+                        Path(scratch),
+                        initial_sha256,
+                    )
+                    initial_bytes = initial_path.read_bytes()
+                initial_manifest = load_remote_manifest(
+                    json.loads(initial_bytes),
+                    resume_run,
+                    archive_profile=config.archive_profile,
+                    approved_program_ids=approved_program_ids,
+                    approved_rows=approved_rows,
+                    remote_manifest_sha256=initial_sha256,
+                    manifest_bytes=initial_bytes,
+                )
+
+                from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+
+                queue = FilesystemJobQueue(Path(run_root) / "queue")
+                local_closed = _manifest_from_closed_queue(
+                    queue,
+                    archive_profile=config.archive_profile,
+                )
+                local_published = _manifest_from_closed_queue(
+                    queue,
+                    states=("published",),
+                    archive_profile=config.archive_profile,
+                )
+                with tempfile.TemporaryDirectory(prefix="icgs-hf-preflight-latest-") as scratch:
+                    latest_path = _download_archive_control_file(
+                        downloader,
+                        resume_run,
+                        token,
+                        filename,
+                        Path(scratch),
+                    )
+                    latest_revision = _require_pinned_revision(
+                        _snapshot_revision(latest_path)
+                    )
+                    latest_bytes = _download_pinned_file(
+                        downloader,
+                        resume_run,
+                        token,
+                        latest_revision,
+                        filename,
+                        Path(scratch),
+                    ).read_bytes()
+                latest_sha256 = hashlib.sha256(latest_bytes).hexdigest()
+                latest_run = replace(resume_run, resume_from_hf=False)
+                latest_manifest = load_remote_manifest(
+                    json.loads(latest_bytes),
+                    latest_run,
+                    archive_profile=config.archive_profile,
+                    approved_program_ids=approved_program_ids,
+                    approved_rows=approved_rows,
+                    remote_manifest_sha256=latest_sha256,
+                    manifest_bytes=latest_bytes,
+                    local_closed_manifest=local_closed,
+                )
+                _validate_resume_source_extension(initial_manifest, latest_manifest)
+                _validate_local_published_archive_rows_in_remote(
+                    latest_manifest,
+                    resume_run,
+                    local_published,
+                )
+                _verify_resume_archive_publication_binding(
+                    queue,
+                    resume_run,
+                    config.archive_profile,
+                    latest_manifest,
+                    latest_bytes,
+                    local_published,
+                    latest_revision,
+                    token=token,
+                    downloader=downloader,
+                )
+                bootstrap = dict(existing_bootstrap)
+                bootstrap.update({
+                    "latest_remote_manifest_sha256": latest_sha256,
+                    "latest_remote_revision": latest_revision,
+                    "latest_source_run_ids": list(
+                        latest_manifest.get("source_run_ids") or ()
+                    ),
+                    "latest_fetched_at_s": time.time(),
+                })
+        except Exception as error:
+            raise RuntimeError(
+                "remote resume manifest failed immutable validation; inspect pinned revisions"
+            ) from error
+
+        _atomic_write(
+            bootstrap_path,
+            (json.dumps(bootstrap, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+        )
+        return bootstrap
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="icgs-hf-preflight-") as scratch:
+            remote_path = downloader(
+                repo_id=config.run.hf_repo,
+                repo_type="dataset",
+                filename=filename,
+                token=token,
+                force_download=True,
+            )
+            remote_bytes = Path(remote_path).read_bytes()
+            parts = Path(remote_path).parts
+            revision = parts[parts.index("snapshots") + 1] if "snapshots" in parts else None
+    except Exception as error:
+        raise RuntimeError("resume_from_hf requires a readable remote dataset manifest") from error
+    try:
         manifest = load_remote_manifest(
             json.loads(remote_bytes),
             resume_run,
-            archive_profile=config.archive_profile,
             approved_program_ids=approved_program_ids,
-            approved_rows=approved_rows if config.archive_profile is not None else None,
             remote_manifest_sha256=hashlib.sha256(remote_bytes).hexdigest(),
             manifest_bytes=remote_bytes,
         )
@@ -230,7 +394,6 @@ def preflight_resume_manifest(
         "source_run_ids": list(manifest.get("source_run_ids") or ()),
         "fetched_at_s": time.time(),
     }
-    bootstrap_path = Path(run_root) / "control" / "resume_bootstrap.json"
     _atomic_write(
         bootstrap_path,
         (json.dumps(bootstrap, indent=2, sort_keys=True) + "\n").encode("utf-8"),

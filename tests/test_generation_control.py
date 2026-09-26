@@ -936,6 +936,20 @@ def _complete_archive_remote(
         if path.is_file():
             relative = path.relative_to(archive_root).as_posix()
             data_snapshot[f"{run_prefix}/{row['archive_ref']}/{relative}"] = path.read_bytes()
+    if episode_rows:
+        from icgs.data.datasets.generation_view_index import build_provisional_episode_pointers
+
+        episode_manifest = json.loads(
+            (archive_root / "episode.manifest.json").read_text(encoding="utf-8")
+        )
+        for pointer in build_provisional_episode_pointers(episode_manifest):
+            pointer_filename = (
+                f"{run_prefix}/views/provisional/episodes/{row['program_id']}/"
+                f"{row['episode_id']}/{pointer['view']}.json"
+            )
+            data_snapshot[pointer_filename] = (
+                json.dumps(pointer, indent=2, sort_keys=True, allow_nan=False) + "\n"
+            ).encode("utf-8")
     receipt_snapshot = dict(data_snapshot)
     receipt_resume = dict(resume_payload)
     receipt_resume["dataset_manifest_revision"] = data_revision
@@ -1001,6 +1015,896 @@ def _complete_archive_remote(
         return str(cached)
     monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
     return run_json, token, manifest, prefix_root, downloads
+
+
+def _archive_resume_fixture_job(run_id: str, index: int, output_root: Path) -> GenerationJob:
+    episode_id = f"episode-t01-{run_id}-{index:05d}"
+    plan = AttemptPlan(
+        program_id="T01",
+        split="train",
+        episode_index=index,
+        episode_id=episode_id,
+        episode_kind="nominal",
+        scene_seed=index,
+        collection_seed=20260920,
+        randomization={
+            "scene_signature": f"resume-{run_id}-{index}",
+            "scene_seed": index,
+            "asset_instance_id": f"T01-asset-{index}",
+            "asset_family_id": "family-1",
+        },
+        intervention=None,
+    )
+    return GenerationJob.create(
+        job_id=f"job-{run_id}-{index:05d}",
+        run_id=run_id,
+        attempt_id=f"att-{episode_id}",
+        episode_id=episode_id,
+        program_id="T01",
+        plan=plan,
+        code_revision="a" * 40,
+        manifest_sha256="b" * 64,
+        output_root=str(output_root),
+    )
+
+
+def _multi_batch_archive_resume_fixture(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    retention: str = "receipt_only",
+):
+    from test_generation_publication import _archive_queue
+    from icgs.data.collection.generation.distributed_publication import PublicationReceipt
+
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention=retention)
+    hf_prefix = "icgs-extension-test-archive-v1"
+    source_rows = []
+    source_files = {}
+    for index in range(1, 4):
+        job = _archive_resume_fixture_job("old-source", index, tmp_path / "origin-staging")
+        source_queue, job, result, source_profile = _archive_queue(
+            tmp_path / "origin-fixtures" / f"{index:05d}",
+            retention=retention,
+            job=job,
+        )
+        assert source_profile == profile
+        row = validate_closed_result(job, result, archive_profile=profile).episode_entry
+        assert row is not None
+        source_rows.append(row)
+        for path in Path(result.result_dir).rglob("*"):
+            if path.is_file():
+                relative = path.relative_to(result.result_dir).as_posix()
+                source_files[
+                    f"{hf_prefix}/{row['archive_ref']}/{relative}"
+                ] = path.read_bytes()
+        from icgs.data.datasets.generation_view_index import build_provisional_episode_pointers
+
+        episode_manifest = json.loads(
+            (Path(result.result_dir) / "episode.manifest.json").read_text(encoding="utf-8")
+        )
+        for pointer in build_provisional_episode_pointers(episode_manifest):
+            pointer_filename = (
+                f"{hf_prefix}/views/provisional/episodes/{row['program_id']}/"
+                f"{row['episode_id']}/{pointer['view']}.json"
+            )
+            source_files[pointer_filename] = (
+                json.dumps(pointer, indent=2, sort_keys=True, allow_nan=False) + "\n"
+            ).encode("utf-8")
+
+    source_manifest = {
+        "manifest_version": 3,
+        "source_run_ids": ["old-source"],
+        "dataset_identity": profile.dataset_identity,
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "archive_profile": profile.as_dict(),
+        "view_status": "PROVISIONAL",
+        "episodes": source_rows,
+        "failure_attempts": [],
+    }
+    source_manifest_bytes = json.dumps(
+        source_manifest, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+    source_manifest_sha = hashlib.sha256(source_manifest_bytes).hexdigest()
+    source_data_oid = hashlib.sha1(b"resume-origin-data").hexdigest()
+    source_receipt_oid = hashlib.sha1(b"resume-origin-receipt").hexdigest()
+    source_head_oid = hashlib.sha1(b"resume-origin-verified").hexdigest()
+    source_artifact_hashes = {
+        f"{row['job_id']}/{relative}": digest
+        for row in source_rows
+        for relative, digest in row["file_sha256"].items()
+    }
+    source_resume = {
+        "run_id": "old-source",
+        "source_run_id": "old-source",
+        "source_run_ids": ["old-source"],
+        "episodes": len(source_rows),
+        "failure_attempts": 0,
+        "dataset_identity": profile.dataset_identity,
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "archive_profile": profile.as_dict(),
+        "dataset_manifest_sha256": source_manifest_sha,
+        "dataset_manifest_revision": source_data_oid,
+    }
+    source_data_snapshot = {
+        **source_files,
+        f"{hf_prefix}/dataset_manifest.json": source_manifest_bytes,
+    }
+    source_data_committed = PublicationReceipt(
+        run_id="old-source",
+        source_run_id="old-source",
+        job_ids=tuple(row["job_id"] for row in source_rows),
+        status="DATA_COMMITTED",
+        data_commit_oid=source_data_oid,
+        commit_oid=None,
+        artifact_hashes=source_artifact_hashes,
+        dataset_identity=profile.dataset_identity,
+        archive_format_id=profile.archive_format_id,
+        episode_schema_version=profile.episode_schema_version,
+        archive_profile=profile.as_dict(),
+        dataset_manifest_sha256=source_manifest_sha,
+        prefix=hf_prefix,
+    )
+    source_receipt_snapshot = {
+        **source_data_snapshot,
+        f"{hf_prefix}/resume_receipt.json": json.dumps(
+            source_resume, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8"),
+        f"{hf_prefix}/publication_receipt.json": json.dumps(
+            source_data_committed.as_dict(), sort_keys=True, separators=(",", ":")
+        ).encode("utf-8"),
+    }
+    source_verified = replace(
+        source_data_committed,
+        status="VERIFIED",
+        commit_oid=source_receipt_oid,
+    )
+    source_verified_snapshot = {
+        **source_receipt_snapshot,
+        f"{hf_prefix}/publication_receipt.json": json.dumps(
+            source_verified.as_dict(), sort_keys=True, separators=(",", ":")
+        ).encode("utf-8"),
+    }
+    snapshots = {
+        source_data_oid: source_data_snapshot,
+        source_receipt_oid: source_receipt_snapshot,
+        source_head_oid: source_verified_snapshot,
+    }
+
+    config_payload = _runtime_config(tmp_path, publication_enabled=True).as_dict()
+    config_payload["run"].update({
+        "run_id": "archive-extension-run",
+        "validation_mode": False,
+        "resume_from_hf": True,
+        "hf_subfolder": hf_prefix,
+    })
+    config_payload["archive_profile"] = profile.as_dict()
+    config = GenerationRuntimeConfig.from_dict(config_payload)
+    approved_payload = json.loads(
+        Path("artifacts/composition/approved_composition_manifest.json").read_text()
+    )
+    next(row for row in approved_payload["catalog"] if row["program_id"] == "T01")[
+        "asset_family_id"
+    ] = "family-1"
+    approved_path = tmp_path / "approved.json"
+    approved_path.write_text(json.dumps(approved_payload), encoding="utf-8")
+    run_json = generation_launch.persist_run_config(
+        config, approved_path, code_revision="c" * 40,
+    )
+    token = Path(config.run.run_root) / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+    bootstrap_path = Path(config.run.run_root) / "control" / "resume_bootstrap.json"
+    bootstrap_path.write_text(json.dumps({
+        "run_id": config.run.run_id,
+        "remote_manifest_sha256": source_manifest_sha,
+        "remote_revision": source_head_oid,
+        "source_run_ids": ["old-source"],
+    }), encoding="utf-8")
+
+    class SnapshotApi:
+        def __init__(self):
+            self.head = source_head_oid
+            self.tree = dict(snapshots[source_head_oid])
+            self.commit_count = 0
+
+        def create_commit(self, **kwargs):
+            updated = dict(self.tree)
+            for operation in kwargs["operations"]:
+                source = operation.path_or_fileobj
+                content = (
+                    Path(source).read_bytes()
+                    if isinstance(source, (str, Path))
+                    else source.read()
+                )
+                updated[operation.path_in_repo] = content
+            self.commit_count += 1
+            oid = hashlib.sha1(f"extension-commit-{self.commit_count}".encode()).hexdigest()
+            self.tree = updated
+            snapshots[oid] = dict(updated)
+            self.head = oid
+            return SimpleNamespace(oid=oid)
+
+    api = SnapshotApi()
+
+    def download(**kwargs):
+        revision = kwargs.get("revision") or api.head
+        files = snapshots.get(revision)
+        if files is None or kwargs["filename"] not in files:
+            raise FileNotFoundError(f"missing fake HF file at {revision}: {kwargs['filename']}")
+        cache = Path(kwargs["cache_dir"])
+        target = cache / "snapshots" / revision / kwargs["filename"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(files[kwargs["filename"]])
+        return str(target)
+
+    monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
+    monkeypatch.setattr(generation_launch, "hf_hub_download", download)
+    control = CoordinatorControlPlane.open(
+        run_json,
+        api_factory=lambda: api,
+        token_path=token,
+    )
+    return {
+        "api": api,
+        "approved_path": approved_path,
+        "bootstrap_path": bootstrap_path,
+        "config": config,
+        "control": control,
+        "download": download,
+        "manifest": source_manifest,
+        "profile": profile,
+        "run_json": run_json,
+        "run_payload": run_payload,
+        "snapshots": snapshots,
+        "source_head_oid": source_head_oid,
+        "source_manifest_sha": source_manifest_sha,
+        "source_rows": source_rows,
+        "tmp_path": tmp_path,
+        "token": token,
+    }
+
+
+def _stage_resume_extension_batch(fixture: dict, index: int) -> GenerationJob:
+    from test_generation_publication import _archive_queue
+    from scripts.generation_coordinator import _manifest_from_closed_queue
+
+    control = fixture["control"]
+    run = fixture["config"].run
+    job = _archive_resume_fixture_job(
+        run.run_id,
+        index,
+        Path(run.run_root) / "staging",
+    )
+    source_queue, job, _result, profile = _archive_queue(
+        Path(run.run_root) / "fixtures" / job.job_id,
+        retention=fixture["profile"].local_artifact_retention,
+        job=job,
+    )
+    assert profile == fixture["profile"]
+    shutil.copytree(
+        source_queue.root / "ingested" / job.job_id,
+        control.queue.root / "ingested" / job.job_id,
+    )
+    local = _manifest_from_closed_queue(
+        control.queue,
+        states=("ingested",),
+        archive_profile=fixture["profile"],
+    )
+    control.manifest = _merge_manifests(control.manifest, local)
+    return job
+
+
+def _publish_resume_extension_batch(fixture: dict, index: int) -> GenerationJob:
+    job = _stage_resume_extension_batch(fixture, index)
+    control = fixture["control"]
+    completed = control.publisher.publish_due(
+        now_s=300.0 + index,
+        force=True,
+        local_manifest=control.manifest,
+    )
+    assert completed is not None and completed.status == "COMPLETE"
+    return job
+
+
+def test_coordinator_resume_accepts_prepared_batch_when_head_is_prior_local_verified_batch(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    _stage_resume_extension_batch(fixture, 5)
+    previous_head = fixture["api"].head
+
+    def reject_data_commit(**_kwargs):
+        raise RuntimeError("simulated interruption before data commit")
+
+    fixture["api"].create_commit = reject_data_commit
+    with pytest.raises(RuntimeError, match="before data commit"):
+        fixture["control"].publisher.publish_due(
+            now_s=305.0,
+            force=True,
+            local_manifest=fixture["control"].manifest,
+        )
+    assert fixture["api"].head == previous_head
+    local_receipt = json.loads(
+        (fixture["control"].queue.root / "publication_receipt.json").read_text()
+    )
+    assert local_receipt["status"] == "PREPARED"
+
+    runtime_path = Path(
+        json.loads(fixture["run_json"].read_text())["runtime_config_path"]
+    )
+    config = GenerationRuntimeConfig.from_file(runtime_path, check_paths=False)
+    launcher_bootstrap = generation_launch.preflight_resume_manifest(
+        config,
+        token_path=fixture["token"],
+        run_root=config.run.run_root,
+        approved_manifest=fixture["approved_path"],
+        downloader=fixture["download"],
+    )
+    assert launcher_bootstrap["latest_remote_revision"] == previous_head
+    assert json.loads(
+        (fixture["control"].queue.root / "publication_receipt.json").read_text()
+    )["status"] == "PREPARED"
+
+    commit_count = fixture["api"].commit_count
+    resumed = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: fixture["api"],
+        token_path=fixture["token"],
+    )
+
+    assert fixture["api"].commit_count == commit_count
+    assert len(resumed.publisher.remote_manifest["episodes"]) == 4
+    assert json.loads(
+        (resumed.queue.root / "publication_receipt.json").read_text()
+    )["status"] == "PREPARED"
+
+
+def test_coordinator_pending_resume_fails_closed_without_prior_keep_receipt(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(
+        tmp_path, monkeypatch, retention="keep",
+    )
+    first_job = _publish_resume_extension_batch(fixture, 4)
+    _stage_resume_extension_batch(fixture, 5)
+    first_published = fixture["control"].queue.root / "published" / first_job.job_id
+    assert not (first_published / "publication_receipt.json").exists()
+
+    def reject_data_commit(**_kwargs):
+        raise RuntimeError("simulated interruption before data commit")
+
+    fixture["api"].create_commit = reject_data_commit
+    with pytest.raises(RuntimeError, match="before data commit"):
+        fixture["control"].publisher.publish_due(
+            now_s=305.0,
+            force=True,
+            local_manifest=fixture["control"].manifest,
+        )
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            fixture["run_json"],
+            api_factory=lambda: api_calls.append(True),
+            token_path=fixture["token"],
+        )
+
+    assert "pending same-run recovery under keep retention lacks a durable local prior VERIFIED receipt OID" in str(
+        failure.value.__cause__
+    )
+    assert api_calls == []
+    assert not (first_published / "publication_receipt.json").exists()
+
+
+def test_coordinator_keep_mode_stable_batches_resume_from_latest_verified_snapshot(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(
+        tmp_path, monkeypatch, retention="keep",
+    )
+    _publish_resume_extension_batch(fixture, 4)
+    runtime_path = Path(
+        json.loads(fixture["run_json"].read_text())["runtime_config_path"]
+    )
+    config = GenerationRuntimeConfig.from_file(runtime_path, check_paths=False)
+    launcher_bootstrap = generation_launch.preflight_resume_manifest(
+        config,
+        token_path=fixture["token"],
+        run_root=config.run.run_root,
+        approved_manifest=fixture["approved_path"],
+        downloader=fixture["download"],
+    )
+    assert launcher_bootstrap["latest_remote_revision"] == fixture["api"].head
+
+    restarted = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: fixture["api"],
+        token_path=fixture["token"],
+    )
+    assert len(restarted.publisher.remote_manifest["episodes"]) == 4
+    fixture["control"] = restarted
+    second_job = _publish_resume_extension_batch(fixture, 5)
+    final_manifest = json.loads(
+        fixture["snapshots"][fixture["api"].head][
+            f"{fixture['config'].run.hf_subfolder}/dataset_manifest.json"
+        ]
+    )
+
+    assert second_job.episode_id in {row["episode_id"] for row in final_manifest["episodes"]}
+    assert len(final_manifest["episodes"]) == 5
+
+
+def test_coordinator_resume_recovers_data_commit_with_local_prepared_receipt(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    _stage_resume_extension_batch(fixture, 5)
+    api = fixture["api"]
+    original_create_commit = api.create_commit
+
+    def interrupt_after_remote_data_commit(**kwargs):
+        if kwargs["commit_message"].startswith("Add generation batch"):
+            original_create_commit(**kwargs)
+            raise RuntimeError("simulated stop after remote data commit")
+        return original_create_commit(**kwargs)
+
+    api.create_commit = interrupt_after_remote_data_commit
+    with pytest.raises(RuntimeError, match="after remote data commit"):
+        fixture["control"].publisher.publish_due(
+            now_s=305.0,
+            force=True,
+            local_manifest=fixture["control"].manifest,
+        )
+    pending = json.loads(
+        (fixture["control"].queue.root / "publication_receipt.json").read_text()
+    )
+    assert pending["status"] == "PREPARED"
+    assert pending["data_commit_oid"] is None
+    assert json.loads(
+        api.tree[f"{fixture['config'].run.hf_subfolder}/publication_receipt.json"]
+    )["status"] == "PREPARED"
+
+    commit_count = api.commit_count
+    resumed = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: api,
+        token_path=fixture["token"],
+    )
+
+    recovered = json.loads(
+        (resumed.queue.root / "publication_receipt.json").read_text()
+    )
+    assert recovered["status"] == "DATA_COMMITTED"
+    assert recovered["data_commit_oid"] == api.head
+    assert api.commit_count == commit_count
+    assert len(resumed.publisher.remote_manifest["episodes"]) == 5
+
+
+def test_coordinator_resume_recovers_first_batch_data_commit_before_local_oid_write(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _stage_resume_extension_batch(fixture, 4)
+    api = fixture["api"]
+    original_create_commit = api.create_commit
+
+    def interrupt_after_remote_data_commit(**kwargs):
+        if kwargs["commit_message"].startswith("Add generation batch"):
+            original_create_commit(**kwargs)
+            raise RuntimeError("simulated stop after remote data commit")
+        return original_create_commit(**kwargs)
+
+    api.create_commit = interrupt_after_remote_data_commit
+    with pytest.raises(RuntimeError, match="after remote data commit"):
+        fixture["control"].publisher.publish_due(
+            now_s=304.0,
+            force=True,
+            local_manifest=fixture["control"].manifest,
+        )
+    assert fixture["control"].queue.counts().published == 0
+
+    resumed = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: api,
+        token_path=fixture["token"],
+    )
+
+    receipt = json.loads(
+        (resumed.queue.root / "publication_receipt.json").read_text()
+    )
+    assert receipt["status"] == "DATA_COMMITTED"
+    assert receipt["data_commit_oid"] == api.head
+    assert resumed.planner.counts("T01").nominal_successes == 4
+
+
+def test_coordinator_resume_accepts_data_committed_pending_head(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    _stage_resume_extension_batch(fixture, 5)
+
+    def fail_remote_verification(*_args):
+        raise RuntimeError("simulated remote verification interruption")
+
+    fixture["control"].publisher.remote_verify = fail_remote_verification
+    with pytest.raises(RuntimeError, match="verification interruption"):
+        fixture["control"].publisher.publish_due(
+            now_s=305.0,
+            force=True,
+            local_manifest=fixture["control"].manifest,
+        )
+    pending = json.loads(
+        (fixture["control"].queue.root / "publication_receipt.json").read_text()
+    )
+    remote = json.loads(
+        fixture["api"].tree[
+            f"{fixture['config'].run.hf_subfolder}/publication_receipt.json"
+        ]
+    )
+    assert pending["status"] == "DATA_COMMITTED"
+    assert remote["status"] == "DATA_COMMITTED"
+    assert remote["data_commit_oid"] == pending["data_commit_oid"]
+
+    commit_count = fixture["api"].commit_count
+    resumed = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: fixture["api"],
+        token_path=fixture["token"],
+    )
+
+    assert fixture["api"].commit_count == commit_count
+    assert len(resumed.publisher.remote_manifest["episodes"]) == 5
+
+
+def test_coordinator_resume_rejects_latest_head_with_another_batch_receipt(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    first_job = _publish_resume_extension_batch(fixture, 4)
+    _publish_resume_extension_batch(fixture, 5)
+    prefix = fixture["config"].run.hf_subfolder
+    latest_snapshot = fixture["snapshots"][fixture["api"].head]
+    latest_manifest = json.loads(latest_snapshot[f"{prefix}/dataset_manifest.json"])
+    other_batch_row = next(
+        row for row in latest_manifest["episodes"] if row["job_id"] == first_job.job_id
+    )
+    publication = json.loads(latest_snapshot[f"{prefix}/publication_receipt.json"])
+    receipt_revision = publication["commit_oid"]
+    other_batch_hashes = {
+        f"{first_job.job_id}/{relative}": digest
+        for relative, digest in other_batch_row["file_sha256"].items()
+    }
+    prior_snapshot = fixture["snapshots"][receipt_revision]
+    for snapshot, status in ((prior_snapshot, "DATA_COMMITTED"), (latest_snapshot, "VERIFIED")):
+        other_batch_receipt = dict(publication)
+        other_batch_receipt.update({
+            "job_ids": [first_job.job_id],
+            "artifact_hashes": other_batch_hashes,
+            "status": status,
+            "commit_oid": None if status == "DATA_COMMITTED" else receipt_revision,
+        })
+        snapshot[f"{prefix}/publication_receipt.json"] = json.dumps(
+            other_batch_receipt, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            fixture["run_json"],
+            api_factory=lambda: api_calls.append(True),
+            token_path=fixture["token"],
+        )
+
+    assert "remote same-run resume/publication receipt identity mismatch" in str(
+        failure.value.__cause__
+    )
+    assert api_calls == []
+
+
+def _remove_row_from_fake_hf_head(fixture: dict, episode_id: str) -> None:
+    api = fixture["api"]
+    files = fixture["snapshots"][api.head]
+    filename = f"{fixture['config'].run.hf_subfolder}/dataset_manifest.json"
+    manifest = json.loads(files[filename])
+    manifest["episodes"] = [
+        row for row in manifest["episodes"] if row["episode_id"] != episode_id
+    ]
+    files[filename] = json.dumps(
+        manifest, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode("utf-8")
+
+
+def _tamper_fake_hf_head_archive(fixture: dict, row: dict) -> None:
+    api = fixture["api"]
+    archive_relative = next(
+        relative for relative in row["file_sha256"]
+        if relative.startswith("data/chunk-")
+    )
+    filename = (
+        f"{fixture['config'].run.hf_subfolder}/{row['archive_ref']}/{archive_relative}"
+    )
+    fixture["snapshots"][api.head][filename] += b"tampered remote archive bytes"
+
+
+def _third_hf_only_resume_control(fixture: dict):
+    third_root = Path(fixture["tmp_path"]) / "third-run"
+    third_root.mkdir(parents=True, exist_ok=True)
+    payload = fixture["config"].as_dict()
+    payload["run"].update({
+        "run_id": "archive-extension-third-run",
+        "run_root": str(third_root),
+        "resume_from_hf": True,
+    })
+    config = GenerationRuntimeConfig.from_dict(payload)
+    run_json = generation_launch.persist_run_config(
+        config,
+        fixture["approved_path"],
+        code_revision="e" * 40,
+    )
+    token = third_root / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+    bootstrap = generation_launch.preflight_resume_manifest(
+        config,
+        token_path=token,
+        run_root=third_root,
+        approved_manifest=fixture["approved_path"],
+        downloader=fixture["download"],
+    )
+    control = CoordinatorControlPlane.open(
+        run_json,
+        api_factory=lambda: fixture["api"],
+        token_path=token,
+    )
+    return bootstrap, control
+
+
+def test_archive_resume_keeps_origin_and_all_local_batches_at_latest_head(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    control = fixture["control"]
+    source_ids = {row["episode_id"] for row in fixture["source_rows"]}
+
+    first_job = _publish_resume_extension_batch(fixture, 4)
+    first_manifest = json.loads(
+        fixture["snapshots"][fixture["api"].head][
+            f"{fixture['config'].run.hf_subfolder}/dataset_manifest.json"
+        ]
+    )
+    assert {row["episode_id"] for row in first_manifest["episodes"]} == (
+        source_ids | {first_job.episode_id}
+    )
+
+    initial_bootstrap = json.loads(fixture["bootstrap_path"].read_text())
+    assert initial_bootstrap["remote_revision"] == fixture["source_head_oid"]
+    assert initial_bootstrap["remote_manifest_sha256"] == fixture["source_manifest_sha"]
+    restart_config = GenerationRuntimeConfig.from_file(
+        json.loads(fixture["run_json"].read_text())["runtime_config_path"],
+        check_paths=False,
+    )
+    launcher_bootstrap = generation_launch.preflight_resume_manifest(
+        restart_config,
+        token_path=fixture["token"],
+        run_root=restart_config.run.run_root,
+        approved_manifest=fixture["approved_path"],
+        downloader=fixture["download"],
+    )
+    assert launcher_bootstrap["remote_revision"] == fixture["source_head_oid"]
+    assert launcher_bootstrap["remote_manifest_sha256"] == fixture["source_manifest_sha"]
+    assert launcher_bootstrap["latest_remote_revision"] == fixture["api"].head
+
+    control = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: fixture["api"],
+        token_path=fixture["token"],
+    )
+    assert len(control.publisher.remote_manifest["episodes"]) == 4
+    second_job = _publish_resume_extension_batch(fixture, 5)
+    final_manifest = json.loads(
+        fixture["snapshots"][fixture["api"].head][
+            f"{fixture['config'].run.hf_subfolder}/dataset_manifest.json"
+        ]
+    )
+    expected_ids = source_ids | {first_job.episode_id, second_job.episode_id}
+    assert {row["episode_id"] for row in final_manifest["episodes"]} == expected_ids
+
+    third_bootstrap, third_control = _third_hf_only_resume_control(fixture)
+
+    assert third_bootstrap["source_run_ids"] == ["archive-extension-run", "old-source"]
+    assert len(third_control.manifest["episodes"]) == 5
+    assert third_control.planner.counts("T01").nominal_successes == 5
+
+
+def test_coordinator_resume_accepts_unrelated_newer_repo_head_with_unchanged_prefix(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    prior_prefix_manifest = fixture["snapshots"][fixture["api"].head][
+        f"{fixture['config'].run.hf_subfolder}/dataset_manifest.json"
+    ]
+    unrelated = fixture["api"].create_commit(
+        operations=[], commit_message="unrelated repository change",
+    )
+
+    resumed = CoordinatorControlPlane.open(
+        fixture["run_json"],
+        api_factory=lambda: fixture["api"],
+        token_path=fixture["token"],
+    )
+
+    assert fixture["api"].head == unrelated.oid
+    assert fixture["snapshots"][fixture["api"].head][
+        f"{fixture['config'].run.hf_subfolder}/dataset_manifest.json"
+    ] == prior_prefix_manifest
+    assert len(resumed.publisher.remote_manifest["episodes"]) == 4
+
+
+def test_coordinator_resume_rejects_latest_head_missing_local_published_row(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    published_job = _publish_resume_extension_batch(fixture, 4)
+    _remove_row_from_fake_hf_head(fixture, published_job.episode_id)
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            fixture["run_json"],
+            api_factory=lambda: api_calls.append(True),
+            token_path=fixture["token"],
+        )
+
+    assert "locally published archive row is missing from the latest remote manifest" in str(
+        failure.value.__cause__
+    )
+    assert "inspect pinned revisions" in str(failure.value)
+    assert api_calls == []
+
+
+def test_coordinator_resume_rejects_missing_local_publication_receipt_after_publish(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    (fixture["control"].queue.root / "publication_receipt.json").unlink()
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            fixture["run_json"],
+            api_factory=lambda: api_calls.append(True),
+            token_path=fixture["token"],
+        )
+
+    assert "same-run restart requires a regular local publication receipt" in str(
+        failure.value.__cause__
+    )
+    assert api_calls == []
+
+
+def test_launcher_resume_preflight_rejects_missing_local_publication_receipt(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    _publish_resume_extension_batch(fixture, 4)
+    (fixture["control"].queue.root / "publication_receipt.json").unlink()
+    runtime_path = Path(
+        json.loads(fixture["run_json"].read_text())["runtime_config_path"]
+    )
+    config = GenerationRuntimeConfig.from_file(runtime_path, check_paths=False)
+
+    with pytest.raises(
+        RuntimeError, match="remote resume manifest failed immutable validation"
+    ) as failure:
+        generation_launch.preflight_resume_manifest(
+            config,
+            token_path=fixture["token"],
+            run_root=config.run.run_root,
+            approved_manifest=fixture["approved_path"],
+            downloader=fixture["download"],
+        )
+
+    assert "same-run restart requires a regular local publication receipt" in str(
+        failure.value.__cause__
+    )
+
+
+def test_coordinator_resume_rejects_changed_archive_bytes_at_latest_head(
+    tmp_path: Path,
+    monkeypatch,
+):
+    from scripts.generation_coordinator import _manifest_from_closed_queue
+
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    published_job = _publish_resume_extension_batch(fixture, 4)
+    published_rows = _manifest_from_closed_queue(
+        fixture["control"].queue,
+        states=("published",),
+        archive_profile=fixture["profile"],
+    )
+    published_row = next(
+        row for row in published_rows["episodes"]
+        if row["episode_id"] == published_job.episode_id
+    )
+    _tamper_fake_hf_head_archive(fixture, published_row)
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            fixture["run_json"],
+            api_factory=lambda: api_calls.append(True),
+            token_path=fixture["token"],
+        )
+
+    assert "remote archive hash mismatch" in str(failure.value.__cause__)
+    assert api_calls == []
+
+
+def test_launcher_resume_preflight_rejects_dropped_published_row_before_workers(
+    tmp_path: Path,
+    monkeypatch,
+):
+    fixture = _multi_batch_archive_resume_fixture(tmp_path, monkeypatch)
+    published_job = _publish_resume_extension_batch(fixture, 4)
+    _remove_row_from_fake_hf_head(fixture, published_job.episode_id)
+    smoke_receipt = tmp_path / "smoke.json"
+    from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
+
+    smoke_receipt.write_text(json.dumps({"results": [
+        {"program_id": program_id, "result_class": "success", "timeline_ok": True}
+        for program_id in GENERATION_PROGRAMS
+    ]}), encoding="utf-8")
+    runtime_path = Path(
+        json.loads(fixture["run_json"].read_text())["runtime_config_path"]
+    )
+    spawned = []
+    monkeypatch.setattr(
+        generation_launch.subprocess,
+        "Popen",
+        lambda *args, **kwargs: spawned.append(args) or SimpleNamespace(pid=9001, wait=lambda: 0),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="remote resume manifest failed immutable validation; inspect pinned revisions",
+    ) as failure:
+        generation_launch.main([
+            "--runtime-config", str(runtime_path),
+            "--approved-manifest", str(fixture["approved_path"]),
+            "--code-revision", "e" * 40,
+            "--smoke-receipt", str(smoke_receipt),
+            "--hf-token-path", str(fixture["token"]),
+            "--detach",
+        ])
+
+    assert spawned == []
+    assert "locally published archive row is missing from the latest remote manifest" in str(
+        failure.value.__cause__
+    )
 
 
 def _same_run_archive_restart_fixture(
@@ -1517,6 +2421,10 @@ def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(tmp_p
     } | {
         f"{prefix_root.relative_to(prefix_root.parents[1])}/{manifest['episodes'][0]['archive_ref']}/{relative}"
         for relative in manifest["episodes"][0]["file_sha256"]
+    } | {
+        f"{prefix_root.relative_to(prefix_root.parents[1])}/views/provisional/episodes/"
+        f"{manifest['episodes'][0]['program_id']}/{manifest['episodes'][0]['episode_id']}/{view}.json"
+        for view in ("D_geom", "D_temporal", "D_dyn", "D_task")
     }
 
 
@@ -1679,6 +2587,7 @@ def test_archive_preflight_pins_local_fake_manifest(tmp_path: Path, monkeypatch)
     run_json, token, _, _, downloads = _complete_archive_remote(tmp_path, monkeypatch)
     run_payload = json.loads(run_json.read_text())
     config = GenerationRuntimeConfig.from_file(run_payload["runtime_config_path"], check_paths=False)
+    (Path(config.run.run_root) / "control" / "resume_bootstrap.json").unlink()
     bootstrap = generation_launch.preflight_resume_manifest(
         config, token_path=token, run_root=config.run.run_root,
         approved_manifest=run_payload["approved_manifest"],
