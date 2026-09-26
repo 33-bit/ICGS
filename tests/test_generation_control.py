@@ -809,6 +809,7 @@ def _complete_archive_remote(
     *,
     remote_revision: str = "d1cc82c27bc57602bf3fac40f55c6dbb59766d45",
     fixture_job: GenerationJob | None = None,
+    archive_outcome: str = "success",
 ):
     from test_generation_publication import _archive_queue, _job
 
@@ -824,17 +825,51 @@ def _complete_archive_remote(
                            else "T01-asset-1"
                        )},
     ))
-    _source_queue, job, result, profile = _archive_queue(
-        tmp_path / "source", retention="receipt_only", job=fixture_job,
-    )
-    row = validate_closed_result(job, result, archive_profile=profile).episode_entry
+    if archive_outcome == "success":
+        _source_queue, job, result, profile = _archive_queue(
+            tmp_path / "source", retention="receipt_only", job=fixture_job,
+        )
+        row = validate_closed_result(job, result, archive_profile=profile).episode_entry
+        episode_rows, failure_attempt_rows = [row], []
+    elif archive_outcome in {"simulator_crash", "invalid_observation"}:
+        from scripts.generation_worker import _file_hashes, _write_archive_worker_attempt
+
+        profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="receipt_only")
+        config_payload = _runtime_config(tmp_path).as_dict()
+        config_payload["run"]["validation_mode"] = False
+        config_payload["archive_profile"] = profile.as_dict()
+        worker_config = GenerationRuntimeConfig.from_dict(config_payload)
+        result_dir = tmp_path / "source" / "archive-worker-attempt"
+        _write_archive_worker_attempt(
+            result_dir,
+            fixture_job,
+            worker_config,
+            outcome=archive_outcome,
+            error="worker startup failed",
+        )
+        result = WorkerResult(
+            job_id=fixture_job.job_id,
+            attempt_id=fixture_job.attempt_id,
+            episode_id=None,
+            program_id=fixture_job.program_id,
+            outcome=archive_outcome,
+            result_dir=str(result_dir),
+            file_sha256=_file_hashes(result_dir),
+            timeline=None,
+        )
+        job = fixture_job
+        row = validate_closed_result(job, result, archive_profile=profile).attempt_entry
+        episode_rows, failure_attempt_rows = [], [row]
+    else:
+        raise ValueError(f"unsupported archive fixture outcome: {archive_outcome}")
+    assert row is not None
     manifest = {
         "manifest_version": 3, "source_run_ids": [job.run_id],
         "dataset_identity": profile.dataset_identity,
         "archive_format_id": profile.archive_format_id,
         "episode_schema_version": profile.episode_schema_version,
         "archive_profile": profile.as_dict(), "view_status": "PROVISIONAL",
-        "episodes": [row], "failure_attempts": [],
+        "episodes": episode_rows, "failure_attempts": failure_attempt_rows,
     }
     config_payload = _runtime_config(tmp_path, publication_enabled=True).as_dict()
     config_payload["run"].update({
@@ -870,7 +905,8 @@ def _complete_archive_remote(
     }
     resume_payload = {
         "run_id": job.run_id, "source_run_id": job.run_id,
-        "source_run_ids": [job.run_id], "episodes": 1, "failure_attempts": 0,
+        "source_run_ids": [job.run_id],
+        "episodes": len(episode_rows), "failure_attempts": len(failure_attempt_rows),
         "dataset_identity": profile.dataset_identity,
         "archive_format_id": profile.archive_format_id,
         "episode_schema_version": profile.episode_schema_version,
@@ -1482,6 +1518,27 @@ def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(tmp_p
         f"{prefix_root.relative_to(prefix_root.parents[1])}/{manifest['episodes'][0]['archive_ref']}/{relative}"
         for relative in manifest["episodes"][0]["file_sha256"]
     }
+
+
+def test_coordinator_archive_resume_reopens_bound_crash_attempt(tmp_path: Path, monkeypatch):
+    run_json, token, manifest, _prefix_root, _downloads = _complete_archive_remote(
+        tmp_path,
+        monkeypatch,
+        archive_outcome="simulator_crash",
+    )
+
+    control = CoordinatorControlPlane.open(
+        run_json,
+        api_factory=lambda: object(),
+        token_path=token,
+    )
+
+    assert control.manifest["episodes"] == []
+    assert len(control.manifest["failure_attempts"]) == 1
+    row = control.manifest["failure_attempts"][0]
+    assert row["split"] == "train"
+    assert row["subset"] == manifest["failure_attempts"][0]["subset"]
+    assert control.planner.counts("T01").nominal_crashes == 1
 
 
 def test_coordinator_archive_resume_requires_verified_receipt_to_bind_data_committed_snapshot(

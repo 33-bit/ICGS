@@ -244,6 +244,91 @@ def test_archive_result_detection_requires_canonical_manifest_without_legacy_fal
         generation_worker._archive_result_payload(candidate, config)
 
 
+@pytest.mark.parametrize("outcome", ["simulator_crash", "invalid_observation"])
+@pytest.mark.parametrize(
+    ("program_id", "plan_split", "expected_split", "expected_subset", "plan_randomization"),
+    [
+        ("T01", "train", "train", "train_core", {"train_subset": "train_core"}),
+        ("T01", "train", "train", "train_core", {}),
+        ("V01", "development", "dev", None, {}),
+    ],
+)
+def test_worker_fallback_archive_attempt_binds_planned_split_and_subset(
+    tmp_path: Path,
+    outcome: str,
+    program_id: str,
+    plan_split: str,
+    expected_split: str,
+    expected_subset: str | None,
+    plan_randomization: dict,
+):
+    base_config = _runtime_config(tmp_path)
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    config_payload = base_config.as_dict()
+    config_payload["archive_profile"] = profile.as_dict()
+    config = GenerationRuntimeConfig.from_dict(config_payload)
+    episode_id = f"episode-{program_id.lower()}-fallback-00001"
+    plan = AttemptPlan(
+        program_id=program_id,
+        split=plan_split,
+        episode_index=1,
+        episode_id=episode_id,
+        episode_kind="nominal",
+        scene_seed=7,
+        collection_seed=20260920,
+        randomization={
+            "scene_signature": "fallback-signature",
+            "asset_instance_id": f"{program_id}-asset-7",
+            **plan_randomization,
+        },
+        intervention=None,
+    )
+    job = GenerationJob.create(
+        job_id=f"job-{program_id}-fallback",
+        run_id=config.run.run_id,
+        attempt_id=f"att-{episode_id}",
+        episode_id=episode_id,
+        program_id=program_id,
+        plan=plan,
+        code_revision="a" * 40,
+        manifest_sha256="b" * 64,
+        output_root=str(tmp_path / "staging"),
+    )
+    candidate = tmp_path / "worker-fallback"
+
+    generation_worker._write_archive_worker_attempt(
+        candidate,
+        job,
+        config,
+        outcome=outcome,
+        error="worker startup failed",
+    )
+
+    archive_path = candidate / "attempt.manifest.json"
+    archive = json.loads(archive_path.read_text(encoding="utf-8"))
+    attempt = archive["record_metadata"]["attempt"]
+    assert archive["split"] == expected_split
+    assert archive["subset"] == expected_subset
+    assert attempt["split"] == expected_split
+    assert attempt["subset"] == expected_subset
+    result = WorkerResult(
+        job_id=job.job_id,
+        attempt_id=job.attempt_id,
+        episode_id=None,
+        program_id=job.program_id,
+        outcome=outcome,
+        result_dir=str(candidate),
+        file_sha256=generation_worker._file_hashes(candidate),
+        timeline=None,
+    )
+
+    validated = validate_closed_result(job, result, archive_profile=profile)
+
+    assert validated.attempt_entry is not None
+    assert validated.attempt_entry["split"] == expected_split
+    assert validated.attempt_entry["subset"] == expected_subset
+
+
 def _worker_episode_materialization_row(*, outcome: str, depth_frames: list[np.ndarray | None]) -> dict:
     plan = AttemptPlan(
         program_id="T01", split="train", episode_index=1,
@@ -1112,6 +1197,8 @@ def test_archive_worker_preserves_closed_attempt_when_runner_raises(
                 "attempt_id": job.attempt_id,
                 "episode_id": None,
                 "program_id": job.program_id,
+                "split": "train",
+                "subset": "train_core",
                 "outcome": outcome,
                 "valid_observation_until": 1,
             },
@@ -1184,6 +1271,8 @@ def test_archive_worker_keeps_closed_attempt_when_publication_fails(
                 "attempt_id": job.attempt_id,
                 "episode_id": None,
                 "program_id": job.program_id,
+                "split": "train",
+                "subset": "train_core",
                 "outcome": outcome,
                 "valid_observation_until": 0,
             },

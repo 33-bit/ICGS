@@ -26,6 +26,7 @@ def online_observation_view(observation: Mapping[str, Any]) -> dict[str, Any]:
     return {field: observation[field] for field in ("points", "point_valid", "T_w_e", "grip")}
 
 from icgs.data.collection.generation.distributed_contracts import GenerationJob, WorkerResult
+from icgs.data.collection.generation.diversity import train_subset_for_sample
 from icgs.data.collection.generation.episode_archive import (
     EpisodeArchiveWriter,
     archive_profile_from_environment,
@@ -454,8 +455,15 @@ def _write_archive_result(
             "durations": len(record["dt"]),
         }
     else:
+        attempt_record = dict(materialized.attempt_record or {})
+        attempt_record["split"] = "dev" if job.plan.split == "development" else job.plan.split
+        attempt_record["subset"] = (
+            job.plan.randomization.get("train_subset")
+            or train_subset_for_sample(job.plan.randomization)
+            if job.plan.split == "train" else None
+        )
         writer.write_attempt(
-            materialized.attempt_record or {},
+            attempt_record,
             prefix_arrays=_archive_attempt_prefix(materialized),
             debug_metadata=_archive_debug_metadata(materialized, job),
             output_dir=target,

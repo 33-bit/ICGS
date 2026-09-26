@@ -39,17 +39,17 @@ class Obs:
     front_mask: np.ndarray
 
 
-def _job(index: int = 1, split: str = "train") -> GenerationJob:
+def _job(index: int = 1, split: str = "train", program_id: str = "T01") -> GenerationJob:
     plan = AttemptPlan(
-        program_id="T01", split=split, episode_index=index,
-        episode_id=f"episode-t01-{index:05d}", episode_kind="nominal",
+        program_id=program_id, split=split, episode_index=index,
+        episode_id=f"episode-{program_id.lower()}-{index:05d}", episode_kind="nominal",
         scene_seed=100 + index, collection_seed=20260920,
         randomization={"scene_signature": f"sig-{index}", "asset_instance_id": f"asset-{index}"},
         intervention=None,
     )
     return GenerationJob.create(
         job_id=f"job-{index}", run_id="run-1", attempt_id=f"att-{plan.episode_id}",
-        episode_id=plan.episode_id, program_id="T01", plan=plan,
+        episode_id=plan.episode_id, program_id=program_id, plan=plan,
         code_revision="a" * 40, manifest_sha256="b" * 64,
         output_root="/content/run/staging",
     )
@@ -102,10 +102,12 @@ def _archive_closed(
     index: int = 1,
     *,
     randomization_overrides: dict | None = None,
+    split: str = "train",
+    program_id: str = "T01",
 ):
     profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
     monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(profile.as_dict()))
-    job = _job(index)
+    job = _job(index, split=split, program_id=program_id)
     if randomization_overrides:
         plan = replace(
             job.plan,
@@ -214,18 +216,140 @@ def test_archive_profile_validates_episode_and_emits_durable_hf_reference(
 def test_archive_profile_validates_attempts_without_episode_training_entry(
     tmp_path: Path, monkeypatch, outcome: str
 ):
-    job, result, profile = _archive_closed(tmp_path, monkeypatch, outcome)
+    job, result, profile = _archive_closed(
+        tmp_path,
+        monkeypatch,
+        outcome,
+    )
 
     validated = validate_closed_result(job, result, archive_profile=profile)
 
+    archive = json.loads(
+        (Path(result.result_dir) / "attempt.manifest.json").read_text(encoding="utf-8")
+    )
+    attempt = archive["record_metadata"]["attempt"]
+    assert archive["split"] == "train"
+    assert archive["subset"] == "train_core"
+    assert attempt["split"] == "train"
+    assert attempt["subset"] == "train_core"
     assert validated.episode_entry is None
     assert validated.attempt_entry is not None
     assert validated.attempt_entry["outcome"] == outcome
+    assert validated.attempt_entry["split"] == "train"
+    assert validated.attempt_entry["subset"] == "train_core"
     assert "result_dir" not in validated.attempt_entry
     assert validated.attempt_entry["archive_ref"] == (
         f"attempts/{job.program_id}/{job.attempt_id}"
     )
     assert validated.attempt_entry["file_sha256"] == result.file_sha256
+
+
+@pytest.mark.parametrize("outcome", ["simulator_crash", "invalid_observation"])
+def test_archive_attempt_writer_normalizes_development_split(
+    tmp_path: Path,
+    monkeypatch,
+    outcome: str,
+):
+    job, result, profile = _archive_closed(
+        tmp_path,
+        monkeypatch,
+        outcome,
+        split="development",
+        program_id="V01",
+    )
+
+    archive = json.loads(
+        (Path(result.result_dir) / "attempt.manifest.json").read_text(encoding="utf-8")
+    )
+    attempt = archive["record_metadata"]["attempt"]
+    validated = validate_closed_result(job, result, archive_profile=profile)
+
+    assert archive["split"] == "dev"
+    assert archive["subset"] is None
+    assert attempt["split"] == "dev"
+    assert attempt["subset"] is None
+    assert validated.attempt_entry is not None
+    assert validated.attempt_entry["split"] == "dev"
+    assert validated.attempt_entry["subset"] is None
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong_value"),
+    [("split", "dev"), ("subset", "train_diverse")],
+)
+def test_archive_profile_rejects_attempt_manifest_plan_identity_conflict(
+    tmp_path: Path,
+    monkeypatch,
+    field: str,
+    wrong_value: str,
+):
+    job, result, profile = _archive_closed(
+        tmp_path,
+        monkeypatch,
+        "simulator_crash",
+        randomization_overrides={"train_subset": "train_core"},
+    )
+    original = EpisodeArchiveReader(Path(result.result_dir) / "attempt.manifest.json")
+    attempt = original.to_episode_record()
+    attempt["split"] = "train"
+    attempt["subset"] = "train_core"
+    attempt[field] = wrong_value
+    target = tmp_path / f"conflicting-attempt-{field}"
+    EpisodeArchiveWriter(profile).write_attempt(
+        attempt,
+        prefix_arrays=original.raw_arrays,
+        debug_metadata=dict(original.debug_metadata),
+        output_dir=target,
+    )
+    hashes = _archive_file_hashes(target)
+
+    with pytest.raises(ValueError, match=f"archive attempt metadata mismatch for {field}"):
+        validate_closed_result(
+            job,
+            replace(result, result_dir=str(target), file_sha256=hashes),
+            archive_profile=profile,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong_value"),
+    [("split", "dev"), ("subset", "train_diverse")],
+)
+def test_archive_profile_rejects_top_level_attempt_identity_conflict(
+    tmp_path: Path,
+    monkeypatch,
+    field: str,
+    wrong_value: str,
+):
+    job, result, profile = _archive_closed(
+        tmp_path,
+        monkeypatch,
+        "simulator_crash",
+        randomization_overrides={"train_subset": "train_core"},
+    )
+    target = tmp_path / f"conflicting-top-level-{field}"
+    import shutil
+
+    shutil.copytree(result.result_dir, target)
+    manifest_path = target / "attempt.manifest.json"
+    manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest_payload[field] = wrong_value
+    manifest_bytes = _write_canonical_json(manifest_path, manifest_payload)
+    artifact_path = target / "artifact_manifest.json"
+    artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+    artifact["files"]["attempt.manifest.json"].update({
+        "bytes": len(manifest_bytes),
+        "sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+    })
+    _write_canonical_json(artifact_path, artifact)
+    hashes = _archive_file_hashes(target)
+
+    with pytest.raises(ValueError, match=f"archive identity mismatch for {field}"):
+        validate_closed_result(
+            job,
+            replace(result, result_dir=str(target), file_sha256=hashes),
+            archive_profile=profile,
+        )
 
 
 def test_archive_attempt_manifest_row_excludes_local_paths_and_unprojected_arrays(

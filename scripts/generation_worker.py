@@ -24,6 +24,7 @@ from icgs.data.collection.generation.distributed_queue import (
     FilesystemJobQueue,
     GenerationSafetyStop,
 )
+from icgs.data.collection.generation.diversity import train_subset_for_sample
 from icgs.data.collection.generation.episode_archive import EpisodeArchiveWriter
 
 
@@ -135,6 +136,12 @@ def _write_archive_worker_attempt(
         "attempt_id": job.attempt_id,
         "episode_id": None,
         "program_id": job.program_id,
+        "split": "dev" if job.plan.split == "development" else job.plan.split,
+        "subset": (
+            job.plan.randomization.get("train_subset")
+            or train_subset_for_sample(job.plan.randomization)
+            if job.plan.split == "train" else None
+        ),
         "outcome": outcome,
         "error": error[:8192],
         "valid_observation_until": None,

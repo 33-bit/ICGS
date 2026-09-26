@@ -19,6 +19,7 @@ from icgs.data.collection.generation.distributed_publication import (
     PublicationReceipt,
     reconcile_publication,
 )
+from icgs.data.collection.generation.diversity import train_subset_for_sample
 from icgs.data.collection.generation.episode_archive import EpisodeArchiveWriter
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
 
@@ -550,6 +551,11 @@ def test_archive_operations_upload_complete_attempt_inventory(
             "episode_id": None,
             "program_id": job.program_id,
             "split": job.plan.split,
+            "subset": (
+                job.plan.randomization.get("train_subset")
+                or train_subset_for_sample(job.plan.randomization)
+                if job.plan.split == "train" else None
+            ),
             "episode_kind": job.plan.episode_kind,
             "outcome": outcome,
             "valid_observation_until": None,

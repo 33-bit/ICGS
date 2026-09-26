@@ -555,9 +555,17 @@ def _validate_archive_identity(
         "episode_id": None,
         "program_id": job.program_id,
         "outcome": result.outcome,
+        "split": "dev" if job.plan.split == "development" else job.plan.split,
+        "subset": _planned_archive_subset(job),
     }.items():
         if attempt.get(key) != value:
             raise ValueError(f"archive attempt metadata mismatch for {key}")
+    for key, value in {
+        "split": "dev" if job.plan.split == "development" else job.plan.split,
+        "subset": _planned_archive_subset(job),
+    }.items():
+        if payload.get(key) != value:
+            raise ValueError(f"archive identity mismatch for {key}")
     if result.timeline is not None:
         raise ValueError("attempt archive result must not carry a timeline")
     return payload, reader, dict(attempt)
