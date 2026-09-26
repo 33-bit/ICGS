@@ -360,11 +360,21 @@ any broad historical conversion job.
 **Interfaces:**
 - `capacity_receipt.json` adds per-result `bytes_by_category`, `boundaries`, `raw_points`, `archive_profile`, and `local_peak_bytes`.
 
-- [ ] Categorize bytes into archive chunks, manifests, debug metadata, views, and receipts.
-- [ ] Record point counts and boundary counts without loading all prior episodes.
-- [ ] Enforce a bounded per-result and total staging cap before launching a probe stage.
-- [ ] Add tests for byte-cap rejection, category accounting, compact-profile validation, and no-worker preflight behavior.
-- [ ] Run only the configuration/preflight tests locally; live capacity measurement remains explicit.
+- [x] Categorize bytes into archive chunks, manifests, debug metadata, views, and receipts.
+- [x] Record point counts and boundary counts without loading all prior episodes.
+- [x] Enforce a bounded per-result and total staging cap before launching a probe stage.
+- [x] Add tests for byte-cap rejection, category accounting, compact-profile validation, and no-worker preflight behavior.
+- [x] Run only configuration/preflight and fixture tests locally; live capacity measurement remains explicit.
+
+**Local acceptance (2026-09-26):** Commits `8660299`, `6779b37`, and
+`ae9d06f` add per-result category/timeline/point accounting and writer-reported
+local-peak upper-bound labels. Archive-profile probes now require explicit
+per-result and global staging caps; product and cumulative retained-stage
+budgets are checked before worker launch. A Grok 4.7 High task review accepted
+the cap fixes. Fresh parent CPython 3.11.15 results: capacity **31 PASS**,
+generation/capacity **497 PASS**, L0 **22 PASS** (two pre-existing invalid-escape
+warnings); task-range `git diff --check` **PASS**. Live capacity measurement,
+simulator, HF, training, C1–C5, and full generation are **NOT RUN**.
 
 ## Phase 5 — Documentation and acceptance closure
 
