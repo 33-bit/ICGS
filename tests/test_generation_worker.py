@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+import os
 from pathlib import Path
 import signal
 import subprocess
@@ -339,6 +340,7 @@ def _run_episode_worker_main_with_stub_task(
     *,
     failure: str,
     archive_profile: ArchiveProfileConfig | None,
+    inject_signal_after_capture: bool = False,
 ):
     generation_episode_worker = _load_generation_episode_worker_without_simulator(monkeypatch)
     program_id = "T01"
@@ -496,7 +498,30 @@ def _run_episode_worker_main_with_stub_task(
 
         monkeypatch.setattr(generation_episode_worker, "_write_episode", interrupted_writer)
 
-    assert generation_episode_worker.main() == 0
+    previous_injected_handler = None
+    if inject_signal_after_capture:
+        class InjectedSignal(BaseException):
+            pass
+
+        def injected_handler(_signum, _frame):
+            raise InjectedSignal("injected SIGTERM after capture and before archive write")
+
+        previous_injected_handler = signal.signal(signal.SIGTERM, injected_handler)
+        original_print = print
+
+        def print_and_inject(*args, **kwargs):
+            original_print(*args, **kwargs)
+            if args and isinstance(args[0], str) and args[0].startswith("{"):
+                os.kill(os.getpid(), signal.SIGTERM)
+
+        monkeypatch.setattr(generation_episode_worker, "print", print_and_inject, raising=False)
+
+    try:
+        result = generation_episode_worker.main()
+    finally:
+        if previous_injected_handler is not None:
+            signal.signal(signal.SIGTERM, previous_injected_handler)
+    assert result == 0
     return write_root / program_id
 
 
@@ -600,6 +625,24 @@ def test_sigterm_during_archive_write_leaves_discoverable_write_marker(
     marker = json.loads(markers[0].read_text(encoding="utf-8"))
     assert marker["program_id"] == "T01"
     assert marker["attempt_id"] is None
+
+
+def test_sigterm_after_capture_before_archive_write_leaves_marker(
+    tmp_path: Path, monkeypatch,
+):
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    with pytest.raises(BaseException, match="after capture and before archive write"):
+        _run_episode_worker_main_with_stub_task(
+            monkeypatch,
+            tmp_path,
+            failure="step_raises_after_prefix",
+            archive_profile=profile,
+            inject_signal_after_capture=True,
+        )
+
+    markers = list((tmp_path / "episodes").glob(".T01.archive-write-in-progress-*"))
+    assert len(markers) == 1
+    assert not (tmp_path / "episodes" / "T01" / "attempt.manifest.json").exists()
 
 
 def test_legacy_episode_worker_exception_keeps_v2_empty_prefix_output(

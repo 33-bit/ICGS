@@ -1034,6 +1034,13 @@ def main() -> int:
                 if archive_profile_enabled
                 else None
             )
+            write_marker = None
+            if archive_profile_enabled and write_root_value:
+                write_marker = _begin_archive_write_marker(
+                    Path(write_root_value),
+                    program_id,
+                    plan.episode_id if plan is not None else None,
+                )
             previous_sigterm = None
             try:
                 if archive_profile_enabled:
@@ -1055,20 +1062,15 @@ def main() -> int:
                     }
                     if captured_prefix is not None:
                         row.update(captured_prefix)
+                finally:
+                    if previous_sigterm is not None:
+                        signal.signal(signal.SIGTERM, previous_sigterm)
+                        previous_sigterm = None
                 results.append(row)
                 public = {k: v for k, v in row.items() if not k.startswith("_")}
                 print(json.dumps(public), flush=True)
                 if write_root_value:
                     write_root = Path(write_root_value)
-                    write_marker = None
-                    if archive_profile_enabled:
-                        write_marker = _begin_archive_write_marker(
-                            write_root, program_id, row.get("_plan", {}).get("episode_id")
-                            if isinstance(row.get("_plan"), dict) else None,
-                        )
-                        if previous_sigterm is not None:
-                            signal.signal(signal.SIGTERM, previous_sigterm)
-                            previous_sigterm = None
                     _write_episode(write_root / program_id, row)
                     if write_marker is not None:
                         write_marker.unlink(missing_ok=True)
