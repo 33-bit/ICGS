@@ -512,3 +512,20 @@ Hành vi test bao gồm (không phải danh sách hết file):
 1. Pilot nhỏ trên vài family + vài perturbation kind.
 2. Báo cáo ngắn: parity, schema/timeline, split leakage, diversity, perturbation quota.
 3. Chỉ khi các mục đó pass mới chạy 200+80 / 100+20.
+
+---
+
+## Ghi chú bổ sung — lưu trữ HF và view (2026-09-26)
+
+Các mục trên là bằng chứng lịch sử của hợp đồng generation ngày 2026-09-20 và
+không bị sửa đổi bởi thiết kế lưu trữ mới. [Generation artifacts](../components/generation-artifacts.md)
+và [ADR0015](../decisions/0015-generation-storage-and-view-snapshots.md) hiện
+ghi thêm profile tùy chọn `icgs-primary-v3-archive-v1` /
+`icgs_npz_chunked_v1` / `icgs_episode_archive_v1`: HF giữ toàn bộ raw/debug,
+`success` và `valid_failure` là episode đầy đủ, crash/invalid là attempt có
+prefix hợp lệ, và artefact v2 cũ vẫn immutable. Pointer view trong lúc
+materialize là `PROVISIONAL`; snapshot `FINAL` được tạo từ một
+`dataset_manifest.json` đã đóng băng theo HF commit revision và ghi revision +
+SHA256 đó. Resume dựa trên manifest HF; receipt-only chỉ xóa payload local sau
+khi verify bytes ở revision đã ghim. Đây là ghi chú về owner hiện tại, không phải
+thay đổi các quota, split, schema hay claim chưa launch ở audit này.

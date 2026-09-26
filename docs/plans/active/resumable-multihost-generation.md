@@ -12,12 +12,12 @@ change.
 ## Current and target states
 
 The canonical runtime is `src/icgs/data/collection/generation` with the
-coordinator and worker entry points under `scripts/`. The target keeps all
-serialized protocol/schema strings unchanged while adding strict runtime
-configuration for `resume_from_hf`, `distribution_mode`, `machine.host_id` and
-`machine.worker_ids`. A coordinator owns planning, validation and publication;
-other hosts run workers and a host-scoped watchdog against one shared POSIX
-filesystem.
+coordinator and worker entry points under `scripts/`. Legacy v2
+protocol/schema strings remain unchanged; the opt-in archive profile uses the
+new identities `icgs-primary-v3-archive-v1`, `icgs_npz_chunked_v1` and
+`icgs_episode_archive_v1`. A coordinator owns planning, validation and
+publication; other hosts run workers and a host-scoped watchdog against one
+shared POSIX filesystem.
 
 ## Invariants and scope
 
@@ -25,6 +25,14 @@ filesystem.
   identity, serialized attempt plans and immutable conflicts are checked before
   workers start.
 - A resumed run uses a new disjoint run ID and keeps the configured HF prefix.
+- Archive-profile resume additionally requires a lowercase full HF commit OID,
+  validates the complete archive/schema identity and every row's manifest/chunk
+  hash, and restores quota state from HF after local episode payloads are gone.
+- `success` and `valid_failure` rows remain episodes; crash/invalid rows remain
+  measured-prefix attempts and are never promoted into training views.
+- Receipt-only retention removes local result payloads only after pinned-revision
+  verification; queue receipts, manifest rows, artifact hashes, source run ID and
+  remote commit OID remain available for recovery.
 - Workers never receive HF credentials.
 - Shared queue transitions use atomic rename plus POSIX `flock`.
 - Active `(worker_id, host_id, worker_instance_id)` leases fence duplicates and
@@ -44,6 +52,10 @@ filesystem.
   reconciliation.
 - [x] HF bootstrap: launcher preflight before child spawn, manifest validation,
   cached revision/SHA receipt and coordinator reuse of the pinned revision.
+- [x] Archive-profile bootstrap: owned temporary caches, complete archive
+  inventory verification, profile/plan identity checks and HF-only planner
+  reconstruction are covered by local fake-HF fixtures. A live HF run on the
+  current branch is not implied.
 - [x] Documentation and no-secret profile example.
 - [x] Bounded VPS acceptance with HF resume, pinned manifest, disjoint run ID and
   workers-only host attach is recorded in
@@ -56,8 +68,31 @@ Run focused generation tests and L0 locally. Unit tests cover duplicate/expired
 leases, concurrent lock serialization, stale-claim heartbeat behavior, late
 result fencing, host-local command/config paths, credential filtering, strict
 resume manifest validation, preflight-before-spawn, coordinator snapshot digest,
-and retry output isolation. Do not treat skipped or unrun simulator/HF/live
-checks as PASS.
+archive hash/profile checks and retry output isolation. Do not treat skipped or
+unrun simulator/HF/live checks as PASS. The exact per-record HF reader, resume
+and pinned final-view commands are maintained in
+[Data generation](../../components/generation.md); they use external credential
+setup and never embed token values.
+
+Focused fixture commands:
+
+```bash
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_generation_archive.py
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_generation_views.py tests/test_generation_view_finalization.py
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_generation_control.py tests/test_generation_planner.py \
+  tests/test_generation_publication.py tests/test_generation_queue.py
+PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_capacity_probe.py
+python3 -B scripts/validate_fast.py
+git diff --check
+```
+
+Report each selected command as `PASS`, `FAIL`, `SKIPPED` with its prerequisite,
+or `NOT RUN` when it was not selected. A skipped required gate is never a pass.
+These fixtures do not establish live HF behavior, Open3D SOR execution, native
+`icgs train` archive ingestion, simulator behavior or a full generation run.
 
 ## Compatibility
 
@@ -76,18 +111,17 @@ artifacts or rewrite published rows.
 
 ## Final evidence
 
-Fresh local evidence on Python 3.11.15:
+Local fixture evidence on Python 3.11.15 (the storage/view implementation record,
+not a new remote run):
 
-- `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation*.py` —
-  **PASS, 217 passed**.
-- `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests` — **PASS, 896 passed,
-  10 skipped, 3 warnings**.
-- `python3 -B scripts/validate_fast.py` — **PASS**, 22 harness tests; L1–L4
-  explicitly **NOT RUN**.
-- `git diff --check` — **PASS**; bytecode compilation — **PASS**.
+- `PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation*.py tests/test_capacity_probe.py` — **PASS, 497 passed**.
+- `python3 -B scripts/validate_fast.py` — **PASS**, 22 harness tests; L1–L4,
+  Open3D SOR and native archive-backed training integration explicitly **NOT RUN**.
+- `git diff --check` — **PASS** in the recorded implementation evidence.
 
 Repository-wide discovery `pytest -q` remains **FAIL** because three generated
 `output/icgs-figures*/src/test_typography.py` modules share one import name;
 this is pre-existing output-tree collection pollution, not a runtime test
-failure. Live simulator, multi-host, HF resume and HF write checks remain
-**NOT RUN** until explicitly provisioned.
+failure. The dated VPS record reports a bounded remote acceptance, but live HF
+publication/finalization on this branch, a simultaneous multi-host production
+run, simulator collection, full quota and training remain **NOT RUN**.

@@ -21,6 +21,44 @@ python3 -B -m pytest -q tests/test_environment_setup.py tests/test_generation_en
 python3 -B -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
+## Generation archive and view checks
+
+The lossless HF archive is opt-in and fixture-tested without network access. Run
+the focused checks separately so the report identifies which contract was
+actually exercised:
+
+```bash
+# archive round-trip, hashes, offsets, aliases and bounded chunk/cache reads
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_generation_archive.py
+
+# provisional pointers and FINAL role/view snapshots at a frozen manifest
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_generation_views.py tests/test_generation_view_finalization.py
+
+# remote-resume contract fixtures and receipt-only publication/recovery
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_generation_control.py tests/test_generation_planner.py \
+  tests/test_generation_publication.py tests/test_generation_queue.py
+
+# per-result and cumulative archive staging/size budgets
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_capacity_probe.py
+```
+
+These tests use tiny local archives or fake HF clients. They do not download a
+dataset, launch a simulator, run preprocessing, execute Open3D SOR, start
+training, publish to HF or prove that native `icgs train` consumes archive-backed
+views. The current trainer still reads PyG sample directories and does not
+persist archive view metadata. A clean-machine reader, resume command and
+revision-bound finalizer are documented in [Data generation](../docs/components/generation.md).
+
+For each selected command report `PASS` when assertions pass, `FAIL` when the
+command ran and failed, `SKIPPED` with the unavailable prerequisite, or `NOT RUN`
+when it was not selected. `SKIPPED` is never a `PASS`; live HF, simulator,
+Open3D, training and C1–C5 claims remain `NOT RUN` unless their explicit gate is
+provisioned.
+
 The package must be installed; tests no longer inject repository roots into sys.path.
 L0 uses only stdlib. Full L1 uses the validated environment; missing modules are not
 substituted with fake imports. Core fixture tests inject concrete small collaborators
@@ -51,7 +89,7 @@ acceptance job must run actual checkpoint tests and reference comparison.
 | test_checkpoints.py | Generated alias/compiled/shape/missing diagnostics and artifact immutability |
 | test_loading.py | Resolved config survives load→context→prediction |
 | test_training.py | Actual Lightning wrapper alias registration (no training job) |
-| test_generation_config.py / test_generation_archive.py | Opt-in archive profile validation; lossless episode/attempt archive roundtrip, hashes, offsets, aliases, bit-packed validity, bounded chunk/cache behavior |
+| test_generation_config.py / test_generation_archive.py / test_generation_views.py / test_generation_view_finalization.py / test_capacity_probe.py | Opt-in archive profile validation; lossless episode/attempt roundtrip, hashes, offsets, aliases, bit-packed validity, bounded chunk/cache behavior, provisional/final revision-bound views and staging budgets |
 | test_cli.py | Four bounded successful command-body lifecycle seam tests for infer/train/prepare-data/evaluate; installed `--help` and rejection parser/import probes kept separate |
 | test_differential.py | Verified original source methods, not two facades of new implementation |
 | test_model_integration.py | Real strict published native inference, explicitly enabled |

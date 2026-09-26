@@ -11,8 +11,8 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [RESEARCH](RESEARCH.md) | Baseline-change policy, experiments, reproducibility expectations |
 | [Original baseline](baselines/instant_policy.md) | Historical source/defaults, entry-point overrides, assets and reproduction limits |
 | [Policy data contract](components/policy-data-contract.md) | Current data, graph, frame, action and normalization semantics |
-| [Data generation](components/generation.md) | Canonical generation modules, lifecycle, record classes and operations |
-| [Generation artifacts](components/generation-artifacts.md) | Current episode/attempt schema, file inventory, consumers and storage duplication |
+| [Data generation](components/generation.md) | Canonical generation modules, HF archive lifecycle, record classes, resume and view finalization |
+| [Generation artifacts](components/generation-artifacts.md) | Legacy v2 and lossless HF archive trees, file inventories, consumers and retention |
 | [Environment setup](components/environment.md) | Portable CPU/CUDA/generation profiles, verification and credential boundary |
 | [Composition examples](components/composition-examples.md) | Current component replacement APIs and future extension boundaries |
 | [Boundary decision](decisions/0001-harness-boundary.md) | Runtime independence from repository harness |
@@ -42,7 +42,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Onboarding audit](audits/harness-onboarding.md) | Dated evidence, design approval, adoption choices and discovered debt |
 | [Generation contract audit](audits/2026-09-20-generation-contract.md) | Historical collection quota, splits, schema, perturbations and views |
 | [Generation launch record](audits/2026-09-21-generation-launch.md) | Historical distributed launch evidence and publication receipts |
-| [Resumable multi-host generation](plans/active/resumable-multihost-generation.md) | Current HF resume, shared-filesystem worker leases and host-scoped launch contract |
+| [Resumable multi-host generation](plans/active/resumable-multihost-generation.md) | Current HF archive resume, shared-filesystem worker leases and host-scoped launch contract |
 | [Generation storage and view finalization](plans/active/generation-storage-and-view-finalization.md) | HF source-of-truth lossless archive, bounded local retention and frozen training-view plan |
 | [Generation storage decision](decisions/0015-generation-storage-and-view-snapshots.md) | Accepted HF archive, binary deduplication and provisional/final view boundary |
 | [Third-party notices](third-party-notices.md) | Attribution and license for adapted guidance |

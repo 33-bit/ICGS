@@ -47,26 +47,68 @@ Changing them requires a separate data migration.
 opt-in archive identity `icgs-primary-v3-archive-v1` / `icgs_npz_chunked_v1` /
 `icgs_episode_archive_v1`. Runtime configs without `archive_profile` retain the
 existing v3 JSON behavior. The archive profile keeps full-resolution measured
-clouds and captured debug modalities in safe compressed NPZ chunks; success and
-`valid_failure` use full episode archives, while crash/invalid outcomes remain
-attempt archives with null `episode_id`. Provisional pointers are discovery
-indexes. Final training views must bind to a frozen HF dataset-manifest revision.
+clouds and every captured information-bearing debug modality in Hugging Face;
+there is no raw-only local or undocumented cold-storage tier. A valid
+`success` or `valid_failure` is a complete episode archive. A
+`simulator_crash` or `invalid_observation` is an attempt archive with a null
+`episode_id`, including any measured prefix needed for diagnosis. All four
+records remain in the HF archive and retain their immutable file hashes; only
+successes and valid failures can enter training views.
+
+The archive tree for one record is:
+
+```text
+<hf-prefix>/episodes/<program>/<episode>/
+├── episode.manifest.json       # identity, timeline, array pieces and profile
+├── data/chunk-*.npz             # lossless numeric arrays; allow_pickle=False on read
+├── debug.json                   # bounded scalar/string metadata and array references
+└── artifact_manifest.json       # complete file/byte/SHA256 inventory
+```
+
+Crash and invalid records use the same tree under
+`<hf-prefix>/attempts/<program>/<attempt>/` with `attempt.manifest.json`.
+Ragged clouds use values plus offsets, validity masks are bit-packed and
+losslessly unpacked, and byte-identical measured arrays may use an explicit
+semantic alias. `max_chunk_bytes` defaults to 256 MiB of uncompressed NPZ member
+bytes (including `.npy` headers); the manifest records the local write bound.
 
 The archive writer/reader, both local materialization paths, archive-aware worker
-result detection, and profile-aware distributed validation are implemented for
-this opt-in profile. The coordinator validates the canonical archive inventory
-before ingestion and the publisher revalidates it immediately before upload.
-Validated dataset rows contain HF-relative archive references and complete file
-hash inventories, not absolute local result paths. Success and `valid_failure`
-remain episode rows; crashes and invalid observations remain attempt rows. Legacy
-configs without `archive_profile` retain their JSON/layout behavior. Verified
-receipt-only pruning now retains a per-job queue receipt and manifest row; it is
-rejected in validation mode, whose checked-in profile remains `keep`. HF-only
-archive resume bootstrap is locally implemented and tested with a complete fake
-remote tree. Final-view publication, live remote acceptance and production-run
-authorization remain pending, so this is not yet an end-to-end production
-collection path. See the [active implementation plan](../plans/active/generation-storage-and-view-finalization.md)
-for current phase evidence.
+result detection, profile-aware validation, HF-only resume bootstrap, lazy index,
+and final-view builder are implemented and fixture-tested locally. The
+coordinator validates the canonical archive inventory before ingestion and the
+publisher revalidates it immediately before upload. Validated dataset rows
+contain HF-relative archive references and complete file hash inventories, not
+absolute local result paths. Legacy configs without `archive_profile` retain
+their JSON/layout behavior. Verified receipt-only pruning retains a per-job
+queue receipt, immutable manifest row, artifact hashes, source run identity and
+remote commit OID; pruning is allowed only after pinned-revision byte verification
+of every archive and control/view receipt, and is rejected in validation mode
+whose checked-in profile remains `keep`. Live HF publication/finalization and
+production-run authorization remain separate gates. See the [active
+implementation plan](../plans/active/generation-storage-and-view-finalization.md)
+for phase evidence and the [generation artifact inventory](generation-artifacts.md)
+for the legacy/new tree comparison.
+
+### Provisional and final views
+
+Materialization and each publication batch may write four metadata-only pointers
+(`D_geom`, `D_temporal`, `D_dyn`, `D_task`) with `status: "PROVISIONAL"`,
+`role: "all"`, and `mix: false`. They are discovery indexes and do not represent
+the training mixture. The finalizer reads a complete `dataset_manifest.json`
+from one pinned HF revision, verifies every selected episode manifest, then writes
+twelve immutable role/view snapshots (`train`, `validation`, `evaluation` × the
+four views) with `status: "FINAL"`. A final snapshot records the source revision,
+dataset-manifest SHA256, archive/preprocessing identities, role, mixture seed,
+sample counts and source-manifest timestamp. Re-running with remembered local
+state is not valid; a changed source revision or manifest hash fails closed.
+The 70/30 nominal/perturbed mixture is applied only to final train
+`D_temporal`/`D_dyn` transition references, in complete 7:3 units.
+
+The native `icgs train` command still consumes its existing PyG sample directory.
+It does not automatically ingest archive-backed views and does not persist their
+view metadata. Open3D statistical-outlier filtering (SOR, 20 neighbours and
+standard ratio 2) was not executed locally; fixture tests cover archive/index
+contracts and deterministic sampling only.
 
 ## Distributed lifecycle
 
@@ -105,21 +147,125 @@ manifest's full profile to equal the dataset/runtime profile. Attempt plans must
 also match the program catalog's split, allowed kind, and approved asset family.
 Legacy resume behavior is unchanged.
 
-The resume command requires a coordinator-only credential path:
+The clean-machine resume command requires a coordinator-only credential path.
+The file contains the token, but the token value is never embedded in a command
+or committed to a runtime snapshot:
 
 ```bash
+export ICGS_HF_TOKEN_PATH=/secure/credentials/hf-token
 python3 -B scripts/generation_launch.py \
   --runtime-config /runs/resume/runtime.json \
   --approved-manifest artifacts/composition/approved_composition_manifest.json \
   --code-revision "$(git rev-parse HEAD)" \
   --smoke-receipt /runs/resume/smoke.json \
-  --hf-token-path /secure/credentials/hf-token \
+  --hf-token-path "$ICGS_HF_TOKEN_PATH" \
   --detach
 ```
 
 The token path is never placed in worker command lines or worker environments.
 The coordinator persists queue and publication receipts so a process restart
 continues from immutable queue/HF state rather than resetting quota.
+
+### Clean-machine archive inspection
+
+The archive reader is a local-file API, not a `generation` CLI. Keep inspection
+bounded to one selected archive: fetch its manifest, artifact inventory, debug
+metadata and chunks at one immutable revision into a temporary directory, then
+run the canonical validator and reader. Configure Hugging Face authentication
+outside this command (`HF_TOKEN` or the machine's normal HF login); no token is
+printed or placed in the command line.
+
+```bash
+export HF_DATASET_REPO=ORG/DATASET
+export HF_SOURCE_REVISION=0123456789abcdef0123456789abcdef01234567
+export HF_ARCHIVE_PREFIX=icgs-primary-v3-archive-v1/episodes/T01/EPISODE_ID
+python3 -B - <<'PY'
+import json
+import os
+from pathlib import Path, PurePosixPath
+import tempfile
+
+from huggingface_hub import hf_hub_download
+from icgs.data.collection.generation.episode_archive import (
+    EpisodeArchiveReader,
+    validate_archive_manifest,
+)
+
+repo = os.environ["HF_DATASET_REPO"]
+revision = os.environ["HF_SOURCE_REVISION"]
+prefix = os.environ["HF_ARCHIVE_PREFIX"].rstrip("/")
+
+with tempfile.TemporaryDirectory(prefix="icgs-archive-read-") as temporary:
+    root = Path(temporary)
+    cache = root / "hf-cache"
+    cache.mkdir()
+
+    def fetch(relative: str) -> Path:
+        path = PurePosixPath(relative)
+        if path.is_absolute() or ".." in path.parts or "\\" in relative:
+            raise ValueError(f"unsafe archive path: {relative}")
+        destination = root.joinpath(*path.parts)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        downloaded = hf_hub_download(
+            repo_id=repo,
+            repo_type="dataset",
+            filename=f"{prefix}/{path.as_posix()}",
+            revision=revision,
+            cache_dir=str(cache),
+        )
+        destination.write_bytes(Path(downloaded).read_bytes())
+        return destination
+
+    manifest_path = fetch("episode.manifest.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    artifact_path = fetch("artifact_manifest.json")
+    inventory = json.loads(artifact_path.read_text(encoding="utf-8"))["files"]
+    for relative in inventory:
+        fetch(relative)
+    validate_archive_manifest(manifest_path)
+    reader = EpisodeArchiveReader(manifest_path)
+    print(json.dumps({
+        "episode_id": reader.manifest.payload["episode_id"],
+        "outcome": reader.manifest.payload["outcome"],
+        "timeline": reader.manifest.payload["timeline"],
+        "archive_format_id": reader.manifest.payload["archive_format_id"],
+    }, sort_keys=True))
+PY
+```
+
+This intentionally downloads one archive, never a whole HF prefix. A
+metadata-only index can fetch `dataset_manifest.json` and the selected compact
+episode manifests first; use a caller-owned fetch adapter to materialize only
+the chunks needed for a sample. The native `ArchiveDatasetIndex` and
+`EpisodeArchiveReader` do not stream directly from HF.
+
+### Clean-machine final-view publication
+
+`generation_finalize_views.py` is the only finalizer command. It downloads the
+dataset manifest and compact episode manifests from the explicitly supplied
+source prefix/revision, writes snapshots under a separate output prefix, and
+verifies the committed bytes at the returned revision. Configure HF credentials
+through the machine's normal login or `HF_TOKEN`; do not substitute a branch,
+tag or remembered local manifest for the full commit OID.
+
+```bash
+export HF_DATASET_REPO=ORG/DATASET
+export HF_SOURCE_PREFIX=icgs-primary-v3-archive-v1
+export HF_SOURCE_REVISION=0123456789abcdef0123456789abcdef01234567
+export HF_FINAL_VIEWS_PREFIX=icgs-primary-v3-final-views
+python3 -B scripts/generation_finalize_views.py \
+  --repo-id "$HF_DATASET_REPO" \
+  --source-prefix "$HF_SOURCE_PREFIX" \
+  --source-revision "$HF_SOURCE_REVISION" \
+  --output-prefix "$HF_FINAL_VIEWS_PREFIX" \
+  --mixture-seed 20260920
+```
+
+The finalizer never downloads numeric chunks and never rebuilds from remembered
+local state. The output path is bound to
+`<output-prefix>/<source-revision>/seed-<mixture-seed>/`; an existing snapshot
+with different bytes or a source manifest whose revision/hash changed fails
+closed.
 
 ### Multiple hosts on one shared filesystem
 
@@ -172,12 +318,31 @@ earlier launches. They are evidence, not current commands.
 
 ## Validation
 
-Cheap validation:
+Focused archive/view/resume validation uses tiny local fixtures and fake HF
+clients; none of these commands contacts Hugging Face or starts a simulator,
+training job, preprocessing workload or robot motion:
 
 ```bash
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_generation_archive.py
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_generation_views.py tests/test_generation_view_finalization.py
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_generation_control.py tests/test_generation_planner.py \
+  tests/test_generation_publication.py tests/test_generation_queue.py
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_capacity_probe.py
 python3 -B scripts/validate_fast.py
-PYTHONPATH=src .venv/bin/python -B -m pytest -q tests/test_generation*.py
+git diff --check
 ```
+
+Report each selected command as `PASS`, `FAIL`, `SKIPPED` (with the missing
+prerequisite) or `NOT RUN` (not selected). A skipped required gate is never a
+pass. The focused tests prove archive round-trip/hash/offset behavior, final
+view role/mixture/revision binding, remote-resume contract fixtures and local
+capacity budgets. They do not prove live HF publication, clean-machine remote
+resume, Open3D SOR execution, native `icgs train` archive ingestion, simulator
+behavior, full generation or C1–C5; those remain explicit acceptance gates.
 
 Simulator execution, full collection and large Hugging Face publication require
 an explicitly provisioned environment and separate authorization.

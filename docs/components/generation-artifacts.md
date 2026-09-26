@@ -1,14 +1,25 @@
 # ICGS generation schema and artifact inventory
 
-Status: **documentation of the current implementation** (2026-09-24).
+Status: **documentation of the current implementation** (2026-09-26).
 
 This document describes what the canonical generation runtime currently writes,
 why each item exists, which consumer reads it, and whether it is part of the
 published Hugging Face artifact. It is an inventory, not permission to delete or
 change files. Any storage reduction that changes the serialized episode or the
 required training layout needs a separate migration decision and fresh validation.
+The v2 JSON/layout tree below is retained as immutable historical evidence;
+the opt-in archive profile is a new HF prefix and a new schema identity, not an
+in-place rewrite of those artifacts.
 
 ## Scope and source of truth
+
+For the archive profile, Hugging Face is the complete source of truth for raw
+observations, valid failures, provenance and debug evidence. Local result
+directories are staging/cache only. After publication, the `receipt_only` mode
+removes the large local payload only after every archive file, dataset manifest,
+resume receipt, publication receipt snapshot and provisional view has been
+verified at one pinned remote revision. The queue receipt, manifest row, source
+run identity, remote commit OID and file hashes remain locally for recovery.
 
 The phase-1 generation contract is defined by:
 
@@ -29,6 +40,13 @@ The `rlbench_attempt.py` writer is a separate reusable archive/materialization p
 and should not be confused with the distributed subprocess writer.
 
 ## Frozen protocol identity
+
+The historical v2 contract is documented by the [2026-09-20 generation
+audit](../audits/2026-09-20-generation-contract.md) and [2026-09-21 launch
+record](../audits/2026-09-21-generation-launch.md). Keep the approved program
+manifest at [`artifacts/composition/approved_composition_manifest.json`](../../artifacts/composition/approved_composition_manifest.json)
+and any published v2 HF manifest at its original revision; neither is rewritten
+when the archive profile is enabled.
 
 These values identify stored artifacts and must not be renamed as part of a storage
 cleanup:
@@ -71,7 +89,12 @@ not receive HF credentials. `success` and `valid_failure` are episode records;
 `simulator_crash` and `invalid_observation` are attempt records with
 `episode_id = null` and never count toward the success quota.
 
-## Episode artifact: successful or valid-failure result
+## Legacy v2 episode artifact: successful or valid-failure result
+
+The following tree is the current behavior when `archive_profile` is absent. It
+is the legacy `icgs_episode_v2` evidence used by the dated audits and existing
+HF prefixes; it remains readable and immutable. Do not infer that these JSON
+arrays are the storage format of the new archive profile.
 
 The following tree describes the distributed writer after a valid physical run.
 Some files are optional when a modality is unavailable; unavailable data must be
@@ -205,7 +228,7 @@ Contains attempt/episode identity, outcome and a map of every other file to
 the actual file set and hashes match exactly. **Required for ingestion, resume and
 publication integrity; not redundant metadata in the current contract.**
 
-## Attempt artifact: simulator crash or invalid observation
+## Legacy v2 attempt artifact: simulator crash or invalid observation
 
 ```text
 <result_dir>/
@@ -248,10 +271,10 @@ are not episode data:
 These control files are small relative to sensor artifacts. They should not be
 counted as the cause of the multi-terabyte dataset estimate.
 
-## Hugging Face published prefix
+## Legacy v2 Hugging Face published prefix
 
-For a valid episode, `distributed_publication.py` uploads every file in the
-validated `file_sha256` inventory below:
+For a valid episode under the legacy profile, `distributed_publication.py` uploads
+every file in the validated `file_sha256` inventory below:
 
 ```text
 <hf_subfolder>/episodes/<PROGRAM_ID>/<EPISODE_ID>/<all validated result files>
@@ -278,7 +301,21 @@ publication_receipt.json
 The publisher does not currently filter out `execution.json`, `telemetry.npz`, or
 duplicate layout arrays; if they are in the validated inventory, they are uploaded.
 
-## Training versus debug classification
+The archive profile uses the same control-file names under a new HF prefix, but
+its episode rows point to `episodes/<program>/<episode>/episode.manifest.json`
+and attempt rows point to `attempts/<program>/<attempt>/attempt.manifest.json`.
+The row's `file_sha256` map covers every chunk, manifest and `debug.json`; no
+absolute local result path is part of the source-of-truth record. Publication
+marks prefix view pointers `PROVISIONAL`. Final role/view snapshots are written
+later by `scripts/generation_finalize_views.py` under a separate prefix bound to
+the frozen source revision; they are not cumulative publication batches.
+
+## Legacy v2 training versus debug classification
+
+The table below describes the immutable v2 tree only. In the archive profile,
+all numeric arrays and captured modalities are information-bearing HF archive
+content; `debug.json` is metadata plus references and is not a second numeric
+copy.
 
 | Component | Current status | Why |
 |---|---|---|
@@ -308,7 +345,12 @@ retain a component-level size breakdown. Therefore this report does **not** clai
 percentage saving for any proposed cleanup. The next safe measurement is a single
 episode inventory that records `bytes` by top-level file before changing the writer.
 
-## Safe reduction path (proposal, not applied)
+## Safe reduction path (historical v2 proposal, superseded for new archives)
+
+This sequence records the pre-ADR0015 v2 cleanup discussion. It remains useful
+for explaining why the old tree was measured, but it is not an instruction to
+delete debug evidence from the new archive profile. ADR0015 keeps all
+information-bearing debug data in the HF source-of-truth archive.
 
 1. Measure one complete success and one valid failure with a per-file size table.
 2. Confirm actual training readers for root JSON versus `layout/` arrays.
@@ -373,6 +415,29 @@ artifacts and protocol identities unchanged.
 The earlier proposed `debug_sidecars = false` reduction is superseded: information-
 bearing debug evidence remains part of the HF source-of-truth archive.
 
+The new HF prefix has one complete source-of-truth tree per record:
+
+```text
+<hf-prefix>/episodes/<program>/<episode>/
+├── episode.manifest.json       # archive identity, provenance, timeline, pieces
+├── data/chunk-*.npz             # all lossless numeric arrays and captured modalities
+├── debug.json                   # bounded metadata; large arrays are references only
+└── artifact_manifest.json       # exact file, byte-count and SHA256 inventory
+
+<hf-prefix>/attempts/<program>/<attempt>/
+├── attempt.manifest.json
+├── data/chunk-*.npz             # measured prefix arrays when available
+├── debug.json
+└── artifact_manifest.json
+```
+
+`success` and `valid_failure` are full episode archives. `simulator_crash` and
+`invalid_observation` are complete attempt archives with `episode_id: null`;
+their valid measured prefixes remain available for diagnosis but are excluded
+from training views. A missing optional modality is omitted rather than filled
+with synthetic values. Full raw clouds, debug metadata, source/provenance
+identities and valid failures therefore remain recoverable from HF alone.
+
 The archive writer/reader currently materializes this tree:
 
 ```text
@@ -412,10 +477,45 @@ timeline before ingestion; the publisher repeats validation before upload.
 Validated dataset-manifest rows contain HF-relative `archive_ref` and manifest
 paths plus the complete per-file SHA256 map. They do not contain absolute local
 `result_dir` values, so rows remain portable after receipt-only pruning or when
-reconstructed on another machine. `success` and `valid_failure` stay episode rows;
-`simulator_crash` and `invalid_observation` stay attempt rows. With the archive
-profile absent, the legacy `episode.json`, layout, telemetry, and `attempt.json`
-paths remain unchanged. Verified receipt-only local pruning is implemented;
-HF-only resume bootstrap and remote publication acceptance remain pending in the
-active implementation plan. Until those gates pass, the legacy inventory above
-describes the end-to-end distributed path.
+reconstructed on another machine. With the archive profile absent, the legacy
+`episode.json`, layout, telemetry and `attempt.json` paths remain unchanged.
+
+Per-episode `views/*.json` pointers are `PROVISIONAL` (`role: all`, `mix: false`)
+and contain archive references only. The finalizer consumes a complete
+`dataset_manifest.json` materialized from one pinned HF revision and writes
+twelve immutable `FINAL` snapshots under
+`<output-prefix>/<source-revision>/seed-<mixture-seed>/` (three roles × four
+views). Each snapshot records the source revision and manifest SHA256, archive
+and preprocessing identities, role, mixture seed, sample counts and the source
+manifest timestamp. The train `D_temporal` and `D_dyn` snapshots select complete
+7 nominal : 3 perturbed transition units; crashes and invalid attempts never
+enter a view, while eligible valid failures do. A different source revision or
+manifest hash is a conflict, not a request to rebuild from remembered local
+state.
+
+The lazy archive reader is a separate dataset API. Native `icgs train` still
+consumes PyG sample directories, does not automatically ingest archive-backed
+views and does not persist their metadata. Open3D SOR execution was not run in
+the local fixture environment; only the archive/index and deterministic sampling
+contracts were exercised.
+
+HF-only resume, archive indexing and final-view generation have local fake-client
+or fixture evidence. Live HF publication/finalization, full generation and
+production authorization remain explicit gates. Receipt-only pruning is allowed
+only after pinned remote byte verification and retains the queue receipt, manifest
+row, hashes, source run and remote commit identity; the checked-in bounded
+validation profile continues to use `keep`.
+
+The exact clean-machine per-record reader, HF resume and pinned finalizer
+commands are maintained in [Data generation](generation.md); those commands use
+caller-provided credential paths or the machine's HF login and never embed token
+values.
+
+The historical TPU capacity numbers in
+[capacity-probe-tpu-v6e1-20260924.md](../experiments/generation-validation/capacity-probe-tpu-v6e1-20260924.md)
+measure the legacy v2 format and must not be presented as archive compression
+evidence. The archive profile records `bytes_by_category`, timeline boundaries,
+raw point counts, `archive_profile`, and a conservative
+`local_peak_bytes_upper_bound`; local capacity-budget fixtures enforce
+per-result and cumulative staging caps. A new live archive capacity measurement
+has not been run.
