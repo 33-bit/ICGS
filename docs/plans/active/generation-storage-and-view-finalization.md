@@ -223,13 +223,22 @@ guard (3 failures: resume returned without raising), then GREEN after it (3/3).
   reconciliation and initial manifest discovery use owned, temporary cache
   directories and preserve commit-OID discovery from the returned snapshot path.
 
-- [ ] Add RED fake-HF tests proving archive recovery and initial manifest
+- [x] Add RED fake-HF tests proving archive recovery and initial manifest
       discovery supply an owned cache, reject returned files outside it, and
       remove cache bytes after success or error.
-- [ ] Keep legacy non-archive download/retry behavior unchanged.
-- [ ] Preserve the existing fail-closed data/receipt reconciliation and exact
+- [x] Keep legacy non-archive download/retry behavior unchanged.
+- [x] Preserve the existing fail-closed data/receipt reconciliation and exact
       local/remote hash checks; no remote write or pruning before verification.
-- [ ] Run focused control/publication tests and L0 without contacting HF.
+- [x] Run focused control/publication tests and L0 without contacting HF.
+
+**Local acceptance (2026-09-26):** Commits `4a521b1` and `cc1f75b` use
+disposable owned caches for archive recovery and initial manifest discovery.
+The scoped review closed a fail-open non-resume startup path, returned-directory
+misclassification, and an external symlink alias that could spoof a snapshot
+OID. Fresh parent CPython 3.11.15: control/publication **133 PASS**,
+generation/capacity **478 PASS**, system L0 **22 PASS** (two pre-existing
+invalid-escape warnings), `git show --check` **PASS**. No selected skips;
+live HF behavior is **NOT RUN** and remains a Task 5.3 gate.
 
 ## Phase 3 — Lazy HF archive reader and training views
 
