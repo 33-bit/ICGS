@@ -469,6 +469,10 @@ and training remain **NOT RUN**.
       exact 7:3 transition units, split separation, immutable output bytes and
       same-target idempotency under a new corrected prefix.
 - [ ] Record bytes per episode, peak local staging bytes, upload throughput, publication commits, resume revision/SHA, and all PASS/FAIL/SKIPPED/NOT RUN states.
+- [ ] Establish a hard live-writer staging bound and repeat a finite capacity
+      probe; sampled tree detection alone does not satisfy this gate.
+- [ ] Prove that a cap-triggered worker stop preserves scratch and prevents a
+      new claim during the still-live lease as well as after lease expiry.
 - [ ] Do not authorize the 7,520-attempt production run until archive quality, HF-only recovery, final views, and storage budget gates pass.
 
 **Partial live acceptance (2026-09-27):** The
@@ -487,8 +491,17 @@ payload pruning with a durable per-job receipt, and disjoint HF-only resume
 with zero payloads; its data/receipt/HEAD OIDs are in the same record. Task 5.3
 stays open: live failure-attempt HF retention, workers-only attach, a hard
 live-writer staging bound/capacity retest, native training ingestion, and full
-quota remain **NOT RUN** or unproven. No 7,520-attempt authorization follows
-from this partial gate.
+quota remain open. At reviewed `8a2b811`, a new no-HF, one-job G1 probe with
+80,000,000-byte result/stage/total caps returned **FAIL** after its one-second sampler
+observed at least 81,804,171 staged bytes (81,795,696 of writer scratch) and
+terminated the worker. No closed artifact was produced; the claimed job,
+52 NPY spool files and write marker remain in the preserved run root. A live
+lease still hid that scratch from orphan discovery at inspection, so immediate
+fail-closed behavior for another claim is not established; post-expiry
+discovery is a code-path inference, **NOT RUN** on this root. Exact receipt
+hashes, queue state and limitations are in the durable validation record.
+The observed breach is detection, not a hard writer-side staging bound. No
+7,520-attempt authorization follows from this partial gate.
 
 ## Compatibility, rollback, and recovery
 

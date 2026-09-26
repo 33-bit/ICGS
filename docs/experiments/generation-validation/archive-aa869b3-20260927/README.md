@@ -200,6 +200,59 @@ zero attempts, zero local payloads, and the same pinned HEAD/SHA above. This
 proves the bounded live pruning/recovery path, not a general failure-attempt
 retention or quota-run guarantee. Raw receipts remain under both run roots.
 
+## G1 80 MB capacity probe — FAIL, forensic root preserved
+
+A separate one-job, no-HF G1 probe ran on `vps-a` at code revision
+`8a2b81107ddbe02b5ef42f8064978b1e70e984a4` and returned **FAIL**. Its root is
+`/home/huy2325/icgs-archive-capacity-8a2b811-20260927a`. The ignored local
+operator inputs are `capacity-g1-80m-20260927a.json` and
+`capacity-runtime-g1-80m-20260927a.json` under
+`.superpowers/sdd/generation-storage-and-view-finalization/`.
+The probe used one G1 job/worker/simulator slot, a 600-second worker timeout,
+an 80,000,000-byte per-result/stage/total staging cap, and one-second tree
+sampling. Publication was disabled and validation mode enabled. The original
+shell argv was not retained in the run artifacts; the claimed job records
+code revision above and approved-manifest SHA256
+`d50b737ce3ac168724c61c6e9f87603944dd576101615660e14c993c378d53e1`.
+Do not treat this record as a command to rerun the simulator.
+
+`capacity_summary.json` and `G1/capacity_receipt.json` both report **FAIL**
+after 45.242 seconds: the sampled stage/total tree reached **at least
+81,804,171 bytes**, exceeding each 80,000,000-byte cap by 1,804,171 bytes.
+The sampled writer-scratch lower bound was **81,795,696 bytes**. The monitor
+terminated the worker process group (`worker_returncodes=[-15]`); the queue
+ended with one claimed job and zero ready, ingested or published results.
+`artifact_bytes=0` means no *closed* result was measured, not that no bytes
+were written. There is no per-result peak-bound manifest. These are sampled
+lower bounds, not a writer-enforced maximum or a complete episode-size result.
+
+Read-only inspection found 52 NPY spool files totaling 81,795,584 bytes and
+one 112-byte `.G1.archive-write-in-progress-*` marker. The 52 files and marker
+remain under `G1/staging/worker-results/.../retry-0/`, with no closed archive.
+The current root contains 64 regular files totaling 81,808,991 logical bytes,
+including the later probe receipts; this post-run inventory is not a peak.
+The SHA256 of the sorted `sha256sum` listing for the retry-root files was
+`3beede3690dd72db3d06d9675868b854a3fcebb8034021ffdbdb42be606cf769`.
+The stage receipt and summary SHA256 values were respectively
+`1848492004a378f65444ca28f7fc668c90ec34591826cb84970a871b2802175e`
+and `c1dee88e80021bd016210ab72c98764bbcbd31e3727028992d0596f76c1c3b85`.
+No file was removed, retried or published.
+
+At the read-only inspection (`2026-09-26T19:52:07Z`), no matching generation
+process was listed and `G1/control/generation-safety-stop.json` was absent,
+while the claimed job's
+heartbeat lease remained valid until epoch `1790453237.419692`. The queue's
+orphan scanner excludes scratch for a live claimed generation; a later claim
+*before lease expiry* is therefore not proven to stop on this evidence (the
+fixture test permits another pending job in that interval). From the scanner
+and coordinator/claim call paths, an invocation *after expiry* should inventory
+the preserved marker/spool, write a safety-stop receipt, and raise before new
+work. That later live invocation was **NOT RUN** against this forensic root.
+The probe terminates a whole process group on a sampled breach, so it can
+leave a live lease without the worker's own safety-stop receipt. Keep the root
+untouched and do not resume it while this safety gap and a hard writer-side
+staging bound remain unresolved.
+
 ## Remaining gates and limits
 
 | Gate | Status | Reason |
@@ -210,7 +263,7 @@ retention or quota-run guarantee. Raw receipts remain under both run roots.
 | Live `simulator_crash` / `invalid_observation` attempt retention | NOT RUN | The nine bounded simulator jobs did not produce an attempt archive. |
 | Receipt-only local pruning after remote verification | PASS, one bounded result | Separate finite profile retained per-job VERIFIED receipt/hashes, removed only the verified payload, and restored the episode from HF with zero local payloads. |
 | Workers-only multi-host attach under this archive profile | NOT RUN | No second host attached to these run roots. |
-| Hard live-writer staging cap and bounded capacity retest | NOT RUN on `aa869b3` | The previous 100 MB G1 probe at `2551f78` failed and is preserved. Current run-root sizes were 73,914,057; 75,726,195; 76,038,690 bytes after publication, **not peak measurements**. No hard writer-side cap was proven. |
+| Hard live-writer staging cap and bounded capacity retest | FAIL at `8a2b811` | The one-job 80 MB G1 probe detected at least 81,804,171 staged bytes and stopped the worker with scratch preserved; it did not enforce a hard writer-side bound. The previous 100 MB G1 failure also remains preserved. The successful archive run-root sizes of 73,914,057; 75,726,195; and 76,038,690 bytes were after publication, **not peak measurements**. |
 | Native `icgs train` ingestion of archive FINAL views, Open3D SOR, training, C1–C5, full preprocessing | NOT RUN | The trainer still consumes PyG sample directories; no archive-backed training integration is claimed. |
 | Full 7,520-attempt collection and L4 benchmark | NOT RUN | This finite validation does not authorize them. |
 
