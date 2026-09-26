@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import shutil
 import signal
 import subprocess
 import sys
@@ -22,7 +23,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
-from icgs.data.collection.generation.capacity_probe import CapacityProbeConfig
+from icgs.data.collection.generation.capacity_probe import (
+    CapacityProbeConfig,
+    extract_result_metrics,
+    preflight_stage_capacity,
+)
 from icgs.data.collection.generation.distributed_contracts import (
     GenerationRuntimeConfig,
     RunConfig,
@@ -46,7 +51,7 @@ def enqueue_fixed_jobs(planner, queue, cap: int) -> list[str]:
 
 def stop_processes(processes: list[subprocess.Popen]) -> None:
     """Stop only process groups started by this probe."""
-    active = [process for process in processes if process.poll() is None]
+    active = [process for process in processes if process is not None and process.poll() is None]
     for process in active:
         try:
             os.killpg(process.pid, signal.SIGTERM)
@@ -138,6 +143,7 @@ def run_stage(
     root = output_root / stage.name
     if root.exists():
         raise ValueError(f"capacity stage root already exists: {root}")
+    preflight_stage_capacity(stage, probe, root)
     root.mkdir(parents=True)
     runtime = _stage_runtime(base, probe, stage, root)
     runtime_path = root / "runtime.json"
@@ -195,6 +201,24 @@ def run_stage(
     outcomes = Counter()
     artifact_bytes = 0
     invalid = []
+    effective_max_result_bytes = (
+        stage.max_result_bytes
+        if stage.max_result_bytes is not None
+        else probe.max_result_bytes
+    )
+    effective_max_staging_bytes = (
+        stage.max_staging_bytes
+        if stage.max_staging_bytes is not None
+        else probe.max_total_staging_bytes
+    )
+    stage_bytes_by_category: dict[str, int] = {
+        "chunks": 0,
+        "manifests": 0,
+        "debug": 0,
+        "views": 0,
+        "receipts": 0,
+    }
+    per_results: list[dict[str, Any]] = []
     for result in ready:
         job_path = queue.root / "ready" / result.job_id / "job.json"
         try:
@@ -206,9 +230,44 @@ def run_stage(
                 else validate_closed_result(job, result)
             )
             outcomes[validated.outcome] += 1
-            artifact_bytes += sum(path.stat().st_size for path in Path(result.result_dir).rglob("*") if path.is_file())
+            metrics = extract_result_metrics(
+                result.result_dir,
+                fallback_timeline=result.timeline,
+                fallback_profile=runtime.archive_profile.as_dict() if runtime.archive_profile is not None else None,
+            )
+            res_bytes = metrics["artifact_bytes"]
+            artifact_bytes += res_bytes
+            for cat, val in metrics["bytes_by_category"].items():
+                stage_bytes_by_category[cat] = stage_bytes_by_category.get(cat, 0) + val
+
+            if effective_max_result_bytes is not None and res_bytes > effective_max_result_bytes:
+                invalid.append({
+                    "job_id": result.job_id,
+                    "error": f"ByteCapExceeded: result size {res_bytes} bytes exceeds max_result_bytes {effective_max_result_bytes}",
+                })
+
+            per_results.append({
+                "job_id": result.job_id,
+                "attempt_id": result.attempt_id,
+                "episode_id": result.episode_id,
+                "outcome": validated.outcome,
+                "artifact_bytes": res_bytes,
+                "bytes_by_category": metrics["bytes_by_category"],
+                "boundaries": metrics["boundaries"],
+                "raw_points": metrics["raw_points"],
+                "archive_profile": metrics["archive_profile"],
+                "local_peak_bytes": metrics["local_peak_bytes"],
+                "local_peak_bytes_semantic": metrics["local_peak_bytes_semantic"],
+            })
         except Exception as error:
             invalid.append({"job_id": result.job_id, "error": f"{type(error).__name__}: {error}"})
+
+    if effective_max_staging_bytes is not None and artifact_bytes > effective_max_staging_bytes:
+        invalid.append({
+            "stage": stage.name,
+            "error": f"StagingCapExceeded: stage artifact bytes {artifact_bytes} exceeds max_staging_bytes {effective_max_staging_bytes}",
+        })
+
     counts = queue.counts()
     receipt = {
         "stage": stage.name,
@@ -224,9 +283,14 @@ def run_stage(
         "outcomes": dict(outcomes),
         "invalid_results": invalid,
         "artifact_bytes": artifact_bytes,
+        "bytes_by_category": stage_bytes_by_category,
+        "archive_profile": runtime.archive_profile.as_dict() if runtime.archive_profile is not None else None,
+        "local_peak_bytes_semantic": "local_peak_bytes_upper_bound",
         "minimum_available_memory_bytes": completion["minimum_available_memory_bytes"],
         "worker_returncodes": returncodes,
         "queue": counts.__dict__,
+        "results": per_results,
+        "per_result": per_results,
         "status": "PASS" if len(ready) == len(job_ids) and not invalid
         and sum(outcomes.values()) == len(job_ids)
         and not (outcomes["simulator_crash"] or outcomes["invalid_observation"])
@@ -260,6 +324,16 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("capacity runtime must be validation_mode=true and publication_enabled=false")
     if base.run.hf_subfolder != config.hf_subfolder:
         raise ValueError("capacity runtime HF prefix does not match probe config")
+    if config.max_total_staging_bytes is not None:
+        check_dir = output_root
+        while not check_dir.exists() and check_dir != check_dir.parent:
+            check_dir = check_dir.parent
+        usage = shutil.disk_usage(check_dir)
+        if usage.free < config.max_total_staging_bytes:
+            raise RuntimeError(
+                f"preflight capacity insufficient: required {config.max_total_staging_bytes} bytes "
+                f"total staging capacity, but only {usage.free} bytes are free on {check_dir}"
+            )
     output_root.mkdir(parents=True)
     deadline = time.monotonic() + config.max_runtime_s
     receipts = []

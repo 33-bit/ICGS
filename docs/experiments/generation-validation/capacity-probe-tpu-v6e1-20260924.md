@@ -44,3 +44,22 @@ uncertainty in the ETA.
 
 The 64-worker result is a capacity recommendation, not a production-generation
 authorization or a claim that full quota has been completed.
+
+## Implementation Note: Archive Profile Size Instrumentation and Staging Bounds (Task 4.2)
+
+The measured numbers in the table above reflect the historical 2026-09-24 legacy format (~0.92 GB/attempt) and remain an unedited historical record.
+
+As part of the bounded capacity probe instrumentation (ADR 0015 / Task 4.2):
+1. **Per-Result Metric Instrumentation**: Probes now extract and record categorized byte accounting:
+   - `bytes_by_category`: explicit byte breakdown for `chunks`, `manifests`, `debug`, `views`, and `receipts`.
+   - `boundaries`: step boundary count extracted from episode metadata / timeline.
+   - `raw_points`: point cloud shape/count.
+   - `archive_profile`: explicit archive configuration dictionary.
+   - `local_peak_bytes`: upper bound on local write/spool footprint.
+   - `local_peak_bytes_semantic`: explicitly documented as `"local_peak_bytes_upper_bound"`, matching `local_write_limits.local_peak_bytes_upper_bound` recorded in `episode.manifest.json` / `attempt.manifest.json` rather than an exact sampled runtime peak.
+2. **Fail-Closed Staging Preflight & Bounds**:
+   - `CapacityProbeConfig` and `CapacityStage` accept bounded staging limits (`max_result_bytes`, `max_staging_bytes`, `max_total_staging_bytes`).
+   - Prior to launching any worker processes in a stage or probe run, preflight checks verify available disk space against staging caps in a fail-closed manner. If disk space is insufficient, execution halts immediately with zero worker processes spawned.
+   - Stage results exceeding configured per-result or staging byte limits are flagged with `ByteCapExceeded` or `StagingCapExceeded` in `invalid_results`, resulting in stage `FAIL`.
+   - Legacy profile behavior is preserved unless an explicit new archive cap applies.
+
