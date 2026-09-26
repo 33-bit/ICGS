@@ -342,6 +342,8 @@ def _download_pinned_file(
     ))
     if not remote.is_file() or not remote.resolve().is_relative_to(scratch.resolve()):
         raise ValueError(f"remote archive file is missing or outside owned scratch: {filename}")
+    if _snapshot_revision(remote) != revision:
+        raise ValueError(f"remote archive snapshot revision mismatch: {filename}")
     if expected_sha256 is not None:
         digest = hashlib.sha256()
         with remote.open("rb") as stream:
@@ -380,12 +382,14 @@ def _verify_archive_resume_files(
     prefix = run.hf_subfolder
     with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-control-") as owned:
         scratch = Path(owned)
-        resume = json.loads(_download_pinned_file(
+        resume_path = _download_pinned_file(
             downloader, run, token, revision, f"{prefix}/resume_receipt.json", scratch,
-        ).read_bytes())
-        publication = PublicationReceipt.from_dict(json.loads(_download_pinned_file(
+        )
+        resume = json.loads(resume_path.read_bytes())
+        publication_path = _download_pinned_file(
             downloader, run, token, revision, f"{prefix}/publication_receipt.json", scratch,
-        ).read_bytes()))
+        )
+        publication = PublicationReceipt.from_dict(json.loads(publication_path.read_bytes()))
         expected_identity = {
             "dataset_identity": profile.dataset_identity,
             "archive_format_id": profile.archive_format_id,
@@ -399,7 +403,7 @@ def _verify_archive_resume_files(
             if resume.get(field) != expected or getattr(publication, field) != expected:
                 raise ValueError(f"remote archive receipt {field} mismatch")
         if (
-            publication.status not in {"VERIFIED", "COMPLETE"}
+            publication.status not in {"VERIFIED", "COMPLETE", "DATA_COMMITTED"}
             or publication.run_id not in manifest["source_run_ids"]
             or publication.source_run_id != publication.run_id
             or publication.prefix != prefix
@@ -411,7 +415,13 @@ def _verify_archive_resume_files(
             or _require_pinned_revision(resume.get("dataset_manifest_revision")) != publication.data_commit_oid
         ):
             raise ValueError("remote archive resume/publication receipt identity mismatch")
-        _require_pinned_revision(publication.commit_oid)
+        if _snapshot_revision(publication_path) != revision:
+            raise ValueError("remote publication receipt snapshot revision mismatch")
+        if publication.status == "DATA_COMMITTED":
+            if publication.commit_oid is not None:
+                raise ValueError("remote DATA_COMMITTED publication receipt must not claim a receipt commit OID")
+        else:
+            _require_pinned_revision(publication.commit_oid)
         rows = list(manifest["episodes"]) + list(manifest["failure_attempts"])
         by_job = {row["job_id"]: row for row in rows}
         if not publication.job_ids or any(job not in by_job for job in publication.job_ids):
@@ -463,6 +473,90 @@ def _verify_archive_resume_files(
                 raise ValueError("remote archive attempt_plan disagrees with debug provenance")
             if isinstance(job, Mapping) and job.get("job_id") != row["job_id"]:
                 raise ValueError("remote archive job_id disagrees with debug provenance")
+
+
+def _verify_same_run_remote_snapshot_binding(
+    queue: FilesystemJobQueue,
+    run: RunConfig,
+    profile: ArchiveProfileConfig,
+    manifest: Mapping[str, Any],
+    manifest_bytes: bytes,
+    snapshot_revision: str | None,
+) -> None:
+    """Bind same-run reuse to the exact locally verified publication snapshot."""
+    revision = _require_pinned_revision(snapshot_revision)
+    manifest_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+    receipt_path = queue.root / "publication_receipt.json"
+    manifest_path = queue.root / "publication_manifest.json"
+    resume_path = queue.root / "resume_receipt.json"
+    for name, path in (
+        ("publication receipt", receipt_path),
+        ("publication manifest", manifest_path),
+        ("resume receipt", resume_path),
+    ):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"same-run restart requires a regular local {name}")
+    local_manifest_bytes = manifest_path.read_bytes()
+    if local_manifest_bytes != manifest_bytes:
+        raise ValueError("remote same-run manifest differs from the locally verified publication manifest")
+    if hashlib.sha256(local_manifest_bytes).hexdigest() != manifest_sha256:
+        raise ValueError("local same-run publication manifest SHA256 mismatch")
+
+    receipt = PublicationReceipt.from_dict(
+        json.loads(receipt_path.read_text(encoding="utf-8"))
+    )
+    expected_identity = {
+        "dataset_identity": profile.dataset_identity,
+        "archive_format_id": profile.archive_format_id,
+        "episode_schema_version": profile.episode_schema_version,
+        "archive_profile": profile.as_dict(),
+        "dataset_manifest_sha256": manifest_sha256,
+    }
+    for field, expected in expected_identity.items():
+        if getattr(receipt, field) != expected:
+            raise ValueError(f"local same-run publication receipt {field} mismatch")
+    if (
+        receipt.status not in {"VERIFIED", "COMPLETE"}
+        or receipt.run_id != run.run_id
+        or receipt.source_run_id != run.run_id
+        or receipt.prefix != run.hf_subfolder
+    ):
+        raise ValueError("local same-run publication receipt identity mismatch")
+    if _require_pinned_revision(receipt.commit_oid) != revision:
+        raise ValueError("remote same-run snapshot OID differs from the verified publication receipt OID")
+
+    resume = json.loads(resume_path.read_text(encoding="utf-8"))
+    if not isinstance(resume, Mapping):
+        raise ValueError("local same-run resume receipt must be an object")
+    for field, expected in expected_identity.items():
+        if resume.get(field) != expected:
+            raise ValueError(f"local same-run resume receipt {field} mismatch")
+    if (
+        resume.get("run_id") != run.run_id
+        or resume.get("source_run_id") != run.run_id
+        or resume.get("source_run_ids") != manifest.get("source_run_ids")
+        or resume.get("episodes") != len(manifest.get("episodes") or ())
+        or resume.get("failure_attempts") != len(manifest.get("failure_attempts") or ())
+        or _require_pinned_revision(resume.get("dataset_manifest_revision"))
+        != receipt.data_commit_oid
+    ):
+        raise ValueError("local same-run resume/publication receipt identity mismatch")
+
+    rows = list(manifest.get("episodes") or ()) + list(manifest.get("failure_attempts") or ())
+    by_job = {row["job_id"]: row for row in rows}
+    if (
+        not receipt.job_ids
+        or len(set(receipt.job_ids)) != len(receipt.job_ids)
+        or any(job_id not in by_job for job_id in receipt.job_ids)
+    ):
+        raise ValueError("local same-run publication receipt job_ids are not in its manifest")
+    expected_hashes = {
+        f"{job_id}/{relative}": digest
+        for job_id in receipt.job_ids
+        for relative, digest in by_job[job_id]["file_sha256"].items()
+    }
+    if receipt.artifact_hashes != expected_hashes:
+        raise ValueError("local same-run publication receipt artifact hashes mismatch")
 
 
 def _recover_interrupted_archive_publication(
@@ -799,6 +893,7 @@ def _validate_archive_resume_manifest(
     remote_files: Mapping[str, Any] | None = None,
     remote_manifest_sha256: str | None = None,
     manifest_bytes: bytes | None = None,
+    local_closed_manifest: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not isinstance(profile, ArchiveProfileConfig):
         raise TypeError("archive_profile must be an ArchiveProfileConfig")
@@ -832,8 +927,11 @@ def _validate_archive_resume_manifest(
             source_ids.add(value)
     if run.resume_from_hf and not source_ids:
         raise ValueError("remote resume manifest must identify its source run")
-    if run.run_id in source_ids:
+    same_run_source = run.run_id in source_ids
+    if same_run_source and run.resume_from_hf:
         raise ValueError("resumed run_id must be disjoint from remote source runs")
+    if same_run_source and local_closed_manifest is None:
+        raise ValueError("same-run remote archive rows require closed local queue evidence")
 
     identities: set[str] = set()
     attempt_ids: set[str] = set()
@@ -898,7 +996,7 @@ def _validate_archive_resume_manifest(
                 raise ValueError(f"remote archive {collection} has invalid outcome")
             if row.get("run_id") != row.get("source_run_id") or row.get("source_run_id") not in source_ids:
                 raise ValueError("remote archive row source_run_id is not bound to the manifest")
-            if row.get("run_id") == run.run_id:
+            if row.get("run_id") == run.run_id and run.resume_from_hf:
                 raise ValueError("resumed row run_id must be disjoint from current run")
             if (
                 not isinstance(row.get("manifest_sha256"), str)
@@ -1037,6 +1135,12 @@ def _validate_archive_resume_manifest(
                     if relative == manifest_name:
                         _validate_remote_archive_manifest_bytes(row, content, profile)
         validated[collection] = [dict(row) for row in rows]
+    if same_run_source:
+        _validate_same_run_archive_rows_are_local(
+            validated,
+            run,
+            local_closed_manifest,
+        )
     if remote_files_supplied:
         unexpected = sorted(set(remote_file_inventory) - expected_remote_files)
         if unexpected:
@@ -1055,6 +1159,60 @@ def _validate_archive_resume_manifest(
     return validated
 
 
+def _validate_same_run_archive_rows_are_local(
+    remote_manifest: Mapping[str, Any],
+    run: RunConfig,
+    local_closed_manifest: Mapping[str, Any] | None,
+) -> None:
+    """Require exact local closed-queue evidence for rows already in this run's HF prefix."""
+    if not isinstance(local_closed_manifest, Mapping):
+        raise ValueError("same-run remote archive rows require closed local queue evidence")
+
+    local_rows: dict[str, tuple[str, dict[str, Any]]] = {}
+    for collection, identity_key in (
+        ("episodes", "episode_id"),
+        ("failure_attempts", "attempt_id"),
+    ):
+        rows = local_closed_manifest.get(collection, [])
+        if not isinstance(rows, (list, tuple)):
+            raise ValueError(f"closed local queue {collection} must be a list")
+        for row in rows:
+            if not isinstance(row, Mapping):
+                raise ValueError(f"closed local queue {collection} row must be an object")
+            run_id = row.get("run_id")
+            source_run_id = row.get("source_run_id")
+            if run_id != run.run_id and source_run_id != run.run_id:
+                continue
+            if run_id != run.run_id or source_run_id != run.run_id:
+                raise ValueError("closed local queue same-run row source identity mismatch")
+            identity = row.get(identity_key)
+            if not isinstance(identity, str) or not identity.strip():
+                raise ValueError(f"closed local queue same-run row missing {identity_key}")
+            if identity in local_rows:
+                raise ValueError(f"closed local queue has duplicate same-run archive row: {identity}")
+            local_rows[identity] = (collection, dict(row))
+
+    for collection, identity_key in (
+        ("episodes", "episode_id"),
+        ("failure_attempts", "attempt_id"),
+    ):
+        rows = remote_manifest.get(collection, [])
+        for row in rows:
+            if row.get("source_run_id") != run.run_id:
+                continue
+            identity = row[identity_key]
+            local = local_rows.get(identity)
+            if local is None:
+                raise ValueError(
+                    f"same-run remote archive row is missing from the closed local queue: {identity}"
+                )
+            local_collection, local_row = local
+            if local_collection != collection or json.dumps(
+                local_row, sort_keys=True, separators=(",", ":"), allow_nan=False
+            ) != json.dumps(dict(row), sort_keys=True, separators=(",", ":"), allow_nan=False):
+                raise ValueError(f"same-run remote archive row conflicts with closed local queue: {identity}")
+
+
 def load_remote_manifest(
     manifest: Mapping[str, Any] | str | Path,
     run: RunConfig,
@@ -1065,6 +1223,7 @@ def load_remote_manifest(
     remote_files: Mapping[str, Any] | None = None,
     remote_manifest_sha256: str | None = None,
     manifest_bytes: bytes | None = None,
+    local_closed_manifest: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Parse and validate a legacy or lossless archive resume manifest.
 
@@ -1093,6 +1252,7 @@ def load_remote_manifest(
         remote_files=remote_files,
         remote_manifest_sha256=remote_manifest_sha256,
         manifest_bytes=manifest_bytes,
+        local_closed_manifest=local_closed_manifest,
     )
 
 
@@ -1274,9 +1434,10 @@ class CoordinatorControlPlane:
         token = _credential_path(run_config_path, payload, token_path).read_text(
             encoding="utf-8"
         ).strip()
-        local_manifest = _manifest_from_closed_queue(
+        closed_queue_manifest = _manifest_from_closed_queue(
             queue, archive_profile=runtime.archive_profile
         )
+        local_manifest = closed_queue_manifest
         if not local_manifest["episodes"] and not local_manifest["failure_attempts"]:
             local_manifest = payload.get("manifest", local_manifest)
         remote_manifest: dict = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
@@ -1294,6 +1455,12 @@ class CoordinatorControlPlane:
             bootstrap_manifest_sha256 = bootstrap.get("remote_manifest_sha256")
         if runtime.archive_profile is not None and run.resume_from_hf:
             remote_revision = _require_pinned_revision(remote_revision)
+        elif runtime.archive_profile is not None:
+            # A non-resume restart must discover the current HF head. A prior
+            # bootstrap pin belongs to an earlier inspection, not this query.
+            remote_revision = None
+            bootstrap_manifest_sha256 = None
+        remote_snapshot_revision: str | None = None
         try:
             if runtime.archive_profile is not None and run.resume_from_hf:
                 with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-manifest-") as scratch:
@@ -1301,6 +1468,7 @@ class CoordinatorControlPlane:
                         hf_hub_download, run, token, remote_revision,
                         f"{run.hf_subfolder}/dataset_manifest.json", Path(scratch),
                     )
+                    remote_snapshot_revision = remote_revision
                     remote_bytes = remote_path.read_bytes()
             elif runtime.archive_profile is not None:
                 with tempfile.TemporaryDirectory(prefix="icgs-hf-initial-manifest-") as scratch:
@@ -1318,6 +1486,7 @@ class CoordinatorControlPlane:
                             raise
                         remote_manifest_absent = True
                     else:
+                        remote_snapshot_revision = _snapshot_revision(remote_path)
                         remote_bytes = remote_path.read_bytes()
             else:
                 remote_path = hf_hub_download(
@@ -1338,7 +1507,27 @@ class CoordinatorControlPlane:
                     approved_rows=rows if runtime.archive_profile is not None else None,
                     remote_manifest_sha256=remote_manifest_sha256,
                     manifest_bytes=remote_bytes,
+                    local_closed_manifest=(
+                        closed_queue_manifest if runtime.archive_profile is not None else None
+                    ),
                 )
+                if (
+                    runtime.archive_profile is not None
+                    and not run.resume_from_hf
+                    and any(
+                        row.get("source_run_id") == run.run_id
+                        for collection in ("episodes", "failure_attempts")
+                        for row in remote_manifest[collection]
+                    )
+                ):
+                    _verify_same_run_remote_snapshot_binding(
+                        queue,
+                        run,
+                        runtime.archive_profile,
+                        remote_manifest,
+                        remote_bytes,
+                        remote_snapshot_revision,
+                    )
                 if runtime.archive_profile is not None and run.resume_from_hf:
                     _verify_archive_resume_files(
                         remote_manifest, run, runtime.archive_profile, token=token,

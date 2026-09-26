@@ -858,6 +858,140 @@ def _complete_archive_remote(tmp_path: Path, monkeypatch):
     return run_json, token, manifest, prefix_root, downloads
 
 
+def _same_run_archive_restart_fixture(
+    tmp_path: Path,
+    monkeypatch,
+    *,
+    remote_revision: str = "c" * 40,
+):
+    from test_generation_publication import FakeApi, _archive_queue, _job
+    from icgs.data.collection.generation.distributed_publication import (
+        HuggingFaceBatchPublisher,
+        PublicationConfig,
+    )
+
+    profile = ArchiveProfileConfig(
+        chunk_boundaries=2,
+        local_artifact_retention="receipt_only",
+    )
+    config_payload = _runtime_config(tmp_path, publication_enabled=True).as_dict()
+    config_payload["run"].update({
+        "run_id": "run-1",
+        "validation_mode": False,
+        "resume_from_hf": False,
+    })
+    config_payload["archive_profile"] = profile.as_dict()
+    config = GenerationRuntimeConfig.from_dict(config_payload)
+    approved_payload = json.loads(
+        Path("artifacts/composition/approved_composition_manifest.json").read_text()
+    )
+    next(item for item in approved_payload["catalog"] if item["program_id"] == "T01")[
+        "asset_family_id"
+    ] = "family-1"
+    approved_path = tmp_path / "approved.json"
+    approved_path.write_text(json.dumps(approved_payload), encoding="utf-8")
+    run_json = generation_launch.persist_run_config(
+        config, approved_path, code_revision="a" * 40,
+    )
+    token = Path(config.run.run_root) / "hf-token"
+    token.write_text("secret\n", encoding="utf-8")
+    run_payload = json.loads(run_json.read_text(encoding="utf-8"))
+    run_payload["hf_token_path"] = str(token)
+    run_json.write_text(json.dumps(run_payload), encoding="utf-8")
+
+    first_job = _job()
+    first_job = replace(first_job, plan=replace(
+        first_job.plan,
+        randomization={
+            **first_job.plan.randomization,
+            "scene_seed": 1,
+            "asset_instance_id": "T01-asset-1",
+            "asset_family_id": "family-1",
+        },
+    ))
+    first_source, first_job, first_result, _ = _archive_queue(
+        Path(config.run.run_root) / "staging" / "first-local",
+        retention="receipt_only",
+        job=first_job,
+    )
+    queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
+    shutil.copytree(
+        first_source.root / "ingested" / first_job.job_id,
+        queue.root / "ingested" / first_job.job_id,
+    )
+
+    api = FakeApi()
+    verified_batches = []
+    publisher = HuggingFaceBatchPublisher(
+        RunConfig.from_dict(run_payload["run"]),
+        api,
+        "secret",
+        queue,
+        last_success_s=0.0,
+        remote_verify=lambda job_ids, revision, _token: verified_batches.append(
+            (job_ids, revision)
+        ),
+        publication_config=PublicationConfig(batch_size=1),
+        archive_profile=profile,
+    )
+    completed = publisher.publish_due(now_s=300.0, force=True)
+    assert completed is not None and completed.status == "COMPLETE"
+    assert verified_batches == [((first_job.job_id,), "c" * 40)]
+    assert queue.counts().published == 1
+
+    second_plan = replace(
+        first_job.plan,
+        episode_index=2,
+        episode_id="episode-t01-00002",
+        scene_seed=2,
+        randomization={
+            **first_job.plan.randomization,
+            "scene_signature": "sig-2",
+            "scene_seed": 2,
+            "asset_instance_id": "T01-asset-2",
+        },
+    )
+    second_job = GenerationJob.create(
+        job_id="job-run-1-episode-t01-00002",
+        run_id=first_job.run_id,
+        attempt_id="att-episode-t01-00002",
+        episode_id=second_plan.episode_id,
+        program_id=first_job.program_id,
+        plan=second_plan,
+        code_revision=first_job.code_revision,
+        manifest_sha256=first_job.manifest_sha256,
+        output_root=first_job.output_root,
+    )
+    second_source, second_job, _second_result, _ = _archive_queue(
+        Path(config.run.run_root) / "staging" / "second-local",
+        retention="receipt_only",
+        job=second_job,
+    )
+    shutil.copytree(
+        second_source.root / "ingested" / second_job.job_id,
+        queue.root / "ingested" / second_job.job_id,
+    )
+
+    remote_manifest = json.loads(
+        (queue.root / "publication_manifest.json").read_text(encoding="utf-8")
+    )
+    assert len(remote_manifest["episodes"]) == 1
+    remote_root = tmp_path / "hf-snapshot" / "snapshots" / remote_revision
+    remote_manifest_path = remote_root / config.run.hf_subfolder / "dataset_manifest.json"
+    remote_manifest_path.parent.mkdir(parents=True)
+    shutil.copyfile(queue.root / "publication_manifest.json", remote_manifest_path)
+
+    def download(**kwargs):
+        assert kwargs.get("revision") is None
+        cached = Path(kwargs["cache_dir"]) / "snapshots" / remote_revision / kwargs["filename"]
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(remote_root / kwargs["filename"], cached)
+        return str(cached)
+
+    monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
+    return run_json, token, queue, remote_manifest
+
+
 def _archive_initial_discovery_fixture(tmp_path: Path, monkeypatch):
     resume_run_json, _resume_token, manifest, prefix_root, _ = _complete_archive_remote(
         tmp_path / "source", monkeypatch
@@ -885,6 +1019,122 @@ def _archive_initial_discovery_fixture(tmp_path: Path, monkeypatch):
     run_json.write_text(json.dumps(run_payload), encoding="utf-8")
     revision = prefix_root.parents[1].name
     return run_json, token, manifest, prefix_root, revision
+
+
+def test_coordinator_same_run_restart_accepts_published_receipt_and_ingested_rows(
+    tmp_path: Path, monkeypatch,
+):
+    run_json, token, queue, remote_manifest = _same_run_archive_restart_fixture(
+        tmp_path, monkeypatch
+    )
+
+    control = CoordinatorControlPlane.open(
+        run_json, api_factory=lambda: object(), token_path=token,
+    )
+
+    assert control.queue.counts().published == 1
+    assert control.queue.counts().ingested == 1
+    assert len(control.manifest["episodes"]) == 2
+    assert control.planner.counts("T01").nominal_successes == 2
+    assert control.publisher.remote_manifest["episodes"] == remote_manifest["episodes"]
+    assert control.publisher.remote_manifest["episodes"][0]["job_id"] in {
+        path.name for path in (queue.root / "published").iterdir()
+    }
+
+
+def test_coordinator_same_run_restart_rejects_manifest_at_unverified_newer_hf_oid(
+    tmp_path: Path, monkeypatch,
+):
+    run_json, token, _queue, _remote_manifest = _same_run_archive_restart_fixture(
+        tmp_path,
+        monkeypatch,
+        remote_revision="f" * 40,
+    )
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="archive startup requires a valid remote dataset manifest") as failure:
+        CoordinatorControlPlane.open(
+            run_json,
+            api_factory=lambda: api_calls.append(True),
+            token_path=token,
+        )
+
+    assert "verified publication receipt OID" in str(failure.value.__cause__)
+    assert api_calls == []
+
+
+@pytest.mark.parametrize("local_damage", ["missing", "conflicting_local_row"])
+def test_coordinator_same_run_restart_rejects_remote_rows_without_matching_local_evidence(
+    tmp_path: Path, monkeypatch, local_damage: str,
+):
+    run_json, token, queue, remote_manifest = _same_run_archive_restart_fixture(
+        tmp_path, monkeypatch
+    )
+    remote_job_id = remote_manifest["episodes"][0]["job_id"]
+    if local_damage == "missing":
+        shutil.rmtree(queue.root / "published" / remote_job_id)
+    else:
+        receipt_path = (
+            queue.root / "published" / remote_job_id / "publication_receipt.json"
+        )
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        receipt["manifest_row"]["preprocessing_identity"] = "conflicting_local_receipt"
+        receipt["manifest_row_sha256"] = hashlib.sha256(
+            (
+                json.dumps(
+                    receipt["manifest_row"],
+                    sort_keys=True,
+                    separators=(",", ":"),
+                    allow_nan=False,
+                )
+                + "\n"
+            ).encode("utf-8")
+        ).hexdigest()
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="archive startup requires a valid remote dataset manifest") as failure:
+        CoordinatorControlPlane.open(
+            run_json,
+            api_factory=lambda: api_calls.append(True),
+            token_path=token,
+        )
+
+    assert "same-run remote archive row" in str(failure.value.__cause__)
+    assert api_calls == []
+
+
+def test_coordinator_hf_only_resume_rejects_same_source_run_id(tmp_path: Path, monkeypatch):
+    run_json, token, _manifest, _prefix_root, _downloads = _complete_archive_remote(
+        tmp_path, monkeypatch
+    )
+    payload = json.loads(run_json.read_text(encoding="utf-8"))
+    payload["run"]["run_id"] = "run-1"
+    runtime_path = Path(payload["runtime_config_path"])
+    runtime_payload = json.loads(runtime_path.read_text(encoding="utf-8"))
+    runtime_payload["run"]["run_id"] = "run-1"
+    runtime_bytes = (
+        json.dumps(runtime_payload, indent=2, sort_keys=True, allow_nan=False) + "\n"
+    ).encode("utf-8")
+    runtime_path.write_bytes(runtime_bytes)
+    payload["runtime_config"] = runtime_payload
+    payload["runtime_config_sha256"] = hashlib.sha256(runtime_bytes).hexdigest()
+    bootstrap_path = Path(payload["run"]["run_root"]) / "control" / "resume_bootstrap.json"
+    bootstrap = json.loads(bootstrap_path.read_text(encoding="utf-8"))
+    bootstrap["run_id"] = "run-1"
+    bootstrap_path.write_text(json.dumps(bootstrap), encoding="utf-8")
+    run_json.write_text(json.dumps(payload), encoding="utf-8")
+
+    api_calls = []
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            run_json,
+            api_factory=lambda: api_calls.append(True),
+            token_path=token,
+        )
+
+    assert "resumed run_id must be disjoint" in str(failure.value.__cause__)
+    assert api_calls == []
 
 
 def test_coordinator_archive_initial_manifest_discovery_uses_owned_cache_and_cleans_it(
@@ -1011,6 +1261,110 @@ def test_coordinator_archive_resume_restores_hf_rows_without_local_payload(tmp_p
         f"{prefix_root.relative_to(prefix_root.parents[1])}/{manifest['episodes'][0]['archive_ref']}/{relative}"
         for relative in manifest["episodes"][0]["file_sha256"]
     }
+
+
+def test_coordinator_archive_resume_accepts_data_committed_receipt_at_pinned_receipt_revision(
+    tmp_path: Path, monkeypatch,
+):
+    run_json, token, manifest, prefix_root, _downloads = _complete_archive_remote(
+        tmp_path, monkeypatch
+    )
+    receipt_path = prefix_root / "publication_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["status"] = "DATA_COMMITTED"
+    receipt["commit_oid"] = None
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    control = CoordinatorControlPlane.open(
+        run_json, api_factory=lambda: object(), token_path=token,
+    )
+
+    assert control.publisher.remote_manifest["episodes"] == manifest["episodes"]
+    assert control.planner.counts("T01").nominal_successes == 1
+
+
+def test_coordinator_archive_resume_rejects_data_committed_receipt_from_other_snapshot_oid(
+    tmp_path: Path, monkeypatch,
+):
+    run_json, token, _manifest, prefix_root, _downloads = _complete_archive_remote(
+        tmp_path, monkeypatch
+    )
+    receipt_path = prefix_root / "publication_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["status"] = "DATA_COMMITTED"
+    receipt["commit_oid"] = None
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    ordinary_download = generation_coordinator_module.hf_hub_download
+    wrong_receipt_revision = "0" * 40
+
+    def download(**kwargs):
+        source = Path(ordinary_download(**kwargs))
+        if kwargs["filename"].endswith("/publication_receipt.json"):
+            target = (
+                Path(kwargs["cache_dir"])
+                / "snapshots"
+                / wrong_receipt_revision
+                / kwargs["filename"]
+            )
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, target)
+            return str(target)
+        return str(source)
+
+    monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
+
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            run_json, api_factory=lambda: object(), token_path=token,
+        )
+
+    assert "snapshot revision mismatch" in str(failure.value.__cause__)
+
+
+def test_coordinator_data_committed_resume_requires_every_archive_file_at_pinned_revision(
+    tmp_path: Path, monkeypatch,
+):
+    run_json, token, manifest, prefix_root, _downloads = _complete_archive_remote(
+        tmp_path, monkeypatch
+    )
+    receipt_path = prefix_root / "publication_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["status"] = "DATA_COMMITTED"
+    receipt["commit_oid"] = None
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+    missing_chunk = (
+        prefix_root
+        / manifest["episodes"][0]["archive_ref"]
+        / "data"
+        / "chunk-00000.npz"
+    )
+    missing_chunk.unlink()
+
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            run_json, api_factory=lambda: object(), token_path=token,
+        )
+
+    assert isinstance(failure.value.__cause__, FileNotFoundError)
+
+
+def test_coordinator_archive_resume_rejects_data_commit_oid_mismatch(tmp_path: Path, monkeypatch):
+    run_json, token, _manifest, prefix_root, _downloads = _complete_archive_remote(
+        tmp_path, monkeypatch
+    )
+    receipt_path = prefix_root / "publication_receipt.json"
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    receipt["status"] = "DATA_COMMITTED"
+    receipt["commit_oid"] = None
+    receipt["data_commit_oid"] = "0" * 40
+    receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match="resume_from_hf") as failure:
+        CoordinatorControlPlane.open(
+            run_json, api_factory=lambda: object(), token_path=token,
+        )
+
+    assert "resume/publication receipt identity mismatch" in str(failure.value.__cause__)
 
 
 def test_archive_preflight_pins_local_fake_manifest(tmp_path: Path, monkeypatch):
