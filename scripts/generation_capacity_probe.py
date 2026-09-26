@@ -125,7 +125,7 @@ def wait_for_ready_results(queue, processes, *, expected_jobs: int, deadline: fl
             minimum_free = available if minimum_free is None else min(minimum_free, available)
             if available < 8 * 1024**3:
                 raise RuntimeError("capacity probe stopped: less than 8 GiB memory available")
-        if all(process.poll() is not None for process in processes):
+        if all(process.poll() is not None for process in processes if process is not None):
             raise RuntimeError("all workers exited before all results became ready")
         time.sleep(1)
 
@@ -143,7 +143,13 @@ def run_stage(
     root = output_root / stage.name
     if root.exists():
         raise ValueError(f"capacity stage root already exists: {root}")
-    preflight_stage_capacity(stage, probe, root)
+    preflight_stage_capacity(
+        stage,
+        probe,
+        root,
+        output_root=output_root,
+        archive_profile=base.archive_profile.as_dict() if base.archive_profile is not None else None,
+    )
     root.mkdir(parents=True)
     runtime = _stage_runtime(base, probe, stage, root)
     runtime_path = root / "runtime.json"
@@ -324,6 +330,13 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("capacity runtime must be validation_mode=true and publication_enabled=false")
     if base.run.hf_subfolder != config.hf_subfolder:
         raise ValueError("capacity runtime HF prefix does not match probe config")
+    if base.archive_profile is not None:
+        if config.max_total_staging_bytes is None or config.max_total_staging_bytes <= 0:
+            raise ValueError("archive profile capacity probe requires explicit positive max_total_staging_bytes")
+        for stage in config.stages:
+            eff_r = stage.max_result_bytes if stage.max_result_bytes is not None else config.max_result_bytes
+            if eff_r is None or eff_r <= 0:
+                raise ValueError("archive profile capacity probe requires explicit positive max_result_bytes")
     if config.max_total_staging_bytes is not None:
         check_dir = output_root
         while not check_dir.exists() and check_dir != check_dir.parent:

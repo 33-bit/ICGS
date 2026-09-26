@@ -46,6 +46,11 @@ class CapacityStage:
         if self.max_result_bytes is not None and self.max_staging_bytes is not None:
             if self.max_result_bytes > self.max_staging_bytes:
                 raise ValueError("stage max_result_bytes cannot exceed max_staging_bytes")
+            if self.max_result_bytes * self.max_jobs > self.max_staging_bytes:
+                raise ValueError(
+                    f"stage max_result_bytes * max_jobs ({self.max_result_bytes * self.max_jobs}) "
+                    f"exceeds stage max_staging_bytes ({self.max_staging_bytes})"
+                )
 
 
 @dataclass(frozen=True)
@@ -82,13 +87,40 @@ class CapacityProbeConfig:
         if self.max_result_bytes is not None and self.max_total_staging_bytes is not None:
             if self.max_result_bytes > self.max_total_staging_bytes:
                 raise ValueError("max_result_bytes cannot exceed max_total_staging_bytes")
+
+        stage_budgets: list[int] = []
         for stage in self.stages:
+            eff_res = stage.max_result_bytes if stage.max_result_bytes is not None else self.max_result_bytes
+            if eff_res is not None and stage.max_staging_bytes is not None:
+                if eff_res * stage.max_jobs > stage.max_staging_bytes:
+                    raise ValueError(
+                        f"stage {stage.name} worst-case bytes ({eff_res * stage.max_jobs}) "
+                        f"exceeds max_staging_bytes ({stage.max_staging_bytes})"
+                    )
             if stage.max_staging_bytes is not None and self.max_total_staging_bytes is not None:
                 if stage.max_staging_bytes > self.max_total_staging_bytes:
                     raise ValueError(f"stage {stage.name} max_staging_bytes cannot exceed max_total_staging_bytes")
-            if stage.max_result_bytes is not None and self.max_total_staging_bytes is not None:
-                if stage.max_result_bytes > self.max_total_staging_bytes:
-                    raise ValueError(f"stage {stage.name} max_result_bytes cannot exceed max_total_staging_bytes")
+            if eff_res is not None and self.max_total_staging_bytes is not None:
+                if eff_res * stage.max_jobs > self.max_total_staging_bytes:
+                    raise ValueError(
+                        f"stage {stage.name} worst-case bytes ({eff_res * stage.max_jobs}) "
+                        f"exceeds max_total_staging_bytes ({self.max_total_staging_bytes})"
+                    )
+
+            budget = (
+                stage.max_staging_bytes
+                if stage.max_staging_bytes is not None
+                else (eff_res * stage.max_jobs if eff_res is not None else None)
+            )
+            if budget is not None:
+                stage_budgets.append(budget)
+
+        if self.max_total_staging_bytes is not None and len(stage_budgets) == len(self.stages):
+            if sum(stage_budgets) > self.max_total_staging_bytes:
+                raise ValueError(
+                    f"sum of stage staging budgets ({sum(stage_budgets)}) "
+                    f"exceeds max_total_staging_bytes ({self.max_total_staging_bytes})"
+                )
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "CapacityProbeConfig":
@@ -248,17 +280,13 @@ def preflight_stage_capacity(
     probe: CapacityProbeConfig,
     output_dir: str | Path,
     *,
+    output_root: str | Path | None = None,
+    archive_profile: Mapping[str, Any] | None = None,
     disk_usage_fn: Callable[[Path], Any] | None = None,
 ) -> None:
     """Fail-closed preflight to ensure disk capacity and caps before launching any workers."""
     if disk_usage_fn is None:
         disk_usage_fn = shutil.disk_usage
-    path = Path(output_dir)
-    check_dir = path
-    while not check_dir.exists() and check_dir != check_dir.parent:
-        check_dir = check_dir.parent
-    if not check_dir.exists():
-        check_dir = Path(".")
 
     effective_max_staging = (
         stage.max_staging_bytes
@@ -271,24 +299,68 @@ def preflight_stage_capacity(
         else probe.max_result_bytes
     )
 
+    if archive_profile is not None:
+        if effective_max_result is None or effective_max_result <= 0:
+            raise ValueError("archive profile capacity probe requires explicit positive max_result_bytes")
+        if probe.max_total_staging_bytes is None or probe.max_total_staging_bytes <= 0:
+            raise ValueError("archive profile capacity probe requires explicit positive max_total_staging_bytes")
+
     if effective_max_result is not None and effective_max_staging is not None:
         if effective_max_result > effective_max_staging:
             raise ValueError(
                 f"stage max_result_bytes ({effective_max_result}) exceeds "
                 f"staging cap ({effective_max_staging})"
             )
+        if effective_max_result * stage.max_jobs > effective_max_staging:
+            raise ValueError(
+                f"stage worst-case bytes ({effective_max_result * stage.max_jobs}) "
+                f"exceeds staging cap ({effective_max_staging})"
+            )
 
-    required_staging_bytes = 0
-    if effective_max_staging is not None:
-        required_staging_bytes = effective_max_staging
-    elif effective_max_result is not None:
-        required_staging_bytes = effective_max_result * stage.max_jobs
+    worst_case_stage_bytes = (
+        effective_max_result * stage.max_jobs
+        if effective_max_result is not None
+        else 0
+    )
+    if stage.max_staging_bytes is not None:
+        required_stage_reservation = max(stage.max_staging_bytes, worst_case_stage_bytes)
+    elif worst_case_stage_bytes > 0:
+        required_stage_reservation = worst_case_stage_bytes
+    elif effective_max_staging is not None:
+        required_stage_reservation = effective_max_staging
+    else:
+        required_stage_reservation = 0
 
-    if required_staging_bytes > 0:
+    root_path = Path(output_root) if output_root is not None else Path(output_dir).parent
+    retained_bytes = 0
+    if root_path.is_dir():
+        for item in root_path.rglob("*"):
+            if item.is_file() and not item.is_symlink():
+                try:
+                    retained_bytes += item.stat().st_size
+                except OSError:
+                    pass
+
+    if probe.max_total_staging_bytes is not None and required_stage_reservation > 0:
+        total_staging = retained_bytes + required_stage_reservation
+        if total_staging > probe.max_total_staging_bytes:
+            raise RuntimeError(
+                f"preflight capacity insufficient: retained bytes ({retained_bytes}) + "
+                f"required stage reservation ({required_stage_reservation}) = {total_staging} "
+                f"exceeds max_total_staging_bytes ({probe.max_total_staging_bytes})"
+            )
+
+    if required_stage_reservation > 0:
+        path = Path(output_dir)
+        check_dir = path
+        while not check_dir.exists() and check_dir != check_dir.parent:
+            check_dir = check_dir.parent
+        if not check_dir.exists():
+            check_dir = Path(".")
         usage = disk_usage_fn(check_dir)
         free_bytes = getattr(usage, "free", 0)
-        if free_bytes < required_staging_bytes:
+        if free_bytes < required_stage_reservation:
             raise RuntimeError(
-                f"preflight capacity insufficient: required {required_staging_bytes} bytes "
+                f"preflight capacity insufficient: required {required_stage_reservation} bytes "
                 f"staging capacity, but only {free_bytes} bytes are free on {check_dir}"
             )

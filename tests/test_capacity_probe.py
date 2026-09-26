@@ -225,20 +225,20 @@ def test_wait_for_ready_results_rejects_workers_exiting_with_unfinished_jobs(mon
 
 def test_capacity_probe_config_staging_caps():
     payload = _payload()
-    payload["max_result_bytes"] = 100 * 1024 * 1024
+    payload["max_result_bytes"] = 10 * 1024 * 1024
     payload["max_total_staging_bytes"] = 500 * 1024 * 1024
-    payload["stages"][0]["max_result_bytes"] = 50 * 1024 * 1024
-    payload["stages"][0]["max_staging_bytes"] = 200 * 1024 * 1024
+    payload["stages"][0]["max_result_bytes"] = 10 * 1024 * 1024
+    payload["stages"][0]["max_staging_bytes"] = 100 * 1024 * 1024
     config = CapacityProbeConfig.from_dict(payload)
-    assert config.max_result_bytes == 100 * 1024 * 1024
+    assert config.max_result_bytes == 10 * 1024 * 1024
     assert config.max_total_staging_bytes == 500 * 1024 * 1024
-    assert config.stages[0].max_result_bytes == 50 * 1024 * 1024
-    assert config.stages[0].max_staging_bytes == 200 * 1024 * 1024
+    assert config.stages[0].max_result_bytes == 10 * 1024 * 1024
+    assert config.stages[0].max_staging_bytes == 100 * 1024 * 1024
     dumped = config.as_dict()
-    assert dumped["max_result_bytes"] == 100 * 1024 * 1024
+    assert dumped["max_result_bytes"] == 10 * 1024 * 1024
     assert dumped["max_total_staging_bytes"] == 500 * 1024 * 1024
-    assert dumped["stages"][0]["max_result_bytes"] == 50 * 1024 * 1024
-    assert dumped["stages"][0]["max_staging_bytes"] == 200 * 1024 * 1024
+    assert dumped["stages"][0]["max_result_bytes"] == 10 * 1024 * 1024
+    assert dumped["stages"][0]["max_staging_bytes"] == 100 * 1024 * 1024
 
 
 @pytest.mark.parametrize("field,value", [
@@ -374,6 +374,8 @@ def test_byte_cap_rejection_in_stage_results(tmp_path, monkeypatch):
         max_total_jobs=5,
         max_runtime_s=300,
         stages=(stage,),
+        max_result_bytes=500,
+        max_total_staging_bytes=2000,
     )
     res_dir = tmp_path / "res_001"
     res_dir.mkdir(parents=True)
@@ -469,6 +471,7 @@ def test_stage_preflight_blocks_worker_launch_on_insufficient_capacity(tmp_path,
         worker_count=2,
         simulator_slots=1,
         max_jobs=1,
+        max_result_bytes=500 * 1024 * 1024,
         max_staging_bytes=1000 * 1024 * 1024,
     )
     probe = CapacityProbeConfig(
@@ -477,6 +480,7 @@ def test_stage_preflight_blocks_worker_launch_on_insufficient_capacity(tmp_path,
         max_total_jobs=5,
         max_runtime_s=300,
         stages=(stage,),
+        max_result_bytes=500 * 1024 * 1024,
         max_total_staging_bytes=1000 * 1024 * 1024,
     )
     base_payload = {
@@ -679,3 +683,258 @@ def test_compact_profile_validation_and_receipt_instrumentation(tmp_path, monkey
     assert res0["bytes_by_category"]["debug"] > 0
     assert res0["bytes_by_category"]["views"] > 0
     assert res0["bytes_by_category"]["receipts"] > 0
+
+
+def test_archive_profile_requires_explicit_caps_before_worker_launch(tmp_path, monkeypatch):
+    stage = CapacityStage(
+        name="arch_stage",
+        worker_count=2,
+        simulator_slots=1,
+        max_jobs=2,
+    )
+    probe = CapacityProbeConfig(
+        run_id="arch-probe",
+        hf_subfolder="validation/test",
+        max_total_jobs=5,
+        max_runtime_s=300,
+        stages=(stage,),
+        # Omit all caps
+    )
+    base_payload = {
+        "machine": {
+            "repo_root": str(tmp_path),
+            "python_executable": str(tmp_path / "python"),
+            "simulator_root": str(tmp_path),
+            "rlbench_root": str(tmp_path),
+            "display_base": 1,
+            "display_width": 100,
+            "display_height": 100,
+            "simulator_slots": 1,
+            "worker_timeout_s": 60,
+        },
+        "run": {
+            "run_id": "base",
+            "run_root": str(tmp_path),
+            "worker_count": 2,
+            "hf_subfolder": "validation/test",
+            "publication_enabled": False,
+            "validation_mode": True,
+        },
+        "archive_profile": ArchiveProfileConfig().as_dict(),
+    }
+    base = GenerationRuntimeConfig.from_dict(base_payload)
+
+    spawned = []
+    monkeypatch.setattr(generation_capacity_probe.subprocess, "Popen", lambda *a, **kw: spawned.append(a))
+    manifest_file = Path("artifacts/composition/approved_composition_manifest.json").resolve()
+    stage_dir = tmp_path / "stage_missing_caps" / stage.name
+
+    with pytest.raises(ValueError, match="archive profile.*requires explicit positive"):
+        generation_capacity_probe.run_stage(
+            base, probe, stage,
+            output_root=tmp_path / "stage_missing_caps",
+            approved_manifest=manifest_file,
+            code_revision="a" * 40,
+            deadline=10**10,
+        )
+    assert len(spawned) == 0, "No workers should be launched when archive caps are missing"
+    assert not stage_dir.exists(), "Stage directory should not be created if preflight fails"
+
+    # Positive bounded fixture: with explicit positive caps and free disk, preflight passes
+    valid_stage = CapacityStage(
+        name="valid_stage",
+        worker_count=2,
+        simulator_slots=1,
+        max_jobs=2,
+        max_result_bytes=1000,
+        max_staging_bytes=3000,
+    )
+    valid_probe = CapacityProbeConfig(
+        run_id="valid-probe",
+        hf_subfolder="validation/test",
+        max_total_jobs=5,
+        max_runtime_s=300,
+        stages=(valid_stage,),
+        max_result_bytes=1000,
+        max_total_staging_bytes=5000,
+    )
+
+    class PlentyDisk:
+        free = 10**8
+
+    preflight_stage_capacity(
+        valid_stage,
+        valid_probe,
+        tmp_path / "valid_stage_out",
+        output_root=tmp_path,
+        archive_profile=base.archive_profile.as_dict(),
+        disk_usage_fn=lambda _: PlentyDisk(),
+    )
+
+
+def test_legacy_non_archive_no_cap_compatibility(tmp_path):
+    stage = CapacityStage(
+        name="legacy_stage",
+        worker_count=2,
+        simulator_slots=1,
+        max_jobs=2,
+    )
+    probe = CapacityProbeConfig(
+        run_id="legacy-probe",
+        hf_subfolder="validation/test",
+        max_total_jobs=5,
+        max_runtime_s=300,
+        stages=(stage,),
+    )
+    # Preflight should pass for legacy non-archive runs without caps
+    preflight_stage_capacity(
+        stage,
+        probe,
+        tmp_path / "legacy_stage_out",
+        output_root=tmp_path,
+        archive_profile=None,
+    )
+
+
+def test_capacity_probe_rejects_product_overflow():
+    # 1. Stage product overflow: max_result_bytes * max_jobs > max_staging_bytes
+    with pytest.raises(ValueError, match="exceeds stage max_staging_bytes"):
+        CapacityStage(
+            name="overflow_stage",
+            worker_count=2,
+            simulator_slots=1,
+            max_jobs=2,
+            max_result_bytes=100,
+            max_staging_bytes=150,  # 2 * 100 = 200 > 150
+        )
+
+    # 2. Probe product overflow: eff_res * stage.max_jobs > max_total_staging_bytes
+    stage = CapacityStage(
+        name="s1",
+        worker_count=2,
+        simulator_slots=1,
+        max_jobs=2,
+    )
+    with pytest.raises(ValueError, match="exceeds max_total_staging_bytes"):
+        CapacityProbeConfig(
+            run_id="probe-overflow",
+            hf_subfolder="validation/test",
+            max_total_jobs=5,
+            max_runtime_s=300,
+            stages=(stage,),
+            max_result_bytes=100,
+            max_total_staging_bytes=150,  # 2 * 100 = 200 > 150
+        )
+
+    # 3. Sum of stages overflow: stage 1 + stage 2 budgets exceed max_total_staging_bytes
+    s1 = CapacityStage(name="s1", worker_count=1, simulator_slots=1, max_jobs=1, max_result_bytes=100, max_staging_bytes=100)
+    s2 = CapacityStage(name="s2", worker_count=1, simulator_slots=1, max_jobs=1, max_result_bytes=100, max_staging_bytes=100)
+    with pytest.raises(ValueError, match="exceeds max_total_staging_bytes"):
+        CapacityProbeConfig(
+            run_id="probe-sum-overflow",
+            hf_subfolder="validation/test",
+            max_total_jobs=5,
+            max_runtime_s=300,
+            stages=(s1, s2),
+            max_total_staging_bytes=150,  # 100 + 100 = 200 > 150
+        )
+
+
+def test_preflight_accounts_for_prior_stage_retained_bytes(tmp_path):
+    output_root = tmp_path / "multi_stage_run"
+    prior_stage = output_root / "stage_1"
+    prior_stage.mkdir(parents=True)
+    (prior_stage / "chunk.npz").write_bytes(b"X" * 400)  # 400 bytes retained
+
+    stage_2 = CapacityStage(
+        name="stage_2",
+        worker_count=2,
+        simulator_slots=1,
+        max_jobs=2,
+        max_result_bytes=100,
+        max_staging_bytes=200,
+    )
+    probe = CapacityProbeConfig(
+        run_id="multi-probe",
+        hf_subfolder="validation/test",
+        max_total_jobs=5,
+        max_runtime_s=300,
+        stages=(stage_2,),
+        max_result_bytes=100,
+        max_total_staging_bytes=500,  # 400 retained + 200 stage = 600 > 500!
+    )
+
+    class GoodDisk:
+        free = 10**9
+
+    with pytest.raises(RuntimeError, match="retained bytes.*exceeds max_total_staging_bytes"):
+        preflight_stage_capacity(
+            stage_2,
+            probe,
+            output_root / "stage_2",
+            output_root=output_root,
+            disk_usage_fn=lambda _: GoodDisk(),
+        )
+
+
+def test_stage_preflight_blocks_worker_launch_on_insufficient_worst_case_reservation(tmp_path, monkeypatch):
+    stage = CapacityStage(
+        name="worst_case_stage",
+        worker_count=2,
+        simulator_slots=1,
+        max_jobs=4,
+        max_result_bytes=500,  # Worst case: 4 * 500 = 2000 bytes
+        max_staging_bytes=2000,
+    )
+    probe = CapacityProbeConfig(
+        run_id="cap-probe",
+        hf_subfolder="validation/test",
+        max_total_jobs=5,
+        max_runtime_s=300,
+        stages=(stage,),
+        max_result_bytes=500,
+        max_total_staging_bytes=5000,
+    )
+    base_payload = {
+        "machine": {
+            "repo_root": str(tmp_path),
+            "python_executable": str(tmp_path / "python"),
+            "simulator_root": str(tmp_path),
+            "rlbench_root": str(tmp_path),
+            "display_base": 1,
+            "display_width": 100,
+            "display_height": 100,
+            "simulator_slots": 1,
+            "worker_timeout_s": 60,
+        },
+        "run": {
+            "run_id": "base",
+            "run_root": str(tmp_path),
+            "worker_count": 2,
+            "hf_subfolder": "validation/test",
+            "publication_enabled": False,
+            "validation_mode": True,
+        },
+        "archive_profile": ArchiveProfileConfig().as_dict(),
+    }
+    base = GenerationRuntimeConfig.from_dict(base_payload)
+
+    class LowDisk:
+        free = 1500  # Only 1500 free, but stage worst case is 2000 bytes
+
+    monkeypatch.setattr("icgs.data.collection.generation.capacity_probe.shutil.disk_usage", lambda _: LowDisk())
+    monkeypatch.setattr(generation_capacity_probe.shutil, "disk_usage", lambda _: LowDisk())
+
+    spawned = []
+    monkeypatch.setattr(generation_capacity_probe.subprocess, "Popen", lambda *a, **kw: spawned.append(a))
+    manifest_file = Path("artifacts/composition/approved_composition_manifest.json").resolve()
+
+    with pytest.raises(RuntimeError, match="preflight capacity insufficient"):
+        generation_capacity_probe.run_stage(
+            base, probe, stage,
+            output_root=tmp_path / "stage_worst_case_out",
+            approved_manifest=manifest_file,
+            code_revision="a" * 40,
+            deadline=10**10,
+        )
+    assert len(spawned) == 0, "No workers should be launched when worst-case reservation exceeds free disk"
