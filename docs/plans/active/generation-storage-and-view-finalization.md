@@ -299,7 +299,7 @@ not installed.
 - [x] Apply the 70/30 nominal/perturbed selection only to final `D_temporal` and `D_dyn` snapshots using the recorded collection seed/mixture seed.
 - [x] Exclude crash/invalid attempts; retain valid failures when their split/subset is eligible.
 - [x] Write view manifests with source revision/SHA256, archive identity, preprocessing identity, role, mixture, sample counts, and finalization timestamp.
-- [x] Make finalization idempotent: same source manifest/seed produces the same bytes; conflicting source revision fails closed.
+- [x] Make finalization idempotent: same source manifest/seed produces the same bytes; a source revision/manifest mismatch fails closed only when reusing the same existing output target, while a later source revision uses its own `<output-prefix>/<source-revision>/seed-<mixture-seed>/` directory.
 - [x] Test partial/provisional versus final status, changing dataset snapshot, 70/30 counts, split leakage, valid-failure retention, and deterministic re-run.
 - [x] Run the view-finalization test subset; do not contact HF.
 

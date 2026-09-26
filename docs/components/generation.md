@@ -101,8 +101,10 @@ from one pinned HF revision, verifies every selected episode manifest, then writ
 twelve immutable role/view snapshots (`train`, `validation`, `evaluation` × the
 four views) with `status: "FINAL"`. A final snapshot records the source revision,
 dataset-manifest SHA256, archive/preprocessing identities, role, mixture seed,
-sample counts and source-manifest timestamp. Re-running with remembered local
-state is not valid; a changed source revision or manifest hash fails closed.
+sample counts and source-manifest timestamp. Re-running from remembered local
+state is not valid. A source revision or manifest mismatch fails closed only
+when reusing the same existing output target; a later source revision uses its
+own `<output-prefix>/<source-revision>/seed-<mixture-seed>/` directory.
 The 70/30 nominal/perturbed mixture is applied only to final train
 `D_temporal`/`D_dyn` transition references, in complete 7:3 units.
 
