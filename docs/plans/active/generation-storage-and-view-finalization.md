@@ -481,11 +481,14 @@ readback and zero-payload resume **PASS**. The first immutable FINAL prefix is
 preserved as a **FAIL** for `D_task` kind counts; corrected output from reviewed
 `8a2b811` **PASS** under a distinct prefix. A second corrected prefix was
 accidentally published, its thirteen files were checked byte-identical, and
-both outputs were preserved. Task 5.3 stays open: live failure-attempt HF
-retention, receipt-only pruning, workers-only attach, a hard live-writer staging
-bound/capacity retest, native training ingestion, and full quota remain
-**NOT RUN** or unproven. No 7,520-attempt authorization follows from this
-partial gate.
+both outputs were preserved. A separate one-job `receipt_only` run at reviewed
+`8a2b811` then **PASS**ed pinned HF byte verification, post-verification local
+payload pruning with a durable per-job receipt, and disjoint HF-only resume
+with zero payloads; its data/receipt/HEAD OIDs are in the same record. Task 5.3
+stays open: live failure-attempt HF retention, workers-only attach, a hard
+live-writer staging bound/capacity retest, native training ingestion, and full
+quota remain **NOT RUN** or unproven. No 7,520-attempt authorization follows
+from this partial gate.
 
 ## Compatibility, rollback, and recovery
 

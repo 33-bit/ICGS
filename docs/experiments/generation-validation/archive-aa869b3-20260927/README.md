@@ -159,8 +159,46 @@ An operator retry used a second *new* output prefix,
 `b3529fa124e49d92797fda773ce001493726e19b`. This duplicate is an
 operator error, not a new source revision; all 13 receipt/view files at that
 HEAD were checked byte-identical to the intended corrected target. Both
-prefixes remain immutable; neither was deleted. The current HF repository
-HEAD after the idempotency checks is `b3529fa…`.
+prefixes remain immutable; neither was deleted. HF repository HEAD immediately
+after the idempotency checks was `b3529fa…` (before the separate receipt-only
+gate below).
+
+## Separate receipt-only retention gate
+
+Reviewed code `8a2b811` also ran a **one-job, no-refill** T01 nominal capture
+with `validation_mode=false` and `local_artifact_retention=receipt_only` under
+the separate HF prefix
+`validation/validation-cpu-20260922/archive-receipt-only-8a2b811-20260927a`.
+The operator helper
+`.superpowers/sdd/generation-storage-and-view-finalization/live_receipt_only_validation.py`
+explicitly enqueued one job at
+`/home/huy2325/icgs-archive-receipt-only-8a2b811-20260927a`; the worker ran
+once through the canonical `xvfb-run` command and a credential-free environment.
+It returned a locally validated `valid_failure` episode (127 transitions,
+128 observations, 128 wrist-depth frames, 19 hashed files). The result
+directory existed and the queue had no orphan archive scratch before the one
+publication call.
+
+Publication and pinned remote readback **PASS**. The data commit is
+`964fa535c710028194b3818253df3c5d075a296a`, the locally bound receipt
+commit is `b2519eab5cdc09b7a214df453cea643b169a31db`, and verified metadata
+HEAD is `2f5f0f0fdb69d698c7c9277f5ff017ebea0267e4`. Dataset-manifest SHA256
+is `284b5db49708b10577688e1ee1f48317f4c05472bdaad204ffb1525c034d2881`.
+The clean-scratch verifier checked 33 downloads and the complete 22,957,215-byte
+archive at that HEAD. Only after publisher verification did the queue move to
+one `published` row and remove the result payload. Read-only inspection found
+the result directory absent and only `job.json`, `result.json`, and the
+per-job VERIFIED `publication_receipt.json` retained; that receipt binds the
+19 artifact hashes, manifest row, source run, data OID, and receipt OID. The
+run root then measured 67,942 bytes (post-prune footprint, **not a peak**).
+
+Finally, a new disjoint root
+`/home/huy2325/icgs-archive-receipt-only-audit-8a2b811-20260927a` opened
+with `resume_from_hf=true`, the exact `receipt_only` archive profile and no
+local staging payloads. HF-only planner restoration **PASS**: one episode,
+zero attempts, zero local payloads, and the same pinned HEAD/SHA above. This
+proves the bounded live pruning/recovery path, not a general failure-attempt
+retention or quota-run guarantee. Raw receipts remain under both run roots.
 
 ## Remaining gates and limits
 
@@ -170,7 +208,7 @@ HEAD after the idempotency checks is `b3529fa…`.
 | HF-only resume without local result payloads | PASS | Six- and nine-row disjoint roots restored planner state. |
 | Revision-bound twelve FINAL snapshots and exact train 7:3 | PASS for corrected prefix | Pinned source and output OIDs, independent hashes/counts/split check; first output is preserved as a known failed metadata result. |
 | Live `simulator_crash` / `invalid_observation` attempt retention | NOT RUN | The nine bounded simulator jobs did not produce an attempt archive. |
-| Receipt-only local pruning after remote verification | NOT RUN live | These finite validation profiles used `keep`; fixture tests alone do not establish live pruning. |
+| Receipt-only local pruning after remote verification | PASS, one bounded result | Separate finite profile retained per-job VERIFIED receipt/hashes, removed only the verified payload, and restored the episode from HF with zero local payloads. |
 | Workers-only multi-host attach under this archive profile | NOT RUN | No second host attached to these run roots. |
 | Hard live-writer staging cap and bounded capacity retest | NOT RUN on `aa869b3` | The previous 100 MB G1 probe at `2551f78` failed and is preserved. Current run-root sizes were 73,914,057; 75,726,195; 76,038,690 bytes after publication, **not peak measurements**. No hard writer-side cap was proven. |
 | Native `icgs train` ingestion of archive FINAL views, Open3D SOR, training, C1–C5, full preprocessing | NOT RUN | The trainer still consumes PyG sample directories; no archive-backed training integration is claimed. |
