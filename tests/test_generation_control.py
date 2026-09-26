@@ -947,12 +947,46 @@ def test_coordinator_archive_initial_manifest_discovery_rejects_outside_cache_pa
         return str(remote_manifest)
 
     monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
+    with pytest.raises(
+        RuntimeError, match="archive startup requires a valid remote dataset manifest"
+    ) as failure:
+        CoordinatorControlPlane.open(
+            run_json, api_factory=lambda: object(), token_path=token
+        )
+
+    assert len(calls) == 1
+    assert calls[0].get("cache_dir")
+    assert isinstance(failure.value.__cause__, ValueError)
+    assert "outside owned scratch" in str(failure.value.__cause__)
+    assert len(cache_roots) == 1 and not cache_roots[0].exists()
+
+
+def test_coordinator_archive_initial_manifest_allows_confirmed_remote_absence(
+    tmp_path: Path, monkeypatch,
+):
+    from huggingface_hub.errors import EntryNotFoundError
+
+    run_json, token, _manifest, _prefix_root, _revision = _archive_initial_discovery_fixture(
+        tmp_path, monkeypatch
+    )
+    calls = []
+    cache_roots = []
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        cache = Path(kwargs["cache_dir"])
+        cache_roots.append(cache)
+        (cache / "partial-download.tmp").write_bytes(b"temporary cache bytes")
+        raise EntryNotFoundError("dataset manifest is absent")
+
+    monkeypatch.setattr(generation_coordinator_module, "hf_hub_download", download)
     control = CoordinatorControlPlane.open(
         run_json, api_factory=lambda: object(), token_path=token
     )
 
     assert len(calls) == 1
     assert calls[0].get("cache_dir")
+    assert calls[0].get("revision") is None
     assert len(cache_roots) == 1 and not cache_roots[0].exists()
     assert control.publisher.remote_manifest["episodes"] == []
 

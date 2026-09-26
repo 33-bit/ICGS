@@ -360,10 +360,15 @@ def _download_archive_control_file(
         repo_id=run.hf_repo, repo_type="dataset", filename=filename,
         token=token, force_download=True, revision=revision, cache_dir=str(scratch),
     ))
-    if not remote.resolve().is_relative_to(scratch.resolve()):
+    remote_lexical = Path(os.path.abspath(remote))
+    scratch_lexical = Path(os.path.abspath(scratch))
+    if (
+        not remote_lexical.is_relative_to(scratch_lexical)
+        or not remote.resolve().is_relative_to(scratch.resolve())
+    ):
         raise ValueError(f"remote archive control file is outside owned scratch: {filename}")
     if not remote.is_file():
-        raise FileNotFoundError(remote)
+        raise ValueError(f"remote archive control file is not a regular file: {filename}")
     return remote
 
 
@@ -1277,6 +1282,7 @@ class CoordinatorControlPlane:
         remote_manifest: dict = {"manifest_version": 3, "episodes": [], "failure_attempts": []}
         remote_manifest_sha256: str | None = None
         remote_error: Exception | None = None
+        remote_manifest_absent = False
         bootstrap_path = Path(run.run_root) / "control" / "resume_bootstrap.json"
         remote_revision = None
         bootstrap_manifest_sha256 = None
@@ -1298,12 +1304,21 @@ class CoordinatorControlPlane:
                     remote_bytes = remote_path.read_bytes()
             elif runtime.archive_profile is not None:
                 with tempfile.TemporaryDirectory(prefix="icgs-hf-initial-manifest-") as scratch:
-                    remote_path = _download_archive_control_file(
-                        hf_hub_download, run, token,
-                        f"{run.hf_subfolder}/dataset_manifest.json", Path(scratch),
-                        revision=remote_revision,
-                    )
-                    remote_bytes = remote_path.read_bytes()
+                    try:
+                        remote_path = _download_archive_control_file(
+                            hf_hub_download, run, token,
+                            f"{run.hf_subfolder}/dataset_manifest.json", Path(scratch),
+                            revision=remote_revision,
+                        )
+                    except EntryNotFoundError as error:
+                        if (
+                            isinstance(error, LocalEntryNotFoundError)
+                            or remote_revision is not None
+                        ):
+                            raise
+                        remote_manifest_absent = True
+                    else:
+                        remote_bytes = remote_path.read_bytes()
             else:
                 remote_path = hf_hub_download(
                     repo_id=run.hf_repo, repo_type="dataset",
@@ -1311,26 +1326,35 @@ class CoordinatorControlPlane:
                     token=token, force_download=True, revision=remote_revision,
                 )
                 remote_bytes = Path(remote_path).read_bytes()
-            remote_manifest_sha256 = hashlib.sha256(remote_bytes).hexdigest()
-            if bootstrap_manifest_sha256 and remote_manifest_sha256 != bootstrap_manifest_sha256:
-                raise ValueError("remote resume manifest digest changed after preflight")
-            remote_manifest = load_remote_manifest(
-                json.loads(remote_bytes),
-                run,
-                archive_profile=runtime.archive_profile,
-                approved_program_ids=set(rows),
-                approved_rows=rows if runtime.archive_profile is not None else None,
-                remote_manifest_sha256=remote_manifest_sha256,
-                manifest_bytes=remote_bytes,
-            )
-            if runtime.archive_profile is not None and run.resume_from_hf:
-                _verify_archive_resume_files(
-                    remote_manifest, run, runtime.archive_profile, token=token,
-                    revision=remote_revision, downloader=hf_hub_download,
-                    manifest_sha256=remote_manifest_sha256,
+            if not remote_manifest_absent:
+                remote_manifest_sha256 = hashlib.sha256(remote_bytes).hexdigest()
+                if bootstrap_manifest_sha256 and remote_manifest_sha256 != bootstrap_manifest_sha256:
+                    raise ValueError("remote resume manifest digest changed after preflight")
+                remote_manifest = load_remote_manifest(
+                    json.loads(remote_bytes),
+                    run,
+                    archive_profile=runtime.archive_profile,
+                    approved_program_ids=set(rows),
+                    approved_rows=rows if runtime.archive_profile is not None else None,
+                    remote_manifest_sha256=remote_manifest_sha256,
+                    manifest_bytes=remote_bytes,
                 )
+                if runtime.archive_profile is not None and run.resume_from_hf:
+                    _verify_archive_resume_files(
+                        remote_manifest, run, runtime.archive_profile, token=token,
+                        revision=remote_revision, downloader=hf_hub_download,
+                        manifest_sha256=remote_manifest_sha256,
+                    )
         except Exception as error:
             remote_error = error
+        if (
+            runtime.archive_profile is not None
+            and not run.resume_from_hf
+            and remote_error is not None
+        ):
+            raise RuntimeError(
+                "archive startup requires a valid remote dataset manifest or confirmed absence"
+            ) from remote_error
         if runtime.archive_profile is not None and run.publication_enabled:
             _recover_interrupted_archive_publication(
                 queue,

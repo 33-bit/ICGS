@@ -776,7 +776,7 @@ def test_published_receipt_only_job_reconstructs_manifest_without_episode_payloa
     assert not Path(_result.result_dir).exists()
 
 
-def test_coordinator_open_recovers_interrupted_receipt_only_prune(
+def test_coordinator_open_recovers_verified_prune_then_fails_closed_on_remote_error(
     tmp_path: Path,
     monkeypatch,
 ):
@@ -875,24 +875,31 @@ def test_coordinator_open_recovers_interrupted_receipt_only_prune(
     assert Path(result.result_dir).is_dir()
     assert not (Path(result.result_dir) / relative_to_remove).exists()
 
-    monkeypatch.setattr(
-        generation_coordinator,
-        "hf_hub_download",
-        lambda **_kwargs: (_ for _ in ()).throw(OSError("remote unavailable")),
-    )
-    control = generation_coordinator.CoordinatorControlPlane.open(
-        run_config_path,
-        api_factory=FakeApi,
-        token_path=token_path,
-    )
+    cache_roots = []
 
-    assert control.queue.counts().ingested == 0
-    assert control.queue.counts().published == 1
+    def download(**kwargs):
+        cache = Path(kwargs["cache_dir"])
+        cache_roots.append(cache)
+        (cache / "partial-download.tmp").write_bytes(b"temporary cache bytes")
+        raise OSError("remote unavailable")
+
+    monkeypatch.setattr(generation_coordinator, "hf_hub_download", download)
+    with pytest.raises(
+        RuntimeError, match="archive startup requires a valid remote dataset manifest"
+    ) as failure:
+        generation_coordinator.CoordinatorControlPlane.open(
+            run_config_path,
+            api_factory=lambda: pytest.fail("publisher must not be constructed"),
+            token_path=token_path,
+        )
+
+    assert isinstance(failure.value.__cause__, OSError)
+    assert "remote unavailable" in str(failure.value.__cause__)
+    assert queue.counts().ingested == 0
+    assert queue.counts().published == 1
     assert not Path(result.result_dir).exists()
-    assert [row["episode_id"] for row in control.manifest["episodes"]] == [job.episode_id]
-    assert [row["episode_id"] for row in control.publisher.remote_manifest["episodes"]] == [
-        job.episode_id
-    ]
+    assert (queue.root / "published" / job.job_id / "publication_receipt.json").is_file()
+    assert len(cache_roots) == 1 and not cache_roots[0].exists()
 
 
 @pytest.mark.parametrize("field", ["split", "preprocessing_identity", "source_lineage_id"])
@@ -1349,7 +1356,11 @@ def test_coordinator_recovers_data_revision_after_local_receipt_write_crash(
         if not source.is_file():
             (cache / "partial-download.tmp").write_bytes(b"partial control bytes")
             raise FileNotFoundError(source)
-        cached.write_bytes(source.read_bytes())
+        payload = source.read_bytes()
+        blob = cache / "blobs" / hashlib.sha256(payload).hexdigest()
+        blob.parent.mkdir(parents=True, exist_ok=True)
+        blob.write_bytes(payload)
+        cached.symlink_to(blob)
         returned_paths.append(cached)
         return str(cached)
 
@@ -1530,6 +1541,125 @@ def test_interrupted_archive_recovery_rejects_control_file_outside_owned_cache(
 
     assert len(calls) == 1
     assert calls[0].get("cache_dir")
+    assert isinstance(failure.value.__cause__, ValueError)
+    assert "outside owned scratch" in str(failure.value.__cause__)
+    assert len(cache_roots) == 1 and not cache_roots[0].exists()
+
+
+@pytest.mark.parametrize(
+    ("data_commit_oid", "filename", "error_message"),
+    [
+        (None, "dataset_manifest.json", "pending archive data commit"),
+        ("d" * 40, "publication_receipt.json", "pending archive receipt commit"),
+    ],
+)
+def test_interrupted_archive_recovery_rejects_returned_directory_as_absence(
+    tmp_path: Path,
+    data_commit_oid: str | None,
+    filename: str,
+    error_message: str,
+):
+    from scripts import generation_coordinator as coordinator
+
+    queue, job, _result, profile = _archive_queue(tmp_path, retention="receipt_only")
+    receipt = PublicationReceipt(
+        run_id=job.run_id,
+        job_ids=(job.job_id,),
+        status="PREPARED" if data_commit_oid is None else "DATA_COMMITTED",
+        data_commit_oid=data_commit_oid,
+        artifact_hashes={f"{job.job_id}/artifact_manifest.json": "a" * 64},
+        source_run_id=job.run_id,
+        dataset_identity=profile.dataset_identity,
+        archive_format_id=profile.archive_format_id,
+        episode_schema_version=profile.episode_schema_version,
+        archive_profile=profile.as_dict(),
+        dataset_manifest_sha256="b" * 64,
+        prefix=_run().hf_subfolder,
+    )
+    (queue.root / "publication_receipt.json").write_text(
+        json.dumps(receipt.as_dict()), encoding="utf-8"
+    )
+    cache_roots = []
+    calls = []
+
+    def download(**kwargs):
+        calls.append(kwargs)
+        cache = Path(kwargs["cache_dir"])
+        cache_roots.append(cache)
+        returned_directory = cache / "snapshots" / ("e" * 40) / kwargs["filename"]
+        returned_directory.mkdir(parents=True)
+        return str(returned_directory)
+
+    with pytest.raises(RuntimeError, match=error_message) as failure:
+        coordinator._recover_interrupted_archive_publication(
+            queue,
+            _run(),
+            profile,
+            token="secret",
+            downloader=download,
+        )
+
+    assert len(calls) == 1
+    assert calls[0]["filename"].endswith(filename)
+    assert calls[0].get("cache_dir")
+    assert isinstance(failure.value.__cause__, ValueError)
+    assert "not a regular file" in str(failure.value.__cause__)
+    assert len(cache_roots) == 1 and not cache_roots[0].exists()
+
+
+def test_interrupted_archive_recovery_rejects_external_symlink_alias_into_scratch(
+    tmp_path: Path,
+):
+    from scripts import generation_coordinator as coordinator
+
+    queue, job, _result, profile = _archive_queue(tmp_path, retention="receipt_only")
+    receipt = PublicationReceipt(
+        run_id=job.run_id,
+        job_ids=(job.job_id,),
+        status="PREPARED",
+        artifact_hashes={f"{job.job_id}/artifact_manifest.json": "a" * 64},
+        source_run_id=job.run_id,
+        dataset_identity=profile.dataset_identity,
+        archive_format_id=profile.archive_format_id,
+        episode_schema_version=profile.episode_schema_version,
+        archive_profile=profile.as_dict(),
+        dataset_manifest_sha256="b" * 64,
+        prefix=_run().hf_subfolder,
+    )
+    (queue.root / "publication_receipt.json").write_text(
+        json.dumps(receipt.as_dict()), encoding="utf-8"
+    )
+    cache_roots = []
+    aliases = []
+    snapshot_oid = "f" * 40
+
+    def download(**kwargs):
+        cache = Path(kwargs["cache_dir"])
+        cache_roots.append(cache)
+        target = cache / "snapshots" / snapshot_oid / kwargs["filename"]
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"temporary remote bytes")
+        alias = tmp_path / "outside" / "snapshots" / snapshot_oid / kwargs["filename"]
+        alias.parent.mkdir(parents=True, exist_ok=True)
+        alias.symlink_to(target)
+        aliases.append(alias)
+        return str(alias)
+
+    with pytest.raises(
+        RuntimeError, match="cannot reconcile pending archive data commit"
+    ) as failure:
+        coordinator._recover_interrupted_archive_publication(
+            queue,
+            _run(),
+            profile,
+            token="secret",
+            downloader=download,
+        )
+
+    assert len(aliases) == 1
+    assert aliases[0].resolve().is_relative_to(cache_roots[0].resolve())
+    assert not aliases[0].absolute().is_relative_to(cache_roots[0].absolute())
+    assert coordinator._snapshot_revision(aliases[0]) == snapshot_oid
     assert isinstance(failure.value.__cause__, ValueError)
     assert "outside owned scratch" in str(failure.value.__cause__)
     assert len(cache_roots) == 1 and not cache_roots[0].exists()
