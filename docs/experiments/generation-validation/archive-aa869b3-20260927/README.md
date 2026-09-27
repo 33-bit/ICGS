@@ -358,6 +358,62 @@ The original checkout at `d793b39`, the failed 80 MB run root and older
 forensic roots were not altered. These fixture passes do not turn the live
 80 MB `FAIL` into a capacity `PASS` or authorize full generation.
 
+## G1 512 MiB capacity continuation at `53bc3e6` — FAIL on timeout
+
+On 2026-09-27, the approved one-job, no-HF G1 continuation used a fresh
+`vps-a` checkout at `53bc3e66de4c279cf7565eca4cd5ca611d0027b3` and
+run root `/home/huy2325/icgs-archive-capacity-53bc3e6-20260927a`.
+The ignored local/remote probe and runtime config SHA256 values matched:
+`ccbffe47cc6e7345aacc5a52f9d5d8bc96eea45ec10e0bccdf952a384b0e6f48`
+and `9eb25781ee49c0413f2cdfdafc9e6243977a268b5e642f07e4870ad090cddad5`.
+The approved composition manifest SHA256 remained
+`d50b737ce3ac168724c61c6e9f87603944dd576101615660e14c993c378d53e1`.
+The root and remote config targets were absent before copying, no generation
+process was active, disk had 112,742,612,992 bytes available, and memory had
+14,790,090,752 bytes available. The exact command, from that checkout, was:
+
+```bash
+LD_LIBRARY_PATH=/home/huy2325/icgs-vps-env/CoppeliaSim PYTHONPATH=src \
+  /home/huy2325/icgs-vps-env/bin/python -B scripts/generation_capacity_probe.py \
+  --config /home/huy2325/capacity-g1-512m-53bc3e6-20260927a.json \
+  --runtime-config /home/huy2325/capacity-runtime-g1-512m-53bc3e6-20260927a.json \
+  --approved-manifest /home/huy2325/ICGS-archive-ready-53bc3e6-validation/artifacts/composition/approved_composition_manifest.json \
+  --code-revision 53bc3e66de4c279cf7565eca4cd5ca611d0027b3 \
+  --output-root /home/huy2325/icgs-archive-capacity-53bc3e6-20260927a --execute
+```
+
+The worker used one simulator slot, a 600-second worker timeout, a 900-second
+global deadline, a 536,870,912-byte result cap, and 1,073,741,824-byte
+stage/total caps. The probe returned **FAIL** after 601.939 seconds:
+`GenerationSafetyStop: orphan_archive_scratch_after_timeout`. Its one claimed
+job remained unready, with zero ingested or published results and worker return
+code `-15`; no closed `episode.manifest.json` or NPZ chunk exists. The sampled
+stage and writer-scratch lower bounds were 105,166,792 and 102,163,510 bytes,
+respectively; neither staging cap was reached. The independent read-only
+inventory matched the size and SHA256 of all 5,825 preserved files listed in
+the durable stop, totaling exactly 102,163,510 bytes. Of those, 5,570 files
+were smaller than 1 KiB. The stop receipt, stage receipt and summary SHA256
+values are respectively
+`4917362f72a6f6e96a14cc921aae4b5d8b0aedd37fd70d25a286cab0b523156f`,
+`96272106cc5746ba0d7671333e8c4cafdd63f0024207d757e8c660814aa8abd2`,
+and `75bb3a0202a3cfce297cb2c3bf6cb80b1d975ff8f42a1adef8eeaa67f8a88393`.
+No matching generation process remained. The root was not resumed, claimed,
+cleaned or published.
+
+Read-only diagnosis: the archive-write marker was created at 06:43:53 UTC;
+the last `.npy` spool pieces were written at 06:53:52 UTC, immediately before
+the timeout. The writer was still encoding numeric metadata at chunk 38 of
+64 and had not entered final NPZ compression. `_MetadataEncoder` stores many
+per-observation numeric fields as separate tiny `.npy` files, and
+`_ArchiveArrays._store_array_file` flushes and fsyncs each one. This is
+consistent with the observed tens-of-milliseconds-per-file write cadence;
+it is an inference from code and file timestamps, not a profiler result.
+The probe's stage schema limits `worker_timeout_s` to 600 seconds, whereas
+the checked-in generation runtime example uses 1,200 seconds. Increasing
+the result byte cap alone therefore did not measure a closed G1 archive.
+Per the fail-stop plan, the controlled failure-attempt HF publication was
+**NOT RUN** after this timeout. Full generation remains **NOT AUTHORIZED**.
+
 ## Earlier data-generation readiness retest at `8a2b811` — scoped, still blocked
 
 This 2026-09-27 retest was narrowed to data generation. It did **not** start the
@@ -423,7 +479,7 @@ the separate bounded PASS evidence above, not permission to begin full quota.
 | Live `simulator_crash` / `invalid_observation` attempt retention | NOT RUN | The nine bounded simulator jobs did not produce an attempt archive. |
 | Receipt-only local pruning after remote verification | PASS, one bounded result | Separate finite profile retained per-job VERIFIED receipt/hashes, removed only the verified payload, and restored the episode from HF with zero local payloads. |
 | Workers-only attach under this archive profile | PASS, same-machine host scope only | A job-free `vps-a` attach produced a separate host receipt and credential-free idle worker, then was stopped. A second physical host and a live cross-host claim remain NOT RUN. |
-| Hard live-writer staging cap and bounded capacity retest | Partial per-result proof; 80 MB G1 **FAIL** | At `d793b39`, the writer stopped before a numeric write exceeded the 80,000,000-byte per-result cap, kept 78,649,839 bytes of scratch and wrote a durable stop. No closed archive, successful peak or aggregate whole-run budget was measured. At `8a2b811`, the older sampled probe exceeded the cap. Both failed roots are preserved. The successful archive run-root sizes of 73,914,057; 75,726,195; and 76,038,690 bytes were after publication, **not peak measurements**. |
+| Hard live-writer staging cap and bounded capacity retest | Partial per-result proof; G1 **FAIL** at 80 MB and at 600-second timeout | At `d793b39`, the writer stopped before a numeric write exceeded the 80,000,000-byte per-result cap, kept 78,649,839 bytes of scratch and wrote a durable stop. At `53bc3e6`, a 512 MiB-cap G1 reached no byte cap but timed out while spooling, preserving 102,163,510 bytes. No closed archive, successful peak or aggregate whole-run budget was measured. The older `8a2b811` sampled probe also exceeded 80 MB. All failed roots are preserved. The successful archive run-root sizes of 73,914,057; 75,726,195; and 76,038,690 bytes were after publication, **not peak measurements**. |
 | Open3D SOR on one actual archived observation | PASS, bounded | 16,384 raw points produced 16,215 filtered points and a finite 2,048-point local-frame sample; this is not full preprocessing. |
 | Full archive preprocessing and native `icgs train` ingestion of FINAL views | NOT RUN / NOT IMPLEMENTED | No full preprocessing workload ran; the trainer still consumes PyG sample directories and has no archive-backed integration. Training and C1–C5 were not selected for this data-generation-only decision. |
 | Full 7,520-attempt collection and L4 benchmark | NOT RUN | This finite validation does not authorize them. |

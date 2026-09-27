@@ -589,6 +589,19 @@ roots and the HF validation prefix must be disjoint from earlier evidence.
       generation validation record. No GPU, training, C1–C5 or full-quota run
       is part of this continuation.
 
+**Continuation stop (2026-09-27):** The first fresh `vps-a` G1 run at
+`53bc3e6` did not reach either byte cap; it **FAIL**ed at its 600-second
+worker timeout while spooling thousands of small numeric metadata arrays.
+The durable safety stop preserves 5,825 hashed files (102,163,510 bytes),
+and the stage receipt records one claimed, zero ready/published results.
+Per the checklist, no controlled failure-attempt HF run followed this failed
+probe. The exact command, hashes, file-size distribution and read-only
+diagnosis are in the [validation record](../../experiments/generation-validation/archive-aa869b3-20260927/README.md).
+The probe's 600-second schema maximum is shorter than the production runtime
+example's 1,200-second timeout; any revised time bound or writer-performance
+change requires a separately reviewed finite rerun. Full generation remains
+**NOT AUTHORIZED**.
+
 ## Compatibility, rollback, and recovery
 
 - Existing v2 artifacts and HF prefixes remain immutable and readable.
