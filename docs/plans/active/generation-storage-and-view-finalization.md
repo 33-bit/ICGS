@@ -544,6 +544,51 @@ are in the [validation record](../../experiments/generation-validation/archive-a
 The failed G1 root remains preserved, 80 MB is insufficient for a closed G1
 archive, and full generation remains **NOT AUTHORIZED**.
 
+### Task 5.3 continuation — `vps-a` generation-only acceptance
+
+**Goal:** Close the measured G1 storage and live failure-attempt HF retention
+gaps without starting the 7,520-attempt collection. This is a bounded
+component-validation continuation of the accepted archive migration; protocol,
+quota, episode labels, and published prefixes remain unchanged. All new run
+roots and the HF validation prefix must be disjoint from earlier evidence.
+
+- [ ] **Capacity, no HF:** Pin one clean `vps-a` checkout to code revision
+      `53bc3e66de4c279cf7565eca4cd5ca611d0027b3`. Preflight free disk,
+      memory, simulator paths, absent run root, and no generation processes.
+      Use one G1 job, one worker/slot, a 600-second worker timeout, 900-second
+      global deadline, 536,870,912-byte `max_result_bytes`, and
+      1,073,741,824-byte stage/total staging caps. Execute
+      `scripts/generation_capacity_probe.py --execute` with the approved
+      composition manifest under a fresh root. On `FAIL`, preserve every byte
+      and stop; on `PASS`, independently validate the closed archive and record
+      per-category compressed bytes, writer-reported upper bound, sampled stage
+      lower bound, queue counts, process exit, config hashes, and root identity.
+- [ ] **Two controlled failure attempts, fresh HF prefix:** Use only an
+      operator-owned validation shim around the existing RLBench
+      `TaskEnvironment.step` boundary, never a production protocol change:
+      induce one non-IK exception after captured T01 frames and one empty
+      T02 wrist point-cloud frame. Enqueue exactly those two nominal jobs in
+      a fresh single-host run with a positive per-result writer cap; start
+      one credential-free worker and no refill loop. Require closed
+      `simulator_crash` and `invalid_observation` attempt archives with null
+      `episode_id`, measured prefixes, depth when captured, and immutable
+      inventories. If a stop/invalid artifact appears, do not publish it.
+      Otherwise publish through the canonical coordinator to a new
+      `validation/` HF prefix, hash every declared file at one pinned commit,
+      and restore both attempts from a separate disjoint root with zero local
+      result payloads. Preserve all receipts and existing HF prefixes.
+- [ ] **Storage decision and handoff:** Use the successful G1 writer upper
+      bound plus the measured attempt sizes and chosen production worker/slot
+      count to calculate a worst-case concurrent reservation and a queue
+      backlog limit. Prove that a still-live lease cannot claim past the
+      configured reservation, and that verified receipt-only pruning releases
+      capacity. If production host count or hard aggregate backpressure is
+      undecided, keep full generation **NOT AUTHORIZED**; `vps-a` testing
+      cannot certify a second physical host. Record commands, environment,
+      PASS/FAIL/SKIPPED/NOT RUN, hashes, and residual risks in the existing
+      generation validation record. No GPU, training, C1–C5 or full-quota run
+      is part of this continuation.
+
 ## Compatibility, rollback, and recovery
 
 - Existing v2 artifacts and HF prefixes remain immutable and readable.
