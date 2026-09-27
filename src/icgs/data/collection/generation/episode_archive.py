@@ -805,40 +805,35 @@ class _ArchiveArrays:
             relative = f"data/chunk-{chunk_index:05d}.npz"
             path = destination / relative
             path.parent.mkdir(parents=True, exist_ok=True)
-            mapped: dict[str, np.ndarray] = {}
             try:
-                for key, source in sorted(self.chunk_files[chunk_index]):
-                    try:
-                        mapped[key] = np.load(source, allow_pickle=False, mmap_mode="r")
-                    except ValueError:
-                        # NumPy cannot mmap zero-dimensional .npy scalars; these are tiny metadata values.
-                        mapped[key] = np.load(source, allow_pickle=False)
                 with (self.budget.open(path) if self.budget is not None else path.open("wb")) as stream:
-                    if self.budget is None:
-                        np.savez_compressed(stream, **mapped)
-                    else:
-                        archive = zipfile.ZipFile(stream, mode="w", compression=zipfile.ZIP_DEFLATED)
-                        try:
-                            for key, value in mapped.items():
+                    archive = zipfile.ZipFile(stream, mode="w", compression=zipfile.ZIP_DEFLATED)
+                    try:
+                        for key, source in sorted(self.chunk_files[chunk_index]):
+                            try:
+                                value = np.load(source, allow_pickle=False, mmap_mode="r")
+                            except ValueError:
+                                # NumPy cannot mmap zero-dimensional .npy scalars; these are tiny metadata values.
+                                value = np.load(source, allow_pickle=False)
+                            try:
                                 with archive.open(f"{key}.npy", "w", force_zip64=True) as member:
                                     np.lib.format.write_array(member, value, allow_pickle=False)
-                            archive.close()
-                        except ArchiveWriterCapExceeded:
-                            # A ZIP central directory would add forbidden bytes; leave the
-                            # partial chunk as forensic scratch without a destructor retry.
-                            archive.fp = None
-                            raise
+                            finally:
+                                mmap = getattr(value, "_mmap", None)
+                                if mmap is not None:
+                                    mmap.close()
+                        archive.close()
+                    except ArchiveWriterCapExceeded:
+                        # A ZIP central directory would add forbidden bytes; leave the
+                        # partial chunk as forensic scratch without a destructor retry.
+                        archive.fp = None
+                        raise
                     stream.flush()
                     os.fsync(stream.fileno())
             except Exception as error:
                 if not isinstance(error, ArchiveWriterCapExceeded):
                     path.unlink(missing_ok=True)
                 raise
-            finally:
-                for value in mapped.values():
-                    mmap = getattr(value, "_mmap", None)
-                    if mmap is not None:
-                        mmap.close()
             _check_npz_uncompressed_cap(
                 path,
                 max_chunk_bytes=self.max_chunk_bytes,

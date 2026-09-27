@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
+import subprocess
+import sys
+import textwrap
 
 import numpy as np
 import pytest
@@ -141,6 +145,49 @@ def test_writer_cap_keeps_in_budget_archive_bytes_and_profile_identity(tmp_path:
     bounded = {path.relative_to(capped): path.read_bytes() for path in capped.rglob("*") if path.is_file()}
     assert bounded == original
     assert "max_result_bytes" not in profile.as_dict()
+
+
+@pytest.mark.parametrize("budgeted", [False, True])
+def test_chunk_writer_keeps_file_descriptors_bounded_with_many_members(tmp_path: Path, budgeted: bool):
+    """A full invalid attempt may put thousands of small arrays in one chunk."""
+    script = textwrap.dedent("""
+        import resource
+        import sys
+        from pathlib import Path
+        import numpy as np
+        from icgs.data.collection.generation.episode_archive import _ArchiveArrays, _WriterByteBudget
+
+        root = Path(sys.argv[1])
+        root.mkdir()
+        scratch = root / "spool"
+        scratch.mkdir()
+        destination = root / "archive"
+        destination.mkdir()
+        _, hard_limit = resource.getrlimit(resource.RLIMIT_NOFILE)
+        resource.setrlimit(resource.RLIMIT_NOFILE, (min(64, hard_limit), hard_limit))
+        budget = _WriterByteBudget(root, 1_000_000) if sys.argv[2] == "1" else None
+        arrays = _ArchiveArrays(scratch, max_chunk_bytes=1_000_000, budget=budget)
+        for index in range(128):
+            arrays.add_array(
+                f"member_{index}", np.asarray([index], dtype=np.int64),
+                f"test/member_{index}",
+            )
+        inventory = arrays.write_chunks(destination)
+        assert len(inventory) == 1
+        with np.load(destination / "data/chunk-00000.npz", allow_pickle=False) as archive:
+            assert len(archive.files) == 128
+            assert sum(int(archive[name][0]) for name in archive.files) == 8128
+    """)
+    repo_root = Path(__file__).resolve().parents[1]
+    environment = os.environ.copy()
+    environment["PYTHONPATH"] = os.pathsep.join(filter(None, (
+        str(repo_root / "src"), environment.get("PYTHONPATH", ""),
+    )))
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", script, str(tmp_path / "case"), str(int(budgeted))],
+        cwd=repo_root, env=environment, text=True, capture_output=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_writer_cap_refuses_next_npy_write_and_preserves_spool_and_marker(tmp_path: Path):
