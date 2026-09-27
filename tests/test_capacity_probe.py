@@ -173,6 +173,30 @@ def test_stage_runtime_disables_publication_and_rewrites_identity(tmp_path):
     assert runtime.archive_profile == base.archive_profile
 
 
+def test_archive_stage_runtime_carries_effective_result_cap_to_worker_snapshot(tmp_path):
+    payload = {
+        "machine": {"repo_root": str(tmp_path), "python_executable": str(tmp_path / "python"),
+                    "simulator_root": str(tmp_path), "rlbench_root": str(tmp_path),
+                    "display_base": 1, "display_width": 100, "display_height": 100,
+                    "simulator_slots": 1, "worker_timeout_s": 60},
+        "run": {"run_id": "base", "run_root": str(tmp_path), "worker_count": 2,
+                "hf_subfolder": "validation/test", "publication_enabled": False,
+                "validation_mode": True},
+        "archive_profile": ArchiveProfileConfig().as_dict(),
+    }
+    base = GenerationRuntimeConfig.from_dict(payload)
+    stage = CapacityStage(name="small", worker_count=2, simulator_slots=1, max_jobs=2,
+                          max_result_bytes=1000, max_staging_bytes=3000)
+    probe = CapacityProbeConfig(run_id="probe", hf_subfolder="validation/test", max_total_jobs=2,
+                                max_runtime_s=300, stages=(stage,), max_result_bytes=2000,
+                                max_total_staging_bytes=5000)
+    runtime = generation_capacity_probe._stage_runtime(base, probe, stage, tmp_path / "small")
+    restored = GenerationRuntimeConfig.from_dict(runtime.as_dict())
+    assert restored.max_result_bytes == 1000
+    assert restored.resolved_environment(base={})["ICGS_GENERATION_MAX_RESULT_BYTES"] == "1000"
+    assert restored.archive_profile.as_dict() == base.archive_profile.as_dict()
+
+
 def test_wait_for_ready_results_finishes_before_idle_workers_exit(monkeypatch):
     class Counts:
         def __init__(self, ready):

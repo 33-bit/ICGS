@@ -109,6 +109,83 @@ def _debug(**extra: object) -> dict:
     }
 
 
+def _cap_attempt() -> dict:
+    return {
+        "attempt_id": "att-cap-test", "episode_id": None, "program_id": "T01",
+        "split": "train", "subset": "train_core", "outcome": "simulator_crash",
+        "error": "simulator stopped", "valid_observation_until": None,
+    }
+
+
+def _tree_bytes(root: Path) -> int:
+    return sum(path.stat().st_size for path in root.rglob("*") if path.is_file())
+
+
+@pytest.mark.parametrize("kind", ["episode", "attempt"])
+def test_writer_cap_keeps_in_budget_archive_bytes_and_profile_identity(tmp_path: Path, kind: str):
+    profile = _profile()
+    uncapped = tmp_path / "uncapped" / "T01"
+    capped = tmp_path / "capped" / "T01"
+    if kind == "episode":
+        write = lambda writer, path: writer.write_episode(
+            _episode(), raw_arrays={}, debug_metadata=_debug(), output_dir=path,
+        )
+    else:
+        write = lambda writer, path: writer.write_attempt(
+            _cap_attempt(), prefix_arrays={"actions": np.asarray([[1.0, 2.0]])},
+            debug_metadata=_debug(), output_dir=path,
+        )
+    write(EpisodeArchiveWriter(profile), uncapped)
+    write(EpisodeArchiveWriter(profile, max_result_bytes=1_000_000), capped)
+    original = {path.relative_to(uncapped): path.read_bytes() for path in uncapped.rglob("*") if path.is_file()}
+    bounded = {path.relative_to(capped): path.read_bytes() for path in capped.rglob("*") if path.is_file()}
+    assert bounded == original
+    assert "max_result_bytes" not in profile.as_dict()
+
+
+def test_writer_cap_refuses_next_npy_write_and_preserves_spool_and_marker(tmp_path: Path):
+    retry = tmp_path / "retry-0"
+    retry.mkdir()
+    marker = retry / ".T01.archive-write-in-progress-test"
+    marker.write_bytes(b"marker\n")
+    limit = marker.stat().st_size + 200
+    with pytest.raises(Exception, match=r"max_result_bytes.*current.*attempted.*retry-0"):
+        EpisodeArchiveWriter(_profile(), max_result_bytes=limit).write_episode(
+            _episode(), raw_arrays={}, debug_metadata=_debug(), output_dir=retry / "T01",
+        )
+    assert marker.read_bytes() == b"marker\n"
+    assert 0 < _tree_bytes(retry) <= limit
+    assert list(retry.rglob("*.npy"))
+    assert not list(retry.rglob("*.manifest.json"))
+
+
+@pytest.mark.parametrize("phase", ["chunk", "json"])
+def test_writer_cap_preserves_attempt_evidence_during_later_writes(tmp_path: Path, phase: str):
+    prefix = {"actions": np.random.default_rng(12).integers(0, 256, size=2048, dtype=np.uint8)}
+    debug = _debug(detail="x" * 3000)
+    baseline = tmp_path / "baseline" / "T01"
+    manifest = EpisodeArchiveWriter(_profile()).write_attempt(
+        _cap_attempt(), prefix_arrays=prefix, debug_metadata=debug, output_dir=baseline,
+    ).as_dict()
+    spool = manifest["local_write_limits"]["spool_peak_bytes"]
+    chunk = sum(item["bytes"] for item in manifest["chunk_inventory"])
+    retry = tmp_path / phase / "retry-0"
+    retry.mkdir(parents=True)
+    marker = retry / ".T01.archive-write-in-progress-test"
+    marker.write_bytes(b"marker\n")
+    limit = marker.stat().st_size + spool + (16 if phase == "chunk" else chunk + 16)
+    with pytest.raises(Exception, match="max_result_bytes"):
+        EpisodeArchiveWriter(_profile(), max_result_bytes=limit).write_attempt(
+            _cap_attempt(), prefix_arrays=prefix, debug_metadata=debug, output_dir=retry / "T01",
+        )
+    assert marker.read_bytes() == b"marker\n"
+    assert 0 < _tree_bytes(retry) <= limit
+    assert list(retry.rglob("*.npy"))
+    assert not list(retry.rglob("attempt.manifest.json"))
+    if phase == "json":
+        assert list(retry.rglob("*.npz"))
+
+
 def test_episode_archive_roundtrips_raw_fields_and_random_boundary_access(tmp_path: Path):
     record = _episode()
     measured_actions = np.asarray([[0.1, 0.2, 0.3, 0.0, 0.0, 0.0, 1.0, 1.0]], dtype=np.float64)

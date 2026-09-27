@@ -30,6 +30,7 @@ from icgs.data.collection.generation.diversity import train_subset_for_sample
 from icgs.data.collection.generation.episode_archive import (
     EpisodeArchiveWriter,
     archive_profile_from_environment,
+    archive_writer_cap_from_environment,
 )
 from icgs.data.collection.generation.episode_record import assemble_attempt_record, assemble_episode
 from icgs.data.collection.generation.task_labels import materialize_task_labels
@@ -439,7 +440,7 @@ def _write_archive_result(
     target: Path,
     profile: Any,
 ) -> WorkerResult:
-    writer = EpisodeArchiveWriter(profile)
+    writer = EpisodeArchiveWriter(profile, max_result_bytes=archive_writer_cap_from_environment())
     if materialized.episode_record is not None:
         record = _archive_episode_record(materialized)
         writer.write_episode(

@@ -119,6 +119,7 @@ def _write_episode(write_dir: Path, row: dict) -> None:
     from icgs.data.collection.generation.episode_archive import (
         EpisodeArchiveWriter,
         archive_profile_from_environment,
+        archive_writer_cap_from_environment,
     )
 
     write_dir.mkdir(parents=True, exist_ok=True)
@@ -298,7 +299,9 @@ def _write_episode(write_dir: Path, row: dict) -> None:
             })
             if archive_job_identity is not None:
                 debug["job_identity"] = archive_job_identity
-            EpisodeArchiveWriter(archive_profile).write_attempt(
+            EpisodeArchiveWriter(
+                archive_profile, max_result_bytes=archive_writer_cap_from_environment()
+            ).write_attempt(
                 attempt,
                 prefix_arrays=prefix,
                 debug_metadata=debug,
@@ -356,7 +359,9 @@ def _write_episode(write_dir: Path, row: dict) -> None:
         actions_value = row.get("_actions")
         if archive_job_identity is not None:
             execution["job_identity"] = archive_job_identity
-        EpisodeArchiveWriter(archive_profile).write_episode(
+        EpisodeArchiveWriter(
+            archive_profile, max_result_bytes=archive_writer_cap_from_environment()
+        ).write_episode(
             _archive_record(record),
             raw_arrays={
                 "actions": np.asarray(() if actions_value is None else actions_value),

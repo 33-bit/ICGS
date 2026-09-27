@@ -285,6 +285,7 @@ class GenerationRuntimeConfig:
     machine: MachineConfig
     run: RuntimeRunConfig
     archive_profile: ArchiveProfileConfig | None = None
+    max_result_bytes: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.machine, MachineConfig):
@@ -293,6 +294,8 @@ class GenerationRuntimeConfig:
             raise ValueError("run must be a RuntimeRunConfig")
         if self.archive_profile is not None and not isinstance(self.archive_profile, ArchiveProfileConfig):
             raise ValueError("archive_profile must be an ArchiveProfileConfig or null")
+        if self.max_result_bytes is not None:
+            _positive_int(self.max_result_bytes, "max_result_bytes")
         if (
             self.run.validation_mode
             and self.archive_profile is not None
@@ -324,7 +327,7 @@ class GenerationRuntimeConfig:
     def from_dict(cls, payload: Mapping[str, Any]) -> "GenerationRuntimeConfig":
         values = _mapping(payload, "runtime config")
         required = frozenset({"machine", "run"})
-        allowed = required | {"archive_profile"}
+        allowed = required | {"archive_profile", "max_result_bytes"}
         _reject_unknown(values, allowed, "runtime config")
         _require_fields(values, required, "runtime config")
         return cls(
@@ -334,6 +337,7 @@ class GenerationRuntimeConfig:
                 None if values.get("archive_profile") is None
                 else ArchiveProfileConfig.from_dict(values["archive_profile"])
             ),
+            max_result_bytes=values.get("max_result_bytes"),
         )
 
     @classmethod
@@ -359,6 +363,8 @@ class GenerationRuntimeConfig:
         payload = {"machine": machine, "run": asdict(self.run)}
         if self.archive_profile is not None:
             payload["archive_profile"] = self.archive_profile.as_dict()
+        if self.max_result_bytes is not None:
+            payload["max_result_bytes"] = self.max_result_bytes
         return payload
 
     def resolved_environment(self, base: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -396,6 +402,10 @@ class GenerationRuntimeConfig:
                 if self.archive_profile is not None else ""
             ),
         })
+        if self.max_result_bytes is not None:
+            environment["ICGS_GENERATION_MAX_RESULT_BYTES"] = str(self.max_result_bytes)
+        else:
+            environment.pop("ICGS_GENERATION_MAX_RESULT_BYTES", None)
         return environment
 
 

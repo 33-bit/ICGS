@@ -90,6 +90,23 @@ def _archive_resume_profile() -> ArchiveProfileConfig:
     return ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="receipt_only")
 
 
+@pytest.mark.parametrize("workers_only", [False, True])
+def test_archive_launch_requires_positive_writer_cap_before_spawn(tmp_path: Path, monkeypatch, workers_only: bool):
+    config = _runtime_config(tmp_path)
+    payload = config.as_dict()
+    payload["archive_profile"] = ArchiveProfileConfig().as_dict()
+    path = tmp_path / "archive-runtime.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    spawned = []
+    monkeypatch.setattr(generation_launch.subprocess, "Popen", lambda *args, **kwargs: spawned.append(args))
+    args = ["--runtime-config", str(path), "--approved-manifest", str(tmp_path / "approved.json")]
+    if workers_only:
+        args.extend(["--workers-only", "--run-config", str(tmp_path / "run.json")])
+    with pytest.raises(ValueError, match="archive.*max_result_bytes.*positive"):
+        generation_launch.main(args)
+    assert spawned == []
+
+
 def _archive_resume_plan(*, episode_id: str, episode_kind: str = "nominal") -> AttemptPlan:
     return AttemptPlan(
         program_id="T01",
@@ -1181,6 +1198,7 @@ def _multi_batch_archive_resume_fixture(
         "hf_subfolder": hf_prefix,
     })
     config_payload["archive_profile"] = profile.as_dict()
+    config_payload["max_result_bytes"] = 1_000_000
     config = GenerationRuntimeConfig.from_dict(config_payload)
     approved_payload = json.loads(
         Path("artifacts/composition/approved_composition_manifest.json").read_text()

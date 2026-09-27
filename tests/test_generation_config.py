@@ -63,6 +63,27 @@ def test_runtime_config_types_are_available():
     assert _config_api("GenerationRuntimeConfig")
 
 
+@pytest.mark.parametrize("value", [0, -1, True, "100"])
+def test_runtime_writer_cap_rejects_nonpositive_or_nonnumeric_values(tmp_path: Path, value):
+    payload = _portable_payload(tmp_path)
+    payload["max_result_bytes"] = value
+    with pytest.raises(ValueError, match="max_result_bytes"):
+        _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+
+def test_runtime_writer_cap_is_operational_and_does_not_change_profile_serialization(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    profile = _config_api("ArchiveProfileConfig")().as_dict()
+    payload["archive_profile"] = profile
+    legacy = _config_api("GenerationRuntimeConfig").from_dict(payload)
+    assert "max_result_bytes" not in legacy.as_dict()
+    payload["max_result_bytes"] = 4096
+    runtime = _config_api("GenerationRuntimeConfig").from_dict(payload)
+    assert runtime.as_dict()["max_result_bytes"] == 4096
+    assert runtime.as_dict()["archive_profile"] == profile
+    assert runtime.resolved_environment(base={})["ICGS_GENERATION_MAX_RESULT_BYTES"] == "4096"
+
+
 def test_portable_config_accepts_two_workers_and_two_simulator_slots(tmp_path: Path):
     runtime = _load_payload(tmp_path, _portable_payload(tmp_path))
 

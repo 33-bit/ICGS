@@ -167,7 +167,7 @@ def _write_archive_worker_attempt(
         "stderr": (stderr or "")[-8192:],
         "traceback": (traceback_text or "")[-8192:],
     }
-    EpisodeArchiveWriter(config.archive_profile).write_attempt(
+    EpisodeArchiveWriter(config.archive_profile, max_result_bytes=config.max_result_bytes).write_attempt(
         attempt,
         prefix_arrays={},
         debug_metadata=debug,
@@ -793,6 +793,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--worker-instance-id")
     args = parser.parse_args(argv)
     config = GenerationRuntimeConfig.from_file(args.runtime_config)
+    if config.archive_profile is not None and config.max_result_bytes is None:
+        raise ValueError("archive max_result_bytes must be positive for production worker")
     if args.host_id is not None and args.host_id != config.machine.host_id:
         raise ValueError("--host-id does not match runtime config host_id")
     queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")

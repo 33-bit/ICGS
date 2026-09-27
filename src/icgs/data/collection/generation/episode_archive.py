@@ -71,6 +71,53 @@ _PIECE_FIELDS = frozenset({
 })
 
 
+class ArchiveWriterCapExceeded(RuntimeError):
+    """A writer write would exceed the per-result retry-root byte limit."""
+
+
+class _BudgetedFile:
+    def __init__(self, stream: Any, budget: "_WriterByteBudget", path: Path) -> None:
+        self._stream = stream
+        self._budget = budget
+        self._path = path
+        self._size = path.stat().st_size
+
+    def write(self, payload: bytes) -> int:
+        end = self._stream.tell() + len(payload)
+        growth = max(0, end - self._size)
+        attempted = self._budget.used + growth
+        if attempted > self._budget.limit:
+            raise ArchiveWriterCapExceeded(
+                f"max_result_bytes limit={self._budget.limit} current={self._budget.used} "
+                f"attempted={attempted} preserved_path={self._path} "
+                f"retry_root={self._budget.root}"
+            )
+        written = self._stream.write(payload)
+        new_size = max(self._size, self._stream.tell())
+        self._budget.used += new_size - self._size
+        self._size = new_size
+        return written
+
+    def __enter__(self) -> "_BudgetedFile":
+        return self
+
+    def __exit__(self, *args: Any) -> Any:
+        return self._stream.__exit__(*args)
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._stream, name)
+
+
+class _WriterByteBudget:
+    def __init__(self, root: Path, limit: int) -> None:
+        self.root = root
+        self.limit = limit
+        self.used = sum(path.stat().st_size for path in root.rglob("*") if path.is_file())
+
+    def open(self, path: Path) -> _BudgetedFile:
+        return _BudgetedFile(path.open("wb", buffering=0), self, path)
+
+
 def _canonical_json(payload: Any) -> bytes:
     return (json.dumps(payload, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode("utf-8")
 
@@ -541,12 +588,23 @@ def archive_profile_from_environment(environment: Mapping[str, str] | None = Non
     return ArchiveProfileConfig.from_dict(payload)
 
 
+def archive_writer_cap_from_environment(environment: Mapping[str, str] | None = None) -> int | None:
+    values = os.environ if environment is None else environment
+    raw = values.get("ICGS_GENERATION_MAX_RESULT_BYTES")
+    if raw is None or raw == "":
+        return None
+    if not isinstance(raw, str) or not raw.isascii() or not raw.isdecimal() or int(raw) <= 0:
+        raise ValueError("ICGS_GENERATION_MAX_RESULT_BYTES must be a positive integer")
+    return int(raw)
+
+
 class _ArchiveArrays:
-    def __init__(self, scratch_root: Path, *, max_chunk_bytes: int) -> None:
+    def __init__(self, scratch_root: Path, *, max_chunk_bytes: int, budget: _WriterByteBudget | None = None) -> None:
         self.scratch_root = scratch_root
         if self.scratch_root.is_symlink() or not self.scratch_root.is_dir() or any(self.scratch_root.iterdir()):
             raise ValueError("archive scratch directory must be a new, empty real directory")
         self.max_chunk_bytes = max_chunk_bytes
+        self.budget = budget
         self.chunk_files: dict[int, list[tuple[str, Path]]] = {}
         self.chunk_data_bytes: dict[int, int] = {}
         self.spool_bytes = 0
@@ -609,7 +667,7 @@ class _ArchiveArrays:
         chunk_root = self.scratch_root / f"chunk-{chunk_index:05d}"
         chunk_root.mkdir(parents=True, exist_ok=True)
         path = chunk_root / f"{key}.npy"
-        with path.open("wb") as stream:
+        with (self.budget.open(path) if self.budget is not None else path.open("wb")) as stream:
             np.save(stream, value, allow_pickle=False)
             stream.flush()
             os.fsync(stream.fileno())
@@ -661,8 +719,9 @@ class _ArchiveArrays:
                     "sha256": piece_digest,
                     **dict(ranges),
                 })
-        except Exception:
-            self._discard_files(stored_files)
+        except Exception as error:
+            if not isinstance(error, ArchiveWriterCapExceeded):
+                self._discard_files(stored_files)
             raise
         if not piece_specs:
             raise ValueError(f"archive array has no payload pieces: {semantic_role}")
@@ -736,6 +795,8 @@ class _ArchiveArrays:
                 file_bytes = 0
             path.unlink(missing_ok=True)
             self.spool_bytes -= file_bytes
+            if self.budget is not None:
+                self.budget.used -= file_bytes
             self.chunk_data_bytes[chunk_index] = max(0, self.chunk_data_bytes.get(chunk_index, 0) - data_bytes)
 
     def write_chunks(self, destination: Path) -> list[dict[str, Any]]:
@@ -752,12 +813,26 @@ class _ArchiveArrays:
                     except ValueError:
                         # NumPy cannot mmap zero-dimensional .npy scalars; these are tiny metadata values.
                         mapped[key] = np.load(source, allow_pickle=False)
-                with path.open("wb") as stream:
-                    np.savez_compressed(stream, **mapped)
+                with (self.budget.open(path) if self.budget is not None else path.open("wb")) as stream:
+                    if self.budget is None:
+                        np.savez_compressed(stream, **mapped)
+                    else:
+                        archive = zipfile.ZipFile(stream, mode="w", compression=zipfile.ZIP_DEFLATED)
+                        try:
+                            for key, value in mapped.items():
+                                with archive.open(f"{key}.npy", "w", force_zip64=True) as member:
+                                    np.lib.format.write_array(member, value, allow_pickle=False)
+                            archive.close()
+                        except ArchiveWriterCapExceeded:
+                            # A ZIP central directory would add forbidden bytes; leave the
+                            # partial chunk as forensic scratch without a destructor retry.
+                            archive.fp = None
+                            raise
                     stream.flush()
                     os.fsync(stream.fileno())
-            except Exception:
-                path.unlink(missing_ok=True)
+            except Exception as error:
+                if not isinstance(error, ArchiveWriterCapExceeded):
+                    path.unlink(missing_ok=True)
                 raise
             finally:
                 for value in mapped.values():
@@ -923,19 +998,26 @@ def _series_pieces(
 class EpisodeArchiveWriter:
     """Write one lossless episode/attempt archive using bounded NPZ chunks."""
 
-    def __init__(self, profile: ArchiveProfileConfig) -> None:
+    def __init__(self, profile: ArchiveProfileConfig, *, max_result_bytes: int | None = None) -> None:
         if not isinstance(profile, ArchiveProfileConfig):
             raise TypeError("profile must be an ArchiveProfileConfig")
+        if max_result_bytes is not None and (type(max_result_bytes) is not int or max_result_bytes <= 0):
+            raise ValueError("max_result_bytes must be a positive integer")
         self.profile = profile
+        self.max_result_bytes = max_result_bytes
 
     def _new_array_store(self, output_dir: str | Path) -> _ArchiveArrays:
         target = Path(output_dir).absolute()
         target.parent.mkdir(parents=True, exist_ok=True)
+        budget = (
+            _WriterByteBudget(target.parent, self.max_result_bytes)
+            if self.max_result_bytes is not None else None
+        )
         scratch = Path(tempfile.mkdtemp(
             prefix=f".{target.name}.archive-spool-",
             dir=target.parent,
         ))
-        return _ArchiveArrays(scratch, max_chunk_bytes=self.profile.max_chunk_bytes)
+        return _ArchiveArrays(scratch, max_chunk_bytes=self.profile.max_chunk_bytes, budget=budget)
 
     def write_episode(
         self,
@@ -947,15 +1029,21 @@ class EpisodeArchiveWriter:
     ) -> ArchiveManifest:
         arrays = self._new_array_store(output_dir)
         try:
-            return self._write_episode_body(
+            result = self._write_episode_body(
                 record,
                 raw_arrays=raw_arrays,
                 debug_metadata=debug_metadata,
                 output_dir=output_dir,
                 arrays=arrays,
             )
-        finally:
+        except ArchiveWriterCapExceeded:
+            raise
+        except BaseException:
             arrays.cleanup()
+            raise
+        else:
+            arrays.cleanup()
+            return result
 
     def _write_episode_body(
         self,
@@ -1200,15 +1288,21 @@ class EpisodeArchiveWriter:
     ) -> ArchiveManifest:
         arrays = self._new_array_store(output_dir)
         try:
-            return self._write_attempt_body(
+            result = self._write_attempt_body(
                 attempt,
                 prefix_arrays=prefix_arrays,
                 debug_metadata=debug_metadata,
                 output_dir=output_dir,
                 arrays=arrays,
             )
-        finally:
+        except ArchiveWriterCapExceeded:
+            raise
+        except BaseException:
             arrays.cleanup()
+            raise
+        else:
+            arrays.cleanup()
+            return result
 
     def _write_attempt_body(
         self,
@@ -1398,7 +1492,7 @@ class EpisodeArchiveWriter:
             }
             debug_path = staging / "debug.json"
             debug_bytes = _canonical_json(debug_metadata)
-            self._atomic_write(debug_path, debug_bytes)
+            self._atomic_write(debug_path, debug_bytes, budget=arrays.budget)
             debug_inventory = {
                 "path": "debug.json",
                 "bytes": len(debug_bytes),
@@ -1506,8 +1600,8 @@ class EpisodeArchiveWriter:
                     "archive_format_id": ARCHIVE_FORMAT_ID,
                     "files": all_file_inventory,
                 })
-            self._atomic_write(staging / "artifact_manifest.json", artifact_bytes)
-            self._atomic_write(staging / manifest_name, manifest_bytes)
+            self._atomic_write(staging / "artifact_manifest.json", artifact_bytes, budget=arrays.budget)
+            self._atomic_write(staging / manifest_name, manifest_bytes, budget=arrays.budget)
             self._fsync_directory(data_dir)
             self._fsync_directory(staging)
             if owns_staging:
@@ -1518,22 +1612,25 @@ class EpisodeArchiveWriter:
                 os.replace(staging, target)
                 self._fsync_directory(target.parent)
             return ArchiveManifest.from_dict(manifest_payload)
-        except Exception:
-            if owns_staging:
+        except Exception as error:
+            if owns_staging and not isinstance(error, ArchiveWriterCapExceeded):
                 shutil.rmtree(staging, ignore_errors=True)
             raise
 
     @staticmethod
-    def _atomic_write(path: Path, payload: bytes) -> None:
+    def _atomic_write(path: Path, payload: bytes, *, budget: _WriterByteBudget | None = None) -> None:
         temporary = path.with_name(f".{path.name}.partial-{os.getpid()}-{os.urandom(4).hex()}")
         try:
-            with temporary.open("wb") as stream:
+            with (budget.open(temporary) if budget is not None else temporary.open("wb")) as stream:
                 stream.write(payload)
                 stream.flush()
                 os.fsync(stream.fileno())
             os.replace(temporary, path)
-        finally:
+        except ArchiveWriterCapExceeded:
+            raise
+        except BaseException:
             temporary.unlink(missing_ok=True)
+            raise
 
     @staticmethod
     def _fsync_directory(path: Path) -> None:

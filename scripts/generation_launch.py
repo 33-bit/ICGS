@@ -484,6 +484,8 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     unchecked = GenerationRuntimeConfig.from_file(args.runtime_config, check_paths=False)
+    if unchecked.archive_profile is not None and unchecked.max_result_bytes is None:
+        raise ValueError("archive max_result_bytes must be positive for production launch")
     if args.workers_only:
         if not args.run_config:
             raise ValueError("--workers-only requires --run-config")

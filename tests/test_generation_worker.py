@@ -64,6 +64,80 @@ def _runtime_config(tmp_path: Path, *, worker_timeout_s: int = 47):
     })
 
 
+def _cap_job(tmp_path: Path) -> GenerationJob:
+    plan = AttemptPlan(
+        program_id="T01", split="train", episode_index=1, episode_id="episode-cap-1",
+        episode_kind="nominal", scene_seed=1, collection_seed=20260920,
+        randomization={"scene_signature": "cap-signature", "asset_instance_id": "cap-asset"},
+        intervention=None,
+    )
+    return GenerationJob.create(
+        job_id="job-cap", run_id="cap-run", attempt_id="att-episode-cap-1",
+        episode_id=plan.episode_id, program_id="T01", plan=plan,
+        code_revision="c" * 40, manifest_sha256="d" * 64,
+        output_root=str(tmp_path / "staging"),
+    )
+
+
+def test_archive_worker_fallback_honors_runtime_cap_and_preserves_marker(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    payload = config.as_dict()
+    payload["archive_profile"] = ArchiveProfileConfig().as_dict()
+    payload["max_result_bytes"] = 200
+    bounded = GenerationRuntimeConfig.from_dict(payload)
+    job = _cap_job(tmp_path)
+    retry = tmp_path / "retry-0"
+    retry.mkdir()
+    marker = retry / ".T01.archive-write-in-progress-test"
+    marker.write_bytes(b"marker\n")
+    with pytest.raises(Exception, match="max_result_bytes"):
+        generation_worker._write_archive_worker_attempt(
+            retry / "T01", job, bounded, outcome="simulator_crash", error="runner stopped",
+        )
+    assert marker.read_bytes() == b"marker\n"
+    assert sum(path.stat().st_size for path in retry.rglob("*") if path.is_file()) <= 200
+    assert not list(retry.rglob("attempt.manifest.json"))
+
+
+def test_direct_archive_worker_command_rejects_missing_cap_before_queue_open(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    payload = config.as_dict()
+    payload["archive_profile"] = ArchiveProfileConfig().as_dict()
+    runtime_path = tmp_path / "runtime-cap-missing.json"
+    runtime_path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="archive.*max_result_bytes.*positive"):
+        generation_worker.main([
+            "--worker-id", "000", "--runtime-config", str(runtime_path),
+            "--approved-manifest", str(tmp_path / "approved.json"), "--once",
+        ])
+    assert not (Path(config.run.run_root) / "queue").exists()
+
+
+def test_rlbench_archive_materializer_honors_environment_cap(tmp_path: Path, monkeypatch):
+    from icgs.data.collection.generation.rlbench_attempt import MaterializedAttempt, write_closed_attempt_result
+
+    job = _cap_job(tmp_path)
+    profile = ArchiveProfileConfig()
+    monkeypatch.setenv("ICGS_GENERATION_ARCHIVE_PROFILE", json.dumps(profile.as_dict()))
+    monkeypatch.setenv("ICGS_GENERATION_MAX_RESULT_BYTES", "200")
+    retry = tmp_path / "retry-0"
+    retry.mkdir()
+    marker = retry / ".T01.archive-write-in-progress-test"
+    marker.write_bytes(b"marker\n")
+    materialized = MaterializedAttempt(
+        outcome="simulator_crash", episode_record=None,
+        attempt_record={"attempt_id": job.attempt_id, "episode_id": None,
+                        "program_id": job.program_id, "outcome": "simulator_crash",
+                        "valid_observation_until": None},
+        online_observations=(), transitions=(), auxiliary={},
+    )
+    with pytest.raises(Exception, match="max_result_bytes"):
+        write_closed_attempt_result(materialized, job, retry / "T01")
+    assert marker.read_bytes() == b"marker\n"
+    assert sum(path.stat().st_size for path in retry.rglob("*") if path.is_file()) <= 200
+    assert not list(retry.rglob("attempt.manifest.json"))
+
+
 def test_simulator_slot_pool_uses_runtime_config(tmp_path, monkeypatch):
     config = _runtime_config(tmp_path)
     monkeypatch.setenv("ICGS_SIMULATOR_SLOTS", "99")
@@ -518,6 +592,21 @@ def _write_generation_episode_worker_attempt(
         "_actions": np.asarray([[0.01]], dtype=np.float32),
     })
     return job, output, archive_profile
+
+
+def test_episode_script_materializer_honors_environment_cap(tmp_path: Path, monkeypatch):
+    profile = ArchiveProfileConfig(chunk_boundaries=2)
+    monkeypatch.setenv("ICGS_GENERATION_MAX_RESULT_BYTES", "200")
+    marker = tmp_path / ".T01.archive-write-in-progress-test"
+    marker.write_bytes(b"marker\n")
+    with pytest.raises(Exception, match="max_result_bytes"):
+        _write_generation_episode_worker_attempt(
+            tmp_path, monkeypatch, program_id="T01", outcome="simulator_crash",
+            plan_split="train", binding_split="train", archive_profile=profile,
+        )
+    assert marker.read_bytes() == b"marker\n"
+    assert sum(path.stat().st_size for path in tmp_path.rglob("*") if path.is_file()) <= 200
+    assert not list(tmp_path.rglob("attempt.manifest.json"))
 
 
 def _run_episode_worker_main_with_stub_task(

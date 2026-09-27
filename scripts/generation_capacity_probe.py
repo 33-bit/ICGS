@@ -93,6 +93,10 @@ def _stage_runtime(base: GenerationRuntimeConfig, probe: CapacityProbeConfig, st
         machine=machine,
         run=run,
         archive_profile=base.archive_profile,
+        max_result_bytes=(
+            stage.max_result_bytes if stage.max_result_bytes is not None
+            else probe.max_result_bytes
+        ),
     )
 
 
