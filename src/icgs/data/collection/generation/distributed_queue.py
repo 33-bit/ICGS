@@ -45,6 +45,21 @@ def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
     os.replace(temporary, path)
 
 
+def _write_durable_safety_record(path: Path, payload: dict[str, Any]) -> None:
+    """Persist the safety record and each directory entry leading to it."""
+    _atomic_write(path, payload)
+    directory = path.parent.absolute()
+    while True:
+        descriptor = os.open(directory, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+        if directory == directory.parent:
+            break
+        directory = directory.parent
+
+
 def _read_json(path: Path) -> dict[str, Any]:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -291,7 +306,7 @@ class FilesystemJobQueue:
                     retry = 0
                 suffix = f"{job_id}.retry-{retry}.{time.time_ns()}.json"
                 incident_path = incident_root / suffix
-                _atomic_write(incident_path, receipt)
+                _write_durable_safety_record(incident_path, receipt)
                 raise GenerationSafetyStop(
                     f"generation safety stop marker at {marker} is unreadable; "
                     f"orphan incident receipt was preserved at {incident_path}"
@@ -322,12 +337,12 @@ class FilesystemJobQueue:
                 "preserved_files": preserved_files,
                 "preserved_bytes": sum(regular_file_bytes(item) for item in preserved_files),
             })
-            _atomic_write(marker, existing)
+            _write_durable_safety_record(marker, existing)
             return marker
         receipt = dict(receipt)
         receipt.setdefault("incident_count", 1)
         receipt.setdefault("incidents", [dict(receipt)])
-        _atomic_write(marker, receipt)
+        _write_durable_safety_record(marker, receipt)
         return marker
 
     def trip_safety_stop(self, receipt: dict[str, Any]) -> Path:

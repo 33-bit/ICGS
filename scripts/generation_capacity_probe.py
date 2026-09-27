@@ -212,8 +212,14 @@ def wait_for_ready_results(
                     measurement_errors=measurement_errors,
                     capacity_violations=capacity_violations,
                 )
-            except Exception:
-                stop_processes(processes)
+            except Exception as marker_error:
+                try:
+                    stop_processes(processes)
+                except Exception as cleanup_error:
+                    raise RuntimeError(
+                        f"{marker_error}; process cleanup also failed: "
+                        f"{type(cleanup_error).__name__}: {cleanup_error}"
+                    ) from marker_error
                 raise
             stop_processes(processes)
             counts = queue.counts()
@@ -347,7 +353,16 @@ def run_stage(
         )
         results_elapsed = time.monotonic() - started
     finally:
-        stop_processes(processes)
+        pending_error = sys.exc_info()[1]
+        try:
+            stop_processes(processes)
+        except Exception as cleanup_error:
+            if pending_error is None:
+                raise
+            raise RuntimeError(
+                f"{pending_error}; process cleanup also failed: "
+                f"{type(cleanup_error).__name__}: {cleanup_error}"
+            ) from pending_error
     cleanup_elapsed = time.monotonic() - started - results_elapsed
     returncodes = [process.poll() for process in processes]
     final_stage = measure_staging_tree_bytes(root)

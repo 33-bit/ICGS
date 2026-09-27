@@ -4,8 +4,10 @@ from dataclasses import replace
 import fcntl
 import json
 import multiprocessing as multiprocessing
+import os
 from pathlib import Path
 import queue as queue_module
+import stat
 import time
 
 import pytest
@@ -17,6 +19,7 @@ from icgs.data.collection.generation.distributed_contracts import (
     WorkerResult,
 )
 from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+from icgs.data.collection.generation import distributed_queue
 from icgs.data.collection.generation import distributed_validation as validation
 
 
@@ -298,6 +301,31 @@ def test_run_safety_stop_forbids_new_claims_and_ready_publication(tmp_path: Path
     with pytest.raises(RuntimeError, match="generation safety stop"):
         queue.claim("001")
     assert queue.counts().pending == 1
+
+
+def test_safety_stop_create_and_incident_update_fsync_directory_entries(tmp_path: Path, monkeypatch):
+    # Catches a marker whose JSON data is synced but whose rename can vanish after a crash.
+    queue = FilesystemJobQueue(tmp_path / "run" / "queue")
+    marker = queue.safety_stop_path
+    original_fsync = os.fsync
+    synced = []
+
+    def observe_fsync(fd):
+        info = os.fstat(fd)
+        if stat.S_ISDIR(info.st_mode):
+            for directory in (marker.parent, marker.parent.parent):
+                if directory.is_dir():
+                    target = directory.stat()
+                    if (target.st_dev, target.st_ino) == (info.st_dev, info.st_ino):
+                        synced.append((directory, json.loads(marker.read_text())["incident_count"]))
+        return original_fsync(fd)
+
+    monkeypatch.setattr(distributed_queue.os, "fsync", observe_fsync)
+    queue.trip_safety_stop({"reason": "first", "recovery_action": "Inspect first incident."})
+    assert (marker.parent, 1) in synced
+    assert (marker.parent.parent, 1) in synced
+    queue.trip_safety_stop({"reason": "second", "recovery_action": "Inspect second incident."})
+    assert (marker.parent, 2) in synced
 
 
 def test_claim_discovery_stops_on_abandoned_archive_scratch(tmp_path: Path):

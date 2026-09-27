@@ -349,7 +349,8 @@ def test_staging_measurement_error_records_stop_before_termination(tmp_path, mon
     monkeypatch.setattr(generation_capacity_probe, "measure_staging_tree_bytes", original)
 
 
-def test_probe_marker_write_failure_is_fatal_and_reports_diagnostic(tmp_path, monkeypatch):
+@pytest.mark.parametrize("cleanup_failure", [False, True])
+def test_probe_marker_write_failure_is_fatal_and_reports_diagnostic(tmp_path, monkeypatch, cleanup_failure):
     # Catches a disk-full marker failure being converted into a successful receipt.
     stage_root = tmp_path / "stage"
     queue = FilesystemJobQueue(stage_root / "queue")
@@ -360,7 +361,12 @@ def test_probe_marker_write_failure_is_fatal_and_reports_diagnostic(tmp_path, mo
     monkeypatch.setattr(queue, "trip_safety_stop", lambda _receipt: (_ for _ in ()).throw(OSError("disk full")))
     monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: None)
     terminations = []
-    monkeypatch.setattr(generation_capacity_probe, "stop_processes", lambda _processes: terminations.append(True))
+    def terminate(_processes):
+        terminations.append(True)
+        if cleanup_failure:
+            raise OSError("termination callback failed")
+
+    monkeypatch.setattr(generation_capacity_probe, "stop_processes", terminate)
     with pytest.raises(RuntimeError, match="disk full.*generation-safety-stop.json"):
         generation_capacity_probe.wait_for_ready_results(
             queue, [], expected_jobs=1, deadline=time.monotonic() + 10,
@@ -370,6 +376,45 @@ def test_probe_marker_write_failure_is_fatal_and_reports_diagnostic(tmp_path, mo
     assert scratch.read_bytes() == b"keep these bytes"
     assert not queue.safety_stop_path.exists()
     assert terminations == [True]
+
+
+def test_stage_cleanup_failure_keeps_marker_write_diagnostic(tmp_path, monkeypatch):
+    # Catches run_stage's final cleanup replacing the marker-write failure.
+    stage = CapacityStage(name="cleanup", worker_count=1, simulator_slots=1, max_jobs=1,
+                          max_result_bytes=1000, max_staging_bytes=10_000)
+    probe = CapacityProbeConfig(run_id="probe", hf_subfolder="validation/probe",
+                                max_total_jobs=1, max_runtime_s=300, stages=(stage,),
+                                max_total_staging_bytes=20_000)
+    base = GenerationRuntimeConfig.from_dict({
+        "machine": {"repo_root": str(tmp_path), "python_executable": str(tmp_path / "python"),
+                    "simulator_root": str(tmp_path), "rlbench_root": str(tmp_path),
+                    "display_base": 1, "display_width": 100, "display_height": 100,
+                    "simulator_slots": 1, "worker_timeout_s": 60},
+        "run": {"run_id": "base", "run_root": str(tmp_path / "base"), "worker_count": 1,
+                "hf_subfolder": "validation/probe", "publication_enabled": False,
+                "validation_mode": True},
+        "archive_profile": ArchiveProfileConfig().as_dict(),
+    })
+    monkeypatch.setattr(generation_capacity_probe, "enqueue_fixed_jobs", lambda *args: ["job-1"])
+    monkeypatch.setattr(generation_capacity_probe.DistributedPlanner, "from_manifest", lambda *args: object())
+
+    class Process:
+        def poll(self):
+            return None
+
+    monkeypatch.setattr(generation_capacity_probe.subprocess, "Popen", lambda *args, **kwargs: Process())
+    monkeypatch.setattr(generation_capacity_probe, "wait_for_ready_results", lambda *args, **kwargs: (
+        (_ for _ in ()).throw(RuntimeError("fatal capacity probe FAIL: disk full; generation-safety-stop.json"))
+    ))
+    monkeypatch.setattr(generation_capacity_probe, "stop_processes", lambda _processes: (
+        (_ for _ in ()).throw(OSError("SIGTERM unavailable"))
+    ))
+    with pytest.raises(RuntimeError, match="disk full.*generation-safety-stop.json.*SIGTERM unavailable"):
+        generation_capacity_probe.run_stage(
+            base, probe, stage, output_root=tmp_path / "output",
+            approved_manifest=Path("artifacts/composition/approved_composition_manifest.json").resolve(),
+            code_revision="a" * 40, deadline=time.monotonic() + 10,
+        )
 
 
 @pytest.mark.parametrize("existing_stop", [False, True])
