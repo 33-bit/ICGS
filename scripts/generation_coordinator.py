@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import replace
+from concurrent.futures import ThreadPoolExecutor
 import fcntl
 import hashlib
 import json
@@ -394,6 +395,7 @@ def _validate_runtime_run_binding(run: RunConfig, runtime: GenerationRuntimeConf
         "publish_interval_s": runtime.run.publish_interval_s,
         "publication_batch_size": runtime.run.publication_batch_size,
         "publication_upload_threads": runtime.run.publication_upload_threads,
+        "publication_verify_threads": runtime.run.publication_verify_threads,
         "hf_repo": runtime.run.hf_repo or "33bit/icgs",
         "hf_subfolder": runtime.run.hf_subfolder or "generation",
         "publication_enabled": runtime.run.publication_enabled,
@@ -2032,6 +2034,7 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
                 raise ValueError(f"remote hash mismatch for {filename}")
 
     run_root = queue.root.parent.resolve(strict=True)
+    verification_jobs: list[tuple[str, Path, str]] = []
     for job_id in job_ids:
         directory = queue.root / "ingested" / job_id
         result = json.loads((directory / "result.json").read_text(encoding="utf-8"))
@@ -2059,7 +2062,7 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
             raise ValueError(f"remote verification artifact inventory is empty: {job_id}")
         for relative, expected_hash in sorted(worker_result.file_sha256.items()):
             local_path = resolved_root / relative
-            verify_file(f"{prefix}/{relative}", local_path, expected_hash)
+            verification_jobs.append((f"{prefix}/{relative}", local_path, expected_hash))
         if worker_result.episode_id is not None and worker_result.outcome in {"success", "valid_failure"}:
             for view in ("D_geom", "D_temporal", "D_dyn", "D_task"):
                 pointer_path = (
@@ -2075,7 +2078,7 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
                     raise ValueError(
                         f"local publication artifact is not a regular file: {pointer_filename}"
                     )
-                verify_file(pointer_filename, pointer_path, digest(pointer_path))
+                verification_jobs.append((pointer_filename, pointer_path, digest(pointer_path)))
 
     manifest_path = queue.root / "publication_manifest.json"
     if manifest_path.is_symlink() or not manifest_path.is_file():
@@ -2087,10 +2090,8 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
         expected_manifest_hash = receipt.get("dataset_manifest_sha256")
         if expected_manifest_hash is not None and expected_manifest_hash != manifest_hash:
             raise ValueError("local dataset manifest hash disagrees with publication receipt")
-    verify_file(
-        f"{run.hf_subfolder}/dataset_manifest.json",
-        manifest_path,
-        manifest_hash,
+    verification_jobs.append(
+        (f"{run.hf_subfolder}/dataset_manifest.json", manifest_path, manifest_hash)
     )
     control_files = [
         (
@@ -2110,7 +2111,29 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
         ),
     ]
     for filename, local_path in control_files:
-        verify_file(filename, local_path, digest(local_path))
+        verification_jobs.append((filename, local_path, digest(local_path)))
+
+    # Preserve the original fail-fast serial behavior at the compatibility
+    # setting.  For higher settings only independent file verification is
+    # concurrent; the coordinator remains the sole HF commit owner, and every
+    # task owns a fresh scratch cache, so concurrency cannot create stale-cache
+    # or pruning races.
+    if run.publication_verify_threads == 1:
+        for filename, local_path, expected_hash in verification_jobs:
+            verify_file(filename, local_path, expected_hash)
+        return
+    with ThreadPoolExecutor(max_workers=run.publication_verify_threads) as executor:
+        futures = [
+            executor.submit(verify_file, filename, local_path, expected_hash)
+            for filename, local_path, expected_hash in verification_jobs
+        ]
+        try:
+            for future in futures:
+                future.result()
+        except BaseException:
+            for future in futures:
+                future.cancel()
+            raise
 
 
 class CoordinatorControlPlane:

@@ -626,13 +626,16 @@ def test_archive_operations_upload_complete_attempt_inventory(
         "episode_view_missing",
     ],
 )
+@pytest.mark.parametrize("verify_threads", [1, 4])
 def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache(
-    tmp_path: Path, monkeypatch, remote_mismatch: str,
+    tmp_path: Path, monkeypatch, remote_mismatch: str, verify_threads: int,
 ):
     from scripts import generation_coordinator as coordinator
+    from dataclasses import replace
+    import threading
 
     queue, job, result, profile = _archive_queue(tmp_path)
-    run = _run()
+    run = replace(_run(), publication_verify_threads=verify_threads)
     publisher = HuggingFaceBatchPublisher(
         run, FakeApi(), "secret", queue, archive_profile=profile,
     )
@@ -696,8 +699,26 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
         else metadata_paths.get(remote_mismatch)
     )
     calls = []
+    lock = threading.Lock()
+    barrier = threading.Barrier(verify_threads)
+    active = peak = entered = 0
 
     def fake_download(**kwargs):
+        nonlocal active, peak, entered
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            entered += 1
+            synchronize = entered <= verify_threads
+        if synchronize and remote_mismatch == "none":
+            barrier.wait(timeout=5)
+        try:
+            return download_contents(**kwargs)
+        finally:
+            with lock:
+                active -= 1
+
+    def download_contents(**kwargs):
         cache_dir = Path(kwargs["cache_dir"])
         assert kwargs["revision"] == "c" * 40
         if remote_mismatch == "episode_view_missing" and "/views/provisional/episodes/" in kwargs["filename"]:
@@ -730,12 +751,15 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
             queue, run, (job.job_id,), "c" * 40, "local-test-token",
         )
 
-    if remote_mismatch == "archive":
+    if remote_mismatch == "archive" and verify_threads == 1:
         assert len(calls) == 1
-    elif remote_mismatch != "none":
+    elif remote_mismatch != "none" and verify_threads == 1:
         assert calls[-1][0] == changed_filename
-    else:
+    elif remote_mismatch == "none":
         assert {filename for filename, _revision, _cache in calls} == set(remote_sources)
+        assert peak == verify_threads
+    assert active == 0
+    assert peak <= verify_threads
     assert len({cache for _filename, _revision, cache in calls}) == len(calls)
     assert all(not cache.exists() for _filename, _revision, cache in calls)
 

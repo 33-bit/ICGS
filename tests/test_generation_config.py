@@ -232,23 +232,40 @@ def test_runtime_config_round_trips_publication_concurrency_controls(tmp_path: P
     payload["run"].update({
         "publication_batch_size": 8,
         "publication_upload_threads": 4,
+        "publication_verify_threads": 4,
     })
 
     runtime = _config_api("GenerationRuntimeConfig").from_dict(payload)
 
     assert runtime.run.publication_batch_size == 8
     assert runtime.run.publication_upload_threads == 4
+    assert runtime.run.publication_verify_threads == 4
     restored = _config_api("GenerationRuntimeConfig").from_dict(runtime.as_dict())
     assert restored == runtime
 
 
-@pytest.mark.parametrize("field", ["publication_batch_size", "publication_upload_threads"])
+@pytest.mark.parametrize("field", [
+    "publication_batch_size",
+    "publication_upload_threads",
+    "publication_verify_threads",
+])
 def test_runtime_config_rejects_nonpositive_publication_concurrency(tmp_path: Path, field: str):
     payload = _portable_payload(tmp_path)
     payload["run"][field] = 0
 
     with pytest.raises(ValueError, match=field):
         _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+
+def test_parallel_verification_round_trips_with_existing_scratch_reserve(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    payload.update(archive_profile=contracts.ArchiveProfileConfig().as_dict(),
+                   max_result_bytes=1024, max_staging_bytes=32768,
+                   staging_reserve_bytes=2048)
+    payload["run"]["publication_verify_threads"] = 4
+    config = contracts.GenerationRuntimeConfig.from_dict(payload)
+    assert config.run.publication_verify_threads == 4
+    assert contracts.GenerationRuntimeConfig.from_dict(config.as_dict()) == config
 
 
 def test_validation_mode_rejects_non_validation_hf_prefix(tmp_path: Path):

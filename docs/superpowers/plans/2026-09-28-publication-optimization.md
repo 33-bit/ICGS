@@ -4,7 +4,7 @@
 
 **Goal:** Make bounded HF publication concurrency explicit and resumable, then benchmark it before the full archive run.
 
-**Architecture:** Add `publication_batch_size` and `publication_upload_threads` to the immutable runtime/run contracts. The coordinator constructs `PublicationConfig` from those values; workers remain credential-free and archive semantics remain unchanged.
+**Architecture:** Add bounded publication batch/upload/verification controls to the immutable runtime/run contracts. The coordinator constructs `PublicationConfig` from the batch/upload values and performs independent pinned-revision file verification with the verification value; workers remain credential-free and archive semantics remain unchanged.
 
 **Tech Stack:** Python dataclasses, Hugging Face Hub commit API, pytest, existing filesystem queue and archive validation.
 
@@ -29,13 +29,14 @@
 **Interfaces:**
 - `RuntimeRunConfig.publication_batch_size: int = 1`
 - `RuntimeRunConfig.publication_upload_threads: int = 1`
-- `RunConfig` carries the same two immutable values.
+- `RuntimeRunConfig.publication_verify_threads: int = 1`
+- `RunConfig` carries the same three immutable values.
 - `HuggingFaceBatchPublisher` receives `PublicationConfig(batch_size=..., upload_threads=...)`.
 
-- [ ] Add failing round-trip and run-receipt tests.
-- [ ] Verify the tests fail because the fields are not accepted/persisted.
-- [ ] Add strict validation and runtime/run binding.
-- [ ] Verify focused tests pass.
+- [x] Add failing round-trip and run-receipt tests.
+- [x] Verify the tests fail because the fields are not accepted/persisted.
+- [x] Add strict validation and runtime/run binding.
+- [x] Verify focused tests pass.
 
 ### Task 2: Bounded benchmark and production config
 

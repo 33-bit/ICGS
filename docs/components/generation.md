@@ -123,6 +123,13 @@ archive hashes, pinned-revision verification, receipt-only pruning, and resume
 identity. They are persisted in the runtime snapshot and run receipt, so a
 resume cannot silently change publication behavior.
 
+Remote artifact verification also exposes `run.publication_verify_threads`.
+It defaults to `1` and may be raised only after the same live benchmark proves
+that each file still uses an independent scratch cache, pinned-revision hashes
+match, failures cancel safely, and staging/disk limits remain bounded. The
+coordinator remains the sole HF commit owner; workers never receive HF
+credentials.
+
 ## Full-generation readiness
 
 The checked-in `src/icgs/configuration/profiles/generation_runtime.json` is a
