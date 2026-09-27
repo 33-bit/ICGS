@@ -35,7 +35,9 @@ operating system. Install `git`, `curl`, `tar`, and
 [`uv`](https://docs.astral.sh/uv/getting-started/installation/) first. A host
 without a supported Python can use `uv python install 3.10`; confirm that
 `uv python find 3.10` resolves an interpreter. Do not use a system Python 3.13+
-as the generation environment.
+as the generation environment. In a non-login shell, ensure the installed
+`uv` directory is on `PATH` (often `$HOME/.local/bin` for a standalone
+installation) before running the commands below.
 
 From a fresh clone, keep rebuildable assets under the clone so that no separate
 `icgs-vps-env` directory is required. `outputs/` and `.venv/` are Git-ignored:
