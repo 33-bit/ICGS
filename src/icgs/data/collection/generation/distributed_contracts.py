@@ -32,6 +32,8 @@ _RUNTIME_RUN_FIELDS = frozenset({
     "run_root",
     "worker_count",
     "publish_interval_s",
+    "publication_batch_size",
+    "publication_upload_threads",
     "hf_repo",
     "hf_subfolder",
     "publication_enabled",
@@ -199,6 +201,8 @@ class RuntimeRunConfig:
     run_root: str
     worker_count: int = 1
     publish_interval_s: int = 300
+    publication_batch_size: int = 1
+    publication_upload_threads: int = 1
     hf_repo: str | None = None
     hf_subfolder: str | None = None
     publication_enabled: bool = False
@@ -211,6 +215,8 @@ class RuntimeRunConfig:
         _absolute_path(self.run_root, "run_root")
         _positive_int(self.worker_count, "worker_count")
         _positive_int(self.publish_interval_s, "publish_interval_s")
+        _positive_int(self.publication_batch_size, "publication_batch_size")
+        _positive_int(self.publication_upload_threads, "publication_upload_threads")
         if type(self.publication_enabled) is not bool:
             raise ValueError("publication_enabled must be a boolean")
         if type(self.validation_mode) is not bool:
@@ -440,6 +446,8 @@ class RunConfig:
     approved_manifest_sha256: str
     worker_count: int = 200
     publish_interval_s: int = 300
+    publication_batch_size: int = 1
+    publication_upload_threads: int = 1
     hf_repo: str = "33bit/icgs"
     hf_subfolder: str = "generation"
     publication_enabled: bool = False
@@ -455,6 +463,8 @@ class RunConfig:
         _sha(self.approved_manifest_sha256, "approved_manifest_sha256", (64,))
         _positive_int(self.worker_count, "worker_count")
         _positive_int(self.publish_interval_s, "publish_interval_s")
+        _positive_int(self.publication_batch_size, "publication_batch_size")
+        _positive_int(self.publication_upload_threads, "publication_upload_threads")
         _nonblank(self.hf_repo, "hf_repo")
         if type(self.publication_enabled) is not bool:
             raise ValueError("publication_enabled must be a boolean")

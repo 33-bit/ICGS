@@ -776,7 +776,11 @@ def test_resume_manifest_rejects_source_run_collision_and_duplicate_ids():
 def test_coordinator_resume_requires_and_consumes_remote_manifest(tmp_path: Path, monkeypatch):
     config = _runtime_config(tmp_path, publication_enabled=True)
     payload = config.as_dict()
-    payload["run"]["resume_from_hf"] = True
+    payload["run"].update({
+        "resume_from_hf": True,
+        "publication_batch_size": 8,
+        "publication_upload_threads": 4,
+    })
     config = GenerationRuntimeConfig.from_dict(payload)
     approved = Path("artifacts/composition/approved_composition_manifest.json")
     run_json = generation_launch.persist_run_config(
@@ -818,6 +822,28 @@ def test_coordinator_resume_requires_and_consumes_remote_manifest(tmp_path: Path
     )
 
     assert control.planner.counts("T01").nominal_successes == 1
+    assert control.publisher.publication_config.batch_size == 8
+    assert control.publisher.publication_config.upload_threads == 4
+
+
+def test_persisted_run_keeps_publication_concurrency_controls(tmp_path: Path):
+    config = _runtime_config(tmp_path, publication_enabled=True)
+    payload = config.as_dict()
+    payload["run"].update({
+        "publication_batch_size": 8,
+        "publication_upload_threads": 4,
+    })
+    config = GenerationRuntimeConfig.from_dict(payload)
+
+    run_json = generation_launch.persist_run_config(
+        config,
+        Path("artifacts/composition/approved_composition_manifest.json"),
+        code_revision="a" * 40,
+    )
+
+    persisted = json.loads(run_json.read_text(encoding="utf-8"))
+    assert persisted["run"]["publication_batch_size"] == 8
+    assert persisted["run"]["publication_upload_threads"] == 4
 
 
 def _complete_archive_remote(

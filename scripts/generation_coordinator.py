@@ -31,6 +31,7 @@ from icgs.data.collection.generation.batch import attempt_from_dict
 from icgs.data.collection.generation.distributed_planner import DistributedPlanner
 from icgs.data.collection.generation.distributed_publication import (
     HuggingFaceBatchPublisher,
+    PublicationConfig,
     PublicationReceipt,
 )
 from icgs.data.collection.generation.distributed_queue import (
@@ -391,6 +392,8 @@ def _validate_runtime_run_binding(run: RunConfig, runtime: GenerationRuntimeConf
         "run_root": runtime.run.run_root,
         "worker_count": runtime.run.worker_count,
         "publish_interval_s": runtime.run.publish_interval_s,
+        "publication_batch_size": runtime.run.publication_batch_size,
+        "publication_upload_threads": runtime.run.publication_upload_threads,
         "hf_repo": runtime.run.hf_repo or "33bit/icgs",
         "hf_subfolder": runtime.run.hf_subfolder or "generation",
         "publication_enabled": runtime.run.publication_enabled,
@@ -2398,6 +2401,10 @@ class CoordinatorControlPlane:
         api = api_factory()
         publisher = HuggingFaceBatchPublisher(
             run, api, token, queue,
+            publication_config=PublicationConfig(
+                batch_size=run.publication_batch_size,
+                upload_threads=run.publication_upload_threads,
+            ),
             archive_profile=runtime.archive_profile,
             remote_verify=lambda job_ids, revision, _token: _verify_remote_batch(
                 queue, run, job_ids, revision, token

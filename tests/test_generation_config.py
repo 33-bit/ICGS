@@ -227,6 +227,30 @@ def test_runtime_config_rejects_nonpositive_publication_interval(tmp_path: Path)
         _config_api("GenerationRuntimeConfig").from_dict(payload)
 
 
+def test_runtime_config_round_trips_publication_concurrency_controls(tmp_path: Path):
+    payload = _portable_payload(tmp_path)
+    payload["run"].update({
+        "publication_batch_size": 8,
+        "publication_upload_threads": 4,
+    })
+
+    runtime = _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+    assert runtime.run.publication_batch_size == 8
+    assert runtime.run.publication_upload_threads == 4
+    restored = _config_api("GenerationRuntimeConfig").from_dict(runtime.as_dict())
+    assert restored == runtime
+
+
+@pytest.mark.parametrize("field", ["publication_batch_size", "publication_upload_threads"])
+def test_runtime_config_rejects_nonpositive_publication_concurrency(tmp_path: Path, field: str):
+    payload = _portable_payload(tmp_path)
+    payload["run"][field] = 0
+
+    with pytest.raises(ValueError, match=field):
+        _config_api("GenerationRuntimeConfig").from_dict(payload)
+
+
 def test_validation_mode_rejects_non_validation_hf_prefix(tmp_path: Path):
     payload = _portable_payload(tmp_path)
     payload["run"]["hf_subfolder"] = "generation/full-run"

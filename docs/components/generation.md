@@ -114,6 +114,15 @@ view metadata. Open3D statistical-outlier filtering (SOR, 20 neighbours and
 standard ratio 2) was not executed locally; fixture tests cover archive/index
 contracts and deterministic sampling only.
 
+Production archive publication exposes two bounded runtime controls:
+`run.publication_batch_size` (results per HF data commit) and
+`run.publication_upload_threads` (Hugging Face multipart upload threads). Both
+default to `1` for compatibility with the conservative validation profile. A
+production run may raise them only after a bounded live benchmark verifies
+archive hashes, pinned-revision verification, receipt-only pruning, and resume
+identity. They are persisted in the runtime snapshot and run receipt, so a
+resume cannot silently change publication behavior.
+
 ## Full-generation readiness
 
 The checked-in `src/icgs/configuration/profiles/generation_runtime.json` is a
