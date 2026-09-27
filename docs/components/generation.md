@@ -114,6 +114,52 @@ view metadata. Open3D statistical-outlier filtering (SOR, 20 neighbours and
 standard ratio 2) was not executed locally; fixture tests cover archive/index
 contracts and deterministic sampling only.
 
+## Full-generation readiness
+
+The checked-in `src/icgs/configuration/profiles/generation_runtime.json` is a
+**validation/setup example**, not a production launch profile. A compatible
+Linux host can be rebuilt from a clean clone using [Environment
+setup](environment.md#rebuild-a-generation-host-from-a-clone); host-specific
+runtime JSON and simulator assets may live under the clone's ignored
+`outputs/` tree, while the HF credential stays outside Git. Rebuilding that
+environment does not authorize the 7,520-attempt collection.
+
+As of 2026-09-27, a one-job G1 no-HF capacity probe and live
+HF publication/recovery of deliberately triggered crash and invalid attempts
+**PASS**ed on `vps-a`. The full-generation storage gate is still **OPEN**:
+`max_result_bytes` bounds one archive writer, but production claims and the
+ready/ingested backlog do not have a hard aggregate staging reservation or
+backpressure limit. The capacity probe's stage/total caps apply only to that
+probe, not to `generation_launch.py`. A 230,889,909-byte writer upper bound and
+a 230,898,507-byte sampled staging peak were measured for one G1 job; neither
+is a bound for concurrent workers or every program. See the [active storage
+plan](../plans/active/generation-storage-and-view-finalization.md) and its
+[pinned validation record](../experiments/generation-validation/archive-aa869b3-20260927/README.md).
+
+Before preparing any full-run launch, choose the actual single- or multi-host
+layout, worker IDs and simulator slots, available staging filesystem, and a
+bounded queue backlog. Establish and test an enforced reservation covering
+concurrent per-result writer caps, unpruned closed results, remote-verification
+scratch, and recovery margin; prove that another claim cannot pass the cap
+during a still-live lease and that verified receipt-only pruning releases
+capacity. Then perform a new bounded rehearsal on that selected layout and
+record its receipts and a real per-program smoke receipt. Only after those
+checks pass should an operator make a new production runtime config with a
+fresh `run_id`/`run_root` and disjoint HF prefix, explicit positive
+`max_result_bytes`, `publication_enabled: true`, `validation_mode: false`,
+archive profile and `receipt_only` local retention. Keep the HF token path
+coordinator-only and outside the runtime JSON. The launcher requires the
+approved composition manifest, pinned code revision, and an actual smoke
+receipt; do not fabricate a receipt to satisfy its parser.
+
+The current launcher validates a supplied smoke receipt but does not itself
+produce one; obtaining and reviewing that live receipt belongs to the
+selected-host rehearsal, not to environment setup.
+
+Until this storage/admission and selected-host rehearsal evidence exists,
+**full generation is NOT AUTHORIZED**. Training ingestion of archive-backed
+views is a separate downstream gap, not evidence that the collector passed.
+
 ## Distributed lifecycle
 
 ```text

@@ -26,32 +26,79 @@ python3 scripts/setup_environment.py --profile cuda118
 python3 scripts/verify_environment.py --profile cuda118 --json
 ```
 
-For a generation host, first create a runtime configuration with absolute,
-machine-specific paths. Then install the Python profile and verify host packages:
+### Rebuild a generation host from a clone
+
+The supported generation target is a compatible Linux host with `apt` access,
+Xvfb/Mesa, enough disk for the simulator and staging, and network access for the
+explicit setup downloads. It is not a claim that RLBench generation runs on any
+operating system. Install `git`, `curl`, `tar`, and
+[`uv`](https://docs.astral.sh/uv/getting-started/installation/) first. A host
+without a supported Python can use `uv python install 3.10`; confirm that
+`uv python find 3.10` resolves an interpreter. Do not use a system Python 3.13+
+as the generation environment.
+
+From a fresh clone, keep rebuildable assets under the clone so that no separate
+`icgs-vps-env` directory is required. `outputs/` and `.venv/` are Git-ignored:
 
 ```bash
-python3 scripts/setup_environment.py --profile generation
-python3 scripts/verify_environment.py --profile generation \
-  --simulator-root /srv/icgs/CoppeliaSim \
-  --rlbench-root /srv/icgs/RLBench
+git clone https://github.com/33-bit/ICGS.git
+cd ICGS
+git rev-parse HEAD  # record this exact code revision with the run receipts
+uv python install 3.10
+mkdir -p outputs
+cp src/icgs/configuration/profiles/generation_runtime.json outputs/generation-runtime.json
 ```
 
-Simulator assets are intentionally separate from the ordinary clone setup. To
-provision the pinned CoppeliaSim archive and PyRep/RLBench revisions, pass both
-explicit opt-in flags:
+Edit `outputs/generation-runtime.json` before provisioning. Set
+`machine.repo_root` to the absolute clone path, `machine.python_executable` to
+`<clone>/.venv/bin/python`, `machine.simulator_root` to
+`<clone>/outputs/CoppeliaSim`, and `machine.rlbench_root` to
+`<clone>/outputs/RLBench`. Set `run.run_root` to a fresh absolute path under
+`<clone>/outputs/runs/`, and give `run.run_id` a distinct value. The copied file
+is a **validation example**, not a production launch profile: leave publication
+disabled during setup. Do not put an HF token or its path in this runtime JSON.
+
+Provision the locked generation profile and pinned simulator sources together:
 
 ```bash
-python3 scripts/setup_environment.py --profile generation \
-  --provision-simulator --runtime-config /srv/icgs/runtime.json
+"$(uv python find 3.10)" -B scripts/setup_environment.py \
+  --profile generation --python-version 3.10 \
+  --venv-root "$PWD/.venv" \
+  --provision-simulator --runtime-config "$PWD/outputs/generation-runtime.json" \
+  --receipt "$PWD/outputs/setup_receipt.json"
 ```
 
-For a generation host, keep both flags on every rerun. The command first performs
-the locked `uv sync`, then reapplies the pinned PyRep/RLBench editable installs;
-this ordering restores simulator dependencies that `uv sync` may remove as
-unmanaged packages. The installer is idempotent: an existing virtual environment,
-simulator archive, simulator marker and checked-out source tree are reused after
-their paths are validated. It never starts a simulator, worker, coordinator or
-full generation.
+This opt-in command runs `uv sync --locked`, host package installation, the
+checksum-checked CoppeliaSim download/extraction, and pinned PyRep/RLBench
+checkout/installation. On a rerun, keep `--provision-simulator` and the same
+runtime config: `uv sync` can remove unmanaged simulator packages, so the
+provisioner reapplies them. Setup does **not** start a simulator, worker,
+coordinator, or collection.
+
+Verify the installed profile without launching an episode. Supply a
+coordinator-only HF credential path outside Git if publication will be used;
+the command checks its permissions but never prints its value:
+
+```bash
+export ICGS_HF_TOKEN_PATH=/secure/credentials/hf-token
+./.venv/bin/python -B scripts/verify_environment.py --profile generation \
+  --repo-root "$PWD" --python "$PWD/.venv/bin/python" \
+  --simulator-root "$PWD/outputs/CoppeliaSim" \
+  --rlbench-root "$PWD/outputs/RLBench" \
+  --credential-path "$ICGS_HF_TOKEN_PATH" \
+  --receipt "$PWD/outputs/setup_receipt.json" --json
+LD_LIBRARY_PATH="$PWD/outputs/CoppeliaSim${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+  PYTHONPATH=src ./.venv/bin/python -B -m pytest -q -rs \
+  tests/test_generation*.py tests/test_capacity_probe.py
+./.venv/bin/python -B scripts/validate_fast.py
+```
+
+The verifier's `PASS` proves environment imports and paths, not a live
+simulator attempt or full-generation readiness. The setup and verification
+commands were fixture-tested; rebuilding the complete environment from a
+new clone remains an explicit host acceptance check. Continue with the
+[data-generation launch gate](generation.md#full-generation-readiness), not
+the validation example's launch flags.
 
 ## Credentials
 
