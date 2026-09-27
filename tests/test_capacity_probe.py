@@ -1,4 +1,6 @@
 from pathlib import Path
+import json
+import time
 
 import pytest
 
@@ -17,6 +19,7 @@ from icgs.data.collection.generation.distributed_contracts import (
     GenerationRuntimeConfig,
 )
 from scripts import generation_capacity_probe
+from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue, GenerationSafetyStop
 
 
 def _make_job(job_id: str, episode_id: str = "episode-001") -> GenerationJob:
@@ -248,6 +251,184 @@ def test_wait_for_ready_results_rejects_workers_exiting_with_unfinished_jobs(mon
         )
 
 
+@pytest.mark.parametrize("scope", ["stage", "total"])
+def test_sampled_stage_breach_stops_queue_before_terminating_live_worker(tmp_path, monkeypatch, scope):
+    # Catches monitor SIGTERM preceding the durable queue fence, even with a live lease.
+    stage_root = tmp_path / "stage"
+    queue = FilesystemJobQueue(stage_root / "queue")
+    first, second = _make_job("job-1"), _make_job("job-2", "episode-002")
+    queue.enqueue(first)
+    queue.enqueue(second)
+    now = time.time()
+    assert queue.claim("000", now_s=now, host_id="host-a", worker_instance_id="instance-a") == first
+    queue.write_heartbeat("000", first.job_id, now_s=now, host_id="host-a", worker_instance_id="instance-a")
+    scratch = stage_root / "staging" / "worker-results" / first.job_id / "retry-0" / ".T01.archive-spool-live" / "piece.npy"
+    scratch.parent.mkdir(parents=True)
+    scratch.write_bytes(b"preserved writer bytes")
+    observed = generation_capacity_probe.measure_staging_tree_bytes(stage_root)["bytes"]
+    events = []
+
+    class Process:
+        def poll(self):
+            return None
+
+    def terminate(_processes):
+        marker = queue.safety_stop_path
+        receipt = json.loads(marker.read_text(encoding="utf-8"))
+        assert receipt["run_id"] == "probe-stage"
+        assert receipt["stage"] == "stage"
+        assert receipt["capacity_violations"] == [{
+            "scope": scope, "measured_bytes": observed,
+            "cap_bytes": observed - 1, "semantic": "sampled_lower_bound",
+        }]
+        assert receipt["recovery_action"]
+        with pytest.raises(GenerationSafetyStop):
+            queue.claim("001", now_s=now + 1, host_id="host-b", worker_instance_id="instance-b")
+        queue.write_heartbeat("000", first.job_id, now_s=0, host_id="host-a", worker_instance_id="instance-a")
+        with pytest.raises(GenerationSafetyStop):
+            queue.claim("001", now_s=now + 4000, host_id="host-b", worker_instance_id="instance-b")
+        events.append("terminate")
+
+    monkeypatch.setattr(generation_capacity_probe, "stop_processes", terminate)
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: None)
+    result = generation_capacity_probe.wait_for_ready_results(
+        queue, [Process()], expected_jobs=2, deadline=time.monotonic() + 10,
+        stage_root=stage_root, stage_cap_bytes=observed - 1 if scope == "stage" else None,
+        total_root=stage_root if scope == "total" else None,
+        total_cap_bytes=observed - 1 if scope == "total" else None,
+        stage_name="stage", run_id="probe-stage",
+    )
+    assert result["capacity_violations"][0]["measured_bytes"] == observed
+    assert events == ["terminate"]
+    assert scratch.read_bytes() == b"preserved writer bytes"
+    assert queue.counts().ready == 0
+    assert not list(stage_root.rglob("attempt.manifest.json"))
+
+
+def test_healthy_live_archive_writer_does_not_block_another_claim(tmp_path):
+    # Catches an overly broad scratch fence that would serialize healthy workers.
+    queue = FilesystemJobQueue(tmp_path / "stage" / "queue")
+    first, second = _make_job("job-1"), _make_job("job-2", "episode-002")
+    queue.enqueue(first)
+    queue.enqueue(second)
+    now = time.time()
+    assert queue.claim("000", now_s=now, host_id="host-a", worker_instance_id="instance-a") == first
+    queue.write_heartbeat("000", first.job_id, now_s=now, host_id="host-a", worker_instance_id="instance-a")
+    scratch = tmp_path / "stage" / "staging" / "worker-results" / first.job_id / "retry-0" / ".T01.archive-spool-live" / "piece.npy"
+    scratch.parent.mkdir(parents=True)
+    scratch.write_bytes(b"live writer")
+    assert queue.claim("001", now_s=now + 1, host_id="host-b", worker_instance_id="instance-b") == second
+    assert scratch.read_bytes() == b"live writer"
+    assert not queue.safety_stop_path.exists()
+
+
+def test_staging_measurement_error_records_stop_before_termination(tmp_path, monkeypatch):
+    # Catches a measurement failure that only appears in a probe receipt after kill.
+    stage_root = tmp_path / "stage"
+    queue = FilesystemJobQueue(stage_root / "queue")
+    original = generation_capacity_probe.measure_staging_tree_bytes
+    monkeypatch.setattr(generation_capacity_probe, "measure_staging_tree_bytes", lambda root: {
+        "bytes": 17, "writer_scratch_bytes": 3, "errors": ["cannot stat spool"]
+    })
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: None)
+
+    def terminate(_processes):
+        receipt = json.loads(queue.safety_stop_path.read_text(encoding="utf-8"))
+        assert receipt["measurement_errors"] == ["cannot stat spool"]
+        assert receipt["stage_peak_bytes_sampled_lower_bound"] == 17
+        assert receipt["recovery_action"]
+
+    monkeypatch.setattr(generation_capacity_probe, "stop_processes", terminate)
+    result = generation_capacity_probe.wait_for_ready_results(
+        queue, [], expected_jobs=1, deadline=time.monotonic() + 10,
+        stage_root=stage_root, stage_name="stage", run_id="probe-stage",
+    )
+    assert result["measurement_errors"] == ["cannot stat spool"]
+    with pytest.raises(GenerationSafetyStop):
+        queue.claim("000")
+    monkeypatch.setattr(generation_capacity_probe, "measure_staging_tree_bytes", original)
+
+
+def test_probe_marker_write_failure_is_fatal_and_reports_diagnostic(tmp_path, monkeypatch):
+    # Catches a disk-full marker failure being converted into a successful receipt.
+    stage_root = tmp_path / "stage"
+    queue = FilesystemJobQueue(stage_root / "queue")
+    scratch = stage_root / "staging" / "piece.npy"
+    scratch.parent.mkdir(parents=True)
+    scratch.write_bytes(b"keep these bytes")
+    measured = generation_capacity_probe.measure_staging_tree_bytes(stage_root)["bytes"]
+    monkeypatch.setattr(queue, "trip_safety_stop", lambda _receipt: (_ for _ in ()).throw(OSError("disk full")))
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: None)
+    terminations = []
+    monkeypatch.setattr(generation_capacity_probe, "stop_processes", lambda _processes: terminations.append(True))
+    with pytest.raises(RuntimeError, match="disk full.*generation-safety-stop.json"):
+        generation_capacity_probe.wait_for_ready_results(
+            queue, [], expected_jobs=1, deadline=time.monotonic() + 10,
+            stage_root=stage_root, stage_cap_bytes=measured - 1,
+            stage_name="stage", run_id="probe-stage",
+        )
+    assert scratch.read_bytes() == b"keep these bytes"
+    assert not queue.safety_stop_path.exists()
+    assert terminations == [True]
+
+
+@pytest.mark.parametrize("existing_stop", [False, True])
+def test_final_staging_sample_breach_stops_queue_after_workers_exit(tmp_path, monkeypatch, existing_stop):
+    # Catches a cap breach first seen by run_stage's final sample leaving no queue fence.
+    stage = CapacityStage(name="final", worker_count=1, simulator_slots=1, max_jobs=1,
+                          max_result_bytes=1000, max_staging_bytes=10_000)
+    probe = CapacityProbeConfig(run_id="probe", hf_subfolder="validation/probe",
+                                max_total_jobs=1, max_runtime_s=300, stages=(stage,),
+                                max_total_staging_bytes=20_000)
+    base = GenerationRuntimeConfig.from_dict({
+        "machine": {"repo_root": str(tmp_path), "python_executable": str(tmp_path / "python"),
+                    "simulator_root": str(tmp_path), "rlbench_root": str(tmp_path),
+                    "display_base": 1, "display_width": 100, "display_height": 100,
+                    "simulator_slots": 1, "worker_timeout_s": 60},
+        "run": {"run_id": "base", "run_root": str(tmp_path / "base"), "worker_count": 1,
+                "hf_subfolder": "validation/probe", "publication_enabled": False,
+                "validation_mode": True},
+        "archive_profile": ArchiveProfileConfig().as_dict(),
+    })
+    monkeypatch.setattr(generation_capacity_probe, "enqueue_fixed_jobs", lambda *args: ["job-1"])
+    monkeypatch.setattr(generation_capacity_probe.DistributedPlanner, "from_manifest", lambda *args: object())
+
+    class FinishedProcess:
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(generation_capacity_probe.subprocess, "Popen", lambda *args, **kwargs: FinishedProcess())
+    monkeypatch.setattr(generation_capacity_probe, "stop_processes", lambda processes: None)
+
+    def finish_then_grow(_queue, _processes, **kwargs):
+        if existing_stop:
+            _queue.trip_safety_stop({
+                "reason": "earlier_worker_error", "recovery_action": "Inspect worker scratch."
+            })
+        scratch = kwargs["stage_root"] / "staging" / "piece.npy"
+        scratch.parent.mkdir(parents=True)
+        scratch.write_bytes(b"x" * 11_000)
+        return {"ready": 1, "active_workers_at_completion": 0,
+                "minimum_available_memory_bytes": None, "measurement_errors": [],
+                "capacity_violations": []}
+
+    monkeypatch.setattr(generation_capacity_probe, "wait_for_ready_results", finish_then_grow)
+    receipt = generation_capacity_probe.run_stage(
+        base, probe, stage, output_root=tmp_path / "output",
+        approved_manifest=Path("artifacts/composition/approved_composition_manifest.json").resolve(),
+        code_revision="a" * 40, deadline=time.monotonic() + 10,
+    )
+    queue = FilesystemJobQueue(tmp_path / "output" / "final" / "queue")
+    assert receipt["status"] == "FAIL"
+    stop_receipt = json.loads(queue.safety_stop_path.read_text(encoding="utf-8"))
+    capacity_incident = stop_receipt["incidents"][-1]
+    assert capacity_incident["capacity_violations"][0]["scope"] == "stage"
+    assert stop_receipt["incident_count"] == (2 if existing_stop else 1)
+    with pytest.raises(GenerationSafetyStop):
+        queue.claim("000")
+    assert (tmp_path / "output" / "final" / "staging" / "piece.npy").stat().st_size == 11_000
+
+
 def test_capacity_probe_config_staging_caps():
     payload = _payload()
     payload["max_result_bytes"] = 10 * 1024 * 1024
@@ -411,6 +592,11 @@ def test_byte_cap_rejection_in_stage_results(tmp_path, monkeypatch):
 
     class MockQueue:
         root = tmp_path / "queue"
+        def __init__(self):
+            self.safety_queue = FilesystemJobQueue(tmp_path / "stage_out" / "low" / "queue")
+            self.safety_stop_path = self.safety_queue.safety_stop_path
+        def trip_safety_stop(self, receipt):
+            return self.safety_queue.trip_safety_stop(receipt)
         def counts(self):
             return SimpleNamespace(ready=1, pending=0, claimed=0)
         def iter_ready(self):
@@ -780,8 +966,12 @@ def test_capacity_stage_fails_when_sibling_writer_spool_exceeds_cap(
     class Queue:
         def __init__(self, root):
             self.root = Path(root)
-            self.root.mkdir(parents=True)
+            self.safety_queue = FilesystemJobQueue(self.root)
+            self.safety_stop_path = self.safety_queue.safety_stop_path
             queue_root_holder["root"] = self.root
+
+        def trip_safety_stop(self, receipt):
+            return self.safety_queue.trip_safety_stop(receipt)
 
         def counts(self):
             return SimpleNamespace(ready=1, pending=0, claimed=0)

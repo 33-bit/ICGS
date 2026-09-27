@@ -110,6 +110,42 @@ def _free_memory_bytes() -> int | None:
     return None
 
 
+def _trip_probe_safety_stop(
+    queue: FilesystemJobQueue,
+    *,
+    run_id: str,
+    stage_name: str,
+    stage_peak_bytes: int | None,
+    total_peak_bytes: int | None,
+    measurement_errors: list[str],
+    capacity_violations: list[dict],
+) -> None:
+    receipt = {
+        "schema_version": "icgs_generation_safety_stop_v1",
+        "run_id": run_id,
+        "stage": stage_name,
+        "reason": "capacity_probe_staging_failure",
+        "created_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "stage_peak_bytes_sampled_lower_bound": stage_peak_bytes,
+        "total_peak_bytes_sampled_lower_bound": total_peak_bytes,
+        "measurement_errors": measurement_errors,
+        "capacity_violations": capacity_violations,
+        "recovery_action": (
+            "Stop this run and preserve its queue, staging, spool, partial, and final bytes. "
+            "Inspect the measured cap breach or staging measurement failure and every claimed "
+            "job before recovery. Reconcile archived bytes against pinned publication receipts "
+            "and hashes; resume only through a separately reviewed recovery path."
+        ),
+    }
+    try:
+        queue.trip_safety_stop(receipt)
+    except Exception as error:
+        raise RuntimeError(
+            f"fatal capacity probe FAIL: {type(error).__name__}: {error}; "
+            f"could not write generation safety stop at {queue.safety_stop_path}"
+        ) from error
+
+
 def wait_for_ready_results(
     queue,
     processes,
@@ -121,6 +157,8 @@ def wait_for_ready_results(
     total_root: Path | None = None,
     total_cap_bytes: int | None = None,
     poll_interval_s: float = 1.0,
+    stage_name: str | None = None,
+    run_id: str | None = None,
 ) -> dict:
     """Wait for results while sampling visible staging bytes as a lower bound."""
     if poll_interval_s <= 0:
@@ -164,6 +202,19 @@ def wait_for_ready_results(
                 "semantic": "sampled_lower_bound",
             })
         if measurement_errors or capacity_violations:
+            try:
+                _trip_probe_safety_stop(
+                    queue,
+                    run_id=run_id or stage_name or "unknown",
+                    stage_name=stage_name or (stage_root.name if stage_root is not None else "unknown"),
+                    stage_peak_bytes=stage_peak if stage_root is not None else None,
+                    total_peak_bytes=total_peak if total_root is not None else None,
+                    measurement_errors=measurement_errors,
+                    capacity_violations=capacity_violations,
+                )
+            except Exception:
+                stop_processes(processes)
+                raise
             stop_processes(processes)
             counts = queue.counts()
             return {
@@ -291,6 +342,8 @@ def run_stage(
             stage_cap_bytes=effective_max_staging_bytes,
             total_root=output_root,
             total_cap_bytes=probe.max_total_staging_bytes,
+            stage_name=stage.name,
+            run_id=runtime.run.run_id,
         )
         results_elapsed = time.monotonic() - started
     finally:
@@ -340,14 +393,17 @@ def run_stage(
     if probe.max_total_staging_bytes is not None and total_peak_bytes > probe.max_total_staging_bytes:
         final_violations.append(("total", total_peak_bytes, probe.max_total_staging_bytes))
     reported_scopes = {item.get("scope") for item in completion.get("capacity_violations", [])}
+    new_final_violations = []
     for scope, measured_bytes, cap_bytes in final_violations:
         if scope not in reported_scopes:
-            staging_capacity_violations.append({
+            violation = {
                 "scope": scope,
                 "measured_bytes": measured_bytes,
                 "cap_bytes": cap_bytes,
                 "semantic": "sampled_lower_bound",
-            })
+            }
+            staging_capacity_violations.append(violation)
+            new_final_violations.append(violation)
             invalid.append({
                 "stage": stage.name,
                 "error": (
@@ -358,6 +414,20 @@ def run_stage(
                 "cap_bytes": cap_bytes,
                 "semantic": "sampled_lower_bound",
             })
+    new_final_errors = [
+        error for error in list(final_stage["errors"]) + list(final_total["errors"])
+        if error not in completion.get("measurement_errors", [])
+    ]
+    if new_final_errors or new_final_violations:
+        _trip_probe_safety_stop(
+            queue,
+            run_id=runtime.run.run_id,
+            stage_name=stage.name,
+            stage_peak_bytes=stage_peak_bytes,
+            total_peak_bytes=total_peak_bytes,
+            measurement_errors=staging_measurement_errors,
+            capacity_violations=staging_capacity_violations,
+        )
     stage_bytes_by_category: dict[str, int] = {
         "chunks": 0,
         "manifests": 0,

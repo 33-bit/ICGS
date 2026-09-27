@@ -1193,6 +1193,47 @@ def test_archive_worker_preserves_orphan_spool_and_stops_run_after_timeout(tmp_p
     assert not (orphan_path.parents[2] / "T01" / "attempt.manifest.json").exists()
 
 
+def test_direct_writer_cap_error_stops_normal_worker_before_fallback_publish(tmp_path: Path):
+    # Catches a bounded writer error being recast as a tiny closed failure attempt.
+    base = _runtime_config(tmp_path)
+    payload = base.as_dict()
+    payload["archive_profile"] = ArchiveProfileConfig().as_dict()
+    payload["max_result_bytes"] = 200
+    config = GenerationRuntimeConfig.from_dict(payload)
+    queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
+    template = _cap_job(tmp_path)
+    job = replace(template, run_id=config.run.run_id, output_root=str(Path(config.run.run_root) / "staging"))
+    queue.enqueue(job)
+    approved = Path(config.run.run_root) / "approved.json"
+    approved.write_text(json.dumps({"catalog": [{"program_id": "T01"}]}), encoding="utf-8")
+
+    def runner(command, **kwargs):
+        retry_root = Path(kwargs["env"]["ICGS_GENERATION_WRITE_EPISODE"])
+        spool = retry_root / ".T01.archive-spool-existing" / "piece.npy"
+        spool.parent.mkdir(parents=True)
+        spool.write_bytes(b"preserve numeric bytes")
+        with pytest.raises(Exception, match="max_result_bytes") as cap_error:
+            generation_worker._write_archive_worker_attempt(
+                retry_root / "T01", job, config,
+                outcome="simulator_crash", error="direct writer cap fixture",
+            )
+        return subprocess.CompletedProcess(command, 1, "", str(cap_error.value))
+
+    with pytest.raises(RuntimeError, match="generation safety stop"):
+        generation_worker.run_worker(
+            "000", queue, config=config, approved_manifest=str(approved),
+            once=True, runner=runner,
+        )
+
+    receipt = json.loads(queue.safety_stop_path.read_text(encoding="utf-8"))
+    assert receipt["reason"] == "orphan_archive_scratch_after_worker_error"
+    assert receipt["preserved_bytes"] >= len(b"preserve numeric bytes")
+    assert receipt["recovery_action"]
+    assert queue.counts().ready == 0
+    assert not list(Path(job.output_root).rglob("attempt.manifest.json"))
+    assert any(path.read_bytes() == b"preserve numeric bytes" for path in Path(job.output_root).rglob("piece.npy"))
+
+
 def test_worker_adds_concurrent_orphan_to_existing_run_stop_receipt(tmp_path: Path):
     import hashlib
 
