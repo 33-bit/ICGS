@@ -325,7 +325,40 @@ scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py` each
 warnings remained. `git diff --check` **PASS**ed. These commands did not rerun
 the simulator, generation fixtures, live HF, training or C1–C5.
 
-## Data-generation readiness retest — scoped, still blocked
+### Reporting fix after the preserved G1 failure
+
+The live failure above remains at `d793b39`; it was **not rerun**. Follow-up
+commits `3fec036` and `d194bbe` make an identical second orphan report
+idempotent and make the capacity probe emit a `FAIL` stage receipt when a
+worker's durable safety stop is visible. Regression fixtures cover a stop
+written before the probe sample, during worker-exit polling, during deadline
+checking, during low-memory checking, and alongside a sampled cap breach. A
+distinct incident remains additive; the failed scratch is never cleaned or
+published by these changes. Scoped independent code review found no Critical
+or Important issue. It noted that a worker stop arriving *after* the sampled
+breach branch snapshots the marker can be absent from that stage receipt's
+`safety_stop` field; the breach still records `FAIL` and both incidents remain
+in the queue marker.
+
+Verification at clean `d194bbe08dde92b97ab00fb11c07bc86561ffcb1`:
+
+| Check | Result |
+| --- | --- |
+| Local focused queue/worker/probe fixtures | **PASS**, `PYTHONPATH=src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m pytest -q -rs tests/test_generation_worker.py tests/test_generation_queue.py tests/test_capacity_probe.py`: 141 passed, 0 skipped; macOS CPython 3.11.15. |
+| Local generation/capacity fixtures | **PASS**, same interpreter and options with `tests/test_generation*.py tests/test_capacity_probe.py`: 611 passed, 0 skipped. |
+| `vps-a` generation/capacity fixtures | **PASS**, `LD_LIBRARY_PATH=/home/huy2325/icgs-vps-env/CoppeliaSim PYTHONPATH=src /home/huy2325/icgs-vps-env/bin/python -B -m pytest -q -rs tests/test_generation*.py tests/test_capacity_probe.py`: 611 passed, 0 skipped, Linux CPython 3.10.21, cwd `/home/huy2325/ICGS-archive-probe-reporting-3fec036-validation` at exact `d194bbe`; despite its directory name, this checkout is clean at the later commit. |
+| Local L0 | **PASS**, `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`: 22 each on system CPython 3.14.4; two pre-existing invalid-escape warnings. |
+| `vps-a` L0 | **PASS**, `/home/huy2325/icgs-vps-env/bin/python -B scripts/validate_fast.py`: 22; L1–L4 were **NOT RUN** by this command. |
+| Additional live simulator/HF run | **NOT RUN** after `d793b39`, by the approved reporting-fix scope. No successful closed G1 result or HF failure-attempt archive was established. |
+
+The commits reached the separate `vps-a` fixture checkout via a Git bundle
+whose local and remote SHA256 both equaled
+`09272242f3e77d56fee681cf489fb34e1a4cd14961dce08c43fd95eb0b2aabf7`.
+The original checkout at `d793b39`, the failed 80 MB run root and older
+forensic roots were not altered. These fixture passes do not turn the live
+80 MB `FAIL` into a capacity `PASS` or authorize full generation.
+
+## Earlier data-generation readiness retest at `8a2b811` — scoped, still blocked
 
 This 2026-09-27 retest was narrowed to data generation. It did **not** start the
 7,520-attempt collection, another simulator episode, training, a GPU test, or
@@ -369,7 +402,7 @@ warnings were a non-collected helper class and two existing invalid escape
 sequences. Those broader runs do not promote any skipped or unrun data-generation
 gate to PASS; no further general-suite or GPU testing was selected.
 
-The **generation decision remains NOT READY**. The 80 MB sampled capacity gate
+At that revision, the **generation decision was NOT READY**. The 80 MB sampled capacity gate
 failed; there is no cumulative pre-write writer cap. On a cap-triggered process
 stop, the orphan scanner can ignore preserved scratch while the dead worker's
 claim lease remains live; a two-job fixture in the current suite explicitly
@@ -390,7 +423,7 @@ the separate bounded PASS evidence above, not permission to begin full quota.
 | Live `simulator_crash` / `invalid_observation` attempt retention | NOT RUN | The nine bounded simulator jobs did not produce an attempt archive. |
 | Receipt-only local pruning after remote verification | PASS, one bounded result | Separate finite profile retained per-job VERIFIED receipt/hashes, removed only the verified payload, and restored the episode from HF with zero local payloads. |
 | Workers-only attach under this archive profile | PASS, same-machine host scope only | A job-free `vps-a` attach produced a separate host receipt and credential-free idle worker, then was stopped. A second physical host and a live cross-host claim remain NOT RUN. |
-| Hard live-writer staging cap and bounded capacity retest | FAIL at `8a2b811` | The one-job 80 MB G1 probe detected at least 81,804,171 staged bytes and stopped the worker with scratch preserved; it did not enforce a hard writer-side bound. The previous 100 MB G1 failure also remains preserved. The successful archive run-root sizes of 73,914,057; 75,726,195; and 76,038,690 bytes were after publication, **not peak measurements**. |
+| Hard live-writer staging cap and bounded capacity retest | Partial per-result proof; 80 MB G1 **FAIL** | At `d793b39`, the writer stopped before a numeric write exceeded the 80,000,000-byte per-result cap, kept 78,649,839 bytes of scratch and wrote a durable stop. No closed archive, successful peak or aggregate whole-run budget was measured. At `8a2b811`, the older sampled probe exceeded the cap. Both failed roots are preserved. The successful archive run-root sizes of 73,914,057; 75,726,195; and 76,038,690 bytes were after publication, **not peak measurements**. |
 | Open3D SOR on one actual archived observation | PASS, bounded | 16,384 raw points produced 16,215 filtered points and a finite 2,048-point local-frame sample; this is not full preprocessing. |
 | Full archive preprocessing and native `icgs train` ingestion of FINAL views | NOT RUN / NOT IMPLEMENTED | No full preprocessing workload ran; the trainer still consumes PyG sample directories and has no archive-backed integration. Training and C1–C5 were not selected for this data-generation-only decision. |
 | Full 7,520-attempt collection and L4 benchmark | NOT RUN | This finite validation does not authorize them. |

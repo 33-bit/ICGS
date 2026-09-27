@@ -532,6 +532,18 @@ The 80 MB limit cannot hold this G1 archive, a successful closed-result peak
 and aggregate storage budget are still unmeasured, and live failure-attempt HF
 retention remains **NOT RUN**. Full generation remains **NOT AUTHORIZED**.
 
+**Reporting fix and generation-only fixture check (2026-09-27):** Reviewed
+commits `3fec036` and `d194bbe` deduplicate an identical worker orphan-stop
+inventory and emit a `FAIL` capacity stage receipt naming an existing worker
+stop, including the reproduced worker-exit/deadline/low-memory races. Fresh
+local generation/capacity fixtures **PASS**ed 611 tests with zero skips; a
+clean, separate `vps-a` checkout at `d194bbe` **PASS**ed the same 611 tests
+and L0 **PASS**ed 22. The `d793b39` live G1 failure was **not rerun** after
+these reporting fixes. The exact commands, review caveat and Git-bundle hash
+are in the [validation record](../../experiments/generation-validation/archive-aa869b3-20260927/README.md).
+The failed G1 root remains preserved, 80 MB is insufficient for a closed G1
+archive, and full generation remains **NOT AUTHORIZED**.
+
 ## Compatibility, rollback, and recovery
 
 - Existing v2 artifacts and HF prefixes remain immutable and readable.
