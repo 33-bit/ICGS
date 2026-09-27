@@ -303,6 +303,31 @@ def test_run_safety_stop_forbids_new_claims_and_ready_publication(tmp_path: Path
     assert queue.counts().pending == 1
 
 
+def test_repeated_identical_orphan_stop_does_not_double_count_bytes(tmp_path: Path):
+    queue = FilesystemJobQueue(tmp_path / "run" / "queue")
+    incident = {
+        "run_id": "run-cap",
+        "job_id": "job-cap",
+        "attempt_id": "att-cap",
+        "retry_generation": 0,
+        "reason": "orphan_archive_scratch_after_worker_error",
+        "created_at_utc": "2026-09-27T03:14:09Z",
+        "preserved_bytes": 4,
+        "preserved_files": [{
+            "path": "staging/worker-results/job-cap/retry-0/.T01.archive-spool-a/piece.npy",
+            "kind": "file", "bytes": 4, "sha256": "a" * 64,
+        }],
+        "recovery_action": "Preserve and inspect the archived bytes.",
+    }
+    queue.trip_safety_stop(incident)
+    queue.trip_safety_stop({**incident, "created_at_utc": "2026-09-27T03:14:10Z"})
+
+    receipt = json.loads(queue.safety_stop_path.read_text(encoding="utf-8"))
+    assert receipt["incident_count"] == 1
+    assert receipt["preserved_bytes"] == 4
+    assert len(receipt["preserved_files"]) == 1
+
+
 def test_safety_stop_create_and_incident_update_fsync_directory_entries(tmp_path: Path, monkeypatch):
     # Catches a marker whose JSON data is synced but whose rename can vanish after a crash.
     queue = FilesystemJobQueue(tmp_path / "run" / "queue")

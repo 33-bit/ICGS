@@ -318,6 +318,16 @@ class FilesystemJobQueue:
                     if key not in {"incidents", "incident_count"}
                 }]
             incidents = [item for item in incidents if isinstance(item, dict)]
+            def incident_body(item: dict[str, Any]) -> dict[str, Any]:
+                return {
+                    key: value for key, value in item.items()
+                    if key not in {"created_at_utc", "incidents", "incident_count"}
+                }
+
+            if receipt.get("preserved_files") and any(
+                incident_body(item) == incident_body(receipt) for item in incidents
+            ):
+                return marker
             incidents.append(dict(receipt))
             preserved_files = []
             for incident in incidents:

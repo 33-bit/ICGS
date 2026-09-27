@@ -251,6 +251,68 @@ def test_wait_for_ready_results_rejects_workers_exiting_with_unfinished_jobs(mon
         )
 
 
+def test_worker_safety_stop_produces_failed_stage_receipt(tmp_path: Path, monkeypatch):
+    stage = CapacityStage(
+        name="G1", worker_count=1, simulator_slots=1, max_jobs=1,
+        max_result_bytes=500_000, max_staging_bytes=1_000_000,
+    )
+    probe = CapacityProbeConfig(
+        run_id="probe-stop", hf_subfolder="validation/probe-stop",
+        max_total_jobs=1, max_runtime_s=300, stages=(stage,),
+        max_total_staging_bytes=1_000_000,
+    )
+    base = GenerationRuntimeConfig.from_dict({
+        "machine": {
+            "repo_root": str(tmp_path), "python_executable": str(tmp_path / "python"),
+            "simulator_root": str(tmp_path), "rlbench_root": str(tmp_path),
+            "display_base": 1, "display_width": 100, "display_height": 100,
+            "simulator_slots": 1, "worker_timeout_s": 60,
+        },
+        "run": {
+            "run_id": "base", "run_root": str(tmp_path / "base"), "worker_count": 1,
+            "hf_subfolder": "validation/probe-stop", "publication_enabled": False,
+            "validation_mode": True,
+        },
+        "archive_profile": ArchiveProfileConfig().as_dict(),
+    })
+    stage_root = tmp_path / "output" / "G1"
+    scratch = stage_root / "staging" / "piece.npy"
+
+    class FinishedProcess:
+        def poll(self):
+            return 1
+
+    def worker_stops(*_args, **_kwargs):
+        queue = FilesystemJobQueue(stage_root / "queue")
+        assert queue.claim("000") is not None
+        scratch.parent.mkdir(parents=True)
+        scratch.write_bytes(b"preserved numeric bytes")
+        queue.trip_safety_stop({
+            "reason": "orphan_archive_scratch_after_worker_error",
+            "preserved_files": [{"path": "staging/piece.npy", "kind": "file", "bytes": 23}],
+            "recovery_action": "Preserve and inspect scratch before recovery.",
+        })
+        return FinishedProcess()
+
+    monkeypatch.setattr(generation_capacity_probe.subprocess, "Popen", worker_stops)
+    receipt = generation_capacity_probe.run_stage(
+        base, probe, stage, output_root=tmp_path / "output",
+        approved_manifest=Path("artifacts/composition/approved_composition_manifest.json").resolve(),
+        code_revision="a" * 40, deadline=time.monotonic() + 10,
+    )
+
+    assert receipt["status"] == "FAIL"
+    assert receipt["queue"]["claimed"] == 1
+    assert receipt["queue"]["ready"] == 0
+    assert receipt["safety_stop"] == {
+        "path": str(stage_root / "control" / "generation-safety-stop.json"),
+        "reason": "orphan_archive_scratch_after_worker_error",
+    }
+    assert any("GenerationSafetyStop" in item["error"] for item in receipt["invalid_results"])
+    assert json.loads((stage_root / "capacity_receipt.json").read_text())["status"] == "FAIL"
+    assert scratch.read_bytes() == b"preserved numeric bytes"
+
+
 @pytest.mark.parametrize("scope", ["stage", "total"])
 def test_sampled_stage_breach_stops_queue_before_terminating_live_worker(tmp_path, monkeypatch, scope):
     # Catches monitor SIGTERM preceding the durable queue fence, even with a live lease.

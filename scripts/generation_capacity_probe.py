@@ -239,6 +239,35 @@ def wait_for_ready_results(
                 "capacity_violations": capacity_violations,
             }
         counts = queue.counts()
+        stop_path = getattr(queue, "safety_stop_path", None)
+        if stop_path is not None:
+            stop_path = Path(stop_path)
+            if stop_path.exists() or stop_path.is_symlink():
+                try:
+                    if stop_path.is_symlink() or not stop_path.is_file():
+                        raise ValueError("safety stop marker is not a regular file")
+                    stop_payload = json.loads(stop_path.read_text(encoding="utf-8"))
+                    stop_reason = stop_payload["reason"]
+                    if not isinstance(stop_reason, str) or not stop_reason.strip():
+                        raise ValueError("safety stop marker has no reason")
+                except (OSError, ValueError, KeyError, TypeError) as error:
+                    stop_reason = f"unreadable safety stop marker: {type(error).__name__}: {error}"
+                return {
+                    "ready": counts.ready,
+                    "active_workers_at_completion": sum(
+                        process.poll() is None for process in processes if process is not None
+                    ),
+                    "minimum_available_memory_bytes": minimum_free,
+                    "stage_peak_bytes_sampled_lower_bound": stage_peak if stage_root is not None else None,
+                    "stage_writer_scratch_peak_bytes_sampled_lower_bound": (
+                        stage_writer_scratch_peak if stage_root is not None else None
+                    ),
+                    "total_peak_bytes_sampled_lower_bound": total_peak if total_root is not None else None,
+                    "sample_interval_s": poll_interval_s,
+                    "measurement_errors": [],
+                    "capacity_violations": [],
+                    "safety_stop": {"path": str(stop_path), "reason": stop_reason},
+                }
         if counts.ready == expected_jobs:
             return {
                 "ready": counts.ready,
@@ -391,6 +420,12 @@ def run_stage(
     for error in staging_measurement_errors:
         invalid.append({"stage": stage.name, "error": f"StagingMeasurementFailed: {error}"})
     staging_capacity_violations = list(completion.get("capacity_violations", []))
+    safety_stop = completion.get("safety_stop")
+    if safety_stop is not None:
+        invalid.append({
+            "stage": stage.name,
+            "error": f"GenerationSafetyStop: {safety_stop['reason']}; inspect {safety_stop['path']}",
+        })
     for violation in staging_capacity_violations:
         invalid.append({
             "stage": stage.name,
@@ -524,6 +559,7 @@ def run_stage(
         "staging_sample_interval_s": completion.get("sample_interval_s", 1.0),
         "staging_measurement_errors": staging_measurement_errors,
         "staging_capacity_violations": staging_capacity_violations,
+        "safety_stop": safety_stop,
         "minimum_available_memory_bytes": completion["minimum_available_memory_bytes"],
         "worker_returncodes": returncodes,
         "queue": counts.__dict__,
