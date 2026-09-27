@@ -15,6 +15,25 @@ if str(_REPO_ROOT / "src") not in sys.path:
 from icgs.data.collection.generation.compiler import compile_generation_catalog
 from icgs.data.collection.generation.protocol import GENERATION_PROTOCOL
 
+
+def verify_built_tasks(rlbench_root: str | Path) -> dict:
+    """Verify the whole compiled catalog without importing/launching a simulator."""
+    root = Path(rlbench_root) / "rlbench"
+    verified = {}
+    for program_id, spec in compile_generation_catalog().items():
+        source = root / "tasks" / f"{spec.module}.py"
+        model = root / "task_ttms" / f"{spec.module}.ttm"
+        for path in (source, model):
+            if path.is_symlink() or not path.is_file():
+                raise ValueError(f"missing generation task asset for {program_id}: {path}; run generation_build_tasks.py --all-programs")
+            if path.stat().st_size == 0:
+                raise ValueError(f"empty generation task asset: {path}")
+        if source.read_text(encoding="utf-8") != spec.py_source:
+            raise ValueError(f"stale generation task source: {source}; rebuild tasks")
+        verified[program_id] = {"module": spec.module, "py": str(source), "ttm": str(model)}
+    return verified
+
+
 def build_models(
     program_ids: list[str] | None = None,
     *,
@@ -132,7 +151,9 @@ def build_models(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--programs", nargs="+", default=list(GENERATION_PROTOCOL.pilot_program_ids))
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--programs", nargs="+", default=list(GENERATION_PROTOCOL.pilot_program_ids))
+    selection.add_argument("--all-programs", action="store_true")
     parser.add_argument(
         "--rlbench-root",
         default=os.environ.get("ICGS_RLBENCH_ROOT"),
@@ -145,7 +166,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     built = build_models(
-        args.programs,
+        list(compile_generation_catalog()) if args.all_programs else args.programs,
         rlbench_root=args.rlbench_root,
         output_root=args.output_root,
     )

@@ -428,6 +428,21 @@ def _require_pinned_revision(value: Any) -> str:
     return value
 
 
+def _run_scratch(run: RunConfig, *, prefix: str):
+    """Budgeted HF scratch lives on the same filesystem as its reservation."""
+    root = Path(run.run_root)
+    policy = root / "queue" / "control" / "staging-policy.json"
+    if not policy.exists() and not policy.is_symlink():
+        return tempfile.TemporaryDirectory(prefix=prefix)
+    scratch = root / "hf-scratch"
+    if scratch.is_symlink():
+        raise ValueError("HF scratch must not be a symlink")
+    scratch.mkdir(exist_ok=True)
+    if scratch.stat().st_dev != root.stat().st_dev:
+        raise ValueError("HF scratch must use the reserved staging filesystem")
+    return tempfile.TemporaryDirectory(prefix=prefix, dir=scratch)
+
+
 def _download_pinned_file(
     downloader, run: RunConfig, token: str, revision: str, filename: str,
     scratch: Path, expected_sha256: str | None = None,
@@ -479,7 +494,7 @@ def _verify_archive_resume_files(
 ) -> None:
     """Validate one complete archive at a time, releasing scratch after each row."""
     prefix = run.hf_subfolder
-    with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-control-") as owned:
+    with _run_scratch(run, prefix="icgs-hf-resume-control-") as owned:
         scratch = Path(owned)
         resume_path = _download_pinned_file(
             downloader, run, token, revision, f"{prefix}/resume_receipt.json", scratch,
@@ -554,7 +569,7 @@ def _verify_archive_resume_files(
             raise ValueError("remote publication receipt artifact hashes mismatch")
 
     for row in rows:
-        with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-archive-") as owned:
+        with _run_scratch(run, prefix="icgs-hf-resume-archive-") as owned:
             scratch = Path(owned)
             archive = scratch / "archive"
             archive.mkdir()
@@ -562,7 +577,7 @@ def _verify_archive_resume_files(
                 filename = f"{prefix}/{row['archive_ref']}/{relative}"
                 target = archive / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
-                with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-file-") as fetch:
+                with _run_scratch(run, prefix="icgs-hf-resume-file-") as fetch:
                     remote = _download_pinned_file(
                         downloader, run, token, revision, filename, Path(fetch), digest,
                     )
@@ -603,7 +618,7 @@ def _verify_archive_resume_files(
                         json.dumps(pointer, indent=2, sort_keys=True, allow_nan=False) + "\n"
                     ).encode("utf-8")
                     pointer_sha256 = hashlib.sha256(pointer_bytes).hexdigest()
-                    with tempfile.TemporaryDirectory(prefix="icgs-resume-pointer-") as owned:
+                    with _run_scratch(run, prefix="icgs-resume-pointer-") as owned:
                         _download_pinned_file(
                             downloader,
                             run,
@@ -614,7 +629,7 @@ def _verify_archive_resume_files(
                             pointer_sha256,
                         )
 
-    with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-data-manifest-") as owned:
+    with _run_scratch(run, prefix="icgs-hf-resume-data-manifest-") as owned:
         _download_pinned_file(
             downloader,
             run,
@@ -627,7 +642,7 @@ def _verify_archive_resume_files(
 
     if publication.status == "VERIFIED":
         receipt_revision = _require_pinned_revision(publication.commit_oid)
-        with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-verified-receipt-") as owned:
+        with _run_scratch(run, prefix="icgs-hf-resume-verified-receipt-") as owned:
             scratch = Path(owned)
             prior_publication_path = _download_pinned_file(
                 downloader,
@@ -773,7 +788,7 @@ def _verify_same_run_remote_snapshot_binding(
     if receipt.artifact_hashes != expected_hashes:
         raise ValueError("local same-run publication receipt artifact hashes mismatch")
 
-    with tempfile.TemporaryDirectory(prefix="icgs-hf-same-run-control-") as owned:
+    with _run_scratch(run, prefix="icgs-hf-same-run-control-") as owned:
         scratch = Path(owned)
         remote_publication_path = _download_pinned_file(
             downloader,
@@ -1079,7 +1094,7 @@ def _verify_pending_same_run_archive_binding(
                         or local_resume.get("dataset_manifest_revision") not in {None, data_oid}
                     ):
                         raise ValueError("remote PREPARED snapshot does not bind the local DATA_COMMITTED state")
-                    with tempfile.TemporaryDirectory(
+                    with _run_scratch(run,
                         prefix="icgs-hf-pending-data-commit-"
                     ) as owned:
                         scratch = Path(owned)
@@ -1137,7 +1152,7 @@ def _verify_pending_same_run_archive_binding(
                     raise ValueError("pending DATA_COMMITTED snapshot lacks its exact local receipt bytes")
                 if local_receipt.commit_oid is not None:
                     receipt_oid = _require_pinned_revision(local_receipt.commit_oid)
-                    with tempfile.TemporaryDirectory(
+                    with _run_scratch(run,
                         prefix="icgs-hf-pending-receipt-oid-"
                     ) as owned:
                         scratch = Path(owned)
@@ -1328,7 +1343,7 @@ def _recover_interrupted_archive_publication(
     local_manifest_path = queue.root / "publication_manifest.json"
     if local_receipt.data_commit_oid is None:
         try:
-            with tempfile.TemporaryDirectory(prefix="icgs-hf-recovery-manifest-") as owned:
+            with _run_scratch(run, prefix="icgs-hf-recovery-manifest-") as owned:
                 remote_manifest_path = _download_archive_control_file(
                     downloader, run, token,
                     f"{run.hf_subfolder}/dataset_manifest.json", Path(owned),
@@ -1365,7 +1380,7 @@ def _recover_interrupted_archive_publication(
 
     snapshot_path = queue.root / "publication_receipt_to_verify.json"
     try:
-        with tempfile.TemporaryDirectory(prefix="icgs-hf-recovery-receipt-") as owned:
+        with _run_scratch(run, prefix="icgs-hf-recovery-receipt-") as owned:
             remote_receipt_path = _download_archive_control_file(
                 downloader, run, token,
                 f"{run.hf_subfolder}/publication_receipt.json", Path(owned),
@@ -1865,7 +1880,7 @@ def _validate_archive_resume_manifest(
             raise ValueError(f"remote archive contains files outside the declared inventory: {unexpected}")
         for collection in ("episodes", "failure_attempts"):
             for row in validated[collection]:
-                with tempfile.TemporaryDirectory(prefix="icgs-resume-fixture-") as owned:
+                with _run_scratch(run, prefix="icgs-resume-fixture-") as owned:
                     root = Path(owned)
                     for relative in row["file_sha256"]:
                         source_key = f"{row['archive_ref']}/{relative}"
@@ -1997,7 +2012,7 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
             raise ValueError(f"local hash mismatch for {filename}")
         # A fresh cache per file bounds disk lifetime and prevents this
         # verification pass from reading stale entries in the shared HF cache.
-        with tempfile.TemporaryDirectory(prefix="icgs-hf-verify-") as scratch:
+        with _run_scratch(run, prefix="icgs-hf-verify-") as scratch:
             remote_path = hf_hub_download(
                 repo_id=run.hf_repo,
                 repo_type="dataset",
@@ -2144,6 +2159,7 @@ class CoordinatorControlPlane:
         runtime = GenerationRuntimeConfig.from_file(configured_runtime_path, check_paths=False)
         _validate_runtime_run_binding(run, runtime)
         queue = FilesystemJobQueue(run.run_root + "/queue")
+        queue.configure_runtime_staging(runtime)
         approved = json.loads(Path(payload["approved_manifest"]).read_text(encoding="utf-8"))
         approved_bytes = Path(payload["approved_manifest"]).read_bytes()
         if hashlib.sha256(approved_bytes).hexdigest() != run.approved_manifest_sha256:
@@ -2199,7 +2215,7 @@ class CoordinatorControlPlane:
                     )
                 ):
                     raise ValueError("resume bootstrap initial manifest SHA256 is invalid")
-                with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-manifest-") as scratch:
+                with _run_scratch(run, prefix="icgs-hf-resume-manifest-") as scratch:
                     initial_path = _download_pinned_file(
                         hf_hub_download, run, token, remote_revision,
                         f"{run.hf_subfolder}/dataset_manifest.json", Path(scratch),
@@ -2215,7 +2231,7 @@ class CoordinatorControlPlane:
                     remote_manifest_sha256=bootstrap_manifest_sha256,
                     manifest_bytes=initial_bytes,
                 )
-                with tempfile.TemporaryDirectory(prefix="icgs-hf-resume-latest-") as scratch:
+                with _run_scratch(run, prefix="icgs-hf-resume-latest-") as scratch:
                     latest_path = _download_archive_control_file(
                         hf_hub_download,
                         run,
@@ -2264,7 +2280,7 @@ class CoordinatorControlPlane:
                     downloader=hf_hub_download,
                 )
             elif runtime.archive_profile is not None:
-                with tempfile.TemporaryDirectory(prefix="icgs-hf-initial-manifest-") as scratch:
+                with _run_scratch(run, prefix="icgs-hf-initial-manifest-") as scratch:
                     try:
                         remote_path = _download_archive_control_file(
                             hf_hub_download, run, token,

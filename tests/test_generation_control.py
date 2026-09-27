@@ -895,6 +895,7 @@ def _complete_archive_remote(
         "resume_from_hf": True,
     })
     config_payload["archive_profile"] = profile.as_dict()
+    config_payload.update(max_result_bytes=1_000_000, max_staging_bytes=20_000_000, staging_reserve_bytes=2_000_000)
     config = GenerationRuntimeConfig.from_dict(config_payload)
     approved_payload = json.loads(Path("artifacts/composition/approved_composition_manifest.json").read_text())
     next(item for item in approved_payload["catalog"] if item["program_id"] == "T01")["asset_family_id"] = "family-1"
@@ -1199,6 +1200,7 @@ def _multi_batch_archive_resume_fixture(
     })
     config_payload["archive_profile"] = profile.as_dict()
     config_payload["max_result_bytes"] = 1_000_000
+    config_payload.update(max_staging_bytes=20_000_000, staging_reserve_bytes=2_000_000)
     config = GenerationRuntimeConfig.from_dict(config_payload)
     approved_payload = json.loads(
         Path("artifacts/composition/approved_composition_manifest.json").read_text()
@@ -2154,6 +2156,7 @@ def _same_run_archive_restart_fixture(
         "resume_from_hf": False,
     })
     config_payload["archive_profile"] = profile.as_dict()
+    config_payload.update(max_result_bytes=1_000_000, max_staging_bytes=20_000_000, staging_reserve_bytes=2_000_000)
     config = GenerationRuntimeConfig.from_dict(config_payload)
     approved_payload = json.loads(
         Path("artifacts/composition/approved_composition_manifest.json").read_text()
@@ -2188,6 +2191,7 @@ def _same_run_archive_restart_fixture(
         job=first_job,
     )
     queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")
+    queue.configure_runtime_staging(config)
     shutil.copytree(
         first_source.root / "ingested" / first_job.job_id,
         queue.root / "ingested" / first_job.job_id,
@@ -2310,6 +2314,7 @@ def _archive_initial_discovery_fixture(tmp_path: Path, monkeypatch):
         "resume_from_hf": False,
     })
     config_payload["archive_profile"] = manifest["archive_profile"]
+    config_payload.update(max_result_bytes=1_000_000, max_staging_bytes=20_000_000, staging_reserve_bytes=2_000_000)
     config = GenerationRuntimeConfig.from_dict(config_payload)
     run_json = generation_launch.persist_run_config(
         config,

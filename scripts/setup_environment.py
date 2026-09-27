@@ -130,9 +130,12 @@ def plan_setup(
     python_version: str = "3.10",
     provision_simulator: bool = False,
     runtime_config: str | Path | None = None,
+    build_generation_tasks: bool = False,
 ) -> tuple[tuple[str, ...], ...]:
     """Build an idempotent command plan without executing anything."""
     profile = _validate_profile(profile)
+    if build_generation_tasks and (profile != "generation" or not provision_simulator):
+        raise ValueError("building tasks requires generation --provision-simulator")
     root = Path(repo_root).resolve()
     venv = Path(venv_root).resolve()
     if not root.is_dir():
@@ -157,6 +160,8 @@ def plan_setup(
                 str(Path(runtime_config).resolve()),
             )
         )
+        if build_generation_tasks:
+            commands[-1] = (*commands[-1], "--build-tasks")
     return tuple(commands)
 
 
@@ -209,6 +214,7 @@ def setup_environment(
     dry_run: bool = False,
     provision_simulator: bool = False,
     runtime_config: str | Path | None = None,
+    build_generation_tasks: bool = False,
     runner: Runner = subprocess.run,
     environment: Mapping[str, str] | None = None,
 ) -> SetupReceipt:
@@ -225,6 +231,7 @@ def setup_environment(
         python_version=python_version,
         provision_simulator=provision_simulator,
         runtime_config=runtime_config,
+        build_generation_tasks=build_generation_tasks,
     )
     status = "DRY_RUN" if dry_run else "PASS"
     clean_env = _safe_environment(environment)
@@ -264,6 +271,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--provision-simulator", action="store_true")
     parser.add_argument("--runtime-config")
+    parser.add_argument("--build-generation-tasks", action="store_true", help="explicitly launch headless simulator to build all task assets")
     args = parser.parse_args(argv)
     receipt = setup_environment(
         args.profile,
@@ -274,6 +282,7 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         provision_simulator=args.provision_simulator,
         runtime_config=args.runtime_config,
+        build_generation_tasks=args.build_generation_tasks,
     )
     print(json.dumps(receipt.as_dict(), indent=2, sort_keys=True))
     return 0

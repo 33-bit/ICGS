@@ -41,9 +41,9 @@ PYTHONPATH=src .venv/bin/python -B -m pytest -q \
   tests/test_generation_control.py tests/test_generation_planner.py \
   tests/test_generation_publication.py tests/test_generation_queue.py
 
-# per-result and cumulative archive staging/size budgets
+# per-result and shared run-wide archive staging/size budgets
 PYTHONPATH=src .venv/bin/python -B -m pytest -q \
-  tests/test_capacity_probe.py
+  tests/test_capacity_probe.py tests/test_generation_storage.py
 ```
 
 These tests use tiny local archives or fake HF clients. They do not download a
@@ -52,6 +52,13 @@ training, publish to HF or prove that native `icgs train` consumes archive-backe
 views. The current trainer still reads PyG sample directories and does not
 persist archive view metadata. A clean-machine reader, resume command and
 revision-bound finalizer are documented in [Data generation](../docs/components/generation.md).
+
+Shared-storage fixtures exercise real multiprocess claim admission, retained
+reservations across lease expiry/backlog, verified-prune release, physical disk
+backpressure, production entry-point guards and run-local HF scratch. Production
+archive runtimes must explicitly configure `max_result_bytes`,
+`max_staging_bytes`, and `staging_reserve_bytes`; old validation fixtures without
+a budget remain supported, but cannot certify production admission.
 
 For each selected command report `PASS` when assertions pass, `FAIL` when the
 command ran and failed, `SKIPPED` with the unavailable prerequisite, or `NOT RUN`
@@ -90,6 +97,7 @@ acceptance job must run actual checkpoint tests and reference comparison.
 | test_loading.py | Resolved config survives load→context→prediction |
 | test_training.py | Actual Lightning wrapper alias registration (no training job) |
 | test_generation_config.py / test_generation_archive.py / test_generation_views.py / test_generation_view_finalization.py / test_capacity_probe.py | Opt-in archive profile validation; lossless episode/attempt roundtrip, hashes, offsets, aliases, bit-packed validity, bounded chunk/cache behavior, provisional/final revision-bound views and staging budgets |
+| test_generation_storage.py | Shared admission policy, durable per-attempt reservations, real concurrent claims, retained backlog and verified-prune release, same-filesystem HF scratch and production guards |
 | test_cli.py | Four bounded successful command-body lifecycle seam tests for infer/train/prepare-data/evaluate; installed `--help` and rejection parser/import probes kept separate |
 | test_differential.py | Verified original source methods, not two facades of new implementation |
 | test_model_integration.py | Real strict published native inference, explicitly enabled |

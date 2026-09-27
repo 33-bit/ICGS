@@ -27,7 +27,7 @@ from icgs.data.collection.generation.steps import GENERATION_PROGRAMS
 try:
     from scripts.generation_coordinator import (
         load_remote_manifest, _snapshot_revision, _require_pinned_revision,
-        _download_pinned_file, _download_archive_control_file,
+        _download_pinned_file, _download_archive_control_file, _run_scratch,
         _manifest_from_closed_queue, _validate_resume_source_extension,
         _validate_local_published_archive_rows_in_remote,
         _verify_resume_archive_publication_binding,
@@ -35,7 +35,7 @@ try:
 except ModuleNotFoundError:  # direct ``python scripts/generation_launch.py`` entrypoint
     from generation_coordinator import (
         load_remote_manifest, _snapshot_revision, _require_pinned_revision,
-        _download_pinned_file, _download_archive_control_file,
+        _download_pinned_file, _download_archive_control_file, _run_scratch,
         _manifest_from_closed_queue, _validate_resume_source_extension,
         _validate_local_published_archive_rows_in_remote,
         _verify_resume_archive_publication_binding,
@@ -215,7 +215,7 @@ def preflight_resume_manifest(
                     raise ValueError("resume bootstrap run_id does not match runtime config")
 
             if existing_bootstrap is None:
-                with tempfile.TemporaryDirectory(prefix="icgs-hf-preflight-") as scratch:
+                with _run_scratch(resume_run, prefix="icgs-hf-preflight-") as scratch:
                     remote_path = _download_archive_control_file(
                         downloader,
                         resume_run,
@@ -262,7 +262,7 @@ def preflight_resume_manifest(
                     or any(character not in "0123456789abcdef" for character in initial_sha256)
                 ):
                     raise ValueError("resume bootstrap initial manifest SHA256 is invalid")
-                with tempfile.TemporaryDirectory(prefix="icgs-hf-preflight-initial-") as scratch:
+                with _run_scratch(resume_run, prefix="icgs-hf-preflight-initial-") as scratch:
                     initial_path = _download_pinned_file(
                         downloader,
                         resume_run,
@@ -295,7 +295,7 @@ def preflight_resume_manifest(
                     states=("published",),
                     archive_profile=config.archive_profile,
                 )
-                with tempfile.TemporaryDirectory(prefix="icgs-hf-preflight-latest-") as scratch:
+                with _run_scratch(resume_run, prefix="icgs-hf-preflight-latest-") as scratch:
                     latest_path = _download_archive_control_file(
                         downloader,
                         resume_run,
@@ -486,6 +486,11 @@ def main(argv: list[str] | None = None) -> int:
     unchecked = GenerationRuntimeConfig.from_file(args.runtime_config, check_paths=False)
     if unchecked.archive_profile is not None and unchecked.max_result_bytes is None:
         raise ValueError("archive max_result_bytes must be positive for production launch")
+    if unchecked.archive_profile is not None and not unchecked.run.validation_mode and unchecked.max_staging_bytes is None:
+        raise ValueError("production archive launch requires max_staging_bytes and staging_reserve_bytes")
+    if unchecked.max_staging_bytes is not None:
+        from icgs.data.collection.generation.distributed_queue import FilesystemJobQueue
+        FilesystemJobQueue(Path(unchecked.run.run_root) / "queue").configure_runtime_staging(unchecked)
     if args.workers_only:
         if not args.run_config:
             raise ValueError("--workers-only requires --run-config")

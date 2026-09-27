@@ -107,8 +107,9 @@ def test_environment_keeps_pinned_sources_and_simulator_checksum():
     }
 
 
+@pytest.mark.parametrize("build_tasks", [False, True])
 def test_provision_environment_records_configured_commands_without_external_execution(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, build_tasks
 ):
     environment = _environment_module()
     monkeypatch.setattr(environment.os, "geteuid", lambda: 0)
@@ -140,6 +141,7 @@ def test_provision_environment_records_configured_commands_without_external_exec
     receipt = _required_api(environment, "provision_environment")(
         config,
         runner=runner,
+        build_tasks=build_tasks,
     )
 
     assert receipt.commands == tuple(calls)
@@ -165,6 +167,11 @@ def test_provision_environment_records_configured_commands_without_external_exec
     assert any(command[:3] == ("uv", "pip", "install") for command in receipt.commands)
     assert any(config.machine.python_executable in command for command in receipt.commands)
     assert all("/content" not in " ".join(command) for command in receipt.commands)
+    builds = [command for command in calls if command[0] == "xvfb-run"]
+    assert len(builds) == int(build_tasks)
+    if build_tasks:
+        assert "--all-programs" in builds[0]
+        assert builds[0][builds[0].index("--rlbench-root") + 1] == config.machine.rlbench_root
 
 
 @pytest.mark.parametrize("marker", ("coppeliaSim", "coppeliaSim.sh"))

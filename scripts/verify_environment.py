@@ -206,6 +206,17 @@ def verify_environment(
                     "PASS" if ok else "FAIL",
                     detail or "PyRep/RLBench imports failed",
                 )
+        checks["generation_tasks"] = _status("FAIL", "RLBench root was not supplied")
+        if rlbench_root is not None:
+            ok, output = _probe(
+                [python, "-c", (
+                    "import sys; sys.path.insert(0, sys.argv[1]); "
+                    "from scripts.generation_build_tasks import verify_built_tasks; "
+                    "verify_built_tasks(sys.argv[2])"
+                ), str(root), str(rlbench_root)],
+                runner=runner, cwd=root, environment=probe_environment,
+            )
+            checks["generation_tasks"] = _status("PASS" if ok else "FAIL", output if not ok else "all compiled task sources and models present")
     else:
         checks["renderer"] = _status("NOT_RUN", "generation profile not selected")
         checks["simulator"] = _status("NOT_RUN", "generation profile not selected")

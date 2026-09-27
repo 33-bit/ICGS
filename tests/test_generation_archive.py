@@ -43,6 +43,27 @@ def test_generation_archive_api_is_available():
     assert _archive_import_error is None, "generation archive API is required"
 
 
+def test_temporary_array_spooling_syncs_final_chunks_not_every_member(tmp_path, monkeypatch):
+    """Thousands of metadata arrays must not require thousands of disk commits."""
+    from icgs.data.collection.generation import episode_archive as archive_module
+    synced = []
+    original = archive_module.os.fsync
+    def track(fd):
+        synced.append(fd)
+        return original(fd)
+    monkeypatch.setattr(archive_module.os, "fsync", track)
+    spool = tmp_path / "spool"
+    spool.mkdir()
+    arrays = _ArchiveArrays(spool, max_chunk_bytes=1_000_000)
+    for i in range(32):
+        arrays.add_array(f"a{i}", np.asarray([i]), f"field/{i}")
+    assert len(synced) == 0, "spool is temporary, not a committed checkpoint"
+    inventory = arrays.write_chunks(tmp_path / "archive")
+    assert len(synced) == len(inventory) == 1
+    with np.load(tmp_path / "archive" / inventory[0]["path"], allow_pickle=False) as stored:
+        assert sorted(int(stored[name][0]) for name in stored.files) == list(range(32))
+
+
 def _episode(outcome: str = "success") -> dict:
     points_a = np.asarray([[0.0, 1.0, 2.0], [3.0, 4.0, 5.0]], dtype=np.float32)
     points_b = np.asarray([[6.0, 7.0, 8.0]], dtype=np.float32)
@@ -208,7 +229,9 @@ def test_writer_cap_refuses_next_npy_write_and_preserves_spool_and_marker(tmp_pa
 
 @pytest.mark.parametrize("phase", ["chunk", "json"])
 def test_writer_cap_preserves_attempt_evidence_during_later_writes(tmp_path: Path, phase: str):
-    prefix = {"actions": np.random.default_rng(12).integers(0, 256, size=2048, dtype=np.uint8)}
+    # Sixteen boundaries exercise the same post-spool/chunk/JSON cap failures;
+    # 2,048 one-boundary chunks needlessly require thousands of durable commits.
+    prefix = {"actions": np.random.default_rng(12).integers(0, 256, size=16, dtype=np.uint8)}
     debug = _debug(detail="x" * 3000)
     baseline = tmp_path / "baseline" / "T01"
     manifest = EpisodeArchiveWriter(_profile()).write_attempt(

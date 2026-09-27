@@ -126,13 +126,25 @@ environment does not authorize the 7,520-attempt collection.
 
 As of 2026-09-27, a one-job G1 no-HF capacity probe and live
 HF publication/recovery of deliberately triggered crash and invalid attempts
-**PASS**ed on `vps-a`. The full-generation storage gate is still **OPEN**:
-`max_result_bytes` bounds one archive writer, but production claims and the
-ready/ingested backlog do not have a hard aggregate staging reservation or
-backpressure limit. The capacity probe's stage/total caps apply only to that
-probe, not to `generation_launch.py`. A 230,889,909-byte writer upper bound and
+**PASS**ed on `vps-a`. Run-wide admission now uses the queue's existing POSIX
+lock and durable per-attempt reservations. Production archive runtimes require
+explicit `max_result_bytes`, `max_staging_bytes`, and `staging_reserve_bytes`.
+The reserve must be at least twice the writer cap and leave room for a writer.
+Claims conservatively count all retained run bytes plus outstanding full writer
+reservations, the next writer cap and the fixed reserve, and check real disk
+free space. HF verification/recovery scratch stays inside the run filesystem.
+Expired leases, retries, quarantine and ready/ingested/keep-retention backlog
+retain their reservations. Only verified receipt-only pruning releases an
+attempt's reservation. A conflicting policy or an old nonempty queue without
+one is rejected: use a fresh run, not a retroactive budget declaration.
+
+This is cooperative admission/backpressure, not a filesystem quota for arbitrary
+external writers. Keep run paths on one filesystem, leave host headroom, and
+preserve abandoned reservations for inspection rather than clearing them to
+force progress. A 230,889,909-byte writer upper bound and
 a 230,898,507-byte sampled staging peak were measured for one G1 job; neither
-is a bound for concurrent workers or every program. See the [active storage
+is a bound for concurrent workers or every program. See the [launch readiness
+plan](../plans/active/generation-launch-readiness.md), the [active storage
 plan](../plans/active/generation-storage-and-view-finalization.md) and its
 [pinned validation record](../experiments/generation-validation/archive-aa869b3-20260927/README.md).
 
@@ -150,15 +162,21 @@ fresh `run_id`/`run_root` and disjoint HF prefix, explicit positive
 archive profile and `receipt_only` local retention. Keep the HF token path
 coordinator-only and outside the runtime JSON. The launcher requires the
 approved composition manifest, pinned code revision, and an actual smoke
-receipt; do not fabricate a receipt to satisfy its parser.
+receipt; do not fabricate a receipt to satisfy its parser. Production runtime
+JSON also requires `max_staging_bytes` and `staging_reserve_bytes`.
 
 The current launcher validates a supplied smoke receipt but does not itself
 produce one; obtaining and reviewing that live receipt belongs to the
 selected-host rehearsal, not to environment setup.
 
-Until this storage/admission and selected-host rehearsal evidence exists,
-**full generation is NOT AUTHORIZED**. Training ingestion of archive-backed
-views is a separate downstream gap, not evidence that the collector passed.
+The selected `vps-a` two-worker/two-slot layout now has a genuine **36/36-program
+PASS** smoke and **three-job PASS** HF backpressure/verified-pruning rehearsal.
+The [readiness record](../experiments/generation-validation/readiness-20260927/README.md)
+contains exact limits, receipts, commands and an unexecuted production launch
+command. It closes this layout's storage and smoke blockers; it does not certify
+another host/layout or start the 7,520-attempt collection. Training ingestion of
+archive-backed views is a separate downstream gap, not evidence that the
+collector passed.
 
 ## Distributed lifecycle
 

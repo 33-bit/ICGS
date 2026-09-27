@@ -670,7 +670,9 @@ class _ArchiveArrays:
         with (self.budget.open(path) if self.budget is not None else path.open("wb")) as stream:
             np.save(stream, value, allow_pickle=False)
             stream.flush()
-            os.fsync(stream.fileno())
+            # This is temporary spool input. The durable boundary is the final
+            # compressed NPZ chunk below; syncing every member makes large
+            # episodes serialize thousands of journal commits.
         self.spool_bytes += path.stat().st_size
         self.spool_peak_bytes = max(self.spool_peak_bytes, self.spool_bytes)
         return path

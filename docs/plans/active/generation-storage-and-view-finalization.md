@@ -577,7 +577,7 @@ roots and the HF validation prefix must be disjoint from earlier evidence.
       `validation/` HF prefix, hash every declared file at one pinned commit,
       and restore both attempts from a separate disjoint root with zero local
       result payloads. Preserve all receipts and existing HF prefixes.
-- [ ] **Storage decision and handoff:** Use the successful G1 writer upper
+- [x] **Storage decision and handoff:** Use the successful G1 writer upper
       bound plus the measured attempt sizes and chosen production worker/slot
       count to calculate a worst-case concurrent reservation and a queue
       backlog limit. Prove that a still-live lease cannot claim past the
@@ -588,6 +588,15 @@ roots and the HF validation prefix must be disjoint from earlier evidence.
       PASS/FAIL/SKIPPED/NOT RUN, hashes, and residual risks in the existing
       generation validation record. No GPU, training, C1–C5 or full-quota run
       is part of this continuation.
+
+**Readiness closure (2026-09-27):** The approved single-host follow-up added
+run-wide queue reservations and same-filesystem HF scratch, rebuilt the clone's
+generation environment/tasks, and passed 650 fixture tests, both 22-test L0
+modes, all 36 live program smokes, and a three-job real HF backpressure/prune/
+resume rehearsal. See the [readiness evidence](../../experiments/generation-validation/readiness-20260927/README.md)
+for limits, OIDs, preserved failures and the unexecuted two-worker launch command.
+The collection readiness blockers are closed for this layout; full collection
+and archive-backed trainer integration are not claimed complete.
 
 **Continuation stop (2026-09-27):** The first fresh `vps-a` G1 run at
 `53bc3e6` did not reach either byte cap; it **FAIL**ed at its 600-second

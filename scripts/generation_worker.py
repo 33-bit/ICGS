@@ -439,6 +439,7 @@ def run_worker(
     worker_instance_id: str | None = None,
 ) -> int:
     display_number(worker_id, config)
+    queue.configure_runtime_staging(config)
     if worker_id not in config.machine.worker_ids:
         raise ValueError(f"worker_id is outside host worker scope: {worker_id}")
     worker_instance_id = worker_instance_id or (
@@ -795,6 +796,8 @@ def main(argv: list[str] | None = None) -> int:
     config = GenerationRuntimeConfig.from_file(args.runtime_config)
     if config.archive_profile is not None and config.max_result_bytes is None:
         raise ValueError("archive max_result_bytes must be positive for production worker")
+    if config.archive_profile is not None and not config.run.validation_mode and config.max_staging_bytes is None:
+        raise ValueError("production archive worker requires max_staging_bytes and staging_reserve_bytes")
     if args.host_id is not None and args.host_id != config.machine.host_id:
         raise ValueError("--host-id does not match runtime config host_id")
     queue = FilesystemJobQueue(Path(config.run.run_root) / "queue")

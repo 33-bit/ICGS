@@ -45,6 +45,8 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Resumable multi-host generation](plans/active/resumable-multihost-generation.md) | Current HF archive resume, shared-filesystem worker leases and host-scoped launch contract |
 | [Generation storage and view finalization](plans/active/generation-storage-and-view-finalization.md) | HF source-of-truth lossless archive, bounded local retention and frozen training-view plan |
 | [Generation storage decision](decisions/0015-generation-storage-and-view-snapshots.md) | Accepted HF archive, binary deduplication and provisional/final view boundary |
+| [Generation launch readiness](plans/active/generation-launch-readiness.md) | Run-wide storage admission, fresh-host task build and selected-host acceptance |
+| [Generation readiness evidence](experiments/generation-validation/readiness-20260927/README.md) | VPS-only commands, live smoke and bounded publication/backpressure evidence |
 | [Third-party notices](third-party-notices.md) | Attribution and license for adapted guidance |
 
 Source code owns implementation detail; tests establish only the behavior they

@@ -280,12 +280,26 @@ class ArchiveProfileConfig:
         return asdict(self)
 
 
+def validate_staging_limits(max_result_bytes, max_staging_bytes, staging_reserve_bytes) -> None:
+    for name, value in (("max_result_bytes", max_result_bytes),
+                        ("max_staging_bytes", max_staging_bytes),
+                        ("staging_reserve_bytes", staging_reserve_bytes)):
+        if type(value) is not int or value <= 0:
+            raise ValueError(f"staging limits require positive integer {name}")
+    if staging_reserve_bytes < 2 * max_result_bytes:
+        raise ValueError("staging_reserve_bytes must cover two result caps for verification/recovery")
+    if max_staging_bytes <= staging_reserve_bytes + max_result_bytes:
+        raise ValueError("max_staging_bytes must exceed reserve plus one result cap")
+
+
 @dataclass(frozen=True)
 class GenerationRuntimeConfig:
     machine: MachineConfig
     run: RuntimeRunConfig
     archive_profile: ArchiveProfileConfig | None = None
     max_result_bytes: int | None = None
+    max_staging_bytes: int | None = None
+    staging_reserve_bytes: int | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.machine, MachineConfig):
@@ -296,6 +310,10 @@ class GenerationRuntimeConfig:
             raise ValueError("archive_profile must be an ArchiveProfileConfig or null")
         if self.max_result_bytes is not None:
             _positive_int(self.max_result_bytes, "max_result_bytes")
+        if self.max_staging_bytes is not None or self.staging_reserve_bytes is not None:
+            validate_staging_limits(self.max_result_bytes, self.max_staging_bytes, self.staging_reserve_bytes)
+            if self.archive_profile is None:
+                raise ValueError("staging budget requires an archive profile with a bounded writer")
         if (
             self.run.validation_mode
             and self.archive_profile is not None
@@ -327,7 +345,7 @@ class GenerationRuntimeConfig:
     def from_dict(cls, payload: Mapping[str, Any]) -> "GenerationRuntimeConfig":
         values = _mapping(payload, "runtime config")
         required = frozenset({"machine", "run"})
-        allowed = required | {"archive_profile", "max_result_bytes"}
+        allowed = required | {"archive_profile", "max_result_bytes", "max_staging_bytes", "staging_reserve_bytes"}
         _reject_unknown(values, allowed, "runtime config")
         _require_fields(values, required, "runtime config")
         return cls(
@@ -338,6 +356,8 @@ class GenerationRuntimeConfig:
                 else ArchiveProfileConfig.from_dict(values["archive_profile"])
             ),
             max_result_bytes=values.get("max_result_bytes"),
+            max_staging_bytes=values.get("max_staging_bytes"),
+            staging_reserve_bytes=values.get("staging_reserve_bytes"),
         )
 
     @classmethod
@@ -365,6 +385,9 @@ class GenerationRuntimeConfig:
             payload["archive_profile"] = self.archive_profile.as_dict()
         if self.max_result_bytes is not None:
             payload["max_result_bytes"] = self.max_result_bytes
+        if self.max_staging_bytes is not None:
+            payload["max_staging_bytes"] = self.max_staging_bytes
+            payload["staging_reserve_bytes"] = self.staging_reserve_bytes
         return payload
 
     def resolved_environment(self, base: Mapping[str, str] | None = None) -> dict[str, str]:

@@ -131,6 +131,109 @@ class FilesystemJobQueue:
         with self._operation_lock():
             self._assert_run_active_unlocked()
 
+    def configure_staging(self, *, max_result_bytes: int, max_staging_bytes: int,
+                          staging_reserve_bytes: int) -> None:
+        """Bind one admission policy to the shared queue, before its first claim."""
+        from icgs.data.collection.generation.distributed_contracts import validate_staging_limits
+
+        validate_staging_limits(max_result_bytes, max_staging_bytes, staging_reserve_bytes)
+        policy = dict(max_result_bytes=max_result_bytes, max_staging_bytes=max_staging_bytes,
+                      staging_reserve_bytes=staging_reserve_bytes)
+        with self._operation_lock():
+            path = self.root / "control" / "staging-policy.json"
+            if path.exists() or path.is_symlink():
+                if json.loads(self._read_regular_file(path)) != policy:
+                    raise ValueError("staging policy conflict: use the original limits or a fresh run")
+                return
+            counts = self.counts()
+            if counts.claimed or counts.ready or counts.ingested or counts.published or counts.quarantined:
+                raise ValueError("staging policy requires a fresh queue without prior claims/results")
+            _write_durable_safety_record(path, policy)
+
+    def configure_runtime_staging(self, config) -> None:
+        if config.archive_profile is not None and not config.run.validation_mode and config.max_staging_bytes is None:
+            raise ValueError("production archive runtime requires max_staging_bytes and staging_reserve_bytes")
+        if config.max_staging_bytes is not None:
+            self.configure_staging(
+                max_result_bytes=config.max_result_bytes,
+                max_staging_bytes=config.max_staging_bytes,
+                staging_reserve_bytes=config.staging_reserve_bytes,
+            )
+        elif (self.root / "control" / "staging-policy.json").exists():
+            raise ValueError("runtime omits the shared staging policy")
+
+    def _staging_status_unlocked(self) -> dict[str, Any] | None:
+        path = self.root / "control" / "staging-policy.json"
+        if not path.exists() and not path.is_symlink():
+            return None
+        policy = json.loads(self._read_regular_file(path))
+        from icgs.data.collection.generation.distributed_contracts import validate_staging_limits
+        validate_staging_limits(**policy)
+        reserved = 0
+        reservations = self.root / "control" / "staging-reservations"
+        if reservations.is_symlink():
+            raise ValueError("staging reservations must not be a symlink")
+        for reservation in reservations.glob("*.json"):
+            receipt = json.loads(self._read_regular_file(reservation))
+            if receipt.get("bytes") != policy["max_result_bytes"]:
+                raise ValueError("staging reservation conflicts with policy")
+            reserved += receipt["bytes"]
+        # Count all retained bytes, including quarantine, logs, retry scratch and
+        # receipts. Reservations deliberately OVERCOUNT already-written payloads:
+        # no racy subtraction of a live writer's changing file sizes is needed.
+        used = 0
+        def scan_error(error):
+            if not isinstance(error, FileNotFoundError):
+                raise error
+        for directory, directories, files in os.walk(self.root.parent, followlinks=False, onerror=scan_error):
+            for name in directories + files:
+                entry = Path(directory) / name
+                try:
+                    info = entry.lstat()
+                except FileNotFoundError:  # atomic writer renames during the scan
+                    continue
+                if stat.S_ISLNK(info.st_mode):
+                    scratch = self.root.parent / "hf-scratch"
+                    if not entry.is_relative_to(scratch) or not entry.resolve().is_relative_to(scratch.resolve()):
+                        raise ValueError(f"staging tree contains an unsafe symlink: {entry}")
+                    used += info.st_size
+                if stat.S_ISREG(info.st_mode):
+                    used += info.st_size
+        extra = reserved + policy["max_result_bytes"] + policy["staging_reserve_bytes"]
+        free = shutil.disk_usage(self.root.parent).free
+        return {**policy, "reserved_bytes": reserved, "local_bytes": used,
+                "free_bytes": free,
+                "can_claim": used + extra <= policy["max_staging_bytes"] and extra <= free}
+
+    def staging_status(self) -> dict[str, Any] | None:
+        with self._operation_lock():
+            return self._staging_status_unlocked()
+
+    def _reserve_staging_unlocked(self, job: GenerationJob) -> bool:
+        status = self._staging_status_unlocked()
+        if status is None:
+            return True
+        expected = (self.root.parent / "staging").resolve()
+        if Path(job.output_root).resolve() != expected:
+            raise ValueError("budgeted job output_root must be the run's staging directory")
+        if not status["can_claim"]:
+            return False
+        path = self.root / "control" / "staging-reservations" / f"{job.job_id}.retry-{job.retry_generation}.json"
+        if path.exists():
+            # A prior process may have died between reservation and claim rename.
+            # Never turn that uncertainty into an unreserved second writer.
+            return False
+        _write_durable_safety_record(path, {
+            "job_id": job.job_id, "retry_generation": job.retry_generation,
+            "bytes": status["max_result_bytes"],
+        })
+        return True
+
+    def _release_published_staging_unlocked(self, target: Path) -> None:
+        job = GenerationJob.from_dict(_read_json(target / "job.json"))
+        reservation = self.root / "control" / "staging-reservations" / f"{job.job_id}.retry-{job.retry_generation}.json"
+        reservation.unlink(missing_ok=True)
+
     def _active_claim_generations_unlocked(self, now_s: float) -> set[tuple[str, int]]:
         active: set[tuple[str, int]] = set()
         claimed_root = self.root / "claimed"
@@ -514,6 +617,9 @@ class FilesystemJobQueue:
             worker_dir.mkdir(parents=True, exist_ok=True)
             for source in sorted((self.root / "pending").glob("*.json")):
                 target = worker_dir / source.name
+                job = GenerationJob.from_dict(_read_json(source))
+                if not self._reserve_staging_unlocked(job):
+                    return None
                 try:
                     os.replace(source, target)
                 except FileNotFoundError:
@@ -1007,6 +1113,7 @@ class FilesystemJobQueue:
                     raise ValueError(f"ingested and published results both exist: {job_id}")
                 if retention == "receipt_only":
                     self._validate_saved_receipt_only_record(target, job_id)
+                    self._release_published_staging_unlocked(target)
                 return target
             if source.is_symlink() or not source.is_dir():
                 raise FileNotFoundError(f"ingested result does not exist: {job_id}")
@@ -1045,6 +1152,7 @@ class FilesystemJobQueue:
             else:
                 raise ValueError("missing local payload lacks a matching verified per-job receipt")
             os.replace(source, target)
+            self._release_published_staging_unlocked(target)
             return target
 
     def recover_stale(self, *, now_s: float, stale_after_s: float) -> list[str]:

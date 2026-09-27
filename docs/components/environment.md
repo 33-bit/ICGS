@@ -66,16 +66,20 @@ Provision the locked generation profile and pinned simulator sources together:
 "$(uv python find 3.10)" -B scripts/setup_environment.py \
   --profile generation --python-version 3.10 \
   --venv-root "$PWD/.venv" \
-  --provision-simulator --runtime-config "$PWD/outputs/generation-runtime.json" \
+  --provision-simulator --build-generation-tasks \
+  --runtime-config "$PWD/outputs/generation-runtime.json" \
   --receipt "$PWD/outputs/setup_receipt.json"
 ```
 
 This opt-in command runs `uv sync --locked`, host package installation, the
 checksum-checked CoppeliaSim download/extraction, and pinned PyRep/RLBench
-checkout/installation. On a rerun, keep `--provision-simulator` and the same
+checkout/installation. The explicit `--build-generation-tasks` flag then launches
+a bounded headless simulator build of all 36 generated task modules and scene
+assets; provisioning the upstream RLBench checkout alone does not supply them.
+It does not collect episodes. On a rerun, keep `--provision-simulator` and the same
 runtime config: `uv sync` can remove unmanaged simulator packages, so the
-provisioner reapplies them. Setup does **not** start a simulator, worker,
-coordinator, or collection.
+provisioner reapplies them. Without `--build-generation-tasks`, setup does not
+start a simulator. Neither mode starts workers, a coordinator, or collection.
 
 Verify the installed profile without launching an episode. Supply a
 coordinator-only HF credential path outside Git if publication will be used;
@@ -95,10 +99,11 @@ LD_LIBRARY_PATH="$PWD/outputs/CoppeliaSim${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" 
 ./.venv/bin/python -B scripts/validate_fast.py
 ```
 
-The verifier's `PASS` proves environment imports and paths, not a live
-simulator attempt or full-generation readiness. The setup and verification
-commands were fixture-tested; rebuilding the complete environment from a
-new clone remains an explicit host acceptance check. Continue with the
+The verifier checks that every generated task module matches the compiler and
+has a nonempty scene asset. Its `PASS` proves environment imports, paths and
+task availability, not a live episode or full-generation readiness. A fresh
+Python 3.10 environment and all-task build were exercised on `vps-a` under the
+clone in September 2026. Continue with the
 [data-generation launch gate](generation.md#full-generation-readiness), not
 the validation example's launch flags.
 

@@ -134,11 +134,14 @@ def _archive_queue(
     retention: str = "keep",
     outcome: str = "success",
     job: GenerationJob | None = None,
+    staging_limits: dict | None = None,
 ):
     from icgs.data.collection.generation.episode_record import assemble_episode
 
     profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention=retention)
     queue = FilesystemJobQueue(tmp_path / "archive-queue")
+    if staging_limits is not None:
+        queue.configure_staging(**staging_limits)
     job = _job() if job is None else job
     queue.enqueue(job)
     assert queue.claim("000") == job
@@ -795,6 +798,7 @@ def test_coordinator_open_recovers_verified_prune_then_fails_closed_on_remote_er
     job = _job()
     job = replace(
         job,
+        output_root=str(tmp_path / "staging"),
         plan=replace(
             job.plan,
             randomization={
@@ -803,8 +807,10 @@ def test_coordinator_open_recovers_verified_prune_then_fails_closed_on_remote_er
             },
         ),
     )
+    staging_limits = dict(max_result_bytes=1024**2, max_staging_bytes=20 * 1024**2,
+                          staging_reserve_bytes=2 * 1024**2)
     queue, job, result, profile = _archive_queue(
-        tmp_path, retention="receipt_only", job=job,
+        tmp_path, retention="receipt_only", job=job, staging_limits=staging_limits,
     )
     queue.root.rename(tmp_path / "queue")
     queue = FilesystemJobQueue(tmp_path / "queue")
@@ -832,6 +838,7 @@ def test_coordinator_open_recovers_verified_prune_then_fails_closed_on_remote_er
             "validation_mode": False,
         },
         "archive_profile": profile.as_dict(),
+        **staging_limits,
     })
     approved_manifest = tmp_path / "approved.json"
     approved_manifest.write_bytes(

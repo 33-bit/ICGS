@@ -104,6 +104,7 @@ def provision_environment(
     config: GenerationRuntimeConfig,
     *,
     runner=subprocess.run,
+    build_tasks: bool = False,
 ) -> ProvisionReceipt:
     """Install pinned simulator dependencies, recording each external command."""
     if not isinstance(config, GenerationRuntimeConfig):
@@ -258,6 +259,14 @@ def provision_environment(
         commands=commands,
     )
     machine.validate_paths()
+    if build_tasks:
+        _run(
+            ["xvfb-run", "--auto-servernum", str(python_executable), "-B",
+             str(repo_root / "scripts" / "generation_build_tasks.py"), "--all-programs",
+             "--rlbench-root", str(rlbench_root),
+             "--output-root", str(rlbench_root.parent / "generation-tasks")],
+            timeout=600, env=environment, runner=runner, commands=commands,
+        )
     return ProvisionReceipt(
         repo_root=str(repo_root),
         python_executable=str(python_executable),
@@ -272,9 +281,10 @@ def provision_environment(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--runtime-config", required=True)
+    parser.add_argument("--build-tasks", action="store_true")
     args = parser.parse_args(argv)
     config = GenerationRuntimeConfig.from_file(args.runtime_config, check_paths=False)
-    receipt = provision_environment(config)
+    receipt = provision_environment(config, build_tasks=args.build_tasks)
     print(json.dumps(receipt.as_dict(), indent=2, sort_keys=True))
     return 0
 

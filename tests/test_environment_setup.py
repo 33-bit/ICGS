@@ -17,6 +17,19 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by Python 3.10
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_generation_task_build_is_explicit_complete_and_headless(tmp_path):
+    setup = _setup_module()
+    commands = setup.plan_setup("generation", repo_root=tmp_path, venv_root=tmp_path / ".venv",
+                                provision_simulator=True, runtime_config=tmp_path / "runtime.json",
+                                build_generation_tasks=True)
+    assert commands[-1][-1] == "--build-tasks"
+    assert "--build-tasks" not in setup.plan_setup(
+        "generation", repo_root=tmp_path, venv_root=tmp_path / ".venv",
+        provision_simulator=True, runtime_config=tmp_path / "runtime.json")[-1]
+    with pytest.raises(ValueError, match="provision"):
+        setup.plan_setup("cpu", repo_root=tmp_path, venv_root=tmp_path / ".venv", build_generation_tasks=True)
+
+
 def _setup_module():
     return importlib.import_module("scripts.setup_environment")
 
