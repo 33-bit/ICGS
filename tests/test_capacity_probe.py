@@ -66,6 +66,18 @@ def test_capacity_probe_config_accepts_bounded_stages():
     assert config.as_dict()["stages"][0]["max_jobs"] == 8
 
 
+def test_capacity_probe_accepts_production_length_worker_timeout():
+    payload = _payload()
+    payload["max_runtime_s"] = 1500
+    payload["stages"][0]["worker_timeout_s"] = 1200
+    config = CapacityProbeConfig.from_dict(payload)
+    assert config.stages[0].worker_timeout_s == 1200
+
+    payload["stages"][0]["worker_timeout_s"] = 1201
+    with pytest.raises(ValueError, match="worker_timeout_s"):
+        CapacityProbeConfig.from_dict(payload)
+
+
 @pytest.mark.parametrize("field,value", [("max_total_jobs", 401), ("max_runtime_s", 5401)])
 def test_capacity_probe_rejects_global_limits(field, value):
     payload = _payload()

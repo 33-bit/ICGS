@@ -36,8 +36,8 @@ class CapacityStage:
             raise ValueError("stage simulator_slots must be within worker_count")
         if type(self.max_jobs) is not int or not 1 <= self.max_jobs <= 400:
             raise ValueError("stage max_jobs must be in 1..400")
-        if type(self.worker_timeout_s) is not int or not 30 <= self.worker_timeout_s <= 600:
-            raise ValueError("stage worker_timeout_s must be in 30..600")
+        if type(self.worker_timeout_s) is not int or not 30 <= self.worker_timeout_s <= 1200:
+            raise ValueError("stage worker_timeout_s must be in 30..1200")
         if self.max_result_bytes is not None:
             if type(self.max_result_bytes) is not int or self.max_result_bytes <= 0:
                 raise ValueError("stage max_result_bytes must be a positive integer")
