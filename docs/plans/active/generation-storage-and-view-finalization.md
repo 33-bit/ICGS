@@ -517,6 +517,21 @@ pre-clarification suite results are in the durable validation record. Per the
 user's narrowed scope, GPU C1–C5 and training were not selected as generation
 readiness checks. Full generation is **NOT AUTHORIZED**.
 
+**Writer-cap live retest (2026-09-27):** At committed `d793b39`, a fresh
+one-job, no-HF G1 probe on `vps-a` hit `ArchiveWriterCapExceeded` before a
+numeric write would have raised the retry-root inventory from 78,649,839 to
+80,222,703 bytes against an 80,000,000-byte result cap. The 51 NPY spool files
+and write marker were preserved and a durable queue safety stop exists; no ready
+result was published. This is positive evidence for the hard *per-result*
+pre-write limit, but the probe itself exited with a generic worker-exit error
+and wrote no stage receipt. The stop receipt also lists the same orphan
+inventory twice, inflating its top-level byte total. The original and new
+failed roots remain untouched. The exact command, hashes and limitations are
+in the [validation record](../../experiments/generation-validation/archive-aa869b3-20260927/README.md).
+The 80 MB limit cannot hold this G1 archive, a successful closed-result peak
+and aggregate storage budget are still unmeasured, and live failure-attempt HF
+retention remains **NOT RUN**. Full generation remains **NOT AUTHORIZED**.
+
 ## Compatibility, rollback, and recovery
 
 - Existing v2 artifacts and HF prefixes remain immutable and readable.

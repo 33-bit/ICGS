@@ -253,6 +253,78 @@ leave a live lease without the worker's own safety-stop receipt. Keep the root
 untouched and do not resume it while this safety gap and a hard writer-side
 staging bound remain unresolved.
 
+## G1 80 MB writer-cap retest at `d793b39` — FAIL safely, reporting gap
+
+On 2026-09-27, a fresh, isolated `vps-a` checkout at
+`/home/huy2325/ICGS-archive-capfix-d793b39-validation` was clean at
+`d793b39f6454344b05c5015a0fecefb250b8b7c4`. The ignored local probe and
+runtime inputs are `capacity-g1-80m-d793b39-20260927a.json` and
+`capacity-runtime-g1-80m-d793b39-20260927a.json` under
+`.superpowers/sdd/generation-storage-and-view-finalization/`; their remote
+SHA256 values matched local copies
+(`2119c8caf3811f47229d76c6d589b6b090d370c30ffd01b7d84f810ea0a9a577`
+and `aaec9970284386d8d6f8e2cea12a02cc2907921e6530dadb538e23fcea46f8ab`).
+The approved composition manifest SHA256 was
+`d50b737ce3ac168724c61c6e9f87603944dd576101615660e14c993c378d53e1`.
+The fresh root was absent and no generation process was active before launch.
+The finite probe used one G1 job, worker and simulator slot, a 600-second worker
+timeout, 900-second global deadline, and 80,000,000-byte per-result, stage and
+total caps. HF publication was disabled and validation mode enabled. The exact
+execution command, from that checkout, was:
+
+```bash
+LD_LIBRARY_PATH=/home/huy2325/icgs-vps-env/CoppeliaSim PYTHONPATH=src \
+  /home/huy2325/icgs-vps-env/bin/python -B scripts/generation_capacity_probe.py \
+  --config /home/huy2325/capacity-g1-80m-d793b39-20260927a.json \
+  --runtime-config /home/huy2325/capacity-runtime-g1-80m-d793b39-20260927a.json \
+  --approved-manifest /home/huy2325/ICGS-archive-capfix-d793b39-validation/artifacts/composition/approved_composition_manifest.json \
+  --code-revision d793b39f6454344b05c5015a0fecefb250b8b7c4 \
+  --output-root /home/huy2325/icgs-archive-capacity-d793b39-20260927a --execute
+```
+
+The simulator completed G1 with `success`, 508 actions and 509 observations,
+but archive encoding intentionally **FAIL**ed at the writer cap. The child log
+records `ArchiveWriterCapExceeded: max_result_bytes limit=80000000
+current=78649839 attempted=80222703` before the next numeric write. The
+worker preserved 51 NPY spool files and one write marker: **78,649,839**
+apparent bytes of writer-owned scratch, below 80,000,000. Independent read-only
+verification matched all 52 listed file sizes and SHA256 digests in the first
+safety-stop incident. A worker log adds 3,226 bytes in the retry root. The
+queue retained one claimed job, with zero ready, ingested or published results;
+there is no closed episode or attempt manifest. No generation process remained
+after the probe. The forensic root and prior failed roots were not cleaned,
+resumed or claimed.
+
+The durable stop at `G1/control/generation-safety-stop.json` has SHA256
+`7edf5452ff4e7225ed362724b6b0e12f9a08a5641771a38f11e048265c188a03`.
+The outer worker caught its own `GenerationSafetyStop` and recorded the same
+preserved-file inventory twice; the top-level `preserved_bytes=157299678` is
+therefore duplicate incident accounting, **not** disk usage. The actual retry
+root has 53 regular files totaling 78,653,065 apparent bytes. The entire
+post-run root has 64 regular files totaling 78,753,725 apparent bytes; this is
+not a sampled peak or a proof of an aggregate live stage cap. The sorted
+SHA256 listing of retry-root files hashes to
+`f5735cc6b7c653307d6813dde082ac0b545547174e891e2b46de566b8235703a`.
+
+`generation_capacity_probe.py --execute` exited 1. Its
+`capacity_summary.json` (SHA256
+`26f8d46b869651503a986e9cb6927724676389ce450d5ff7cdf17617ff1f9fb7`)
+reports **FAIL** with the generic error `all workers exited before all results
+became ready`; no `G1/capacity_receipt.json` was written. The worker log and
+stop receipt identify the actual cap-triggered stop, but the probe's own failure
+reporting is incomplete. This one finite run demonstrates a hard pre-write
+numeric spool limit and preserved scratch, not a successful 80 MB G1 capacity
+result, a full archive size, a defensible whole-run storage budget or permission
+for full generation. A distinct no-HF capacity run with a newly approved cap
+would be required to measure a closed G1 archive. Live failure-attempt HF
+retention also remains **NOT RUN**.
+
+Documentation verification after recording this run: `python3 -B
+scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py` each
+**PASS**ed 22 L0 tests on local CPython 3.14.4; two pre-existing invalid-escape
+warnings remained. `git diff --check` **PASS**ed. These commands did not rerun
+the simulator, generation fixtures, live HF, training or C1–C5.
+
 ## Data-generation readiness retest — scoped, still blocked
 
 This 2026-09-27 retest was narrowed to data generation. It did **not** start the
