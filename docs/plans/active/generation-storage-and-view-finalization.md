@@ -552,10 +552,10 @@ component-validation continuation of the accepted archive migration; protocol,
 quota, episode labels, and published prefixes remain unchanged. All new run
 roots and the HF validation prefix must be disjoint from earlier evidence.
 
-- [ ] **Capacity, no HF:** Pin one clean `vps-a` checkout to code revision
-      `53bc3e66de4c279cf7565eca4cd5ca611d0027b3`. Preflight free disk,
+- [x] **Capacity, no HF:** Pin one clean `vps-a` checkout to code revision
+      `5e5687bc9ece5e65de2ea730b49a624a08eb2460`. Preflight free disk,
       memory, simulator paths, absent run root, and no generation processes.
-      Use one G1 job, one worker/slot, a 600-second worker timeout, 900-second
+      Use one G1 job, one worker/slot, a 1,200-second worker timeout, 1,500-second
       global deadline, 536,870,912-byte `max_result_bytes`, and
       1,073,741,824-byte stage/total staging caps. Execute
       `scripts/generation_capacity_probe.py --execute` with the approved
@@ -597,10 +597,27 @@ and the stage receipt records one claimed, zero ready/published results.
 Per the checklist, no controlled failure-attempt HF run followed this failed
 probe. The exact command, hashes, file-size distribution and read-only
 diagnosis are in the [validation record](../../experiments/generation-validation/archive-aa869b3-20260927/README.md).
-The probe's 600-second schema maximum is shorter than the production runtime
-example's 1,200-second timeout; any revised time bound or writer-performance
-change requires a separately reviewed finite rerun. Full generation remains
+At `53bc3e6`, the probe's 600-second schema maximum was shorter than the
+production runtime example's 1,200-second timeout; a revised bound required a
+separately reviewed finite rerun. Full generation remained
 **NOT AUTHORIZED**.
+
+**Capacity continuation (2026-09-27):** The approved 1,200-second retry at
+`6b9a093` completed a valid G1 archive, but the probe **FAIL**ed when its
+sampled lower-bound tree scanner treated 56 writer-cleanup `FileNotFoundError`
+events as staging failures. The failed root and safety stop remain preserved.
+The narrowly scoped scanner fix at `5e5687b` ignores only vanished descendants;
+missing stage roots, permission errors, and symlinks still report errors. Local
+and clean `vps-a` generation/capacity suites each **PASS**ed 617 tests with zero
+skips; each L0 run **PASS**ed 22. One fresh no-HF G1 probe at `5e5687b`
+**PASS**ed with one closed `success`, 94,562,197 artifact bytes, a
+230,889,909-byte writer upper bound and a 230,898,507-byte sampled stage
+lower-bound peak. Independent canonical archive and queue validation **PASS**ed.
+The exact inputs, commands, receipt hashes, prior failure and readback are in
+the [validation record](../../experiments/generation-validation/archive-aa869b3-20260927/README.md).
+The controlled failure-attempt HF gate and production storage/backpressure
+decision remain open; this single-host capacity result does not authorize the
+full generation run.
 
 ## Compatibility, rollback, and recovery
 

@@ -414,6 +414,107 @@ the result byte cap alone therefore did not measure a closed G1 archive.
 Per the fail-stop plan, the controlled failure-attempt HF publication was
 **NOT RUN** after this timeout. Full generation remains **NOT AUTHORIZED**.
 
+## G1 1,200-second retry at `6b9a093` — FAIL on a cleanup race
+
+The separately approved no-HF retry used clean `vps-a` code revision
+`6b9a093dc5261fbfd960ca1e0cb0122dc883afe4`, one G1 job/worker/slot,
+1,200-second worker and 1,500-second global limits, a 536,870,912-byte
+result cap, and 1,073,741,824-byte stage/total caps. Its fresh root is
+`/home/huy2325/icgs-archive-capacity-6b9a093-20260927a`; the probe and
+runtime config SHA256 values are
+`5d6e4a38293525a98707c0b0225a259d51aed8f1b0befa56a77a4399cff6429e`
+and `6f3dad0093b903fe34421d91db4dfd904e9aa702015d455cf41293a7f576d321`.
+The probe **FAIL**ed at 1,078.171 seconds because its staging scanner reported
+56 `FileNotFoundError` entries while the writer was deleting normal
+`.G1.archive-spool-*` descendants. It recorded one claimed, zero ready,
+ingested or published jobs, worker return code `-15`, and a durable safety
+stop. The summary, stage receipt and stop SHA256 values are respectively
+`083e8a45e56e746bb31e00e41209ca391b808a38a6f2f852bbec7bc87e2da634`,
+`595e4fa3bdc0cc5d7f1a05e48ba6e31d81d0b35d2c7f10ace67ea93ab5a8bc2e`,
+and `7b7f7cec1a5d0c4d4dc80b4eca0588a63dde6114874f9afae39969df2b6cf921`.
+Read-only canonical archive validation separately **PASS**ed: `success`,
+509 observations, 508 transitions, 64 chunks, 67 archive files, manifest
+SHA256 `51a89a2f9a8741a6d883848b33d140fa5bbe6ba0a7f751b5ea99d1a6ce195e86`.
+That valid payload does **not** turn the fenced queue or probe into a PASS.
+The failed root was not resumed, claimed, published or cleaned, and its three
+receipt hashes were unchanged after the later run.
+
+## G1 scanner fix and fresh no-HF probe at `5e5687b` — PASS
+
+The scanner now ignores `FileNotFoundError` only for descendants that vanish
+during its sampled lower-bound walk. It still reports a missing stage root,
+permission errors and symlinks. The file- and directory-cleanup tests were
+**RED** (2 failed, 4 passed among six selected scanner tests), then all six
+were **GREEN**. Local and isolated `vps-a` generation/capacity fixtures each
+**PASS**ed 617 tests with zero skips. Local and `vps-a` L0 each **PASS**ed 22;
+L1 model execution, GPU/C1–C5, training, full preprocessing and full quota
+were **NOT RUN**. The fixture commands, from each repository checkout, were:
+
+```bash
+# Local macOS, CPython 3.11.15
+PYTHONPATH=src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m pytest -q -rs \
+  tests/test_generation*.py tests/test_capacity_probe.py
+
+# vps-a Linux, CPython 3.10.21
+LD_LIBRARY_PATH=/home/huy2325/icgs-vps-env/CoppeliaSim PYTHONPATH=src \
+  /home/huy2325/icgs-vps-env/bin/python -B -m pytest -q -rs \
+  tests/test_generation*.py tests/test_capacity_probe.py
+```
+
+L0 used each same interpreter with `-B scripts/validate_fast.py` and the
+same environment variables. `git diff --check` and
+`git show --check --oneline 5e5687b` **PASS**ed.
+
+The clean remote checkout was pinned to
+`5e5687bc9ece5e65de2ea730b49a624a08eb2460` through Git bundle SHA256
+`0aec29dee7f1a3b923691dbb9201e572a8da0e2be5d0059593cc0dd8f66d1d9a`.
+The new run root
+`/home/huy2325/icgs-archive-capacity-5e5687b-20260927a` was absent before
+launch. Probe/runtime input SHA256 values matched across hosts:
+`f878692d8dc8fd1a5b86075a5efed0fd1676a31d29aac2eb3fc55b2fba0d3ee5`
+and `432763cb0078c332814d896e703d288449f0cae3b9571ec91f91b3203d7d9599`.
+The approved composition manifest SHA256 was
+`d50b737ce3ac168724c61c6e9f87603944dd576101615660e14c993c378d53e1`.
+Preflight found 112,325,226,496 free disk bytes, 14,871,097,344 available
+memory bytes, valid simulator paths, and no generation processes. The
+runtime had `publication_enabled=false`, `validation_mode=true`, and
+`resume_from_hf=false`. The one live command, from that checkout, was:
+
+```bash
+timeout -k 30s 1600s env \
+  LD_LIBRARY_PATH=/home/huy2325/icgs-vps-env/CoppeliaSim PYTHONPATH=src \
+  /home/huy2325/icgs-vps-env/bin/python -B scripts/generation_capacity_probe.py \
+  --config /home/huy2325/capacity-g1-1200s-5e5687b-20260927a.json \
+  --runtime-config /home/huy2325/capacity-runtime-g1-1200s-5e5687b-20260927a.json \
+  --approved-manifest artifacts/composition/approved_composition_manifest.json \
+  --code-revision 5e5687bc9ece5e65de2ea730b49a624a08eb2460 \
+  --output-root /home/huy2325/icgs-archive-capacity-5e5687b-20260927a --execute
+```
+
+The probe returned **PASS** after 1,060.685 seconds: one closed `success`,
+one ready result, zero pending/claimed/ingested/published/quarantined, no
+invalid result, measurement error, staging violation or safety stop, and worker
+return code `0`. Its 94,562,197-byte archive comprises 90,133,634 chunk bytes,
+4,421,248 manifest bytes, and 7,315 debug bytes. The writer reported a
+230,889,909-byte local-write upper bound; the probe measured a
+230,898,507-byte stage/total peak and a 230,889,990-byte writer-scratch peak,
+both explicitly **sampled lower bounds**, not hard production aggregate caps.
+The minimum sampled available memory was 14,258,380,800 bytes.
+
+Independent `validate_closed_result` and `validate_archive_manifest` readback
+**PASS**ed at the closed queue result: 509 observations, 508 transitions,
+8,339,456 raw points, 9,195 array specifications, 64 chunks and 67 files.
+The canonical validator checked every declared archive file/hash; the queue
+had exactly one ready result and no safety stop. The archive-manifest SHA256
+is `2dac855786231161f0e055664a8677b14ea0c8c0b06f48c74ccb7d9ade09f5ee`.
+The capacity summary, stage receipt and stage runtime SHA256 values are
+`0274a711efd5c95e1423cb680308a770ac9650a58020abe3e7f1b77aff3647db`,
+`7f73e856c1f0604ca439e7fed1105653458ce8fb673ed8bb6045463777aab179`,
+and `4f20c5b2063fb69b6699d035996a00378f783c8cb178dc6a2ff9e7869b998cd5`.
+No generation process remained. This no-HF capacity PASS does not establish
+live failure-attempt HF retention, a multi-host production budget, or permission
+to start full generation.
+
 ## Earlier data-generation readiness retest at `8a2b811` — scoped, still blocked
 
 This 2026-09-27 retest was narrowed to data generation. It did **not** start the
@@ -479,7 +580,7 @@ the separate bounded PASS evidence above, not permission to begin full quota.
 | Live `simulator_crash` / `invalid_observation` attempt retention | NOT RUN | The nine bounded simulator jobs did not produce an attempt archive. |
 | Receipt-only local pruning after remote verification | PASS, one bounded result | Separate finite profile retained per-job VERIFIED receipt/hashes, removed only the verified payload, and restored the episode from HF with zero local payloads. |
 | Workers-only attach under this archive profile | PASS, same-machine host scope only | A job-free `vps-a` attach produced a separate host receipt and credential-free idle worker, then was stopped. A second physical host and a live cross-host claim remain NOT RUN. |
-| Hard live-writer staging cap and bounded capacity retest | Partial per-result proof; G1 **FAIL** at 80 MB and at 600-second timeout | At `d793b39`, the writer stopped before a numeric write exceeded the 80,000,000-byte per-result cap, kept 78,649,839 bytes of scratch and wrote a durable stop. At `53bc3e6`, a 512 MiB-cap G1 reached no byte cap but timed out while spooling, preserving 102,163,510 bytes. No closed archive, successful peak or aggregate whole-run budget was measured. The older `8a2b811` sampled probe also exceeded 80 MB. All failed roots are preserved. The successful archive run-root sizes of 73,914,057; 75,726,195; and 76,038,690 bytes were after publication, **not peak measurements**. |
+| Hard live-writer staging cap and bounded capacity retest | One-job G1 **PASS** at 512 MiB result / 1 GiB staging caps; aggregate production budget remains open | At `5e5687b`, the closed G1 archive was 94,562,197 bytes, the writer upper bound was 230,889,909 bytes, and the sampled stage lower-bound peak was 230,898,507 bytes. Earlier 80 MB, 600-second and scanner-race failures remain FAIL with their roots preserved. This single-job measurement does not bound concurrent workers, queue backlog, or another physical host. |
 | Open3D SOR on one actual archived observation | PASS, bounded | 16,384 raw points produced 16,215 filtered points and a finite 2,048-point local-frame sample; this is not full preprocessing. |
 | Full archive preprocessing and native `icgs train` ingestion of FINAL views | NOT RUN / NOT IMPLEMENTED | No full preprocessing workload ran; the trainer still consumes PyG sample directories and has no archive-backed integration. Training and C1–C5 were not selected for this data-generation-only decision. |
 | Full 7,520-attempt collection and L4 benchmark | NOT RUN | This finite validation does not authorize them. |
