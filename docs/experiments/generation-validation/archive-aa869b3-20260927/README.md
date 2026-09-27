@@ -253,6 +253,61 @@ leave a live lease without the worker's own safety-stop receipt. Keep the root
 untouched and do not resume it while this safety gap and a hard writer-side
 staging bound remain unresolved.
 
+## Data-generation readiness retest — scoped, still blocked
+
+This 2026-09-27 retest was narrowed to data generation. It did **not** start the
+7,520-attempt collection, another simulator episode, training, a GPU test, or
+HF publication. The local worktree was `ee995dc962f30ecd99a0012073d9d0021f44d51b`
+(documentation only after runtime `8a2b811`); the isolated `vps-a` checkout
+remained `8a2b81107ddbe02b5ef42f8064978b1e70e984a4`.
+
+| Check | Result and limit |
+| --- | --- |
+| Local generation/capacity fixtures | **PASS**, `PYTHONPATH=src /Users/33bit/AI/Research/VLA/ICGS/.venv/bin/python -B -m pytest -q tests/test_generation*.py tests/test_capacity_probe.py`: 577 passed, 0 skipped; macOS CPython 3.11.15. |
+| `vps-a` generation/capacity fixtures | **PASS**, `LD_LIBRARY_PATH=/home/huy2325/icgs-vps-env/CoppeliaSim PYTHONPATH=src /home/huy2325/icgs-vps-env/bin/python -B -m pytest -q -rs tests/test_generation*.py tests/test_capacity_probe.py`: 577 passed, 0 skipped; Linux CPython 3.10.21. Fixtures do not publish or run a simulator. |
+| Local L0 after this record | **PASS**, `python3 -B scripts/validate_fast.py` and `python3 -B -S scripts/validate_fast.py`: 22 harness tests each on system CPython 3.14.4; two pre-existing invalid-escape warnings. L1–L4 were **NOT RUN** by these commands. |
+| Generation host verifier | **PASS** with `scripts/verify_environment.py --profile generation --repo-root /home/huy2325/ICGS-archive-aa869b3-validation --python /home/huy2325/icgs-vps-env/bin/python --simulator-root /home/huy2325/icgs-vps-env/CoppeliaSim --rlbench-root /home/huy2325/icgs-vps-env/RLBench --credential-path /home/huy2325/.icgs_hf_token --json`; Python, imports, PyG ABI, renderer, simulator path, RLBench/PyRep imports and restricted credential-file mode passed. CUDA and setup-receipt checks were **NOT RUN**. The token value was not read into this report. |
+| One actual archived observation through native filtering | **PASS** on `vps-a`: `validate_archive_manifest` and `EpisodeArchiveReader.observation(0)` read the kept `episode-t01-00004` archive; Open3D SOR with 20 neighbours / standard ratio 2 retained 16,215 of 16,384 raw points; seeded selection and local-frame transform produced 2,048 finite points. This is one observation, **not** full archive preprocessing or trainer ingestion. The first inline diagnostic invocation **FAIL**ed due to shell quoting that passed literal `\\n` to Python; the corrected stdin invocation passed without modifying the archive. |
+| Same-machine archive-profile workers-only attach | **PASS** for host-scoped attach on `vps-a`, **NOT RUN** on a second physical host. A fresh shared-filesystem, validation-mode, no-publication run with no queued jobs launched worker `001` for `host_id=vps-a-attach`; the receipt and heartbeat agreed, `/proc` showed no HF credential keys, and no coordinator heartbeat, claimed/ready result or publication appeared. The test watchdog and worker process groups were verified by PID/command and sent SIGTERM; a later process scan found none. No simulator attempt or HF call was made. |
+
+The successful attach root is
+`/home/huy2325/icgs-archive-attach-8a2b811-20260927b`. Its `run.json`,
+host runtime, worker-launch receipt and final heartbeat SHA256 values are
+respectively `75aff9de95977e7673cbdf98f0bb1def2f248c5abbeac9f7b06347d64bc5c689`,
+`94e28bc25a36089b3289da22db6d439a7b9da8bd2d9ab07564e6fa19705b2349`,
+`d7ae22828394d6dc6857b1ac921a1d4b23bfbea329dadfc9849016a56a2c0e3b`, and
+`d56fef1d01c58aa5dd3b966428a0671317db1fd2a24dc4a11eb14890452362e3`.
+An interrupted heartbeat temporary file remains after scoped SIGTERM; the
+root (8 files, 7,676 logical bytes) was preserved, not reused or cleaned. The
+first preparation at the separate `...20260927a` root **FAIL**ed before launch
+because `validation_max_jobs=0` violates the positive-integer contract; it
+left only `control/runtime_config.json` (1,320 bytes), which was preserved.
+
+Before the user narrowed this turn to data generation, broader `pytest -q -rs
+tests` diagnostics had already run. Local: **PASS**, 1,268 passed, 10 skipped,
+3 warnings. Initial `vps-a` invocation without `LD_LIBRARY_PATH`: **FAIL**,
+1,268 passed, 9 skipped, one RLBench class-import error because
+`libcoppeliaSim.so.1` was not in the loader path. The documented simulator
+library path made that exact test **PASS** (1 passed); a full `vps-a` rerun with
+the path set was **PASS**, 1,269 passed, 9 skipped, 3 warnings. Local skips
+were four missing verified original-source differential cases, RLBench absent,
+two CUDA-related cases, opt-in published-checkpoint integration, and two missing
+Lightning cases. On `vps-a`, RLBench executed, so it had nine skips. The three
+warnings were a non-collected helper class and two existing invalid escape
+sequences. Those broader runs do not promote any skipped or unrun data-generation
+gate to PASS; no further general-suite or GPU testing was selected.
+
+The **generation decision remains NOT READY**. The 80 MB sampled capacity gate
+failed; there is no cumulative pre-write writer cap. On a cap-triggered process
+stop, the orphan scanner can ignore preserved scratch while the dead worker's
+claim lease remains live; a two-job fixture in the current suite explicitly
+allows another claim in that interval. A hard writer-side bound, durable
+immediate stop before another claim, and a new finite live capacity retest are
+required. Live `simulator_crash`/`invalid_observation` HF attempt retention was
+**NOT RUN** in this retest because another simulator capture is not a safe
+storage-cap test. Prior nine-episode HF readback, resume and final views remain
+the separate bounded PASS evidence above, not permission to begin full quota.
+
 ## Remaining gates and limits
 
 | Gate | Status | Reason |
@@ -262,9 +317,10 @@ staging bound remain unresolved.
 | Revision-bound twelve FINAL snapshots and exact train 7:3 | PASS for corrected prefix | Pinned source and output OIDs, independent hashes/counts/split check; first output is preserved as a known failed metadata result. |
 | Live `simulator_crash` / `invalid_observation` attempt retention | NOT RUN | The nine bounded simulator jobs did not produce an attempt archive. |
 | Receipt-only local pruning after remote verification | PASS, one bounded result | Separate finite profile retained per-job VERIFIED receipt/hashes, removed only the verified payload, and restored the episode from HF with zero local payloads. |
-| Workers-only multi-host attach under this archive profile | NOT RUN | No second host attached to these run roots. |
+| Workers-only attach under this archive profile | PASS, same-machine host scope only | A job-free `vps-a` attach produced a separate host receipt and credential-free idle worker, then was stopped. A second physical host and a live cross-host claim remain NOT RUN. |
 | Hard live-writer staging cap and bounded capacity retest | FAIL at `8a2b811` | The one-job 80 MB G1 probe detected at least 81,804,171 staged bytes and stopped the worker with scratch preserved; it did not enforce a hard writer-side bound. The previous 100 MB G1 failure also remains preserved. The successful archive run-root sizes of 73,914,057; 75,726,195; and 76,038,690 bytes were after publication, **not peak measurements**. |
-| Native `icgs train` ingestion of archive FINAL views, Open3D SOR, training, C1–C5, full preprocessing | NOT RUN | The trainer still consumes PyG sample directories; no archive-backed training integration is claimed. |
+| Open3D SOR on one actual archived observation | PASS, bounded | 16,384 raw points produced 16,215 filtered points and a finite 2,048-point local-frame sample; this is not full preprocessing. |
+| Full archive preprocessing and native `icgs train` ingestion of FINAL views | NOT RUN / NOT IMPLEMENTED | No full preprocessing workload ran; the trainer still consumes PyG sample directories and has no archive-backed integration. Training and C1–C5 were not selected for this data-generation-only decision. |
 | Full 7,520-attempt collection and L4 benchmark | NOT RUN | This finite validation does not authorize them. |
 
 The original failed four-row validation prefix

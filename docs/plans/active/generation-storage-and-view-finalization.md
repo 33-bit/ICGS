@@ -503,6 +503,20 @@ hashes, queue state and limitations are in the durable validation record.
 The observed breach is detection, not a hard writer-side staging bound. No
 7,520-attempt authorization follows from this partial gate.
 
+**Data-generation-only retest (2026-09-27):** Fresh local and `vps-a` focused
+generation/capacity suites each **PASS**ed 577 tests with zero skips. The
+generation environment verifier **PASS**ed its selected CPU/simulator-path
+checks, and one kept real archive observation **PASS**ed Open3D SOR and
+2,048-point local-frame derivation. A no-job, no-HF archive-profile workers-only
+attach **PASS**ed on `vps-a` with a separate host identity and credential-free
+idle worker; this is not a second-physical-host or live claim result. The
+80 MB G1 capacity **FAIL**, missing hard cumulative writer limit, and live-lease
+claim window remain unchanged. No additional simulator attempt or HF publication
+was run. Exact commands, failed test-root preparation, hashes, and the broader
+pre-clarification suite results are in the durable validation record. Per the
+user's narrowed scope, GPU C1–C5 and training were not selected as generation
+readiness checks. Full generation is **NOT AUTHORIZED**.
+
 ## Compatibility, rollback, and recovery
 
 - Existing v2 artifacts and HF prefixes remain immutable and readable.
