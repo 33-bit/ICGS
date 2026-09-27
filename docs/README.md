@@ -47,6 +47,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Generation storage decision](decisions/0015-generation-storage-and-view-snapshots.md) | Accepted HF archive, binary deduplication and provisional/final view boundary |
 | [Generation launch readiness](plans/completed/generation-launch-readiness.md) | Run-wide storage admission, fresh-host task build and selected-host acceptance |
 | [Generation readiness evidence](experiments/generation-validation/readiness-20260927/README.md) | VPS-only commands, live smoke and bounded publication/backpressure evidence |
+| [Colab archive capacity experiment](experiments/generation-validation/archive-v6e1-stress-20260927.md) | OAuth2 V6e-1 concurrency comparison, publication service rate and quota-aware ETA |
 | [Third-party notices](third-party-notices.md) | Attribution and license for adapted guidance |
 
 Source code owns implementation detail; tests establish only the behavior they
