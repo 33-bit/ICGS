@@ -515,6 +515,136 @@ No generation process remained. This no-HF capacity PASS does not establish
 live failure-attempt HF retention, a multi-host production budget, or permission
 to start full generation.
 
+## Two controlled failure attempts and HF-only recovery at `1a68ce8` — PASS after preserved failures
+
+This continuation used `vps-a` only, one credential-free worker and simulator
+slot at a time, two explicitly enqueued nominal jobs, no coordinator refill
+loop, and a 536,870,912-byte per-result writer cap. The operator-only
+`sitecustomize.py` shim patched RLBench `TaskEnvironment.step` only in an
+episode subprocess carrying the expected job identity; it did not alter the
+repository runtime. Its SHA256 was
+`dc37f4abdbeaeda25935f06141e400ef96eb8a86dfbae5469c36ad9116e6ec1f`.
+For T01 it raised a non-IK exception after two completed steps. For T02 it
+replaced one returned wrist point cloud with an empty numeric array while
+retaining the other measured frames and wrist depth.
+
+Three setup/execution failures were retained as distinct evidence, not counted
+as acceptance passes:
+
+- The first operator preparation under
+  `/home/huy2325/icgs-failure-attempts-5e5687b-20260927a` **FAIL**ed before
+  worker launch because its attempt ID did not equal `att-<plan.episode_id>`.
+  Only `control/run.json` and `control/runtime_config.json` were written;
+  their SHA256 values are
+  `5a926d230a6d8e422f30ed04fa503aed353b72b3e21190619335545d5ba36827`
+  and `8bdce56a82d5426ef83e5f0380ae979f1ce17349f3fed015cd921e1bc4b6ebc6`.
+- The next fresh root,
+  `/home/huy2325/icgs-failure-attempts-5e5687b-20260927b`, closed and
+  validated a T01 `simulator_crash` with 3 observations/2 actions. T02
+  captured `invalid_observation` over 166 observations/165 actions, but its
+  archive writer **FAIL**ed with `OSError: [Errno 24] Too many open files`
+  while `write_chunks` mapped thousands of small numeric members. The worker
+  left a 114-byte `.T02.archive-write-in-progress-*` marker and durable
+  `orphan_archive_scratch_after_worker_error` stop, SHA256
+  `857f32442875edd1000a8cbfb4cdf33fe96598b19f65648bc2392cc6ac7d7629`.
+  The root and marker remain unchanged; a forensic tar copy has SHA256
+  `7ad3c2a86bf65a97a174511693f30ccf163b18e0e05643cfeb1ff69c66a9b7f0`.
+  A read-only HF listing found zero files under its prefix. No T02 fallback
+  attempt was published.
+- A descriptor-fixed root at
+  `/home/huy2325/icgs-failure-attempts-1a68ce8-20260927c` locally **PASS**ed
+  both attempt archives. Publication then **FAIL**ed before upload because
+  its fresh prefix was under `validation/validation-cpu-20260927/`, while the
+  validation publisher requires `validation/validation-cpu-20260922/`.
+  It remains preserved with two locally ingested results; its forensic tar
+  copy SHA256 is
+  `b52d8e497445141648e18649677e9892bd1e9d10ebaa3c90fd078deb8b018c59`.
+  No safety stop or remote files were created under that prefix.
+
+The production writer fix is commit
+`1a68ce8e91feb900d74a5efa473ab2a554661215`. It writes each NPZ member
+from one mapped scratch array, closes that mapping, then moves to the next;
+the capped and uncapped low-file-descriptor tests were **RED** with `Errno 24`
+before the change and **GREEN** afterward. Existing byte-equivalence and cap
+tests also passed. Local macOS CPython 3.11.15 and the isolated Linux
+CPython 3.10.21 checkout at the exact commit each ran
+`PYTHONPATH=src <venv>/bin/python -B -m pytest -q -rs tests/test_generation*.py
+tests/test_capacity_probe.py`: **619 passed, 0 skipped** per host. On Linux
+the command additionally set
+`LD_LIBRARY_PATH=/home/huy2325/icgs-vps-env/CoppeliaSim`. Each L0 run
+`<venv>/bin/python -B scripts/validate_fast.py` **PASS**ed 22 tests; L0 did
+not run simulator, model, training, GPU/C1–C5 or full preprocessing. Bundle
+SHA256 was `83cfc3a0d798245f365875e3c5a11765158d300e2c59f499a23f95f102619f10`;
+the clean `vps-a` checkout was
+`/home/huy2325/ICGS-archive-ready-1a68ce8-validation`.
+
+The successful fresh run root is
+`/home/huy2325/icgs-failure-attempts-1a68ce8-20260927d` and its previously
+absent HF prefix is
+`validation/validation-cpu-20260922/failure-attempts-1a68ce8-20260927d`.
+The operator helper SHA256 was
+`1b3aab4f19ccd15428d6a58727e33bab15aa224294b0e27e21f8266a99b2e60d`.
+The approved composition manifest SHA256 was
+`d50b737ce3ac168724c61c6e9f87603944dd576101615660e14c993c378d53e1`.
+The two serial worker commands used these exact substitutions:
+
+```bash
+cd /home/huy2325/ICGS-archive-ready-1a68ce8-validation
+for mode in t01-captured-crash t02-empty-wrist-cloud; do
+  timeout -k 30s 1300s env \
+    LD_LIBRARY_PATH=/home/huy2325/icgs-vps-env/CoppeliaSim \
+    PYTHONPATH=/home/huy2325/icgs-failure-shim-5e5687b:.:src \
+    ICGS_VALIDATION_FAULT_MODE="$mode" \
+    xvfb-run --server-num 340 \
+      -s '-screen 0 1280x1024x24 +extension GLX +render -noreset' \
+      /home/huy2325/icgs-vps-env/bin/python -B scripts/generation_worker.py \
+      --worker-id 000 \
+      --runtime-config /home/huy2325/icgs-failure-attempts-1a68ce8-20260927d/control/runtime_config.json \
+      --approved-manifest artifacts/composition/approved_composition_manifest.json \
+      --worker-instance-id vps-a-failure-validation-1a68ce8-d-000 --once
+done
+```
+
+The equivalent commands were run one at a time, with canonical local
+`validate_closed_result` and `validate_archive_manifest` checks after each.
+Before upload the queue was exactly two ready, zero pending/claimed/ingested/
+published/quarantined, with no safety stop, orphan scratch or active generation
+process. The two published archives are attempts with null `episode_id`:
+
+| Program | Outcome | Observations/actions | Wrist depth | Compressed file bytes |
+| --- | --- | ---: | ---: | ---: |
+| T01 | `simulator_crash` | 3 / 2 | 3 frames | 512,377 |
+| T02 | `invalid_observation` | 166 / 165; one empty point-cloud frame at boundary 1 | 166 frames | 30,075,439 |
+
+Publication invoked one `CoordinatorControlPlane.open` and two forced
+`publisher.publish_due` batches, not `tick`. Both returned local `COMPLETE`;
+the batch-one and batch-two data/receipt OIDs were respectively
+`7069c90ba1aa545b2f64a0834c19644aee8a147a` /
+`b57394eca91b36941f0e714ce174ecfd4b0f1c60` and
+`085c83ee2e6b0d9a8d8134830e61f6fc0ef720c8` /
+`04ac83e7e57fecbe1450784468efeb269ed39623`. The final pinned metadata
+HEAD was `b78c1e8f5083da70cb177176f716a361cbd86b26`, manifest SHA256
+`ab157852f643492e7111e1fbfc964f2b04e37ac7a732c33653ab908d0baabf1f`.
+A clean-scratch HF verifier downloaded 38 files at that HEAD, checked every
+declared archive hash, both canonical attempt validators, depth, provisional
+views, dataset manifest and the `VERIFIED` → `DATA_COMMITTED` → data-commit
+receipt chain: **PASS**, verifier SHA256
+`829badce86a1018eb806215c815093d299e24c3c538f9776178cf02be3994e52`.
+The manifest has zero episode rows and two failure-attempt rows. The final
+main queue is exactly two published, zero other states, with no safety stop.
+
+Disjoint HF-only recovery under
+`/home/huy2325/icgs-failure-attempts-audit-1a68ce8-20260927d` **PASS**ed:
+the pinned bootstrap revision is the same `b78c1e8…` HEAD, both attempt IDs
+were restored, and the audit root has zero local staging files and zero queued
+jobs. The bootstrap and recovery receipt SHA256 values are
+`b5b0d1bf93e091495dcc4f17a721eafd0198d727fa4c6dc5f1fabb37b3b12cff`
+and `3e7f2bf1de31f00d5fbd3514984d5ae5dd2fc8653f5a526b7e00c5a502116504`.
+The successful main run kept 30,601,356 local staging bytes by its validation
+`keep` policy; the disjoint audit used HF alone. No generation process remained.
+This acceptance does not establish a production-wide staging reservation,
+backpressure limit, second host, training ingestion, or full-run authorization.
+
 ## Earlier data-generation readiness retest at `8a2b811` — scoped, still blocked
 
 This 2026-09-27 retest was narrowed to data generation. It did **not** start the
@@ -577,7 +707,7 @@ the separate bounded PASS evidence above, not permission to begin full quota.
 | Archive-profile success, valid failure and nine-row multi-batch restart | PASS | Local canonical validation plus pinned full HF readback; manifest grew 3→4→5→6 and then to 9 without dropped rows. |
 | HF-only resume without local result payloads | PASS | Six- and nine-row disjoint roots restored planner state. |
 | Revision-bound twelve FINAL snapshots and exact train 7:3 | PASS for corrected prefix | Pinned source and output OIDs, independent hashes/counts/split check; first output is preserved as a known failed metadata result. |
-| Live `simulator_crash` / `invalid_observation` attempt retention | NOT RUN | The nine bounded simulator jobs did not produce an attempt archive. |
+| Live `simulator_crash` / `invalid_observation` attempt retention | PASS, bounded at `1a68ce8` | Two deliberately triggered attempts were published under a fresh validation prefix, independently verified at pinned HF HEAD, and restored from a disjoint HF-only root with zero local staging payloads. This is not a full-run claim. |
 | Receipt-only local pruning after remote verification | PASS, one bounded result | Separate finite profile retained per-job VERIFIED receipt/hashes, removed only the verified payload, and restored the episode from HF with zero local payloads. |
 | Workers-only attach under this archive profile | PASS, same-machine host scope only | A job-free `vps-a` attach produced a separate host receipt and credential-free idle worker, then was stopped. A second physical host and a live cross-host claim remain NOT RUN. |
 | Hard live-writer staging cap and bounded capacity retest | One-job G1 **PASS** at 512 MiB result / 1 GiB staging caps; aggregate production budget remains open | At `5e5687b`, the closed G1 archive was 94,562,197 bytes, the writer upper bound was 230,889,909 bytes, and the sampled stage lower-bound peak was 230,898,507 bytes. Earlier 80 MB, 600-second and scanner-race failures remain FAIL with their roots preserved. This single-job measurement does not bound concurrent workers, queue backlog, or another physical host. |

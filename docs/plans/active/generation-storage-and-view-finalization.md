@@ -563,7 +563,7 @@ roots and the HF validation prefix must be disjoint from earlier evidence.
       and stop; on `PASS`, independently validate the closed archive and record
       per-category compressed bytes, writer-reported upper bound, sampled stage
       lower bound, queue counts, process exit, config hashes, and root identity.
-- [ ] **Two controlled failure attempts, fresh HF prefix:** Use only an
+- [x] **Two controlled failure attempts, fresh HF prefix:** Use only an
       operator-owned validation shim around the existing RLBench
       `TaskEnvironment.step` boundary, never a production protocol change:
       induce one non-IK exception after captured T01 frames and one empty
@@ -615,9 +615,33 @@ skips; each L0 run **PASS**ed 22. One fresh no-HF G1 probe at `5e5687b`
 lower-bound peak. Independent canonical archive and queue validation **PASS**ed.
 The exact inputs, commands, receipt hashes, prior failure and readback are in
 the [validation record](../../experiments/generation-validation/archive-aa869b3-20260927/README.md).
-The controlled failure-attempt HF gate and production storage/backpressure
-decision remain open; this single-host capacity result does not authorize the
-full generation run.
+At this capacity checkpoint, the controlled failure-attempt HF gate and
+production storage/backpressure decision remained open; this single-host
+result did not authorize the full generation run.
+
+**Failure-attempt continuation (2026-09-27):** The first bounded T01 capture
+closed correctly, but a full-length T02 invalid-observation archive at
+`5e5687b` hit `OSError: Too many open files` while the writer mapped many
+small members of one chunk. Its 114-byte write marker, durable safety stop,
+and root remain preserved; no HF files were published under that prefix.
+At `1a68ce8`, the writer now opens and closes each chunk member individually.
+The low-descriptor capped/uncapped tests were RED then GREEN; local and clean
+`vps-a` generation/capacity suites each **PASS**ed 619 tests with zero skips,
+and L0 **PASS**ed 22 on both hosts. An operator prefix outside the publisher's
+required `validation/validation-cpu-20260922/` parent then failed before any
+upload; its ingested local root is preserved. A new disjoint root under the
+required parent published exactly two canonical failure attempts: T01
+`simulator_crash` with three observations/two actions, and T02
+`invalid_observation` with 166 observations/165 actions and one deliberately
+empty wrist-cloud frame. Both retained measured prefixes and wrist depth;
+neither has an episode ID. Two publisher batches reached local `COMPLETE`,
+and a pinned HF readback **PASS**ed every declared archive file and receipt at
+`b78c1e8f5083da70cb177176f716a361cbd86b26`. Disjoint HF-only recovery
+**PASS**ed with two attempts and zero local staging payloads. Exact roots,
+prefix, commands, hashes and failed setup evidence are in the
+[validation record](../../experiments/generation-validation/archive-aa869b3-20260927/README.md).
+Production host layout and hard aggregate backpressure are not resolved; full
+generation remains **NOT AUTHORIZED**.
 
 ## Compatibility, rollback, and recovery
 
