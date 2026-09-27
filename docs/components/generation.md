@@ -135,6 +135,12 @@ minimum and reserves an additional result cap for every concurrent reader.
 
 ## Full-generation readiness
 
+Terminal settling preserves the last measured gripper state, rather than
+unconditionally releasing held objects. This collection-behavior correction and
+the two-seed T01 replay are recorded in
+[terminal-grip evidence](../experiments/generation-validation/terminal-grip-20260928.md).
+Historical archive bytes are unchanged; new runs retain code-revision provenance.
+
 The checked-in `src/icgs/configuration/profiles/generation_runtime.json` is a
 **validation/setup example**, not a production launch profile. A compatible
 Linux host can be rebuilt from a clean clone using [Environment

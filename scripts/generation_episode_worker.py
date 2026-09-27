@@ -59,6 +59,11 @@ from rlbench.environment import Environment
 from rlbench.observation_config import ObservationConfig
 
 
+def terminal_settle_grip(observations: list[dict]) -> float:
+    """Hold measured grip instead of adding an unplanned terminal release."""
+    return float(observations[-1]["grip"]) if observations else 1.0
+
+
 def find_shape(name: str):
     for candidate in (name, f"{name}0", f"{name}#0"):
         try:
@@ -929,9 +934,10 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                     break
 
     tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
+    terminal_grip = terminal_settle_grip(timed_obs)
     for _ in range(15):
         try:
-            advance(np.concatenate([tip, quat, [1.0]]), 1.0)
+            advance(np.concatenate([tip, quat, [terminal_grip]]), terminal_grip)
         except Exception as exc:
             if _is_ik_error(exc):
                 break

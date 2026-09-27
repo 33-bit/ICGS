@@ -170,6 +170,15 @@ def test_worker_source_has_no_hf_token_or_api_access():
     assert "huggingface_hub" not in text
 
 
+@pytest.mark.parametrize(
+    ("observations", "expected"),
+    [([], 1.0), ([{"grip": 0}], 0.0), ([{"grip": 1}, {"grip": 0}], 0.0)],
+)
+def test_terminal_settle_preserves_last_measured_grip(monkeypatch, observations, expected):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    assert worker.terminal_settle_grip(observations) == expected
+
+
 def test_worker_display_number_uses_configured_base_and_worker_limit(tmp_path: Path):
     config = _runtime_config(tmp_path)
     try:
@@ -670,7 +679,7 @@ def _run_episode_worker_main_with_stub_task(
                 [[index * 0.1, 0.0, 0.8], [index * 0.1, 0.1, 0.8]], dtype=np.float32
             ),
             gripper_pose=pose,
-            gripper_open=1.0,
+            gripper_open=0.0 if failure == "terminal_closed_grip" else 1.0,
             joint_positions=np.full((7,), index, dtype=np.float64),
             joint_velocities=np.full((7,), index / 10.0, dtype=np.float64),
             wrist_depth=np.asarray([[index + 0.125, index + 0.25]], dtype=np.float32),
@@ -685,6 +694,8 @@ def _run_episode_worker_main_with_stub_task(
 
         def step(self, _action):
             self.step_count += 1
+            if failure == "terminal_closed_grip":
+                assert _action[-1] == 0.0, "terminal settling must not release a held object"
             if failure == "term_signal_after_prefix" and self.step_count == 2:
                 signal.raise_signal(signal.SIGTERM)
             if failure == "step_raises_after_prefix" and self.step_count == 2:
@@ -709,6 +720,14 @@ def _run_episode_worker_main_with_stub_task(
     generation_episode_worker.EndEffectorPoseViaIK = lambda **_kwargs: object()
     generation_episode_worker.Discrete = lambda: object()
     generation_episode_worker.Environment = lambda *_args, **_kwargs: environment
+    if failure == "terminal_closed_grip":
+        def capture_terminal_result(output, row):
+            output.mkdir(parents=True, exist_ok=True)
+            (output / "terminal.json").write_text(json.dumps({
+                "outcome": row["result_class"],
+                "grips": [float(action[-1]) for action in row["_actions"]],
+            }))
+        monkeypatch.setattr(generation_episode_worker, "_write_episode", capture_terminal_result)
 
     plan = AttemptPlan(
         program_id=program_id,
@@ -1010,6 +1029,16 @@ def test_legacy_episode_worker_exception_keeps_v2_empty_prefix_output(
         assert prefix["points"].shape == (0, 3)
         np.testing.assert_array_equal(prefix["point_offsets"], np.asarray([0], dtype=np.int64))
         assert prefix["T_w_e"].shape == (0,)
+
+
+def test_episode_worker_settles_closed_grip_without_release(tmp_path: Path, monkeypatch):
+    result_dir = _run_episode_worker_main_with_stub_task(
+        monkeypatch, tmp_path, failure="terminal_closed_grip",
+        archive_profile=ArchiveProfileConfig(),
+    )
+    result = json.loads((result_dir / "terminal.json").read_text())
+    assert result["outcome"] == "valid_failure"
+    assert result["grips"] == [0.0] * 15
 
 
 @pytest.mark.parametrize("outcome", ["success", "valid_failure"])
