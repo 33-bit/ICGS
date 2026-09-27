@@ -1128,6 +1128,114 @@ def test_stage_tree_measurement_includes_hidden_writer_scratch(tmp_path):
     assert measured == {"bytes": 25, "writer_scratch_bytes": 23, "errors": []}
 
 
+def test_stage_tree_measurement_skips_file_removed_during_writer_cleanup(tmp_path, monkeypatch):
+    from icgs.data.collection.generation import capacity_probe as capacity_module
+
+    stage_root = tmp_path / "stage"
+    spool = stage_root / ".T01.archive-spool-live"
+    spool.mkdir(parents=True)
+    retained = spool / "retained.npy"
+    removed = spool / "removed.npy"
+    retained.write_bytes(b"kept")
+    removed.write_bytes(b"gone")
+    original_scandir = capacity_module.os.scandir
+
+    def scan_then_remove(path):
+        entries = list(original_scandir(path))
+        if Path(path) == spool and removed.exists():
+            removed.unlink()
+        return entries
+
+    monkeypatch.setattr(capacity_module.os, "scandir", scan_then_remove)
+    assert measure_staging_tree_bytes(stage_root) == {
+        "bytes": 4, "writer_scratch_bytes": 4, "errors": [],
+    }
+
+
+def test_stage_tree_measurement_skips_directory_removed_during_writer_cleanup(tmp_path, monkeypatch):
+    from icgs.data.collection.generation import capacity_probe as capacity_module
+
+    stage_root = tmp_path / "stage"
+    spool = stage_root / ".T01.archive-spool-live"
+    vanished = spool / "chunk-00000"
+    vanished.mkdir(parents=True)
+    retained = spool / "retained.npy"
+    retained.write_bytes(b"kept")
+    original_scandir = capacity_module.os.scandir
+
+    def scan_then_remove(path):
+        entries = list(original_scandir(path))
+        if Path(path) == spool and vanished.exists():
+            vanished.rmdir()
+        return entries
+
+    monkeypatch.setattr(capacity_module.os, "scandir", scan_then_remove)
+    assert measure_staging_tree_bytes(stage_root) == {
+        "bytes": 4, "writer_scratch_bytes": 4, "errors": [],
+    }
+
+
+def test_stage_tree_measurement_reports_stage_root_removed_before_scan(tmp_path, monkeypatch):
+    from icgs.data.collection.generation import capacity_probe as capacity_module
+
+    stage_root = tmp_path / "stage"
+    stage_root.mkdir()
+    original_scandir = capacity_module.os.scandir
+
+    def remove_root_then_scan(path):
+        if Path(path) == stage_root:
+            stage_root.rmdir()
+        return original_scandir(path)
+
+    monkeypatch.setattr(capacity_module.os, "scandir", remove_root_then_scan)
+    measured = measure_staging_tree_bytes(stage_root)
+    assert measured["bytes"] == 0
+    assert measured["writer_scratch_bytes"] == 0
+    assert len(measured["errors"]) == 1
+    assert "cannot scan" in measured["errors"][0]
+    assert "FileNotFoundError" in measured["errors"][0]
+
+
+def test_stage_tree_measurement_reports_permission_error(tmp_path, monkeypatch):
+    from icgs.data.collection.generation import capacity_probe as capacity_module
+
+    stage_root = tmp_path / "stage"
+    blocked = stage_root / "blocked"
+    blocked.mkdir(parents=True)
+    original_scandir = capacity_module.os.scandir
+
+    def deny_child_scan(path):
+        if Path(path) == blocked:
+            raise PermissionError("blocked scan")
+        return original_scandir(path)
+
+    monkeypatch.setattr(capacity_module.os, "scandir", deny_child_scan)
+    measured = measure_staging_tree_bytes(stage_root)
+    assert measured["bytes"] == 0
+    assert len(measured["errors"]) == 1
+    assert "cannot scan" in measured["errors"][0]
+    assert "PermissionError" in measured["errors"][0]
+
+
+def test_stage_tree_measurement_rejects_symlinks(tmp_path):
+    stage_root = tmp_path / "stage"
+    stage_root.mkdir()
+    outside = tmp_path / "outside"
+    outside.write_bytes(b"secret")
+    (stage_root / "alias").symlink_to(outside)
+
+    measured = measure_staging_tree_bytes(stage_root)
+    assert measured["bytes"] == 0
+    assert len(measured["errors"]) == 1
+    assert "staging tree contains a symlink" in measured["errors"][0]
+
+    root_alias = tmp_path / "stage-alias"
+    root_alias.symlink_to(stage_root, target_is_directory=True)
+    assert measure_staging_tree_bytes(root_alias)["errors"] == [
+        f"staging root is a symlink: {root_alias}"
+    ]
+
+
 def test_capacity_stage_fails_when_sibling_writer_spool_exceeds_cap(
     tmp_path: Path, monkeypatch,
 ):

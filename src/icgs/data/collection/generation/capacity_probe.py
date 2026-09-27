@@ -221,6 +221,12 @@ def measure_staging_tree_bytes(root: str | Path) -> dict[str, Any]:
         directory = pending.pop()
         try:
             entries = list(os.scandir(directory))
+        except FileNotFoundError as error:
+            if directory == base:
+                errors.append(f"cannot scan {directory}: {type(error).__name__}: {error}")
+            # A writer may remove a previously listed descendant during this
+            # sampled lower-bound measurement.
+            continue
         except OSError as error:
             errors.append(f"cannot scan {directory}: {type(error).__name__}: {error}")
             continue
@@ -243,6 +249,9 @@ def measure_staging_tree_bytes(root: str | Path) -> dict[str, Any]:
                         writer_scratch += size
                 else:
                     errors.append(f"staging tree contains a nonregular path: {entry.path}")
+            except FileNotFoundError:
+                # Normal writer cleanup can race with inspection of a listed entry.
+                continue
             except OSError as error:
                 errors.append(f"cannot inspect {entry.path}: {type(error).__name__}: {error}")
     return {"bytes": total, "writer_scratch_bytes": writer_scratch, "errors": errors}
