@@ -321,6 +321,8 @@ class GenerationRuntimeConfig:
             _positive_int(self.max_result_bytes, "max_result_bytes")
         if self.max_staging_bytes is not None or self.staging_reserve_bytes is not None:
             validate_staging_limits(self.max_result_bytes, self.max_staging_bytes, self.staging_reserve_bytes)
+            if self.staging_reserve_bytes < (self.run.publication_verify_threads + 1) * self.max_result_bytes:
+                raise ValueError("staging_reserve_bytes must cover each verification reader plus recovery")
             if self.archive_profile is None:
                 raise ValueError("staging budget requires an archive profile with a bounded writer")
         if (

@@ -624,6 +624,7 @@ def test_archive_operations_upload_complete_attempt_inventory(
         "view_D_task",
         "episode_view_D_geom",
         "episode_view_missing",
+        "outside_cache",
     ],
 )
 @pytest.mark.parametrize("verify_threads", [1, 4])
@@ -725,6 +726,8 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
             calls.append((kwargs["filename"], kwargs["revision"], cache_dir))
             raise FileNotFoundError(kwargs["filename"])
         source = remote_sources[kwargs["filename"]]
+        if remote_mismatch == "outside_cache":
+            return str(source)
         cache_dir.mkdir(parents=True, exist_ok=True)
         downloaded = cache_dir / "downloaded.bin"
         contents = source.read_bytes()
@@ -741,6 +744,11 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
             coordinator._verify_remote_batch(
                 queue, run, (job.job_id,), "c" * 40, "local-test-token",
             )
+    elif remote_mismatch == "outside_cache":
+        with pytest.raises(ValueError, match="outside owned scratch"):
+            coordinator._verify_remote_batch(
+                queue, run, (job.job_id,), "c" * 40, "local-test-token",
+            )
     elif remote_mismatch != "none":
         with pytest.raises(ValueError, match="remote hash mismatch"):
             coordinator._verify_remote_batch(
@@ -753,7 +761,7 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
 
     if remote_mismatch == "archive" and verify_threads == 1:
         assert len(calls) == 1
-    elif remote_mismatch != "none" and verify_threads == 1:
+    elif remote_mismatch not in {"none", "outside_cache"} and verify_threads == 1:
         assert calls[-1][0] == changed_filename
     elif remote_mismatch == "none":
         assert {filename for filename, _revision, _cache in calls} == set(remote_sources)
@@ -762,6 +770,29 @@ def test_coordinator_verifies_each_archive_file_in_a_fresh_revision_pinned_cache
     assert peak <= verify_threads
     assert len({cache for _filename, _revision, cache in calls}) == len(calls)
     assert all(not cache.exists() for _filename, _revision, cache in calls)
+
+
+def test_remote_verification_rejects_control_file_above_scratch_cap(tmp_path: Path, monkeypatch):
+    from dataclasses import replace
+    from scripts import generation_coordinator as coordinator
+
+    queue = FilesystemJobQueue(tmp_path / "queue")
+    queue.configure_staging(max_result_bytes=32, max_staging_bytes=4096, staging_reserve_bytes=160)
+    run = replace(_run(), run_root=str(tmp_path), publication_verify_threads=4)
+    (queue.root / "publication_manifest.json").write_text("{}")
+    (queue.root / "resume_receipt.json").write_text("x" * 33)
+    for view in ("D_geom", "D_temporal", "D_dyn", "D_task"):
+        path = queue.root / "views" / f"{view}.json"
+        path.parent.mkdir(exist_ok=True)
+        path.write_text("{}")
+    (queue.root / "publication_receipt_to_verify.json").write_text("{}")
+
+    def unexpected_download(**kwargs):
+        pytest.fail("oversized control file must fail before any download")
+
+    monkeypatch.setattr(coordinator, "hf_hub_download", unexpected_download)
+    with pytest.raises(ValueError, match="verification file exceeds.*cap"):
+        coordinator._verify_remote_batch(queue, run, (), "c" * 40, "secret")
 
 
 def test_published_receipt_only_job_reconstructs_manifest_without_episode_payload(

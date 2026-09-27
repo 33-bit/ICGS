@@ -2030,6 +2030,8 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
             remote = Path(remote_path)
             if not remote.is_file():
                 raise ValueError(f"remote artifact download is not a regular file: {filename}")
+            if not remote.resolve().is_relative_to(Path(scratch).resolve()):
+                raise ValueError(f"remote artifact is outside owned scratch: {filename}")
             if digest(remote) != expected_hash:
                 raise ValueError(f"remote hash mismatch for {filename}")
 
@@ -2112,6 +2114,16 @@ def _verify_remote_batch(queue: FilesystemJobQueue, run: RunConfig, job_ids: tup
     ]
     for filename, local_path in control_files:
         verification_jobs.append((filename, local_path, digest(local_path)))
+
+    staging = queue.staging_status()
+    if staging is not None:
+        # Include cumulative manifests/views: they are not worker results and
+        # therefore are not covered by the writer's per-result size limit.
+        if staging["staging_reserve_bytes"] < (run.publication_verify_threads + 1) * staging["max_result_bytes"]:
+            raise ValueError("staging reserve is insufficient for verification readers")
+        for filename, local_path, _expected_hash in verification_jobs:
+            if local_path.stat().st_size > staging["max_result_bytes"]:
+                raise ValueError(f"verification file exceeds scratch result cap: {filename}")
 
     # Preserve the original fail-fast serial behavior at the compatibility
     # setting.  For higher settings only independent file verification is

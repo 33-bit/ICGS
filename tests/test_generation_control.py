@@ -780,6 +780,7 @@ def test_coordinator_resume_requires_and_consumes_remote_manifest(tmp_path: Path
         "resume_from_hf": True,
         "publication_batch_size": 8,
         "publication_upload_threads": 4,
+        "publication_verify_threads": 4,
     })
     config = GenerationRuntimeConfig.from_dict(payload)
     approved = Path("artifacts/composition/approved_composition_manifest.json")
@@ -824,6 +825,7 @@ def test_coordinator_resume_requires_and_consumes_remote_manifest(tmp_path: Path
     assert control.planner.counts("T01").nominal_successes == 1
     assert control.publisher.publication_config.batch_size == 8
     assert control.publisher.publication_config.upload_threads == 4
+    assert control.run.publication_verify_threads == 4
 
 
 def test_persisted_run_keeps_publication_concurrency_controls(tmp_path: Path):
@@ -832,6 +834,7 @@ def test_persisted_run_keeps_publication_concurrency_controls(tmp_path: Path):
     payload["run"].update({
         "publication_batch_size": 8,
         "publication_upload_threads": 4,
+        "publication_verify_threads": 4,
     })
     config = GenerationRuntimeConfig.from_dict(payload)
 
@@ -844,6 +847,7 @@ def test_persisted_run_keeps_publication_concurrency_controls(tmp_path: Path):
     persisted = json.loads(run_json.read_text(encoding="utf-8"))
     assert persisted["run"]["publication_batch_size"] == 8
     assert persisted["run"]["publication_upload_threads"] == 4
+    assert persisted["run"]["publication_verify_threads"] == 4
 
 
 def _complete_archive_remote(

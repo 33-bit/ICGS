@@ -257,14 +257,18 @@ def test_runtime_config_rejects_nonpositive_publication_concurrency(tmp_path: Pa
         _config_api("GenerationRuntimeConfig").from_dict(payload)
 
 
-def test_parallel_verification_round_trips_with_existing_scratch_reserve(tmp_path: Path):
+@pytest.mark.parametrize("verify_threads", [2, 4, 8])
+def test_parallel_verification_requires_per_reader_scratch_reserve(tmp_path: Path, verify_threads: int):
     payload = _portable_payload(tmp_path)
     payload.update(archive_profile=contracts.ArchiveProfileConfig().as_dict(),
                    max_result_bytes=1024, max_staging_bytes=32768,
                    staging_reserve_bytes=2048)
-    payload["run"]["publication_verify_threads"] = 4
+    payload["run"]["publication_verify_threads"] = verify_threads
+    with pytest.raises(ValueError, match="reserve.*verification"):
+        contracts.GenerationRuntimeConfig.from_dict(payload)
+    payload["staging_reserve_bytes"] = (verify_threads + 1) * 1024
     config = contracts.GenerationRuntimeConfig.from_dict(payload)
-    assert config.run.publication_verify_threads == 4
+    assert config.run.publication_verify_threads == verify_threads
     assert contracts.GenerationRuntimeConfig.from_dict(config.as_dict()) == config
 
 

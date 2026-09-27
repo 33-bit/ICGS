@@ -129,6 +129,9 @@ that each file still uses an independent scratch cache, pinned-revision hashes
 match, failures cancel safely, and staging/disk limits remain bounded. The
 coordinator remains the sole HF commit owner; workers never receive HF
 credentials.
+Budgeted runtimes require at least `(publication_verify_threads + 1) *
+max_result_bytes` of scratch/recovery reserve. This retains the two-cap serial
+minimum and reserves an additional result cap for every concurrent reader.
 
 ## Full-generation readiness
 
