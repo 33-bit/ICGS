@@ -144,7 +144,7 @@ preserve abandoned reservations for inspection rather than clearing them to
 force progress. A 230,889,909-byte writer upper bound and
 a 230,898,507-byte sampled staging peak were measured for one G1 job; neither
 is a bound for concurrent workers or every program. See the [launch readiness
-plan](../plans/active/generation-launch-readiness.md), the [active storage
+plan](../plans/completed/generation-launch-readiness.md), the [active storage
 plan](../plans/active/generation-storage-and-view-finalization.md) and its
 [pinned validation record](../experiments/generation-validation/archive-aa869b3-20260927/README.md).
 

@@ -46,12 +46,12 @@ or branch-protection settings are installed or claimed.
       Preserve failed attempts under `outputs/readiness-smoke` on VPS.
 - [x] Run genuine 36-program smoke, two workers/two slots, one attempt/program,
       isolated no-refill batches; keep all failures. Validate canonical archives.
-- [ ] Rehearse bounded HF publication, pinned verification and receipt-only
+- [x] Rehearse bounded HF publication, pinned verification and receipt-only
       pruning on disjoint validation prefix; prove a blocked claim resumes only
       after pruning. Credentials coordinator-only and never committed/logged.
-- [ ] Record commands, revisions/patch hashes, environment, receipts and remaining
+- [x] Record commands, revisions/patch hashes, environment, receipts and remaining
       limitations in a checked-in evidence record. Update current owner docs.
-- [ ] Commit/push main, sync VPS, leave full-run config/launch instructions only
+- [x] Commit/push main, sync VPS, leave full-run config/launch instructions only
       if all required gates pass. Do not label partial smoke/full collection PASS.
 
 ## Recovery
@@ -71,3 +71,10 @@ restart directory; this was disclosed and the irrecoverable loss is recorded
 there. All subsequent evidence is preserved. The 36-program smoke continues
 from closed archives after its first helper process was interrupted while
 extending the watchdog; no completed episodes were regenerated.
+
+Completed: code/evidence commit `74c876fdcb894b6936a479475220cb51ed3322f8`
+pushed to main and synchronized byte-identically to the VPS. All 650 selected
+fixtures passed (zero skips), both 22-test L0 modes passed, all 36 smoke programs
+validated, and all three live HF publication/prune receipts completed. The
+production profile and command are prepared but were not executed. This plan
+does not complete archive-backed trainer integration or the full collection.

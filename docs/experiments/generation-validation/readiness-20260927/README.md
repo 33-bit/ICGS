@@ -25,6 +25,11 @@ not claims that the unmodified base commit passed. Helpers are retained as
 `outputs/readiness_smoke.py` and `outputs/readiness_hf.py`; they are finite
 acceptance drivers, not a replacement runtime or production scheduler.
 
+Final code/evidence commit: `74c876fdcb894b6936a479475220cb51ed3322f8`,
+pushed on main. The VPS staged tree was compared exactly with fetched
+`origin/main` before advancing its local HEAD without rewriting any worktree
+file; it was clean afterward. The following closure commit only updates docs.
+
 Smoke source patch SHA256:
 `24bbbf58aaee6d86cba5ad4d34af49119b4c26a52cb91bfff07e3b53929b24a8`.
 The `scripts/` + `src/` portion was compared byte-for-byte against the final
