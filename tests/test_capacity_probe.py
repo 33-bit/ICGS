@@ -313,6 +313,104 @@ def test_worker_safety_stop_produces_failed_stage_receipt(tmp_path: Path, monkey
     assert scratch.read_bytes() == b"preserved numeric bytes"
 
 
+def test_worker_stop_written_during_exit_poll_is_reported(tmp_path: Path, monkeypatch):
+    queue = FilesystemJobQueue(tmp_path / "stage" / "queue")
+
+    class ExitingProcess:
+        def poll(self):
+            if not queue.safety_stop_path.exists():
+                queue.trip_safety_stop({
+                    "reason": "orphan_archive_scratch_after_worker_error",
+                    "recovery_action": "Preserve the worker scratch.",
+                })
+            return 1
+
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: None)
+    completion = generation_capacity_probe.wait_for_ready_results(
+        queue, [ExitingProcess()], expected_jobs=1,
+        deadline=time.monotonic() + 10,
+        stage_root=tmp_path / "stage",
+    )
+
+    assert completion["ready"] == 0
+    assert completion["safety_stop"]["reason"] == "orphan_archive_scratch_after_worker_error"
+    assert completion["safety_stop"]["path"] == str(queue.safety_stop_path)
+
+
+def test_worker_stop_written_during_deadline_check_is_reported(tmp_path: Path, monkeypatch):
+    queue = FilesystemJobQueue(tmp_path / "stage" / "queue")
+
+    class RunningProcess:
+        def poll(self):
+            return None
+
+    def deadline_clock():
+        if not queue.safety_stop_path.exists():
+            queue.trip_safety_stop({
+                "reason": "orphan_archive_scratch_after_worker_error",
+                "recovery_action": "Preserve the worker scratch.",
+            })
+        return 20.0
+
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: None)
+    monkeypatch.setattr(generation_capacity_probe.time, "monotonic", deadline_clock)
+    completion = generation_capacity_probe.wait_for_ready_results(
+        queue, [RunningProcess()], expected_jobs=1, deadline=10.0,
+        stage_root=tmp_path / "stage",
+    )
+
+    assert completion["safety_stop"]["reason"] == "orphan_archive_scratch_after_worker_error"
+
+
+def test_worker_stop_written_during_low_memory_check_is_reported(tmp_path: Path, monkeypatch):
+    queue = FilesystemJobQueue(tmp_path / "stage" / "queue")
+    memory_calls = 0
+
+    class RunningProcess:
+        def poll(self):
+            return None
+
+    def available_memory():
+        nonlocal memory_calls
+        memory_calls += 1
+        if memory_calls == 1:
+            return 100 * 1024**3
+        queue.trip_safety_stop({
+            "reason": "orphan_archive_scratch_after_worker_error",
+            "recovery_action": "Preserve the worker scratch.",
+        })
+        return 1
+
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", available_memory)
+    completion = generation_capacity_probe.wait_for_ready_results(
+        queue, [RunningProcess()], expected_jobs=1,
+        deadline=time.monotonic() + 10, stage_root=tmp_path / "stage",
+    )
+
+    assert completion["safety_stop"]["reason"] == "orphan_archive_scratch_after_worker_error"
+
+
+def test_sampled_breach_keeps_existing_worker_stop_reason(tmp_path: Path, monkeypatch):
+    stage_root = tmp_path / "stage"
+    queue = FilesystemJobQueue(stage_root / "queue")
+    scratch = stage_root / "staging" / "piece.npy"
+    scratch.parent.mkdir(parents=True)
+    scratch.write_bytes(b"preserved numeric bytes")
+    queue.trip_safety_stop({
+        "reason": "orphan_archive_scratch_after_worker_error",
+        "recovery_action": "Preserve the worker scratch.",
+    })
+    monkeypatch.setattr(generation_capacity_probe, "_free_memory_bytes", lambda: None)
+    completion = generation_capacity_probe.wait_for_ready_results(
+        queue, [], expected_jobs=1, deadline=time.monotonic() + 10,
+        stage_root=stage_root, stage_cap_bytes=1,
+    )
+
+    assert completion["capacity_violations"]
+    assert completion["safety_stop"]["reason"] == "orphan_archive_scratch_after_worker_error"
+    assert scratch.read_bytes() == b"preserved numeric bytes"
+
+
 @pytest.mark.parametrize("scope", ["stage", "total"])
 def test_sampled_stage_breach_stops_queue_before_terminating_live_worker(tmp_path, monkeypatch, scope):
     # Catches monitor SIGTERM preceding the durable queue fence, even with a live lease.

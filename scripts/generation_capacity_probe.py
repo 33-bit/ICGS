@@ -180,6 +180,24 @@ def wait_for_ready_results(
         scratch = int(measured["writer_scratch_bytes"])
         return max(previous_peak, value), max(previous_scratch_peak, scratch), list(measured["errors"])
 
+    def safety_stop_snapshot() -> dict[str, str] | None:
+        stop_path = getattr(queue, "safety_stop_path", None)
+        if stop_path is None:
+            return None
+        stop_path = Path(stop_path)
+        if not stop_path.exists() and not stop_path.is_symlink():
+            return None
+        try:
+            if stop_path.is_symlink() or not stop_path.is_file():
+                raise ValueError("safety stop marker is not a regular file")
+            stop_payload = json.loads(stop_path.read_text(encoding="utf-8"))
+            stop_reason = stop_payload["reason"]
+            if not isinstance(stop_reason, str) or not stop_reason.strip():
+                raise ValueError("safety stop marker has no reason")
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            stop_reason = f"unreadable safety stop marker: {type(error).__name__}: {error}"
+        return {"path": str(stop_path), "reason": stop_reason}
+
     while True:
         stage_peak, stage_writer_scratch_peak, stage_errors = sample_tree(
             stage_root, stage_peak, stage_writer_scratch_peak,
@@ -202,6 +220,7 @@ def wait_for_ready_results(
                 "semantic": "sampled_lower_bound",
             })
         if measurement_errors or capacity_violations:
+            prior_safety_stop = safety_stop_snapshot()
             try:
                 _trip_probe_safety_stop(
                     queue,
@@ -223,7 +242,7 @@ def wait_for_ready_results(
                 raise
             stop_processes(processes)
             counts = queue.counts()
-            return {
+            completion = {
                 "ready": counts.ready,
                 "active_workers_at_completion": sum(
                     process.poll() is None for process in processes if process is not None
@@ -238,40 +257,40 @@ def wait_for_ready_results(
                 "measurement_errors": measurement_errors,
                 "capacity_violations": capacity_violations,
             }
+            if prior_safety_stop is not None:
+                completion["safety_stop"] = prior_safety_stop
+            return completion
         counts = queue.counts()
-        stop_path = getattr(queue, "safety_stop_path", None)
-        if stop_path is not None:
-            stop_path = Path(stop_path)
-            if stop_path.exists() or stop_path.is_symlink():
-                try:
-                    if stop_path.is_symlink() or not stop_path.is_file():
-                        raise ValueError("safety stop marker is not a regular file")
-                    stop_payload = json.loads(stop_path.read_text(encoding="utf-8"))
-                    stop_reason = stop_payload["reason"]
-                    if not isinstance(stop_reason, str) or not stop_reason.strip():
-                        raise ValueError("safety stop marker has no reason")
-                except (OSError, ValueError, KeyError, TypeError) as error:
-                    stop_reason = f"unreadable safety stop marker: {type(error).__name__}: {error}"
-                return {
-                    "ready": counts.ready,
-                    "active_workers_at_completion": sum(
-                        process.poll() is None for process in processes if process is not None
-                    ),
-                    "minimum_available_memory_bytes": minimum_free,
-                    "stage_peak_bytes_sampled_lower_bound": stage_peak if stage_root is not None else None,
-                    "stage_writer_scratch_peak_bytes_sampled_lower_bound": (
-                        stage_writer_scratch_peak if stage_root is not None else None
-                    ),
-                    "total_peak_bytes_sampled_lower_bound": total_peak if total_root is not None else None,
-                    "sample_interval_s": poll_interval_s,
-                    "measurement_errors": [],
-                    "capacity_violations": [],
-                    "safety_stop": {"path": str(stop_path), "reason": stop_reason},
-                }
+        deadline_reached = False
+        available = None
+        if counts.ready < expected_jobs:
+            deadline_reached = time.monotonic() >= deadline
+            available = _free_memory_bytes()
+            if available is not None:
+                minimum_free = available if minimum_free is None else min(minimum_free, available)
+        active_workers = sum(
+            process.poll() is None for process in processes if process is not None
+        )
+        safety_stop = safety_stop_snapshot()
+        if safety_stop is not None:
+            return {
+                "ready": counts.ready,
+                "active_workers_at_completion": active_workers,
+                "minimum_available_memory_bytes": minimum_free,
+                "stage_peak_bytes_sampled_lower_bound": stage_peak if stage_root is not None else None,
+                "stage_writer_scratch_peak_bytes_sampled_lower_bound": (
+                    stage_writer_scratch_peak if stage_root is not None else None
+                ),
+                "total_peak_bytes_sampled_lower_bound": total_peak if total_root is not None else None,
+                "sample_interval_s": poll_interval_s,
+                "measurement_errors": [],
+                "capacity_violations": [],
+                "safety_stop": safety_stop,
+            }
         if counts.ready == expected_jobs:
             return {
                 "ready": counts.ready,
-                "active_workers_at_completion": sum(process.poll() is None for process in processes),
+                "active_workers_at_completion": active_workers,
                 "minimum_available_memory_bytes": minimum_free,
                 "stage_peak_bytes_sampled_lower_bound": stage_peak if stage_root is not None else None,
                 "stage_writer_scratch_peak_bytes_sampled_lower_bound": (
@@ -284,14 +303,11 @@ def wait_for_ready_results(
             }
         if counts.ready > expected_jobs:
             raise RuntimeError("capacity queue exceeded fixed job cap")
-        if time.monotonic() >= deadline:
+        if deadline_reached:
             raise TimeoutError("capacity probe global deadline reached")
-        available = _free_memory_bytes()
-        if available is not None:
-            minimum_free = available if minimum_free is None else min(minimum_free, available)
-            if available < 8 * 1024**3:
-                raise RuntimeError("capacity probe stopped: less than 8 GiB memory available")
-        if all(process.poll() is not None for process in processes if process is not None):
+        if available is not None and available < 8 * 1024**3:
+            raise RuntimeError("capacity probe stopped: less than 8 GiB memory available")
+        if active_workers == 0:
             raise RuntimeError("all workers exited before all results became ready")
         time.sleep(poll_interval_s)
 
