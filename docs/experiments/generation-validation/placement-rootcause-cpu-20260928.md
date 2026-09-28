@@ -1,6 +1,6 @@
 # Placement controller root-cause experiment
 
-Status: placement fixes partially validated; remaining failures under investigation.
+Status: placement fixes partially validated; remaining T12 aperture failure under investigation.
 Full generation remains stopped.
 
 Category B, CPU Colab (VPS unavailable), 2026-09-28. Baseline: local main
@@ -191,3 +191,24 @@ Attachment lifetime and release-contact behavior remain unresolved as listed abo
 Rotation motions currently command no rotation. Existing success-snapping and
 high-level action timing need explicit accounting before training-ready claims.
 These must not be hidden by archive structural validation.
+
+### Release-contact follow-up
+
+The patched worker's 36-program rerun reduced the residual physical failures to
+R2, T08 and T12. Traces showed R2 blocker B and T08 object A launching when a
+dynamic placed body was re-enabled immediately after gripper release; T20 and
+R3 exhibited the same release-contact mechanism. A bounded
+`release_collision_guard` now covers release and retreat, and successfully
+placed non-articulated bodies remain settled/non-respondable until an explicit
+later grasp re-enables physics. The focused five-program replay passed R2,
+T08, R3 and T20 with complete archive validation; the seven-program control
+replay (G2, P3, R3, T11, T17, T19, T20) was 7/7 success with complete archive
+validation.
+
+T12 remains a valid failure. Its gate opens, but the push-through primitive
+leaves object A on the near side before the close action, about 0.73 m from the
+target. Lowering the push height and moving the catalog aperture waypoint to
+the open marker were tested independently and reverted because neither changed
+the outcome. No tolerance, snap, seed or archive result was changed. Full
+generation remains stopped pending a trace-backed T12 aperture fix and a fresh
+36-program rerun.

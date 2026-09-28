@@ -13,6 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from icgs.data.collection.generation.batch import AttemptPlanner, bounds_from_row
 from icgs.data.collection.generation.distributed_contracts import GenerationRuntimeConfig, GenerationJob, RunConfig
@@ -31,12 +32,34 @@ def main():
     repo = Path(base.machine.repo_root)
     root = args.output_root.resolve()
     root.mkdir(parents=True, exist_ok=False)
+    parallelism = max(1, int(os.environ.get('ICGS_PLACEMENT_PARALLELISM', '1')))
+    selections = {'T06': (0, 1, 12, 24), 'V02': (0, 1, 12, 24), 'T08': (0, 1), 'T01': (0, 1)}
+    if os.environ.get('ICGS_PLACEMENT_SELECTIONS'):
+        selections = json.loads(os.environ['ICGS_PLACEMENT_SELECTIONS'])
+    job_count = sum(len(indices) for indices in selections.values())
+    if job_count < 1:
+        raise ValueError('placement probe requires at least one selected job')
+    # A --once process owns exactly one immutable claim.  Unique identities per
+    # job avoid the heartbeat/claim handoff window when a slot immediately
+    # starts another job while other workers are still writing archive scratch.
+    worker_ids = tuple(f'{index:03}' for index in range(job_count))
+    max_result_bytes = 1024**3
+    staging_reserve_bytes = 2 * 1024**3
+    # The probe retains every closed archive locally until validation finishes;
+    # size admission for the selected workload instead of stopping after the
+    # first fixed number of reservations.
+    max_staging_bytes = max(
+        16 * 1024**3,
+        (2 * job_count + 2) * max_result_bytes + staging_reserve_bytes,
+    )
     config = replace(base,
-        machine=replace(base.machine, worker_ids=('000',), simulator_slots=1, worker_timeout_s=600),
-        run=replace(base.run, run_id=root.name, run_root=str(root), worker_count=1,
+        machine=replace(base.machine, worker_ids=worker_ids, simulator_slots=parallelism, worker_timeout_s=600),
+        run=replace(base.run, run_id=root.name, run_root=str(root), worker_count=job_count,
                     publication_enabled=False, resume_from_hf=False, validation_mode=True,
                     publication_verify_threads=1),
-        max_result_bytes=1024**3, max_staging_bytes=16*1024**3, staging_reserve_bytes=2*1024**3)
+        max_result_bytes=max_result_bytes,
+        max_staging_bytes=max_staging_bytes,
+        staging_reserve_bytes=staging_reserve_bytes)
     if config.archive_profile is None:
         raise ValueError('probe requires the canonical archive profile')
     approved = repo/'artifacts/composition/approved_composition_manifest.json'
@@ -47,9 +70,6 @@ def main():
     queue = FilesystemJobQueue(root/'queue')
     queue.configure_runtime_staging(config)
     jobs = []
-    selections = {'T06': (0, 1, 12, 24), 'V02': (0, 1, 12, 24), 'T08': (0, 1), 'T01': (0, 1)}
-    if os.environ.get('ICGS_PLACEMENT_SELECTIONS'):
-        selections = json.loads(os.environ['ICGS_PLACEMENT_SELECTIONS'])
     for program, indices in selections.items():
         planner = AttemptPlanner(program, bounds=bounds_from_row(catalog[program]),
                                  asset_family_id=catalog[program].get('asset_family_id'))
@@ -69,27 +89,45 @@ def main():
     # and passes one stable instance identity on every --once invocation.
     # This keeps lease ownership explicit without weakening the queue's
     # orphan/duplicate-worker protections.
-    worker_instance_id = f'placement-probe-{root.name}'
-    for index in range(len(jobs)):
-        worker_config = config
-        environment = build_process_environment(worker_config)
-        # Keep diagnostics opt-in; normal generation does not capture a trace.
+    # A slot may process many jobs over the lifetime of this probe.  Let
+    # xvfb-run allocate a fresh free display for each invocation so stale
+    # X11 locks from an interrupted simulator cannot poison later jobs.
+    commands = build_worker_commands(
+        config,
+        approved,
+        runtime_config_path=root/'control/runtime_config.json',
+        auto_servernum=True,
+    )
+    def run_one(index: int) -> None:
+        worker_index = index
+        environment = build_process_environment(config)
         environment['ICGS_GENERATION_TRACE'] = os.environ.get('ICGS_PLACEMENT_TRACE', '0')
-        command = build_worker_commands(worker_config, approved, runtime_config_path=root/'control/runtime_config.json')[0]
+        worker_instance_id = f'placement-probe-{root.name}-{worker_ids[worker_index]}'
         with (root/f'worker-{index:02}.log').open('w') as log:
-            result = subprocess.run(command+['--once', '--worker-instance-id', worker_instance_id], cwd=repo, env=environment,
-                                    stdout=log, stderr=subprocess.STDOUT, timeout=750)
+            result = subprocess.run(commands[worker_index] + ['--once', '--worker-instance-id', worker_instance_id],
+                                    cwd=repo, env=environment, stdout=log, stderr=subprocess.STDOUT, timeout=750)
         if result.returncode:
             raise RuntimeError(f'worker {index} exited {result.returncode}; see its log')
         print('WORKER_COMPLETED', index, flush=True)
-    results = []
-    for result in queue.iter_ready():
+    with ThreadPoolExecutor(max_workers=parallelism) as executor:
+        list(executor.map(run_one, range(len(jobs))))
+    ready_results = queue.iter_ready()
+    if len(ready_results) != len(jobs):
+        raise RuntimeError(f'expected {len(jobs)} ready results, found {len(ready_results)}')
+
+    def validate_one(result):
         job = next(j for j in jobs if j.job_id == result.job_id)
         validate_closed_result(job, result, archive_profile=config.archive_profile)
-        results.append({'program_id': job.program_id, 'episode_index': job.plan.episode_index,
-                        'scene_seed': job.plan.scene_seed, 'outcome': result.outcome,
-                        'scale': job.plan.randomization['scale'], 'archive_validation': 'PASS'})
-        print('VALIDATED', json.dumps(results[-1]), flush=True)
+        return {'program_id': job.program_id, 'episode_index': job.plan.episode_index,
+                'scene_seed': job.plan.scene_seed, 'outcome': result.outcome,
+                'scale': job.plan.randomization['scale'], 'archive_validation': 'PASS'}
+
+    validation_parallelism = max(1, int(os.environ.get(
+        'ICGS_PLACEMENT_VALIDATION_PARALLELISM', str(parallelism))))
+    with ThreadPoolExecutor(max_workers=validation_parallelism) as executor:
+        results = list(executor.map(validate_one, ready_results))
+    for row in results:
+        print('VALIDATED', json.dumps(row), flush=True)
     proof = {
         'status': 'PASS' if len(results) == len(jobs) and all(r['outcome']=='success' for r in results) else 'FAIL',
         'code_revision': revision,
@@ -99,7 +137,8 @@ def main():
                            'tests/regression/generation_placement_probe.py')},
         'git_status': subprocess.check_output(['git','status','--short'], cwd=repo,text=True),
         'elapsed_s': time.monotonic()-started, 'expected_results': len(jobs), 'results': results,
-        'trace_enabled': environment['ICGS_GENERATION_TRACE'],
+        'trace_enabled': os.environ.get('ICGS_PLACEMENT_TRACE', '0'),
+        'parallelism': parallelism, 'validation_parallelism': validation_parallelism,
         'publication': 'NOT RUN', 'training': 'NOT RUN',
     }
     (root/'proof.json').write_text(json.dumps(proof, indent=2)+'\n')

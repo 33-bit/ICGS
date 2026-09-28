@@ -234,6 +234,17 @@ def test_launcher_builds_workers_from_configured_limits_and_paths(tmp_path: Path
     assert all("/content" not in " ".join(command) for command in commands)
 
 
+def test_launcher_can_allocate_ephemeral_xvfb_displays_for_reused_slots(tmp_path: Path):
+    config = _runtime_config(tmp_path)
+    commands = _required_api("build_worker_commands")(
+        config,
+        str(tmp_path / "approved.json"),
+        auto_servernum=True,
+    )
+    assert all("--auto-servernum" in command for command in commands)
+    assert all("--server-num" not in command for command in commands)
+
+
 def test_launcher_worker_commands_can_use_host_local_runtime_snapshot(tmp_path: Path):
     config = _runtime_config(tmp_path)
     host_runtime_path = tmp_path / "worker-a-runtime.json"

@@ -10,6 +10,7 @@ import signal
 import sys
 import time
 import traceback
+from contextlib import contextmanager, nullcontext
 from pathlib import Path
 
 import numpy as np
@@ -65,11 +66,88 @@ def terminal_settle_grip(observations: list[dict]) -> float:
 
 
 PLACEMENT_SETTLE_STEPS = 10
+SCENE_SETTLE_STEPS = 5
 
 
 def grasp_attachment_confirmed(gripper, obj) -> bool:
     """Proximity is not attachment; also reject unintended co-grasps."""
     return list(gripper.get_grasped_objects()) == [obj]
+
+
+@contextmanager
+def release_collision_guard(obj):
+    """Temporarily make a held body kinematic while releasing and retreating.
+
+    Opening the gripper while a dynamic body is still attached can launch it
+    through finger contact.  Suspending dynamics for this short window avoids
+    that impulse; the original dynamic state is restored after retreat.
+    """
+    if obj is None:
+        yield
+        return
+    states = {}
+    for name in ("dynamic",):
+        getter = getattr(obj, f"is_{name}", None)
+        setter = getattr(obj, f"set_{name}", None)
+        if not callable(setter):
+            continue
+        try:
+            states[name] = bool(getter()) if callable(getter) else True
+            setter(False)
+        except Exception:
+            continue
+    try:
+        yield
+    finally:
+        for name, value in states.items():
+            setter = getattr(obj, f"set_{name}", None)
+            if callable(setter):
+                try:
+                    setter(value)
+                except Exception:
+                    pass
+
+
+def _normalize_quaternion(quaternion: np.ndarray) -> np.ndarray:
+    value = np.asarray(quaternion, dtype=np.float64).reshape(4)
+    norm = float(np.linalg.norm(value))
+    if norm <= 0.0:
+        raise ValueError("quaternion must be nonzero")
+    return value / norm
+
+
+def _quaternion_multiply(left: np.ndarray, right: np.ndarray) -> np.ndarray:
+    lx, ly, lz, lw = _normalize_quaternion(left)
+    rx, ry, rz, rw = _normalize_quaternion(right)
+    return _normalize_quaternion(np.asarray([
+        lw * rx + lx * rw + ly * rz - lz * ry,
+        lw * ry - lx * rz + ly * rw + lz * rx,
+        lw * rz + lx * ry - ly * rx + lz * rw,
+        lw * rw - lx * rx - ly * ry - lz * rz,
+    ], dtype=np.float64))
+
+
+def rotate_quaternion(quaternion: np.ndarray, yaw_deg: float) -> np.ndarray:
+    """Rotate an xyzw tool quaternion around the world vertical axis."""
+    half_angle = np.deg2rad(float(yaw_deg)) / 2.0
+    yaw = np.asarray([0.0, 0.0, np.sin(half_angle), np.cos(half_angle)], dtype=np.float64)
+    return _quaternion_multiply(yaw, np.asarray(quaternion, dtype=np.float64))
+
+
+def interpolate_quaternion(start: np.ndarray, end: np.ndarray, fraction: float) -> np.ndarray:
+    """Hemisphere-safe normalized interpolation for incremental IK commands."""
+    left = _normalize_quaternion(start)
+    right = _normalize_quaternion(end)
+    if float(np.dot(left, right)) < 0.0:
+        right = -right
+    amount = min(1.0, max(0.0, float(fraction)))
+    return _normalize_quaternion((1.0 - amount) * left + amount * right)
+
+
+def quaternion_angle_deg(start: np.ndarray, end: np.ndarray) -> float:
+    """Return the shortest orientation change between two xyzw quaternions."""
+    dot = abs(float(np.dot(_normalize_quaternion(start), _normalize_quaternion(end))))
+    return float(np.rad2deg(2.0 * np.arccos(min(1.0, max(-1.0, dot)))))
 
 
 def placement_recovery_step(routine, obj_name: str, target_name: str) -> dict:
@@ -605,7 +683,8 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
         )
     n_obs = 1
     n_actions = 0
-    quat = np.asarray(env._scene.robot.arm.get_tip().get_quaternion(), dtype=np.float64)
+    quat = _normalize_quaternion(np.asarray(env._scene.robot.arm.get_tip().get_quaternion(), dtype=np.float64))
+    command_quat = quat.copy()
     sim_time = 0.0
     dt = 0.05
     timed_obs: list[dict] = []
@@ -740,19 +819,57 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
             event["trace_error"] = f"{type(exc).__name__}: {exc}"
         controller_trace.append(event)
 
-    initial = snapshot_obs(obs, 1.0)
-    timed_obs.append(initial)
-    robot_states.append({"T_w_e": initial["T_w_e"], "grip": initial["grip"], "joint_positions": initial.get("joint_positions"), "joint_velocities": initial.get("joint_velocities")})
-    object_states.append(capture_scene_state())
-
     def _is_ik_error(exc: BaseException) -> bool:
         name = type(exc).__name__
         text = str(exc)
         return "IK" in name or "IK" in text or "Jacobian" in text or "InvalidAction" in name
 
-    def move_ik(target_pos, grip: float) -> None:
+    initial = snapshot_obs(obs, 1.0)
+    timed_obs.append(initial)
+    robot_states.append({"T_w_e": initial["T_w_e"], "grip": initial["grip"], "joint_positions": initial.get("joint_positions"), "joint_velocities": initial.get("joint_velocities")})
+    object_states.append(capture_scene_state())
+
+    if plan is not None:
+        # Procedural assets are spawned slightly above the support surface. Let
+        # them settle before taking the first scripted pose snapshot; otherwise
+        # grasp commands target the stale spawn height and can push an object away.
+        settle_tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
+        for _ in range(SCENE_SETTLE_STEPS):
+            try:
+                advance(np.concatenate([settle_tip, command_quat, [1.0]]), 1.0)
+            except Exception as exc:
+                if _is_ik_error(exc):
+                    break
+                raise
+
+        # Targets are visual/condition markers. Their catalog height is the
+        # nominal spawn height, while scaled dynamic objects settle at a
+        # scale-dependent support height. Align only the marker's vertical
+        # coordinate to the measured settled object; preserve randomized x/y
+        # and never alter articulated-handle targets.
+        for obj_name, target_name, _tolerance in spec.conditions:
+            if "handle" in obj_name or "handle" in target_name:
+                continue
+            obj = find_shape(obj_name)
+            target = find_shape(target_name)
+            if obj is None or target is None:
+                continue
+            try:
+                target_pos = list(target.get_position())
+                # Container/drawer targets are intentionally elevated above
+                # the table; they already encode their support surface and
+                # must not be lowered to the table-settled object height.
+                if float(target_pos[2]) > 0.78:
+                    continue
+                target_pos[2] = float(obj.get_position()[2])
+                target.set_position(target_pos)
+            except Exception:
+                pass
+
+    def move_ik(target_pos, grip: float, orientation=None) -> None:
         nonlocal sim_time, n_actions, n_obs
         target = np.asarray(target_pos, dtype=np.float64)
+        target_quat = command_quat if orientation is None else _normalize_quaternion(orientation)
         trace_event("move_begin", target=target.tolist(), grip=float(grip))
         max_step = 0.012
         for _ in range(120):
@@ -760,7 +877,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
             delta = target - curr
             dist = float(np.linalg.norm(delta))
             if dist < 0.007:
-                action = np.concatenate([target, quat, [grip]])
+                action = np.concatenate([target, target_quat, [grip]])
                 try:
                     advance(action, grip)
                 except Exception as exc:
@@ -771,7 +888,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                 return
             scale = min(1.0, max_step / dist)
             nxt = curr + delta * scale
-            action = np.concatenate([nxt, quat, [grip]])
+            action = np.concatenate([nxt, target_quat, [grip]])
             try:
                 advance(action, grip)
             except Exception as exc:
@@ -787,20 +904,23 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
     def actuate(grip: float, obj=None) -> None:
         nonlocal sim_time, n_actions, n_obs
         tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
-        action = np.concatenate([tip, quat, [grip]])
+        action = np.concatenate([tip, command_quat, [grip]])
         trace_event("grip_before", grip=float(grip), obj=None if obj is None else str(obj))
-        if grip > 0.5:
-            try:
-                env._scene.robot.gripper.release()
-            except Exception:
-                pass
-        for _ in range(grip_hold_steps):
-            try:
-                advance(action, grip)
-            except Exception as exc:
-                if _is_ik_error(exc):
-                    break
-                raise
+        held = find_shape(str(grasped_name or "")) if grip > 0.5 and grasped_name else None
+        guard = release_collision_guard(held) if held is not None else nullcontext()
+        with guard:
+            if grip > 0.5:
+                try:
+                    env._scene.robot.gripper.release()
+                except Exception:
+                    pass
+            for _ in range(grip_hold_steps):
+                try:
+                    advance(action, grip)
+                except Exception as exc:
+                    if _is_ik_error(exc):
+                        break
+                    raise
         trace_event("grip_after", grip=float(grip), obj=None if obj is None else str(obj))
         if grip < 0.5 and obj is not None:
             try:
@@ -811,6 +931,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
 
     offset = np.zeros(3, dtype=np.float64)
     grasped_name = None
+    rotation_checks = []
     grip_hold_steps = 5
     for step in routine:
         delta = step.get("grip_timing_delta_intervals")
@@ -838,6 +959,8 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
 
     push_objs = {s.get("obj") for s in spec.routine if s.get("type") == "push"}
     for step in routine:
+        # Refresh after every completed primitive: dynamic objects and
+        # articulated handles may move while the previous primitive runs.
         poses = live_poses(spec.objects)
         exec_step = dict(step)
         if exec_step.get("obj") and exec_step["type"] in {
@@ -860,7 +983,8 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                     place_like = exec_step.get("type") in {
                         "place", "pick_place", "temporary_place", "fit", "retrieve", "park", "restore",
                     }
-                    if place_like and xyz[2] < 0.86 and motion.get("kind") != "slide":
+                    if (place_like and float(exec_step.get("place_z", 0.0)) > 0.0
+                            and xyz[2] < 0.86 and motion.get("kind") != "slide"):
                         xyz[2] -= float(GENERATION_PROTOCOL.place_ik_z_shortfall_m)
                     off = exec_step.get("place_offset_m") or {}
                     xyz[0] += float(off.get("dx_m", 0.0))
@@ -871,12 +995,27 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                     tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
                     for _ in range(8):
                         try:
-                            advance(np.concatenate([tip, quat, [0.0]]), 0.0)
+                            advance(np.concatenate([tip, command_quat, [0.0]]), 0.0)
                         except Exception as exc:
                             if _is_ik_error(exc):
                                 break
                             raise
                 obj = find_shape(str(motion["grasp_obj"])) if motion.get("grasp_obj") else None
+                if obj is not None and float(motion["grip"]) < 0.5:
+                    # A previously placed object may be parked as a settled,
+                    # non-respondable body. Re-enable its normal physics only
+                    # when the next explicit grasp needs it.
+                    for method, args in (
+                        ("set_dynamic", (True,)),
+                        ("set_respondable", (True,)),
+                        ("set_collidable", (True,)),
+                    ):
+                        fn = getattr(obj, method, None)
+                        if callable(fn):
+                            try:
+                                fn(*args)
+                            except Exception:
+                                pass
                 actuate(float(motion["grip"]), obj)
                 if float(motion["grip"]) < 0.5 and obj is not None:
                     grasped_name = str(motion.get("grasp_obj") or "")
@@ -899,25 +1038,55 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                                 confirmed=grasp_attachment_confirmed(env._scene.robot.gripper, obj))
                 else:
                     held = find_shape(str(grasped_name or "")) if grasped_name else None
-                    try:
-                        env._scene.robot.gripper.release()
-                    except Exception:
-                        pass
-                    if held is not None and _is_mechanism(grasped_name):
-                        target_name = exec_step.get("target")
-                        marker = find_shape(str(target_name)) if target_name else None
-                        if marker is not None:
+                    guard = (nullcontext() if held is None or _is_mechanism(grasped_name)
+                             else release_collision_guard(held))
+                    with guard:
+                        try:
+                            env._scene.robot.gripper.release()
+                        except Exception:
+                            pass
+                        if held is not None and _is_mechanism(grasped_name):
+                            target_name = exec_step.get("target")
+                            marker = find_shape(str(target_name)) if target_name else None
+                            if marker is not None:
+                                try:
+                                    held.set_position(list(marker.get_position()))
+                                except Exception:
+                                    pass
+                            _freeze(held)
+                        elif held is not None:
+                            for method, args in (
+                                ("set_parent", (None,)),
+                                ("set_dynamic", (True,)),
+                            ):
+                                fn = getattr(held, method, None)
+                                if callable(fn):
+                                    try:
+                                        fn(*args)
+                                    except Exception:
+                                        pass
+                        tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
+                        for _ in range(PLACEMENT_SETTLE_STEPS):
                             try:
-                                held.set_position(list(marker.get_position()))
-                            except Exception:
-                                pass
-                        _freeze(held)
-                    elif held is not None:
+                                advance(np.concatenate([tip, command_quat, [1.0]]), 1.0)
+                            except Exception as exc:
+                                if _is_ik_error(exc):
+                                    break
+                                raise
+                        retreat = np.array([tip[0], tip[1], min(0.92, float(tip[2]) + 0.08)])
+                        move_ik(retreat, 1.0)
+                        for _ in range(12):
+                            try:
+                                advance(np.concatenate([retreat, command_quat, [1.0]]), 1.0)
+                            except Exception as exc:
+                                if _is_ik_error(exc):
+                                    break
+                                raise
+                    if held is not None and not _is_mechanism(grasped_name):
                         for method, args in (
-                            ("set_parent", (None,)),
-                            ("set_dynamic", (True,)),
-                            ("set_respondable", (True,)),
-                            ("set_collidable", (True,)),
+                            ("set_dynamic", (False,)),
+                            ("set_respondable", (False,)),
+                            ("set_collidable", (False,)),
                         ):
                             fn = getattr(held, method, None)
                             if callable(fn):
@@ -925,23 +1094,6 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                                     fn(*args)
                                 except Exception:
                                     pass
-                    tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
-                    for _ in range(PLACEMENT_SETTLE_STEPS):
-                        try:
-                            advance(np.concatenate([tip, quat, [1.0]]), 1.0)
-                        except Exception as exc:
-                            if _is_ik_error(exc):
-                                break
-                            raise
-                    retreat = np.array([tip[0], tip[1], min(0.92, float(tip[2]) + 0.08)])
-                    move_ik(retreat, 1.0)
-                    for _ in range(12):
-                        try:
-                            advance(np.concatenate([retreat, quat, [1.0]]), 1.0)
-                        except Exception as exc:
-                            if _is_ik_error(exc):
-                                break
-                            raise
                     offset = np.zeros(3, dtype=np.float64)
                     grasped_name = None
                     trace_event("post_release", obj=None if held is None else str(held))
@@ -950,14 +1102,41 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                 hold = float(motion.get("grip", 1.0))
                 for _ in range(int(motion["intervals"]) * 5):
                     try:
-                        advance(np.concatenate([tip, quat, [hold]]), hold)
+                        advance(np.concatenate([tip, command_quat, [hold]]), hold)
                     except Exception as exc:
                         if _is_ik_error(exc):
                             break
                         raise
             elif kind == "rotate":
+                rotated_name = str(grasped_name or exec_step.get("obj") or "")
+                rotated_obj = find_shape(rotated_name) if rotated_name else None
+                before_orientation = None
+                if rotated_obj is not None:
+                    try:
+                        before_orientation = np.asarray(rotated_obj.get_quaternion(), dtype=np.float64)
+                    except Exception:
+                        before_orientation = None
+                start_quat = command_quat.copy()
+                requested_yaw = float(motion.get("yaw_deg", 0.0))
+                target_quat = rotate_quaternion(start_quat, requested_yaw)
                 tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
-                move_ik(tip, 0.0)
+                increments = max(1, int(np.ceil(abs(requested_yaw) / 5.0)))
+                for index in range(1, increments + 1):
+                    move_ik(tip, 0.0, interpolate_quaternion(start_quat, target_quat, index / increments))
+                command_quat = target_quat
+                measured_deg = None
+                if rotated_obj is not None and before_orientation is not None:
+                    try:
+                        measured_deg = quaternion_angle_deg(before_orientation, rotated_obj.get_quaternion())
+                    except Exception:
+                        measured_deg = None
+                rotation_checks.append({
+                    "object": rotated_name,
+                    "requested_yaw_deg": requested_yaw,
+                    "measured_angle_deg": measured_deg,
+                    "tolerance_deg": 10.0,
+                    "passed": measured_deg is not None and abs(measured_deg - abs(requested_yaw)) <= 10.0,
+                })
 
     def _condition_distance(obj_a: str, obj_b: str) -> float | None:
         sa, sb = find_shape(obj_a), find_shape(obj_b)
@@ -976,13 +1155,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
         sa = find_shape(obj_a)
         if sa is not None and float(sa.get_position()[2]) < 0.55:
             continue
-        if dist <= 0.04:
-            sb = find_shape(obj_b)
-            if sa is not None and sb is not None:
-                try:
-                    sa.set_position(list(sb.get_position()))
-                except Exception:
-                    pass
+        if dist <= 0.01:
             continue
         if dist > 0.28:
             continue
@@ -1004,7 +1177,8 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                         if held is not None:
                             offset = np.asarray(held.get_position(), dtype=np.float64) - tip
                         xyz = xyz - offset
-                        if xyz[2] < 0.86:
+                        if (float(retry.get("place_z", 0.0)) > 0.0
+                                and xyz[2] < 0.86):
                             xyz[2] -= float(GENERATION_PROTOCOL.place_ik_z_shortfall_m)
                     move_ik(xyz, float(motion.get("grip", 1.0)))
                 elif kind == "grip":
@@ -1019,24 +1193,13 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
     terminal_grip = terminal_settle_grip(timed_obs)
     for _ in range(15):
         try:
-            advance(np.concatenate([tip, quat, [terminal_grip]]), terminal_grip)
+            advance(np.concatenate([tip, command_quat, [terminal_grip]]), terminal_grip)
         except Exception as exc:
             if _is_ik_error(exc):
                 break
             raise
-    for item in spec.conditions:
-        obj_a, obj_b = item[0], item[1]
-        dist = _condition_distance(obj_a, obj_b)
-        if dist is None or dist <= 0.01 or dist > 0.04:
-            continue
-        sa, sb = find_shape(obj_a), find_shape(obj_b)
-        if sa is None or sb is None:
-            continue
-        try:
-            sa.set_position(list(sb.get_position()))
-        except Exception:
-            pass
     success, _ = env._scene.task.success()
+    rotation_ok = all(item["passed"] for item in rotation_checks)
     distances = []
     for obj_a, obj_b, _tol in spec.conditions:
         sa, sb = find_shape(obj_a), find_shape(obj_b)
@@ -1065,8 +1228,8 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
         "program_id": spec.program_id,
         "family": spec.family,
         "description": desc,
-        "success": bool(success and observation_valid),
-        "result_class": "success" if success and observation_valid else ("valid_failure" if observation_valid else "invalid_observation"),
+        "success": bool(success and observation_valid and rotation_ok),
+        "result_class": "success" if success and observation_valid and rotation_ok else ("valid_failure" if observation_valid else "invalid_observation"),
         "n_actions": n_actions,
         "n_obs": n_obs,
         "timeline_ok": timeline_ok,
@@ -1074,6 +1237,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
         "events": [event["primitive"] for event in spec.events],
         "routine": [step["type"] for step in spec.routine],
         "predicate_distances_m": distances,
+        "rotation_checks": rotation_checks,
         "object_xyz": {
             name: [float(v) for v in find_shape(name).get_position()]
             for name in spec.objects

@@ -66,6 +66,7 @@ def build_worker_commands(
     approved_manifest: str | Path,
     *,
     runtime_config_path: str | Path | None = None,
+    auto_servernum: bool = False,
 ) -> list[list[str]]:
     if not isinstance(config, GenerationRuntimeConfig):
         raise TypeError("config must be a GenerationRuntimeConfig")
@@ -77,9 +78,14 @@ def build_worker_commands(
     worker_script = Path(machine.repo_root) / "scripts" / "generation_worker.py"
     commands = []
     for worker_id in worker_ids:
+        display_args = (
+            ["--auto-servernum"]
+            if auto_servernum
+            else ["--server-num", str(machine.display_base + int(worker_id))]
+        )
         commands.append([
             "xvfb-run",
-            "--server-num", str(machine.display_base + int(worker_id)),
+            *display_args,
             "-s", (
                 f"-screen 0 {machine.display_width}x{machine.display_height}x24 "
                 "+extension GLX +render -noreset"

@@ -190,6 +190,38 @@ def test_attachment_confirmation_requires_only_the_requested_object(monkeypatch)
     assert not worker.grasp_attachment_confirmed(gripper, target)
 
 
+def test_release_collision_guard_restores_contact_flags(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+
+    class Body:
+        def __init__(self):
+            self.dynamic = True
+            self.calls = []
+
+        def is_dynamic(self):
+            return self.dynamic
+
+        def set_dynamic(self, value):
+            self.calls.append(("dynamic", bool(value)))
+            self.dynamic = bool(value)
+
+    body = Body()
+    with worker.release_collision_guard(body):
+        assert not body.dynamic
+    assert body.dynamic
+    assert body.calls == [
+        ("dynamic", False), ("dynamic", True),
+    ]
+def test_rotate_quaternion_changes_tool_yaw_without_changing_translation(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    initial = np.asarray([0.0, 0.0, 0.0, 1.0])
+    rotated = worker.rotate_quaternion(initial, 90.0)
+    assert rotated.shape == (4,)
+    np.testing.assert_allclose(np.linalg.norm(rotated), 1.0)
+    np.testing.assert_allclose(np.abs(rotated), [0.0, 0.0, np.sqrt(0.5), np.sqrt(0.5)], atol=1e-6)
+    assert worker.quaternion_angle_deg(initial, rotated) == pytest.approx(90.0)
+
+
 def test_placement_recovery_uses_matching_step_not_last_articulation(monkeypatch):
     worker = _load_generation_episode_worker_without_simulator(monkeypatch)
     routine = [
