@@ -179,11 +179,59 @@ def test_terminal_settle_preserves_last_measured_grip(monkeypatch, observations,
     assert worker.terminal_settle_grip(observations) == expected
 
 
-def test_placement_helpers_require_attachment_and_settle_before_retreat(monkeypatch):
+def test_attachment_confirmation_requires_only_the_requested_object(monkeypatch):
     worker = _load_generation_episode_worker_without_simulator(monkeypatch)
-    assert worker.grasp_attachment_confirmed([0.0, 0.0, 0.0], [0.0, 0.0, 0.02])
-    assert not worker.grasp_attachment_confirmed([0.0, 0.0, 0.0], [0.0, 0.0, 0.08])
-    assert worker.PLACEMENT_SETTLE_STEPS >= 5
+    target, neighbour = object(), object()
+    gripper = SimpleNamespace(get_grasped_objects=lambda: [])
+    assert not worker.grasp_attachment_confirmed(gripper, target)
+    gripper.get_grasped_objects = lambda: [target]
+    assert worker.grasp_attachment_confirmed(gripper, target)
+    gripper.get_grasped_objects = lambda: [target, neighbour]
+    assert not worker.grasp_attachment_confirmed(gripper, target)
+
+
+def test_placement_recovery_uses_matching_step_not_last_articulation(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    routine = [
+        {"type": "pick_place", "obj": "object_a", "target": "target_a", "place_z": 0.03},
+        {"type": "close_articulation", "obj": "drawer_handle", "target": "close_target"},
+    ]
+    retry = worker.placement_recovery_step(routine, "object_a", "target_a")
+    assert retry == {"type": "pick_place", "obj": "object_a", "target": "target_a", "place_z": 0.03, "grasp_z": 0.02}
+    assert routine[0]["type"] == "pick_place"
+
+
+def test_prepared_layout_applies_absolute_sizes_with_pinned_pyrep_api(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+
+    class PhysicalShape(worker.Shape):
+        def __init__(self):
+            self.size = np.array([0.035, 0.075, 0.035])
+
+        def get_bounding_box(self):
+            return np.column_stack((-self.size / 2, self.size / 2)).reshape(-1)
+
+        def scale_object(self, x, y, z):
+            self.size *= [x, y, z]
+
+        def set_position(self, value):
+            self.position = value
+
+        def set_orientation(self, value):
+            self.orientation = value
+
+    # PyRep 8f420be exposes scale_object, not set_size. Reapplying an absolute
+    # prepared layout must not accumulate scale or leave a full-sized block.
+    shape = PhysicalShape()
+    monkeypatch.setattr(worker, "find_shape", lambda name: shape)
+    constants = ModuleType("pyrep.const")
+    constants.PrimitiveShape = SimpleNamespace(CUBOID=0)
+    monkeypatch.setitem(sys.modules, "pyrep.const", constants)
+    layout = {"object_a": {"pos": [0.2, 0.1, 0.8], "size": [0.028, 0.060, 0.028], "yaw_deg": -28}}
+    worker.apply_prepared_layout(layout)
+    np.testing.assert_allclose(shape.size, [0.028, 0.060, 0.028])
+    worker.apply_prepared_layout(layout)
+    np.testing.assert_allclose(shape.size, [0.028, 0.060, 0.028])
 
 
 def test_worker_display_number_uses_configured_base_and_worker_limit(tmp_path: Path):
@@ -725,7 +773,11 @@ def _run_episode_worker_main_with_stub_task(
     generation_episode_worker.ObservationConfig = StubObservationConfig
     generation_episode_worker.MoveArmThenGripper = lambda **_kwargs: object()
     generation_episode_worker.EndEffectorPoseViaIK = lambda **_kwargs: object()
-    generation_episode_worker.Discrete = lambda: object()
+    def expert_gripper_mode(*, attach_grasped_objects=True):
+        assert attach_grasped_objects is False, "expert must attach only its named object"
+        return object()
+
+    generation_episode_worker.Discrete = expert_gripper_mode
     generation_episode_worker.Environment = lambda *_args, **_kwargs: environment
     if failure == "terminal_closed_grip":
         def capture_terminal_result(output, row):
@@ -1371,6 +1423,46 @@ def test_orphan_stop_marker_write_failure_keeps_bytes_and_clears_claim(
     assert orphan.read_bytes() == b"preserve this"
 
 
+@pytest.mark.parametrize("stream", ["stdout", "stderr"])
+def test_generation_process_drains_large_output_before_child_exit(tmp_path, stream):
+    # Waiting for exit before reading a pipe deadlocks a healthy verbose child.
+    marker = tmp_path / "finished"
+    script = (
+        "import pathlib, sys; "
+        f"sys.{stream}.write('x' * 1048576); sys.{stream}.flush(); "
+        f"pathlib.Path({str(marker)!r}).write_text('finished')"
+    )
+    result = generation_worker._run_generation_process(
+        [sys.executable, "-c", script], env=os.environ.copy(), timeout_s=3,
+        heartbeat=lambda: None, heartbeat_interval_s=0.1,
+    )
+    assert result.returncode == 0
+    assert getattr(result, stream) == "x" * 1048576
+    assert marker.read_text() == "finished"
+
+
+def test_generation_process_drains_shutdown_report_during_term_grace(tmp_path):
+    marker = tmp_path / "prefix-saved"
+    script = (
+        "import pathlib, signal, sys, time\n"
+        "def finish(signum, frame):\n"
+        "    sys.stdout.write('p' * 1048576)\n"
+        "    sys.stdout.flush()\n"
+        f"    pathlib.Path({str(marker)!r}).write_text('saved')\n"
+        "    sys.exit(0)\n"
+        "signal.signal(signal.SIGTERM, finish)\n"
+        "print('ready', flush=True)\n"
+        "time.sleep(60)\n"
+    )
+    with pytest.raises(subprocess.TimeoutExpired) as error:
+        generation_worker._run_generation_process(
+            [sys.executable, "-c", script], env=os.environ.copy(), timeout_s=1,
+            heartbeat=lambda: None, heartbeat_interval_s=0.1, timeout_grace_s=2,
+        )
+    assert error.value.output == "ready\n" + "p" * 1048576
+    assert marker.read_text() == "saved"
+
+
 def test_generation_process_timeout_uses_term_grace_before_kill(monkeypatch):
     events = []
 
@@ -1394,7 +1486,11 @@ def test_generation_process_timeout_uses_term_grace_before_kill(monkeypatch):
             events.append(("kill", None))
             self.returncode = -9
 
-        def communicate(self):
+        def communicate(self, timeout=None):
+            if timeout is not None:
+                if self.returncode is None:
+                    raise subprocess.TimeoutExpired("episode.py", timeout)
+                events.append(("drain", timeout))
             return "prefix saved", "terminated gracefully"
 
     process = Process()
@@ -1435,7 +1531,11 @@ def test_generation_process_timeout_kills_only_after_grace_expires(monkeypatch):
             events.append(("kill", None))
             self.returncode = -signal.SIGKILL
 
-        def communicate(self):
+        def communicate(self, timeout=None):
+            if timeout is not None:
+                if timeout == 10:
+                    events.append(("drain", timeout))
+                raise subprocess.TimeoutExpired("episode.py", timeout)
             return "partial output", "killed after grace"
 
     process = Process()
@@ -1451,7 +1551,7 @@ def test_generation_process_timeout_kills_only_after_grace_expires(monkeypatch):
 
     assert events == [
         ("signal", signal.SIGTERM),
-        ("wait", 10),
+        ("drain", 10),
         ("kill", None),
         ("wait", None),
     ]
@@ -1479,7 +1579,11 @@ def test_generation_process_stops_when_run_safety_marker_appears(monkeypatch):
             events.append(("kill", None))
             self.returncode = -signal.SIGKILL
 
-        def communicate(self):
+        def communicate(self, timeout=None):
+            if timeout is not None:
+                if self.returncode is None:
+                    raise subprocess.TimeoutExpired("episode.py", timeout)
+                events.append(("drain", timeout))
             return "captured prefix", "stopped"
 
     process = Process()
@@ -1501,7 +1605,7 @@ def test_generation_process_stops_when_run_safety_marker_appears(monkeypatch):
         )
 
     assert checks == 2
-    assert events == [("signal", signal.SIGTERM), ("wait", 10)]
+    assert events == [("signal", signal.SIGTERM), ("drain", 10)]
 
 
 @pytest.mark.parametrize("outcome", ["simulator_crash", "invalid_observation"])
@@ -1667,7 +1771,9 @@ def test_generation_subprocess_refreshes_heartbeat_until_exit(monkeypatch):
             self.poll_count += 1
             return None if self.poll_count == 1 else 0
 
-        def communicate(self):
+        def communicate(self, timeout=None):
+            if timeout is not None:
+                raise subprocess.TimeoutExpired("episode.py", timeout)
             return "stdout", "stderr"
 
         def kill(self):

@@ -141,6 +141,31 @@ the two-seed T01 replay are recorded in
 [terminal-grip evidence](../experiments/generation-validation/terminal-grip-20260928.md).
 Historical archive bytes are unchanged; new runs retain code-revision provenance.
 
+The placement adapter now applies prepared absolute object dimensions with the
+pinned PyRep `get_bounding_box` / `scale_object` API, and the scripted expert
+disables RLBench's all-nearby-object auto-grasp in favor of its explicit named
+grasp. Attachment checks use the actual attachment list, not tip proximity.
+Corrective placement selects its matching routine step, not the last unrelated
+step. These repairs affect newly collected trajectories; old archives that merely
+reported a sampled scale are not evidence that the physical shape was scaled.
+Use a fresh code-revision-bound validation run rather than silently mixing them.
+The [CPU placement investigation](../experiments/generation-validation/placement-rootcause-cpu-20260928.md)
+records isolated hypotheses and the bounded post-fix gates. Optional
+`ICGS_GENERATION_TRACE=1` records attachment, gripper aperture, shape bounds and
+IK endpoint diagnostics in debug metadata. This is not an online policy input.
+The persistent worker drains child stdout/stderr while renewing its lease and
+checking safety stops, including during graceful timeout shutdown. Large trace
+reports must not block a child before archive closure. The 12-job CPU gate
+validated all archives but had 9 successes and 3 placement failures; it is not
+a full-generation acceptance receipt.
+
+This investigation also identified pre-existing collection-semantic gaps:
+the scripted rotation branch does not execute a rotation, success correction
+contains object/handle position snaps, and high-level RLBench actions perform
+more physics substeps than the worker's fixed 0.05 s metadata implies. Archive
+integrity checks do not certify those semantics. Full generation remains stopped
+pending separate acceptance of the collector's physical/task semantics.
+
 The checked-in `src/icgs/configuration/profiles/generation_runtime.json` is a
 **validation/setup example**, not a production launch profile. A compatible
 Linux host can be rebuilt from a clean clone using [Environment

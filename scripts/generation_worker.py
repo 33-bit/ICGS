@@ -388,7 +388,9 @@ def _run_generation_process(
         if timeout_grace_s > 0:
             process.send_signal(signal.SIGTERM)
             try:
-                process.wait(timeout=timeout_grace_s)
+                # Graceful shutdown may itself emit a captured-prefix report.
+                # Keep draining both pipes so it can finish before the deadline.
+                process.communicate(timeout=timeout_grace_s)
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.wait()
@@ -419,7 +421,18 @@ def _run_generation_process(
                     output=stdout,
                     stderr=stderr,
                 )
-            time.sleep(min(heartbeat_interval_s, max(0.01, timeout_s - (now - started))))
+            deadlines = [next_heartbeat, started + timeout_s]
+            if stop_check is not None:
+                deadlines.append(next_stop_check)
+            try:
+                # Waiting on poll() without draining PIPE can block a healthy
+                # verbose child before it closes its archive. communicate() is
+                # retryable after timeout and retains both streams in full.
+                stdout, stderr = process.communicate(timeout=max(0.01, min(deadlines) - now))
+            except subprocess.TimeoutExpired:
+                continue
+            heartbeat()
+            return subprocess.CompletedProcess(command, process.returncode, stdout, stderr)
     except BaseException:
         if process.poll() is None:
             terminate_bounded()

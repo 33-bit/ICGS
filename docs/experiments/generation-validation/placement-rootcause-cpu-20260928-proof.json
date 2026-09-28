@@ -1,0 +1,111 @@
+{
+  "status": "FAIL",
+  "code_revision": "0f92037e049a75b4baf43ee646660aca95a0158e",
+  "source_sha256": {
+    "scripts/generation_episode_worker.py": "0a22e86a88900637a78e9e30dcf89b651eddd7318c0f96940243cef398a3321c",
+    "src/icgs/data/collection/generation/expert.py": "3135393049cfc8d4924bd9884a9b66f7e3d27dd386f58b11fd6b0f09473f6f93"
+  },
+  "git_status": " M scripts/generation_episode_worker.py\n M tests/test_generation_worker.py\n?? tests/regression/generation_placement_probe.py\n",
+  "elapsed_s": 946.0295248579996,
+  "expected_results": 12,
+  "results": [
+    {
+      "program_id": "T01",
+      "episode_index": 0,
+      "scene_seed": 416071343,
+      "outcome": "success",
+      "scale": 0.8689023062031428,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "T01",
+      "episode_index": 1,
+      "scene_seed": 689424400,
+      "outcome": "success",
+      "scale": 0.8735462808029163,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "T06",
+      "episode_index": 0,
+      "scene_seed": 13996986,
+      "outcome": "success",
+      "scale": 0.8211005841925497,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "T06",
+      "episode_index": 1,
+      "scene_seed": 132996328,
+      "outcome": "valid_failure",
+      "scale": 0.8625842266963654,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "T06",
+      "episode_index": 12,
+      "scene_seed": 1500643454,
+      "outcome": "success",
+      "scale": 1.0020580232017111,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "T06",
+      "episode_index": 24,
+      "scene_seed": 1167371849,
+      "outcome": "success",
+      "scale": 1.0823240194623849,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "T08",
+      "episode_index": 0,
+      "scene_seed": 1600168047,
+      "outcome": "success",
+      "scale": 0.8358025086313545,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "T08",
+      "episode_index": 1,
+      "scene_seed": 1751112438,
+      "outcome": "success",
+      "scale": 0.8855516358658515,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "V02",
+      "episode_index": 0,
+      "scene_seed": 376137200,
+      "outcome": "success",
+      "scale": 0.808313956253112,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "V02",
+      "episode_index": 1,
+      "scene_seed": 1882450994,
+      "outcome": "success",
+      "scale": 0.8834426453801869,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "V02",
+      "episode_index": 12,
+      "scene_seed": 1068535031,
+      "outcome": "valid_failure",
+      "scale": 1.0638697369786403,
+      "archive_validation": "PASS"
+    },
+    {
+      "program_id": "V02",
+      "episode_index": 24,
+      "scene_seed": 697076834,
+      "outcome": "valid_failure",
+      "scale": 1.087924942817019,
+      "archive_validation": "PASS"
+    }
+  ],
+  "publication": "NOT RUN",
+  "training": "NOT RUN"
+}

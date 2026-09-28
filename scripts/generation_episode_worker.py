@@ -67,9 +67,18 @@ def terminal_settle_grip(observations: list[dict]) -> float:
 PLACEMENT_SETTLE_STEPS = 10
 
 
-def grasp_attachment_confirmed(object_position, tip_position, *, max_distance_m: float = 0.05) -> bool:
-    """Return whether a just-grasped object is still within attachment range."""
-    return float(np.linalg.norm(np.asarray(object_position, dtype=float) - np.asarray(tip_position, dtype=float))) <= max_distance_m
+def grasp_attachment_confirmed(gripper, obj) -> bool:
+    """Proximity is not attachment; also reject unintended co-grasps."""
+    return list(gripper.get_grasped_objects()) == [obj]
+
+
+def placement_recovery_step(routine, obj_name: str, target_name: str) -> dict:
+    """Recover using the matching placement, not a later unrelated step."""
+    step = next((step for step in reversed(routine)
+                 if step.get("obj") == obj_name and step.get("target") == target_name), {})
+    return {**step, "type": "pick_place", "obj": obj_name, "target": target_name,
+            "grasp_z": float(step.get("grasp_z", 0.02)),
+            "place_z": float(step.get("place_z", 0.0))}
 
 
 def find_shape(name: str):
@@ -514,11 +523,17 @@ def apply_prepared_layout(objects: dict) -> None:
                     found.set_orientation([0.0, 0.0, math.radians(float(yaw))])
                 except Exception:
                     pass
-            if size is not None and hasattr(found, "set_size"):
-                try:
-                    found.set_size(list(size))
-                except Exception:
-                    pass
+            if size is not None and isinstance(found, Shape):
+                # Pinned PyRep exposes relative scale_object, not set_size.
+                # Convert the prepared absolute dimensions using local bounds;
+                # repeated application must not compound the scale.
+                bounds = np.asarray(found.get_bounding_box(), dtype=float).reshape(3, 2)
+                current_size = bounds[:, 1] - bounds[:, 0]
+                desired_size = np.asarray(size, dtype=float)
+                if (desired_size.shape != (3,) or not np.isfinite(desired_size).all()
+                        or np.any(desired_size <= 0) or np.any(current_size <= 0)):
+                    raise ValueError(f"invalid physical shape dimensions for {name}")
+                found.scale_object(*(desired_size / current_size))
             continue
         if isinstance(item, dict) and (item.get("declared") or name == "inserted_blocker"):
             try:
@@ -698,6 +713,33 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
         })
         object_states.append(capture_scene_state())
         return raw
+    trace_enabled = os.environ.get("ICGS_GENERATION_TRACE", "").strip().lower() in {"1", "true", "yes"}
+    controller_trace = []
+
+    def trace_event(kind: str, **fields) -> None:
+        if not trace_enabled:
+            return
+        event = {"kind": kind, **fields}
+        try:
+            event["tip"] = [float(v) for v in env._scene.robot.arm.get_tip().get_position()]
+            event["grasped"] = [v.get_name() for v in env._scene.robot.gripper.get_grasped_objects()]
+            event["gripper_open_amount"] = [float(v) for v in env._scene.robot.gripper.get_open_amount()]
+            event["objects"] = live_poses(spec.objects)
+            event["object_physics"] = {}
+            for name in spec.objects:
+                shape = find_shape(name)
+                if isinstance(shape, Shape):
+                    parent = shape.get_parent()
+                    event["object_physics"][name] = {
+                        "parent": parent.get_name() if parent is not None else None,
+                        "dynamic": shape.is_dynamic(),
+                        "respondable": shape.is_respondable(),
+                        "local_bounds": [float(v) for v in shape.get_bounding_box()],
+                    }
+        except Exception as exc:
+            event["trace_error"] = f"{type(exc).__name__}: {exc}"
+        controller_trace.append(event)
+
     initial = snapshot_obs(obs, 1.0)
     timed_obs.append(initial)
     robot_states.append({"T_w_e": initial["T_w_e"], "grip": initial["grip"], "joint_positions": initial.get("joint_positions"), "joint_velocities": initial.get("joint_velocities")})
@@ -711,6 +753,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
     def move_ik(target_pos, grip: float) -> None:
         nonlocal sim_time, n_actions, n_obs
         target = np.asarray(target_pos, dtype=np.float64)
+        trace_event("move_begin", target=target.tolist(), grip=float(grip))
         max_step = 0.012
         for _ in range(120):
             curr = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
@@ -723,6 +766,8 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                 except Exception as exc:
                     if not _is_ik_error(exc):
                         raise
+                    trace_event("ik_error", error=str(exc))
+                trace_event("move_end", target=target.tolist())
                 return
             scale = min(1.0, max_step / dist)
             nxt = curr + delta * scale
@@ -733,14 +778,17 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                 if not _is_ik_error(exc):
                     raise
                 max_step *= 0.5
+                trace_event("ik_error", error=str(exc), max_step=max_step)
                 if max_step < 0.002:
                     return
                 continue
+        trace_event("move_exhausted", target=target.tolist())
 
     def actuate(grip: float, obj=None) -> None:
         nonlocal sim_time, n_actions, n_obs
         tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
         action = np.concatenate([tip, quat, [grip]])
+        trace_event("grip_before", grip=float(grip), obj=None if obj is None else str(obj))
         if grip > 0.5:
             try:
                 env._scene.robot.gripper.release()
@@ -753,11 +801,13 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                 if _is_ik_error(exc):
                     break
                 raise
+        trace_event("grip_after", grip=float(grip), obj=None if obj is None else str(obj))
         if grip < 0.5 and obj is not None:
             try:
-                env._scene.robot.gripper.grasp(obj)
+                attached = bool(env._scene.robot.gripper.grasp(obj))
+                trace_event("explicit_grasp", obj=str(obj), attached=attached)
             except Exception:
-                pass
+                trace_event("explicit_grasp_error", obj=str(obj))
 
     offset = np.zeros(3, dtype=np.float64)
     grasped_name = None
@@ -797,6 +847,8 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
             grasped_name = grasped_name or exec_step.get("obj")
         for motion in plan_step(exec_step, poses):
             kind = motion["kind"]
+            trace_event("motion", step_type=str(exec_step.get("type")), motion_kind=str(kind),
+                        grip=float(motion.get("grip", 1.0)))
             if kind in {"move", "slide"}:
                 xyz = np.asarray(motion["xyz"], dtype=np.float64)
                 if motion.get("grasp") or motion.get("frame") == "object":
@@ -830,7 +882,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                     grasped_name = str(motion.get("grasp_obj") or "")
                     obj_pos = np.asarray(obj.get_position(), dtype=np.float64)
                     tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
-                    if not grasp_attachment_confirmed(obj_pos, tip):
+                    if not grasp_attachment_confirmed(env._scene.robot.gripper, obj):
                         # A failed grasp must not be followed by a long
                         # transport that produces a misleading placement
                         # failure. Give the simulator a few deterministic
@@ -839,9 +891,12 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                             actuate(0.0, obj)
                             obj_pos = np.asarray(obj.get_position(), dtype=np.float64)
                             tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
-                            if grasp_attachment_confirmed(obj_pos, tip):
+                            if grasp_attachment_confirmed(env._scene.robot.gripper, obj):
                                 break
                     offset = obj_pos - tip
+                    trace_event("post_grasp_check", obj=str(motion.get("grasp_obj")),
+                                distance_m=float(np.linalg.norm(obj_pos - tip)),
+                                confirmed=grasp_attachment_confirmed(env._scene.robot.gripper, obj))
                 else:
                     held = find_shape(str(grasped_name or "")) if grasped_name else None
                     try:
@@ -889,6 +944,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                             raise
                     offset = np.zeros(3, dtype=np.float64)
                     grasped_name = None
+                    trace_event("post_release", obj=None if held is None else str(held))
             elif kind == "pause":
                 tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
                 hold = float(motion.get("grip", 1.0))
@@ -935,17 +991,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
             retry = (
                 {"type": "push", "obj": obj_a, "target": obj_b, "push_z": 0.02}
                 if obj_a in push_objs
-                else {
-                    "type": "pick_place",
-                    "obj": obj_a,
-                    "target": obj_b,
-                    "grasp_z": 0.02,
-                    # Preserve the program's compiled placement height during
-                    # a corrective retry; resetting it to zero can drive the
-                    # object into a drawer/holder and create a false retry.
-                    "place_z": float(exec_step.get("place_z", 0.0)),
-                    "skip_place_ik_z_shortfall": True,
-                }
+                else placement_recovery_step(routine, obj_a, obj_b)
             )
             grasped_name = obj_a
             for motion in plan_step(retry, live_poses(spec.objects)):
@@ -958,7 +1004,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                         if held is not None:
                             offset = np.asarray(held.get_position(), dtype=np.float64) - tip
                         xyz = xyz - offset
-                        if xyz[2] < 0.86 and exec_step.get("skip_place_ik_z_shortfall") is not True:
+                        if xyz[2] < 0.86:
                             xyz[2] -= float(GENERATION_PROTOCOL.place_ik_z_shortfall_m)
                     move_ik(xyz, float(motion.get("grip", 1.0)))
                 elif kind == "grip":
@@ -1042,6 +1088,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
         "_plan": None if plan is None else plan.as_dict(),
         "episode_kind": None if plan is None else plan.episode_kind,
         "intervention": intervention,
+        **({"controller_trace": controller_trace} if trace_enabled else {}),
     }
 
 
@@ -1060,7 +1107,9 @@ def main() -> int:
     obs_config.joint_positions = True
     action_mode = MoveArmThenGripper(
         arm_action_mode=EndEffectorPoseViaIK(collision_checking=False),
-        gripper_action_mode=Discrete(),
+        # The expert explicitly grasps its named object in actuate(). Native
+        # auto-grasp attaches every detected neighbour (e.g. a drawer handle).
+        gripper_action_mode=Discrete(attach_grasped_objects=False),
     )
     results = []
     env = None
