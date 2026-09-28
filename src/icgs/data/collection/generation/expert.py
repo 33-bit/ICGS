@@ -38,6 +38,22 @@ def assert_routine_supported(routine: Sequence[Mapping[str, Any]]) -> None:
             raise ValueError(f"unsupported routine type at step {index}: {stype!r}")
 
 
+def _approach_and_grasp(
+    name: str,
+    pos: Sequence[float],
+    approach_z: float,
+    ax: float = 0.0,
+    ay: float = 0.0,
+    az: float = 0.0,
+) -> list[dict[str, Any]]:
+    """Open approach above an object, descend to its centre and close on it."""
+    return [
+        {"kind": "move", "xyz": [pos[0] + ax, pos[1] + ay, approach_z + az], "grip": 1.0, "grasp": False},
+        {"kind": "move", "xyz": [pos[0], pos[1], pos[2]], "grip": 1.0, "grasp": False},
+        {"kind": "grip", "grip": 0.0, "grasp_obj": name, "grasp": True},
+    ]
+
+
 def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, approach_z: float = 0.90) -> list[dict[str, Any]]:
     """Return an ordered list of {kind, ...} motions. No simulator import."""
     stype = step["type"]
@@ -66,42 +82,50 @@ def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, 
         return motions
 
     if stype == "grasp":
-        pos = xyz(step["obj"])
-        motions.append({"kind": "move", "xyz": [pos[0] + ax, pos[1] + ay, approach_z + az], "grip": 1.0, "grasp": False})
-        motions.append({"kind": "move", "xyz": [pos[0], pos[1], pos[2]], "grip": 1.0, "grasp": False})
-        motions.append({"kind": "grip", "grip": 0.0, "grasp_obj": step["obj"], "grasp": True})
+        motions.extend(_approach_and_grasp(step["obj"], xyz(step["obj"]), approach_z, ax, ay, az))
         return motions
 
     if stype == "push":
         obj = xyz(step["obj"])
         target = xyz(step["target"])
-        via = xyz(step["via"]) if step.get("via") and step["via"] in poses else None
-        push_z = obj[2] + float(step.get("push_z", 0.02))
-        dx, dy = target[0] - obj[0], target[1] - obj[1]
-        norm = (dx * dx + dy * dy) ** 0.5
-        ux, uy = (dx / norm, dy / norm) if norm > 1e-6 else (1.0, 0.0)
-        # The open gripper contacts the blocker ahead of the tool tip.  The
-        # target is expressed at the blocker centre, so stop the tool before
-        # the target by the measured Panda contact-face offset.  Callers may
-        # override this for a task with a different contact geometry.
+        via_name = step.get("via")
+        via = xyz(via_name) if via_name and via_name != step["target"] and via_name in poses else None
+        # Push at the object's centre height: the closed fingertips end only
+        # a few millimetres below the tool tip, so a higher push only grazes
+        # the top edge of small objects.
+        push_z = obj[2] + float(step.get("push_z", 0.0))
+        # Distance from the tool tip to the closed-finger contact face plus
+        # the object's half extent along the push direction.  The worker
+        # supplies the measured value; the protocol constant is the nominal
+        # unit-scale fallback.
         contact_offset_m = float(step.get("contact_offset_m", GENERATION_PROTOCOL.push_contact_offset_m))
         overshoot_m = float(step.get("overshoot_m", 0.0))
-        pre = [obj[0] - ux * 0.06 + ax, obj[1] - uy * 0.06 + ay]
+        clearance_m = float(step.get("pre_push_clearance_m", 0.03))
+        back_off_m = float(step.get("push_back_off_m", 0.01))
+
+        def unit(src, dst) -> tuple[float, float]:
+            dx, dy = dst[0] - src[0], dst[1] - src[1]
+            norm = (dx * dx + dy * dy) ** 0.5
+            return (dx / norm, dy / norm) if norm > 1e-6 else (1.0, 0.0)
+
+        path = [via, target] if via is not None else [target]
+        ux, uy = unit(obj, path[0])
+        # No lateral waypoint noise behind the object: an off-centre start
+        # turns the push into a rotation.  Only the approach height varies.
+        pre = [obj[0] - ux * (contact_offset_m + clearance_m), obj[1] - uy * (contact_offset_m + clearance_m)]
         motions.append({"kind": "move", "xyz": [pre[0], pre[1], approach_z + az], "grip": 0.0, "grasp": False})
         motions.append({"kind": "move", "xyz": [pre[0], pre[1], push_z], "grip": 0.0, "grasp": False})
-        if via is not None:
-            motions.append({"kind": "move", "xyz": [via[0], via[1], push_z], "grip": 0.0, "grasp": False})
-        motions.append({
-            "kind": "move",
-            "xyz": [
-                target[0] - ux * contact_offset_m + ux * overshoot_m,
-                target[1] - uy * contact_offset_m + uy * overshoot_m,
-                push_z,
-            ],
-            "grip": 0.0,
-            "grasp": False,
-        })
-        motions.append({"kind": "move", "xyz": [target[0] + rx, target[1] + ry, approach_z + rz], "grip": 0.0, "grasp": False})
+        previous = obj
+        end = pre
+        for index, point in enumerate(path):
+            ux, uy = unit(previous, point)
+            extra = overshoot_m if index == len(path) - 1 else 0.0
+            end = [point[0] - ux * (contact_offset_m - extra), point[1] - uy * (contact_offset_m - extra)]
+            motions.append({"kind": "move", "xyz": [end[0], end[1], push_z], "grip": 0.0, "grasp": False, "push_contact": True})
+            previous = point
+        back = [end[0] - ux * back_off_m, end[1] - uy * back_off_m]
+        motions.append({"kind": "move", "xyz": [back[0], back[1], push_z], "grip": 0.0, "grasp": False})
+        motions.append({"kind": "move", "xyz": [back[0] + rx, back[1] + ry, approach_z + rz], "grip": 0.0, "grasp": False})
         return motions
 
     if stype in ARTICULATION_TYPES:
@@ -131,9 +155,8 @@ def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, 
 
     if stype == "lift":
         obj = xyz(step["obj"])
-        motions.append({"kind": "move", "xyz": [obj[0], obj[1], approach_z], "grip": 1.0, "grasp": False})
-        motions.append({"kind": "move", "xyz": [obj[0], obj[1], obj[2]], "grip": 1.0, "grasp": False})
-        motions.append({"kind": "grip", "grip": 0.0, "grasp_obj": step["obj"], "grasp": True})
+        if not step.get("held"):
+            motions.extend(_approach_and_grasp(step["obj"], obj, approach_z))
         if step.get("target") and step["target"] in poses:
             tgt = xyz(step["target"])
             motions.append({"kind": "move", "xyz": [tgt[0], tgt[1], tgt[2]], "grip": 0.0, "grasp": True, "frame": "object"})
@@ -167,9 +190,8 @@ def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, 
     if stype == "grasp_rotate":
         obj = xyz(step["obj"])
         lift_z = obj[2] + float(step.get("lift_z", 0.15))
-        motions.append({"kind": "move", "xyz": [obj[0], obj[1], approach_z], "grip": 1.0, "grasp": False})
-        motions.append({"kind": "move", "xyz": [obj[0], obj[1], obj[2]], "grip": 1.0, "grasp": False})
-        motions.append({"kind": "grip", "grip": 0.0, "grasp_obj": step["obj"], "grasp": True})
+        if not step.get("held"):
+            motions.extend(_approach_and_grasp(step["obj"], obj, approach_z))
         motions.append({"kind": "move", "xyz": [obj[0], obj[1], lift_z], "grip": 0.0, "grasp": True})
         motions.append({"kind": "rotate", "yaw_deg": float(step.get("yaw_deg", 90.0)), "grip": 0.0, "grasp": True})
         return motions
@@ -178,15 +200,15 @@ def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, 
         obj = xyz(step["obj"])
         tgt = xyz(step["target"])
         aperture = xyz(step["aperture_wp"]) if step.get("aperture_wp") in poses else None
-        motions.append({"kind": "move", "xyz": [obj[0], obj[1], approach_z], "grip": 1.0, "grasp": False})
-        motions.append({"kind": "move", "xyz": [obj[0], obj[1], obj[2]], "grip": 1.0, "grasp": False})
-        motions.append({"kind": "grip", "grip": 0.0, "grasp_obj": step["obj"], "grasp": True})
+        if not step.get("held"):
+            motions.extend(_approach_and_grasp(step["obj"], obj, approach_z))
         motions.append({"kind": "move", "xyz": [obj[0], obj[1], approach_z], "grip": 0.0, "grasp": True})
         if aperture is not None:
             motions.append({"kind": "move", "xyz": [aperture[0], aperture[1], approach_z], "grip": 0.0, "grasp": True})
         motions.append({"kind": "move", "xyz": [tgt[0], tgt[1], approach_z], "grip": 0.0, "grasp": True})
-        motions.append({"kind": "move", "xyz": [tgt[0], tgt[1], tgt[2] + float(step.get("place_z", 0.0))], "grip": 0.0, "grasp": True, "frame": "object"})
-        motions.append({"kind": "grip", "grip": 1.0, "grasp": False})
+        if step.get("release", True):
+            motions.append({"kind": "move", "xyz": [tgt[0], tgt[1], tgt[2] + float(step.get("place_z", 0.0))], "grip": 0.0, "grasp": True, "frame": "object"})
+            motions.append({"kind": "grip", "grip": 1.0, "grasp": False})
         return motions
 
     raise ValueError(f"unsupported routine type: {stype!r}")

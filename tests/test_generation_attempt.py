@@ -415,6 +415,7 @@ def test_episode_worker_archive_keeps_captured_actions_and_inventory(tmp_path: P
     row = {
         "program_id": "T01", "success": False, "result_class": "valid_failure",
         "_timed_obs": timed, "_actions": actions, "_plan": plan.as_dict(), "_binding": _binding(),
+        "_transition_timing": [{"achieved_duration_s": 0.1, "physics_substeps": 2}],
     }
 
     worker._write_episode(tmp_path / "episode-worker", row)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import math
 from typing import Any, Mapping
 
 from icgs.data.collection.generation.protocol import GENERATION_PROTOCOL
@@ -111,12 +112,16 @@ def apply_perturbation(
         meta["episode_has_external_intervention"] = True
     elif kind == "blocker_insertion":
         blocker = params.get("blocker_role", "inserted_blocker")
+        declared = list(params.get("pos", [0.30, 0.00, 0.775]))
+        applied = free_blocker_position(declared, next_objects, size=_INSERTED_BLOCKER_SIZE_M)
         next_objects[blocker] = {
-            "pos": list(params.get("pos", [0.30, 0.00, 0.775])),
-            "size": [0.04, 0.04, 0.04],
+            "pos": applied,
+            "size": [_INSERTED_BLOCKER_SIZE_M] * 3,
             "color": [0.1, 0.1, 0.1],
             "declared": True,
         }
+        meta["declared_position"] = declared
+        meta["applied_position"] = applied
         meta["external_intervention"] = True
         meta["episode_has_external_intervention"] = True
     elif kind == "pause_hold":
@@ -126,6 +131,73 @@ def apply_perturbation(
             raise ValueError("pause/hold must be 2-10 intervals")
         next_routine.insert(0, {"type": "pause_hold", "intervals": intervals})
     return {"objects": next_objects, "routine": next_routine, "intervention": meta}
+
+
+_INSERTED_BLOCKER_SIZE_M = 0.04
+_SUPPORT_NAMES = frozenset({"pad", "tray", "holder", "drawer"})
+
+
+def _is_marker(name: str) -> bool:
+    return (
+        name.startswith("target")
+        or name.endswith("_wp")
+        or name.endswith("_target")
+        or "_target_" in name
+    )
+
+
+def _footprint(pos, size, yaw_deg: float, margin: float) -> list[tuple[float, float]]:
+    angle = math.radians(float(yaw_deg or 0.0))
+    c, s = math.cos(angle), math.sin(angle)
+    hx, hy = float(size[0]) / 2.0 + margin, float(size[1]) / 2.0 + margin
+    return [
+        (pos[0] + c * x - s * y, pos[1] + s * x + c * y)
+        for x, y in ((hx, hy), (-hx, hy), (-hx, -hy), (hx, -hy))
+    ]
+
+
+def _separated(a: list[tuple[float, float]], b: list[tuple[float, float]]) -> bool:
+    for polygon in (a, b):
+        for index in range(len(polygon)):
+            x1, y1 = polygon[index]
+            x2, y2 = polygon[(index + 1) % len(polygon)]
+            nx, ny = y1 - y2, x2 - x1
+            pa = [nx * x + ny * y for x, y in a]
+            pb = [nx * x + ny * y for x, y in b]
+            if max(pa) <= min(pb) or max(pb) <= min(pa):
+                return True
+    return False
+
+
+def free_blocker_position(
+    declared,
+    objects: Mapping[str, Any],
+    *,
+    size: float,
+    margin: float = 0.005,
+    step_m: float = 0.01,
+    max_shift_m: float = 0.20,
+) -> list[float]:
+    """Nearest declared-row position whose footprint clears every solid body.
+
+    The declared insertion point is kept when it is free.  Otherwise the
+    blocker slides along the declared row (world y) in 1 cm steps, nearest
+    first, so an inserted obstacle never spawns interpenetrating a scene body.
+    """
+    bodies = []
+    for name, spec in objects.items():
+        if _is_marker(name) or not isinstance(spec, Mapping) or "pos" not in spec:
+            continue
+        bodies.append(_footprint(spec["pos"], spec.get("size") or [0.04, 0.04, 0.04], spec.get("yaw_deg") or 0.0, 0.0))
+    shifts = [0.0]
+    for index in range(1, int(round(max_shift_m / step_m)) + 1):
+        shifts.extend((index * step_m, -index * step_m))
+    for shift in shifts:
+        candidate = [float(declared[0]), float(declared[1]) + shift, float(declared[2])]
+        footprint = _footprint(candidate, [size, size, size], 0.0, margin)
+        if all(_separated(footprint, body) for body in bodies):
+            return candidate
+    raise ValueError(f"no collision-free inserted blocker position near {declared}")
 
 
 def math_hypot(dx: float, dy: float) -> float:

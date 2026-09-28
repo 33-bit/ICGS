@@ -190,28 +190,6 @@ def test_attachment_confirmation_requires_only_the_requested_object(monkeypatch)
     assert not worker.grasp_attachment_confirmed(gripper, target)
 
 
-def test_release_collision_guard_restores_contact_flags(monkeypatch):
-    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
-
-    class Body:
-        def __init__(self):
-            self.dynamic = True
-            self.calls = []
-
-        def is_dynamic(self):
-            return self.dynamic
-
-        def set_dynamic(self, value):
-            self.calls.append(("dynamic", bool(value)))
-            self.dynamic = bool(value)
-
-    body = Body()
-    with worker.release_collision_guard(body):
-        assert not body.dynamic
-    assert body.dynamic
-    assert body.calls == [
-        ("dynamic", False), ("dynamic", True),
-    ]
 def test_rotate_quaternion_changes_tool_yaw_without_changing_translation(monkeypatch):
     worker = _load_generation_episode_worker_without_simulator(monkeypatch)
     initial = np.asarray([0.0, 0.0, 0.0, 1.0])
@@ -222,15 +200,70 @@ def test_rotate_quaternion_changes_tool_yaw_without_changing_translation(monkeyp
     assert worker.quaternion_angle_deg(initial, rotated) == pytest.approx(90.0)
 
 
-def test_placement_recovery_uses_matching_step_not_last_articulation(monkeypatch):
+def test_step_retry_targets_the_true_goal_without_perturbation_offsets(monkeypatch):
     worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    place = {
+        "type": "place", "obj": "object_a", "target": "target_a", "place_z": 0.03,
+        "place_offset_m": {"dx_m": 0.01, "dy_m": 0.0}, "approach_waypoint": {"dx_m": 0.004},
+    }
+    assert worker.step_retry(place) == {
+        "type": "pick_place", "obj": "object_a", "target": "target_a", "grasp_z": 0.02, "place_z": 0.03,
+    }
+    push = {"type": "push", "obj": "object_a", "target": "target_a", "via": "gate_wp",
+            "contact_offset_m": 0.04, "release_waypoint": {"dx_m": 0.01}}
+    assert worker.step_retry(push) == {"type": "push", "obj": "object_a", "target": "target_a", "via": "gate_wp"}
+    close = {"type": "close_articulation", "obj": "drawer_handle", "target": "close_target", "axis": "y"}
+    assert worker.step_retry(close) == close
+    grasp = {"type": "grasp", "obj": "object_a", "grasp_z": 0.02, "approach_waypoint": {"dx_m": 0.003}}
+    assert worker.step_retry(grasp) == {"type": "grasp", "obj": "object_a", "grasp_z": 0.02}
+    # Held continuations have no safe scripted retry.
+    assert worker.step_retry({"type": "grasp_rotate", "obj": "object_a", "held": True}) is None
+    assert worker.step_retry({"type": "lift", "obj": "object_a", "held": True}) is None
+    assert worker.step_retry({"type": "transport_through_aperture", "obj": "object_a",
+                              "target": "target_a", "release": False}) is None
+
+
+def test_push_contact_offset_uses_measured_fingers_and_object_face(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    # +y push: closed fingers reach 0.021 m; a 0.045 m cube adds its half face.
+    assert worker.push_contact_offset_m([0.0, 1.0], [0.045, 0.045], 0.0) == pytest.approx(0.021 + 0.0225)
+    # A yawed elongated body presents the half extent of its nearest local axis.
+    assert worker.push_contact_offset_m([0.0, 2.0], [0.035, 0.075], np.deg2rad(80.0)) == pytest.approx(
+        0.021 + 0.0175
+    )
+    # +x push uses the thin front of the fingers.
+    assert worker.push_contact_offset_m([1.0, 0.0], [0.05, 0.05], 0.0) == pytest.approx(0.0095 + 0.025)
+
+
+def test_marker_pairs_include_articulation_targets_once(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    conditions = (("object_a", "target_a", 0.01), ("drawer_handle", "close_target", 0.01))
     routine = [
-        {"type": "pick_place", "obj": "object_a", "target": "target_a", "place_z": 0.03},
+        {"type": "open_articulation", "obj": "drawer_handle", "target": "open_target"},
+        {"type": "pick_place", "obj": "object_a", "target": "target_a"},
         {"type": "close_articulation", "obj": "drawer_handle", "target": "close_target"},
     ]
-    retry = worker.placement_recovery_step(routine, "object_a", "target_a")
-    assert retry == {"type": "pick_place", "obj": "object_a", "target": "target_a", "place_z": 0.03, "grasp_z": 0.02}
-    assert routine[0]["type"] == "pick_place"
+    assert worker.marker_pairs(conditions, routine) == [
+        ("object_a", "target_a"), ("drawer_handle", "close_target"), ("drawer_handle", "open_target"),
+    ]
+
+
+def test_final_hold_requires_every_trailing_boundary(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+
+    def state(distance):
+        return {"objects": [
+            {"name": "object_a", "position": [0.25, 0.16 + distance, 0.77]},
+            {"name": "target_a", "position": [0.25, 0.16, 0.77]},
+        ]}
+
+    conditions = (("object_a", "target_a", 0.01),)
+    held = [state(0.05)] + [state(0.004)] * 5
+    ok, worst = worker.final_hold_satisfied(held, conditions, 5)
+    assert ok and worst["object_a~target_a"] == pytest.approx(0.004)
+    transient = [state(0.004)] * 4 + [state(0.02)] + [state(0.004)]
+    assert not worker.final_hold_satisfied(transient, conditions, 5)[0]
+    assert not worker.final_hold_satisfied([state(0.0)] * 3, conditions, 5)[0]
 
 
 def test_prepared_layout_applies_absolute_sizes_with_pinned_pyrep_api(monkeypatch):
@@ -539,6 +572,7 @@ def _worker_episode_materialization_row(*, outcome: str, depth_frames: list[np.n
         "result_class": None if outcome in {"success", "valid_failure"} else outcome,
         "_timed_obs": observations,
         "_actions": [np.asarray([0.1, 0.2], dtype=np.float32)],
+        "_transition_timing": [{"achieved_duration_s": 0.15, "physics_substeps": 3}],
         "_robot_states": [
             {
                 "T_w_e": item["T_w_e"],
@@ -553,11 +587,19 @@ def _worker_episode_materialization_row(*, outcome: str, depth_frames: list[np.n
     }
 
 
+# Simulated simulator clock shared by the stub pyrep.backend.sim module and the
+# stub task: each stub action advances two 0.05 s physics steps.
+_STUB_SIMULATION_CLOCK = {"time_s": 0.0}
+_STUB_PHYSICS_DT_S = 0.05
+_STUB_SUBSTEPS_PER_ACTION = 2
+
+
 def _load_generation_episode_worker_without_simulator(monkeypatch):
     import importlib.util
 
     package_names = (
         "pyrep",
+        "pyrep.backend",
         "pyrep.objects",
         "rlbench",
         "rlbench.action_modes",
@@ -567,6 +609,7 @@ def _load_generation_episode_worker_without_simulator(monkeypatch):
         package.__path__ = []
         monkeypatch.setitem(sys.modules, name, package)
     external_modules = {
+        "pyrep.backend.sim": {"simGetSimulationTime": lambda: _STUB_SIMULATION_CLOCK["time_s"]},
         "pyrep.objects.object": {"Object": type("Object", (), {})},
         "pyrep.objects.shape": {"Shape": type("Shape", (), {})},
         "rlbench.action_modes.action_mode": {"MoveArmThenGripper": type("MoveArmThenGripper", (), {})},
@@ -781,6 +824,7 @@ def _run_episode_worker_main_with_stub_task(
 
         def step(self, _action):
             self.step_count += 1
+            _STUB_SIMULATION_CLOCK["time_s"] += _STUB_SUBSTEPS_PER_ACTION * _STUB_PHYSICS_DT_S
             if failure == "terminal_closed_grip":
                 assert _action[-1] == 0.0, "terminal settling must not release a held object"
             if failure == "term_signal_after_prefix" and self.step_count == 2:
@@ -798,6 +842,7 @@ def _run_episode_worker_main_with_stub_task(
     task = StubTask()
     environment = SimpleNamespace(
         _scene=SimpleNamespace(robot=SimpleNamespace(arm=StubArm()), task=task),
+        _pyrep=SimpleNamespace(get_simulation_timestep=lambda: _STUB_PHYSICS_DT_S),
         get_task=lambda _task_class: task,
         launch=lambda: None,
         shutdown=lambda: None,
@@ -1834,3 +1879,43 @@ def test_worker_exception_path_does_not_publish_empty_inventory():
     text = Path("scripts/generation_worker.py").read_text(encoding="utf-8")
     assert "file_sha256=_file_hashes(result_dir)" in text
     assert "stale candidate" in text
+
+
+def test_transition_timing_is_measured_not_inferred(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    measured = [{"achieved_duration_s": 0.35, "physics_substeps": 7}]
+    assert worker.transition_timing_at(measured, 0, 1) == {
+        "achieved_duration_s": 0.35, "physics_substeps": 7,
+    }
+    with pytest.raises(ValueError, match="measured transition timing"):
+        worker.transition_timing_at(None, 0, 1)
+    with pytest.raises(ValueError, match="measured transition timing"):
+        worker.transition_timing_at(measured, 0, 2)
+    with pytest.raises(ValueError, match="invalid measured transition timing"):
+        worker.transition_timing_at([{"achieved_duration_s": 0.0, "physics_substeps": 0}], 0, 1)
+
+
+def test_episode_worker_records_measured_simulator_time_per_transition(tmp_path: Path, monkeypatch):
+    from icgs.data.collection.generation import task_labels
+
+    original_labels = task_labels.materialize_task_labels
+    # The stub program has no events; give the archive one (masked) event column.
+    monkeypatch.setattr(
+        task_labels,
+        "materialize_task_labels",
+        lambda _events, object_states, robot_states: original_labels(
+            [{"step_id": "s1", "postcondition": None, "precondition": None}], object_states, robot_states
+        ),
+    )
+    profile = ArchiveProfileConfig(chunk_boundaries=2, local_artifact_retention="keep")
+    result_dir = _run_episode_worker_main_with_stub_task(
+        monkeypatch, tmp_path, failure="none", archive_profile=profile,
+    )
+    manifest_path = result_dir / "episode.manifest.json"
+    assert validate_archive_manifest(manifest_path)["valid"] is True
+    record = EpisodeArchiveReader(manifest_path).to_episode_record()
+    expected_s = _STUB_SUBSTEPS_PER_ACTION * _STUB_PHYSICS_DT_S
+    assert record["dt"] and all(value == pytest.approx(expected_s) for value in record["dt"])
+    assert all(item["physics_substeps"] == _STUB_SUBSTEPS_PER_ACTION for item in record["transitions"])
+    assert all(item["achieved_duration_s"] == pytest.approx(expected_s) for item in record["transitions"])
+    assert all(item["command"]["duration_s"] == pytest.approx(0.05) for item in record["transitions"])

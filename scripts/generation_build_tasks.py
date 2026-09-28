@@ -99,6 +99,7 @@ def build_models(
                     name.startswith("target")
                     or name.endswith("_wp")
                     or name.endswith("_target")
+                    or "_target_" in name
                 )
                 if is_marker:
                     marker = Dummy.create(size=0.01)

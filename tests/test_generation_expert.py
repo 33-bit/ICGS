@@ -47,19 +47,38 @@ class ExpertPlanningTests(unittest.TestCase):
     def test_push_stops_before_target_for_open_contact_face(self):
         poses = {"blocker": [0.25, -0.05, 0.775], "push_target": [0.25, 0.08, 0.775]}
         motions = plan_step({"type": "push", "obj": "blocker", "target": "push_target"}, poses)
-        final_contact = motions[-2]["xyz"]
+        final_contact = [item for item in motions if item.get("push_contact")][-1]["xyz"]
         self.assertAlmostEqual(
             final_contact[1],
             poses["push_target"][1] - GENERATION_PROTOCOL.push_contact_offset_m,
             places=3,
         )
 
+    def test_push_contacts_at_object_centre_height_on_its_centre_line(self):
+        poses = {"object_a": [0.24, -0.10, 0.77], "gate_wp": [0.25, 0.05, 0.775], "target_a": [0.25, 0.16, 0.77]}
+        step = {
+            "type": "push", "obj": "object_a", "target": "target_a", "via": "gate_wp", "push_z": 0.0,
+            "contact_offset_m": 0.04, "approach_waypoint": {"dx_m": 0.01, "dy_m": -0.01, "dz_m": 0.005},
+        }
+        motions = plan_step(step, poses)
+        low = [item for item in motions if item["xyz"][2] < 0.8]
+        self.assertTrue(all(abs(item["xyz"][2] - 0.77) < 1e-9 for item in low))
+        pre = motions[1]["xyz"]
+        # The pre-push point lies behind the object on the line to the via point.
+        direction = [0.25 - 0.24, 0.05 + 0.10]
+        cross = (pre[0] - 0.24) * direction[1] - (pre[1] + 0.10) * direction[0]
+        self.assertAlmostEqual(cross, 0.0, places=9)
+        contacts = [item["xyz"] for item in motions if item.get("push_contact")]
+        self.assertEqual(len(contacts), 2)
+        self.assertAlmostEqual(contacts[-1][1], 0.16 - 0.04, places=6)
+
     def test_worker_does_not_remap_push_to_pick_place(self):
         from pathlib import Path
 
         text = Path("scripts/generation_episode_worker.py").read_text(encoding="utf-8")
         self.assertNotIn('exec_step["type"] = "pick_place"', text)
-        self.assertIn('"type": "push"', text)
+        # Push retries keep the push primitive (see test_step_retry_* in the worker tests).
+        self.assertIn('if kind in {"grasp", "push", "reach"} | ARTICULATION_STEP_TYPES:', text)
 
     def test_episode_worker_has_no_machine_specific_content_paths(self):
         from pathlib import Path
@@ -152,3 +171,51 @@ class ExpertPlanningTests(unittest.TestCase):
             for step in spec.routine:
                 motions = plan_step(step, poses)
                 self.assertGreaterEqual(len(motions), 1)
+
+
+class HeldContinuationTests(unittest.TestCase):
+    """The scripted expert must not open the gripper mid-program on a held object."""
+
+    def _motions(self, spec):
+        poses = {name: list(geom[0]) for name, geom in spec.objects.items()}
+        for step in spec.routine:
+            for motion in plan_step(step, poses):
+                yield step, motion
+
+    def test_no_compiled_program_opens_the_gripper_while_holding(self):
+        for program_id, spec in compile_generation_catalog().items():
+            holding = None
+            for step, motion in self._motions(spec):
+                if motion["kind"] == "grip":
+                    holding = motion.get("grasp_obj") if motion["grip"] < 0.5 else None
+                    continue
+                if motion["kind"] in {"move", "slide"} and motion.get("grip", 1.0) > 0.5:
+                    self.assertIsNone(
+                        holding,
+                        f"{program_id} {step['type']} opens the gripper while holding {holding}",
+                    )
+
+    def test_every_grasp_is_released_by_an_explicit_grip_or_program_end(self):
+        for program_id, spec in compile_generation_catalog().items():
+            grips = [motion for _step, motion in self._motions(spec) if motion["kind"] == "grip"]
+            for index, item in enumerate(grips[:-1]):
+                if item["grip"] < 0.5:
+                    self.assertGreater(grips[index + 1]["grip"], 0.5, f"{program_id} double close")
+
+    def test_retrieve_then_place_is_one_grasp(self):
+        compiled = compile_generation_catalog()
+        for program_id in ("T18", "T20", "V03"):
+            types = [(step["type"], step.get("obj"), bool(step.get("held"))) for step in compiled[program_id].routine]
+            self.assertIn(("lift", "object_a", True), types, program_id)
+            self.assertEqual(
+                sum(1 for kind, obj, _held in types if obj == "object_a" and kind == "pick_place"), 0, program_id,
+            )
+
+    def test_transport_then_place_keeps_the_object(self):
+        compiled = compile_generation_catalog()
+        for program_id in ("G1", "G2", "G3", "G4"):
+            transport = next(step for step in compiled[program_id].routine if step["type"] == "transport_through_aperture")
+            self.assertTrue(transport.get("held"), program_id)
+            self.assertIs(transport.get("release"), False, program_id)
+            motions = plan_step(transport, {name: geom[0] for name, geom in compiled[program_id].objects.items()})
+            self.assertFalse([item for item in motions if item["kind"] == "grip"], program_id)

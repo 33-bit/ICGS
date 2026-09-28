@@ -95,7 +95,7 @@ class GenerationProtocol:
     gripper_unit: str = "open_1_closed_0"
     simulator_version: str = "coppeliasim-4.1"
     physics_engine_version: str = "rlbench-default"
-    predicate_protocol_id: str = "rlbench-nearcondition-v1"
+    predicate_protocol_id: str = "rlbench-nearcondition-history-hold-v2"
     phase2_reserved_fields: tuple[str, ...] = (
         "policy_id",
         "policy_version",

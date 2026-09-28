@@ -52,11 +52,29 @@ def events_from_steps(steps: tuple[ProgramStep, ...]) -> tuple[dict[str, Any], .
     return tuple(events)
 
 
+_PLACEMENT_PRIMITIVES = frozenset({"place", "temporary_place", "fit"})
+
+
+def _next_places_same_object(steps: tuple[ProgramStep, ...], index: int) -> bool:
+    """Whether the following step places the object handled by ``steps[index]``."""
+    if index + 1 >= len(steps):
+        return False
+    following = steps[index + 1]
+    return following.primitive in _PLACEMENT_PRIMITIVES and following.object_role == steps[index].object_role
+
+
 def _routine_from_steps(steps: tuple[ProgramStep, ...]) -> list[dict[str, Any]]:
+    """Compile structured steps into expert routine operations.
+
+    ``grasped`` tracks the object held at the end of the previous operation.
+    A step that continues with the held object is compiled as a held
+    continuation, so the gripper never opens and re-grasps mid-program.
+    """
     grasped: str | None = None
     routine: list[dict[str, Any]] = []
-    for step in steps:
+    for index, step in enumerate(steps):
         primitive = step.primitive
+        held = grasped is not None and grasped == step.object_role
         if primitive == "grasp":
             routine.append({"type": "grasp", "obj": step.object_role, "grasp_z": 0.02})
             grasped = step.object_role
@@ -64,10 +82,12 @@ def _routine_from_steps(steps: tuple[ProgramStep, ...]) -> list[dict[str, Any]]:
             op: dict[str, Any] = {"type": "lift", "obj": step.object_role, "grasp_z": 0.02, "lift_z": 0.88}
             if step.target_role:
                 op["target"] = step.target_role
+            if held:
+                op["held"] = True
             routine.append(op)
             grasped = step.object_role
-        elif primitive in {"place", "temporary_place", "fit"}:
-            if grasped == step.object_role:
+        elif primitive in _PLACEMENT_PRIMITIVES:
+            if held:
                 routine.append({"type": "place", "obj": step.object_role, "target": step.target_role, "place_z": 0.03})
             else:
                 routine.append({
@@ -78,6 +98,12 @@ def _routine_from_steps(steps: tuple[ProgramStep, ...]) -> list[dict[str, Any]]:
                     "place_z": 0.03,
                 })
             grasped = None
+        elif primitive == "retrieve" and not held and _next_places_same_object(steps, index):
+            # Retrieval followed by an explicit placement: grasp and lift clear,
+            # then let the placement step put the held object at its target.
+            routine.append({"type": "grasp", "obj": step.object_role, "grasp_z": 0.02})
+            routine.append({"type": "lift", "obj": step.object_role, "grasp_z": 0.02, "held": True})
+            grasped = step.object_role
         elif primitive in {"retrieve", "park", "restore"}:
             routine.append({
                 "type": "pick_place",
@@ -104,25 +130,28 @@ def _routine_from_steps(steps: tuple[ProgramStep, ...]) -> list[dict[str, Any]]:
             })
             grasped = None
         elif primitive == "push":
-            routine.append({"type": "push", "obj": step.object_role, "target": step.target_role, "push_z": 0.02})
+            routine.append({"type": "push", "obj": step.object_role, "target": step.target_role, "push_z": 0.0})
         elif primitive == "push_through_aperture":
             routine.append({
                 "type": "push",
                 "obj": step.object_role,
                 "target": step.target_role,
-                "push_z": 0.02,
+                "push_z": 0.0,
                 "via": step.aperture_role or step.target_role,
             })
         elif primitive == "reach":
             routine.append({"type": "reach", "target": step.target_role, "reach_z": 0.03})
         elif primitive == "rotate":
-            routine.append({
+            op = {
                 "type": "grasp_rotate",
                 "obj": step.object_role,
                 "grasp_z": -0.005,
                 "lift_z": 0.15,
                 "yaw_deg": 90.0,
-            })
+            }
+            if held:
+                op["held"] = True
+            routine.append(op)
             grasped = step.object_role
         elif primitive == "regrasp":
             routine.append({"type": "grasp", "obj": step.object_role, "grasp_z": 0.02, "kind": "nominal"})
@@ -137,6 +166,7 @@ def _routine_from_steps(steps: tuple[ProgramStep, ...]) -> list[dict[str, Any]]:
                 })
                 grasped = None
         elif primitive == "transport_through_aperture":
+            continues = _next_places_same_object(steps, index)
             op = {
                 "type": "transport_through_aperture",
                 "obj": step.object_role,
@@ -146,8 +176,12 @@ def _routine_from_steps(steps: tuple[ProgramStep, ...]) -> list[dict[str, Any]]:
             }
             if step.aperture_role:
                 op["aperture_wp"] = step.aperture_role
+            if held:
+                op["held"] = True
+            if continues:
+                op["release"] = False
             routine.append(op)
-            grasped = None
+            grasped = step.object_role if continues else None
         else:
             raise ValueError(f"unsupported primitive {primitive!r} at {step.step_id}")
     return routine
