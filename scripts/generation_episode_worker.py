@@ -49,6 +49,7 @@ def _begin_archive_write_marker(write_root: Path, program_id: str, attempt_id: s
 
 from icgs.data.collection.generation.compiler import compile_generation_catalog
 from icgs.data.collection.generation.expert import plan_step
+from icgs.data.collection.generation.layout_clearance import ELONGATED_ASPECT_RATIO, grasp_yaw_delta_deg
 from icgs.data.collection.generation.protocol import GENERATION_PROTOCOL
 from pyrep.objects.object import Object
 from pyrep.objects.shape import Shape
@@ -97,9 +98,21 @@ def simulation_clock(env):
     return (lambda: float(pyrep_sim.simGetSimulationTime())), physics_dt
 
 
+# RLBench's Discrete gripper treats a gripper whose fingers are all open above
+# this fraction as open: a later close command enters its release branch and
+# drops a body the explicit grasp had attached.
+DISCRETE_OPEN_THRESHOLD = 0.9
 def grasp_attachment_confirmed(gripper, obj) -> bool:
-    """Proximity is not attachment; also reject unintended co-grasps."""
-    return list(gripper.get_grasped_objects()) == [obj]
+    """Attached alone, and closed enough for the action mode to keep holding it.
+
+    Proximity is not attachment; unintended co-grasps are rejected.
+    """
+    if list(gripper.get_grasped_objects()) != [obj]:
+        return False
+    open_amount = getattr(gripper, "get_open_amount", None)
+    if callable(open_amount):
+        return not all(float(value) > DISCRETE_OPEN_THRESHOLD for value in open_amount())
+    return True
 
 
 def _normalize_quaternion(quaternion: np.ndarray) -> np.ndarray:
@@ -157,6 +170,11 @@ PLACE_STEP_TYPES = frozenset({
 })
 PLANAR_GOAL_STEP_TYPES = frozenset({"push", "open_articulation", "close_articulation"})
 ARTICULATION_STEP_TYPES = frozenset({"open_articulation", "close_articulation"})
+# Closed-loop push completion: forward-only fingertip advances while the
+# measured along-push error exceeds the tolerance (never pulls the body back).
+PUSH_COMPLETION_STEPS = 3
+PUSH_COMPLETION_TOLERANCE_M = 0.002
+PUSH_COMPLETION_MAX_ADVANCE_M = 0.03
 # Measured closed Panda finger extent around the tool tip in world axes for the
 # default tool yaw (x: -0.0196..0.0095 m, y: -0.021..0.021 m).
 PANDA_CLOSED_FINGER_EXTENT_M = ((-0.0196, 0.0095), (-0.021, 0.021))
@@ -184,17 +202,24 @@ def push_contact_offset_m(direction_xy, size_xy, yaw_rad: float,
 
 
 def marker_pairs(conditions, routine) -> list[tuple[str, str]]:
-    """Body/marker pairs whose marker height follows the settled body."""
+    """Body/marker pairs whose marker height follows the settled body.
+
+    Covers every final condition and every routine target (placements,
+    pushes, handle slides), so transient targets such as a temporary pad are
+    compared at the body's measured rest height too.
+    """
     pairs: list[tuple[str, str]] = []
     for item in conditions:
         pair = (str(item[0]), str(item[1]))
         if pair not in pairs:
             pairs.append(pair)
+    targets = {pair[1] for pair in pairs}
     for step in routine:
-        if step.get("type") in ARTICULATION_STEP_TYPES and step.get("obj") and step.get("target"):
+        if step.get("obj") and step.get("target") and step.get("type") != "lift":
             pair = (str(step["obj"]), str(step["target"]))
-            if pair not in pairs:
+            if pair not in pairs and pair[1] not in targets:
                 pairs.append(pair)
+                targets.add(pair[1])
     return pairs
 
 
@@ -1029,6 +1054,8 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
 
     offset = np.zeros(3, dtype=np.float64)
     grasped_name = None
+    # World angle of the finger closing axis: world y for the default tool yaw.
+    finger_axis_deg = 90.0
     rotation_checks = []
     step_outcomes: list[dict] = []
     grip_hold_steps = 5
@@ -1051,8 +1078,48 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
     def tip_position() -> np.ndarray:
         return np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
 
-    def execute_step(exec_step: dict) -> None:
-        nonlocal offset, grasped_name, command_quat
+    def align_grasp_yaw(exec_step: dict, pending_yaw_deg: float) -> None:
+        """Before a grasp, turn the tool above the body so the fingers close on
+        faces (the nearest face; across the short side of an elongated body),
+        never on the corners of a yawed body.
+
+        An elongated body has two equivalent finger orientations; pick the one
+        keeping the predicted wrist joint (including the program's pending held
+        rotation) farthest from its limits.
+        """
+        nonlocal command_quat, finger_axis_deg
+        grasps = exec_step["type"] in {"grasp", "pick_place", "open_articulation", "close_articulation"} or (
+            exec_step["type"] in {"lift", "grasp_rotate", "transport_through_aperture"} and not exec_step.get("held")
+        )
+        shape = find_shape(str(exec_step.get("obj") or "")) if grasps else None
+        if shape is None:
+            return
+        bounds = np.asarray(shape.get_bounding_box(), dtype=np.float64).reshape(3, 2)
+        size = bounds[:2, 1] - bounds[:2, 0]
+        delta = grasp_yaw_delta_deg(size, np.rad2deg(float(shape.get_orientation()[2])), finger_axis_deg)
+        if abs(delta) < 2.0:
+            return
+        position = np.asarray(shape.get_position(), dtype=np.float64)
+        above = np.asarray([position[0], position[1], 0.90], dtype=np.float64)
+        move_ik(above, 1.0)
+        if float(size.max()) >= ELONGATED_ASPECT_RATIO * float(size.min()):
+            wrist = float(env._scene.robot.arm.get_joint_positions()[6])
+            candidates = [value for value in (delta, delta - 180.0, delta + 180.0) if -180.0 <= value <= 180.0]
+            # A world-z tool yaw of +d degrees turns the Panda wrist joint by -d.
+            delta = min(candidates, key=lambda value: max(
+                abs(wrist - np.deg2rad(value)), abs(wrist - np.deg2rad(value + pending_yaw_deg))))
+        start_quat = command_quat.copy()
+        target_quat = rotate_quaternion(start_quat, delta)
+        increments = max(1, int(np.ceil(abs(delta) / 5.0)))
+        trace_event("grasp_yaw_align", delta_deg=delta)
+        for index in range(1, increments + 1):
+            move_ik(above, 1.0, interpolate_quaternion(start_quat, target_quat, index / increments))
+        command_quat = target_quat
+        finger_axis_deg += delta
+
+    def execute_step(exec_step: dict, pending_yaw_deg: float = 0.0) -> None:
+        nonlocal offset, grasped_name, command_quat, finger_axis_deg
+        align_grasp_yaw(exec_step, pending_yaw_deg)
         poses = live_poses(spec.objects)
         if exec_step["type"] == "push" and exec_step.get("obj") in poses:
             exec_step = {**exec_step, "contact_offset_m": measured_push_contact_offset(exec_step, poses)}
@@ -1077,6 +1144,8 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                     xyz[0] += float(off.get("dx_m", 0.0))
                     xyz[1] += float(off.get("dy_m", 0.0))
                 move_ik(xyz, float(motion.get("grip", 1.0)))
+                if motion.get("push_final") and exec_step.get("obj") and exec_step.get("target"):
+                    complete_push(str(exec_step["obj"]), str(exec_step["target"]), motion["push_direction"], xyz)
             elif kind == "grip":
                 if float(motion["grip"]) < 0.5:
                     obj = find_shape(str(motion["grasp_obj"])) if motion.get("grasp_obj") else None
@@ -1132,6 +1201,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                 for index in range(1, increments + 1):
                     move_ik(tip, 0.0, interpolate_quaternion(start_quat, target_quat, index / increments))
                 command_quat = target_quat
+                finger_axis_deg += requested_yaw
                 measured_deg = None
                 if rotated_obj is not None and before_orientation is not None:
                     try:
@@ -1145,6 +1215,27 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                     "tolerance_deg": 10.0,
                     "passed": measured_deg is not None and abs(measured_deg - abs(requested_yaw)) <= 10.0,
                 })
+
+    def complete_push(obj_name: str, target_name: str, direction, contact_xyz) -> None:
+        """Close the push on the measured object position while still in contact.
+
+        The planned contact offset assumes a face-flush contact; a yawed body
+        touched at a corner stops short.  Advance the fingers along the push
+        direction by the measured remaining distance (bounded, forward only).
+        """
+        obj, target = find_shape(obj_name), find_shape(target_name)
+        if obj is None or target is None:
+            return
+        unit = np.asarray(direction, dtype=np.float64)
+        unit = unit / max(float(np.linalg.norm(unit)), 1e-9)
+        tip_target = np.asarray(contact_xyz, dtype=np.float64).copy()
+        for _ in range(PUSH_COMPLETION_STEPS):
+            remaining = float(unit @ (np.asarray(target.get_position())[:2] - np.asarray(obj.get_position())[:2]))
+            if remaining <= PUSH_COMPLETION_TOLERANCE_M:
+                break
+            tip_target[:2] += unit * min(remaining, PUSH_COMPLETION_MAX_ADVANCE_M)
+            trace_event("push_completion", remaining_m=remaining)
+            move_ik(tip_target, 0.0)
 
     def measured_push_contact_offset(exec_step: dict, poses: dict) -> float:
         obj_name = str(exec_step["obj"])
@@ -1213,7 +1304,11 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
         }:
             grasped_name = grasped_name or exec_step.get("obj")
         begin_index = len(robot_states)
-        execute_step(exec_step)
+        pending_yaw_deg = sum(
+            float(later.get("yaw_deg", 0.0)) for later in routine[step_index + 1:]
+            if later.get("type") == "grasp_rotate" and later.get("held") and later.get("obj") == exec_step.get("obj")
+        )
+        execute_step(exec_step, pending_yaw_deg)
         achieved, distance = goal_status(exec_step, begin_index)
         retries = 0
         while achieved is False and retries < MAX_STEP_RETRIES and recoverable(exec_step):

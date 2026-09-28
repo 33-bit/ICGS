@@ -89,3 +89,43 @@ def test_inserted_blocker_keeps_a_free_declared_position_and_slides_when_occupie
     # Markers never block the insertion point.
     marker = {"target_a": {"pos": [0.30, 0.0, 0.775], "size": [0.06, 0.06, 0.03]}}
     assert free_blocker_position([0.30, 0.0, 0.775], marker, size=0.04) == [0.30, 0.0, 0.775]
+
+
+def test_grasp_yaw_aligns_fingers_with_body_faces():
+    from icgs.data.collection.generation.layout_clearance import grasp_yaw_delta_deg
+
+    # Square body: nearest face, never more than 45 degrees of wrist turn.
+    assert grasp_yaw_delta_deg([0.05, 0.05], 20.0, 90.0) == pytest.approx(20.0)
+    assert grasp_yaw_delta_deg([0.05, 0.05], -30.0, 90.0) == pytest.approx(-30.0)
+    assert grasp_yaw_delta_deg([0.05, 0.05], 0.0, 90.0) == pytest.approx(0.0)
+    # Elongated body (long local y): fingers close across its short local x side.
+    delta = grasp_yaw_delta_deg([0.035, 0.075], -15.3, 90.0)
+    assert -90.0 <= delta < 90.0
+    assert ((90.0 + delta) - (-15.3)) % 180.0 == pytest.approx(0.0, abs=1e-9)
+    # Handles (long local x, no yaw) keep the default world-y finger axis.
+    assert grasp_yaw_delta_deg([0.08, 0.03], 0.0, 90.0) == pytest.approx(0.0)
+    assert grasp_yaw_delta_deg([0.08, 0.03], 0.0, 70.0) == pytest.approx(20.0)
+
+
+def test_aligned_fingers_fit_every_planned_grasp_within_the_discrete_hold_limit():
+    """Face-aligned grasp widths stay below RLBench Discrete's 0.9 open threshold."""
+    import math
+
+    from icgs.data.collection.generation.layout_clearance import ELONGATED_ASPECT_RATIO
+
+    rows = {row["program_id"]: row for row in json.loads(MANIFEST.read_text(encoding="utf-8"))["catalog"]}
+    compiled = compile_generation_catalog(MANIFEST)
+    widest = 0.0
+    for plan in plan_full_generation(rows):
+        spec = compiled[plan.program_id]
+        prepared = prepare_attempt(plan, spec.objects, spec.routine)
+        for step in prepared["routine"]:
+            if step["type"] not in {"grasp", "pick_place"}:
+                continue
+            size = prepared["objects"][step["obj"]]["size"]
+            short = min(size[0], size[1])
+            width = short if max(size[0], size[1]) >= ELONGATED_ASPECT_RATIO * short else max(size[0], size[1])
+            widest = max(widest, width)
+    # Panda stroke 0.08 m; Discrete treats >0.9 of the stroke as open.
+    assert widest < 0.9 * 0.08 - 0.002, widest
+    assert not math.isnan(widest)

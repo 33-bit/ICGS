@@ -188,6 +188,13 @@ def test_attachment_confirmation_requires_only_the_requested_object(monkeypatch)
     assert worker.grasp_attachment_confirmed(gripper, target)
     gripper.get_grasped_objects = lambda: [target, neighbour]
     assert not worker.grasp_attachment_confirmed(gripper, target)
+    # A gripper whose fingers stay above RLBench's Discrete open threshold
+    # would release the body on the next close command.
+    gripper.get_grasped_objects = lambda: [target]
+    gripper.get_open_amount = lambda: [0.92, 0.95]
+    assert not worker.grasp_attachment_confirmed(gripper, target)
+    gripper.get_open_amount = lambda: [0.45, 0.49]
+    assert worker.grasp_attachment_confirmed(gripper, target)
 
 
 def test_rotate_quaternion_changes_tool_yaw_without_changing_translation(monkeypatch):
@@ -245,6 +252,17 @@ def test_marker_pairs_include_articulation_targets_once(monkeypatch):
     ]
     assert worker.marker_pairs(conditions, routine) == [
         ("object_a", "target_a"), ("drawer_handle", "close_target"), ("drawer_handle", "open_target"),
+    ]
+    # Transient routine targets (G4/T17 temporary pads) follow their body too;
+    # lift targets above the table and already-owned markers are left alone.
+    routine = [
+        {"type": "grasp", "obj": "object_a"},
+        {"type": "lift", "obj": "object_a", "target": "lift_target"},
+        {"type": "place", "obj": "object_a", "target": "temp_target"},
+        {"type": "pick_place", "obj": "blocker", "target": "target_a"},
+    ]
+    assert worker.marker_pairs((("object_a", "target_a", 0.01),), routine) == [
+        ("object_a", "target_a"), ("object_a", "temp_target"),
     ]
 
 

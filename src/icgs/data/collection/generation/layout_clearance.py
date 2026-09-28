@@ -15,6 +15,8 @@ import math
 from typing import Any, Iterable, Mapping, Sequence
 
 TABLE_TOP_Z_M = 0.752
+DEFAULT_FINGER_AXIS_DEG = 90.0  # fingers close along world y at the default tool yaw
+ELONGATED_ASPECT_RATIO = 1.3
 FINGERTIP_BELOW_TIP_M = 0.0016
 OPEN_FINGERS_M = ((-0.0196, 0.0095), (-0.0608, 0.0608))
 CLOSED_FINGERS_M = ((-0.0196, 0.0095), (-0.021, 0.021))
@@ -30,6 +32,20 @@ class ClearanceViolation:
     body: str
     other: str
     depth_m: float
+
+
+def grasp_yaw_delta_deg(size_xy, object_yaw_deg: float, finger_axis_deg: float) -> float:
+    """Tool yaw change aligning the finger closing axis with a body face normal.
+
+    Near-square footprints use the nearest face (|delta| <= 45 deg); elongated
+    footprints close across the short side (|delta| <= 90 deg).  Both keep the
+    fingers flush with faces instead of landing on corners of a yawed body.
+    """
+    width, depth = float(size_xy[0]), float(size_xy[1])
+    if max(width, depth) >= ELONGATED_ASPECT_RATIO * min(width, depth):
+        short_axis = float(object_yaw_deg) + (0.0 if width <= depth else 90.0)
+        return (short_axis - float(finger_axis_deg) + 90.0) % 180.0 - 90.0
+    return (float(object_yaw_deg) - float(finger_axis_deg) + 45.0) % 90.0 - 45.0
 
 
 def is_marker(name: str) -> bool:
@@ -54,14 +70,12 @@ def _rectangle(center, half_x: float, half_y: float, yaw_deg: float = 0.0) -> li
     ]
 
 
-def _box(center, extent, margin: float, rotated: bool = False) -> list[tuple[float, float]]:
+def _box(center, extent, margin: float, turn_deg: float = 0.0) -> list[tuple[float, float]]:
+    """Finger box around the tool tip, turned by the tool yaw about the tip."""
     (x0, x1), (y0, y1) = extent
-    if rotated:
-        x0, x1, y0, y1 = y0, y1, -x1, -x0
-    return [
-        (center[0] + x0 - margin, center[1] + y0 - margin), (center[0] + x1 + margin, center[1] + y0 - margin),
-        (center[0] + x1 + margin, center[1] + y1 + margin), (center[0] + x0 - margin, center[1] + y1 + margin),
-    ]
+    c, s = math.cos(math.radians(turn_deg)), math.sin(math.radians(turn_deg))
+    corners = ((x0 - margin, y0 - margin), (x1 + margin, y0 - margin), (x1 + margin, y1 + margin), (x0 - margin, y1 + margin))
+    return [(center[0] + c * x - s * y, center[1] + s * x + c * y) for x, y in corners]
 
 
 def _sweep(start, end, extent, margin: float) -> list[tuple[float, float]]:
@@ -147,17 +161,21 @@ def audit_prepared_attempt(
         low, high = z_range(name)
         check("spawn", name, footprint(name), low, high)
 
-    rotated = False
+    finger_axis = DEFAULT_FINGER_AXIS_DEG
     for step in routine:
         kind = step.get("type")
         body, target = step.get("obj"), step.get("target")
         held = bool(step.get("held"))
         if body in state and (kind in _GRASP_TYPES or (kind in _HELD_CONTINUATION_TYPES and not held)):
-            position = state[body][0]
-            check(f"grasp:{kind}", body, _box(position, OPEN_FINGERS_M, margin_m, rotated),
+            position, size, yaw = state[body]
+            finger_axis += grasp_yaw_delta_deg(size[:2], yaw, finger_axis)
+            check(f"grasp:{kind}", body, _box(position, OPEN_FINGERS_M, margin_m, finger_axis - DEFAULT_FINGER_AXIS_DEG),
                   position[2] - FINGERTIP_BELOW_TIP_M)
-        if kind == "grasp_rotate" and abs(float(step.get("yaw_deg", 90.0))) % 180.0 == 90.0:
-            rotated = not rotated
+        if kind == "grasp_rotate":
+            finger_axis += float(step.get("yaw_deg", 90.0))
+            if body in state:
+                position, size, yaw = state[body]
+                state[body] = (position, size, yaw + float(step.get("yaw_deg", 90.0)))
         if kind == "push" and body in state and target in specs:
             position, size, yaw = state[body]
             goal = specs[target][0]
@@ -190,6 +208,6 @@ def audit_prepared_attempt(
             state[body] = (placed, size, yaw)
             low, high = z_range(body)
             check(f"place:{kind}", body, footprint(body), low, high)
-            check(f"release:{kind}", body, _box(goal, OPEN_FINGERS_M, margin_m, rotated),
+            check(f"release:{kind}", body, _box(goal, OPEN_FINGERS_M, margin_m, finger_axis - DEFAULT_FINGER_AXIS_DEG),
                   placed[2] - FINGERTIP_BELOW_TIP_M)
     return violations

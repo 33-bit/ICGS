@@ -71,6 +71,13 @@ class ExpertPlanningTests(unittest.TestCase):
         contacts = [item["xyz"] for item in motions if item.get("push_contact")]
         self.assertEqual(len(contacts), 2)
         self.assertAlmostEqual(contacts[-1][1], 0.16 - 0.04, places=6)
+        # Only the last contact is marked for closed-loop completion, with its direction.
+        finals = [item for item in motions if item.get("push_final")]
+        self.assertEqual(len(finals), 1)
+        self.assertIs(finals[0], [item for item in motions if item.get("push_contact")][-1])
+        direction = finals[0]["push_direction"]
+        self.assertAlmostEqual(direction[0] ** 2 + direction[1] ** 2, 1.0, places=9)
+        self.assertGreater(direction[1], 0.99)
 
     def test_worker_does_not_remap_push_to_pick_place(self):
         from pathlib import Path

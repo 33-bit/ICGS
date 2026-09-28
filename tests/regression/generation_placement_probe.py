@@ -118,8 +118,14 @@ def main():
     def validate_one(result):
         job = next(j for j in jobs if j.job_id == result.job_id)
         validate_closed_result(job, result, archive_profile=config.archive_profile)
+        timeline = result.timeline or {}
+        # result_class/timeline_ok make a one-index-per-program proof usable as
+        # the launcher's smoke receipt (scripts/generation_launch.py).
         return {'program_id': job.program_id, 'episode_index': job.plan.episode_index,
                 'scene_seed': job.plan.scene_seed, 'outcome': result.outcome,
+                'result_class': result.outcome, 'timeline': timeline,
+                'timeline_ok': timeline.get('actions', 0) > 0
+                and timeline.get('observations') == timeline.get('actions', 0) + 1,
                 'scale': job.plan.randomization['scale'], 'archive_validation': 'PASS'}
 
     validation_parallelism = max(1, int(os.environ.get(

@@ -121,7 +121,15 @@ def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, 
             ux, uy = unit(previous, point)
             extra = overshoot_m if index == len(path) - 1 else 0.0
             end = [point[0] - ux * (contact_offset_m - extra), point[1] - uy * (contact_offset_m - extra)]
-            motions.append({"kind": "move", "xyz": [end[0], end[1], push_z], "grip": 0.0, "grasp": False, "push_contact": True})
+            motions.append({
+                "kind": "move",
+                "xyz": [end[0], end[1], push_z],
+                "grip": 0.0,
+                "grasp": False,
+                "push_contact": True,
+                "push_direction": [ux, uy],
+                "push_final": index == len(path) - 1,
+            })
             previous = point
         back = [end[0] - ux * back_off_m, end[1] - uy * back_off_m]
         motions.append({"kind": "move", "xyz": [back[0], back[1], push_z], "grip": 0.0, "grasp": False})
