@@ -64,6 +64,14 @@ def terminal_settle_grip(observations: list[dict]) -> float:
     return float(observations[-1]["grip"]) if observations else 1.0
 
 
+PLACEMENT_SETTLE_STEPS = 10
+
+
+def grasp_attachment_confirmed(object_position, tip_position, *, max_distance_m: float = 0.05) -> bool:
+    """Return whether a just-grasped object is still within attachment range."""
+    return float(np.linalg.norm(np.asarray(object_position, dtype=float) - np.asarray(tip_position, dtype=float))) <= max_distance_m
+
+
 def find_shape(name: str):
     for candidate in (name, f"{name}0", f"{name}#0"):
         try:
@@ -822,6 +830,17 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                     grasped_name = str(motion.get("grasp_obj") or "")
                     obj_pos = np.asarray(obj.get_position(), dtype=np.float64)
                     tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
+                    if not grasp_attachment_confirmed(obj_pos, tip):
+                        # A failed grasp must not be followed by a long
+                        # transport that produces a misleading placement
+                        # failure. Give the simulator a few deterministic
+                        # re-grasp opportunities at the measured pose.
+                        for _ in range(2):
+                            actuate(0.0, obj)
+                            obj_pos = np.asarray(obj.get_position(), dtype=np.float64)
+                            tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
+                            if grasp_attachment_confirmed(obj_pos, tip):
+                                break
                     offset = obj_pos - tip
                 else:
                     held = find_shape(str(grasped_name or "")) if grasped_name else None
@@ -852,6 +871,13 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                                 except Exception:
                                     pass
                     tip = np.asarray(env._scene.robot.arm.get_tip().get_position(), dtype=np.float64)
+                    for _ in range(PLACEMENT_SETTLE_STEPS):
+                        try:
+                            advance(np.concatenate([tip, quat, [1.0]]), 1.0)
+                        except Exception as exc:
+                            if _is_ik_error(exc):
+                                break
+                            raise
                     retreat = np.array([tip[0], tip[1], min(0.92, float(tip[2]) + 0.08)])
                     move_ik(retreat, 1.0)
                     for _ in range(12):
@@ -909,7 +935,17 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
             retry = (
                 {"type": "push", "obj": obj_a, "target": obj_b, "push_z": 0.02}
                 if obj_a in push_objs
-                else {"type": "pick_place", "obj": obj_a, "target": obj_b, "grasp_z": 0.02, "place_z": 0.0}
+                else {
+                    "type": "pick_place",
+                    "obj": obj_a,
+                    "target": obj_b,
+                    "grasp_z": 0.02,
+                    # Preserve the program's compiled placement height during
+                    # a corrective retry; resetting it to zero can drive the
+                    # object into a drawer/holder and create a false retry.
+                    "place_z": float(exec_step.get("place_z", 0.0)),
+                    "skip_place_ik_z_shortfall": True,
+                }
             )
             grasped_name = obj_a
             for motion in plan_step(retry, live_poses(spec.objects)):
@@ -922,7 +958,7 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
                         if held is not None:
                             offset = np.asarray(held.get_position(), dtype=np.float64) - tip
                         xyz = xyz - offset
-                        if xyz[2] < 0.86:
+                        if xyz[2] < 0.86 and exec_step.get("skip_place_ik_z_shortfall") is not True:
                             xyz[2] -= float(GENERATION_PROTOCOL.place_ik_z_shortfall_m)
                     move_ik(xyz, float(motion.get("grip", 1.0)))
                 elif kind == "grip":

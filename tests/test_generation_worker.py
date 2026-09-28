@@ -179,6 +179,13 @@ def test_terminal_settle_preserves_last_measured_grip(monkeypatch, observations,
     assert worker.terminal_settle_grip(observations) == expected
 
 
+def test_placement_helpers_require_attachment_and_settle_before_retreat(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    assert worker.grasp_attachment_confirmed([0.0, 0.0, 0.0], [0.0, 0.0, 0.02])
+    assert not worker.grasp_attachment_confirmed([0.0, 0.0, 0.0], [0.0, 0.0, 0.08])
+    assert worker.PLACEMENT_SETTLE_STEPS >= 5
+
+
 def test_worker_display_number_uses_configured_base_and_worker_limit(tmp_path: Path):
     config = _runtime_config(tmp_path)
     try:
