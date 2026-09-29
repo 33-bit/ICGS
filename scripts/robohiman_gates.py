@@ -490,9 +490,73 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
         session.shutdown()
 
 
+CANONICAL_TOLERANCE_M = 1e-4
+
+
+def cmd_canonical(args: argparse.Namespace) -> dict[str, Any]:
+    """Derive canonical EE command targets with the simulator's own kinematic chain.
+
+    In a scratch process the arm joints are set kinematically (no physics step)
+    and ``Panda_tip`` is read. The chain is first validated by reproducing every
+    recorded achieved tip pose from the recorded achieved joints; commanded
+    targets are converted only if that residual is below tolerance. Results go
+    to ``<store>/derived/<episode>/canonical_commands.npz``; episodes are not
+    modified.
+    """
+    from icgs.data.stage1.store import iter_episode_dirs, read_episode
+
+    session = _session(args, cameras=(), image=(64, 64))
+    report: dict[str, Any] = {"gate": "canonical", "tolerance_m": CANONICAL_TOLERANCE_M, "episodes": []}
+    try:
+        np.random.seed(args.seed)
+        session.reset(args.variation)
+        arm = session.robot.arm
+        tip = arm.get_tip()
+
+        def fk(joints: np.ndarray) -> np.ndarray:
+            poses = []
+            for q in joints:
+                arm.set_joint_positions(q.tolist())  # kinematic set, no physics step
+                poses.append(np.asarray(tip.get_pose(), dtype=np.float64))
+            return np.stack(poses)
+
+        for episode_dir in iter_episode_dirs(args.store):
+            manifest, arrays = read_episode(episode_dir, keys=(
+                "step_joint_positions", "step_tip_pose", "cmd_arm_joint_target", "cmd_arm_joint_target_valid"))
+            achieved = fk(arrays["step_joint_positions"])
+            residual = np.linalg.norm(achieved[:, :3] - arrays["step_tip_pose"][:, :3], axis=1)
+            dots = np.abs(np.sum(achieved[:, 3:] * arrays["step_tip_pose"][:, 3:], axis=1)).clip(0, 1)
+            angle = np.degrees(2 * np.arccos(dots))
+            entry = {"episode_id": manifest["episode_id"], "fk_residual_max_m": float(residual.max()),
+                     "fk_residual_rot_max_deg": float(angle.max()),
+                     "derivable": bool(residual.max() <= CANONICAL_TOLERANCE_M)}
+            if entry["derivable"]:
+                valid = arrays["cmd_arm_joint_target_valid"]
+                targets = np.zeros((valid.shape[0], 7))
+                targets[valid] = fk(arrays["cmd_arm_joint_target"][valid])
+                gap = np.linalg.norm(targets[valid][:, :3] - arrays["step_tip_pose"][1:][valid][:, :3], axis=1)
+                entry["commanded_ee_vs_achieved_next_ee_m"] = {"mean": float(gap.mean()),
+                                                               "p95": float(np.percentile(gap, 95)),
+                                                               "max": float(gap.max())}
+                out = Path(args.store) / "derived" / manifest["episode_id"]
+                out.mkdir(parents=True, exist_ok=True)
+                np.savez_compressed(out / "canonical_commands.npz", cmd_ee_target_pose=targets,
+                                    cmd_ee_target_valid=valid)
+                (out / "canonical_commands.json").write_text(canonical_json({
+                    "episode_id": manifest["episode_id"], "source_arrays_sha256": manifest["arrays"]["sha256"],
+                    "method": "CoppeliaSim kinematic chain (Panda_tip) at pinned environment",
+                    "representation": "world tip pose xyz + quaternion xyzw per commanded joint target",
+                    "validation": {k: entry[k] for k in ("fk_residual_max_m", "fk_residual_rot_max_deg")}}))
+            report["episodes"].append(entry)
+        return report
+    finally:
+        session.shutdown()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("gate", choices=("parity", "replay", "a0", "dependency"))
+    parser.add_argument("gate", choices=("parity", "replay", "a0", "dependency", "canonical"))
+    parser.add_argument("--store", help="stage1 store (canonical gate)")
     parser.add_argument("--task", required=True)
     parser.add_argument("--variation", type=int, default=0)
     parser.add_argument("--strategy", type=int, default=0)
@@ -507,7 +571,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
     started = time.time()
-    report = {"parity": cmd_parity, "replay": cmd_replay, "a0": cmd_a0, "dependency": cmd_dependency}[args.gate](args)
+    report = {"parity": cmd_parity, "replay": cmd_replay, "a0": cmd_a0, "dependency": cmd_dependency,
+              "canonical": cmd_canonical}[args.gate](args)
     report["wall_s"] = round(time.time() - started, 1)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(canonical_json(report))
