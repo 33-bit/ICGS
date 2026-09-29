@@ -223,14 +223,18 @@ class StepRecorder:
         self.steps.append(row)
         boundary = len(self.steps) - 1
         if self._capture_frame is not None and self.frame_stride > 0 and boundary % self.frame_stride == 0:
-            self.frames.append(self._capture_frame())
+            self._append_frame(boundary)
+
+    def _append_frame(self, boundary: int) -> None:
+        frame = self._capture_frame()
+        if frame is not None:
+            self.frames.append(frame)
             self.frame_steps.append(boundary)
 
     def capture_final_frame(self) -> None:
         boundary = len(self.steps) - 1
         if self._capture_frame is not None and (not self.frame_steps or self.frame_steps[-1] != boundary):
-            self.frames.append(self._capture_frame())
-            self.frame_steps.append(boundary)
+            self._append_frame(boundary)
 
     def trailing_command(self) -> dict[str, Any]:
         """Commands written after the final physics step (never executed)."""

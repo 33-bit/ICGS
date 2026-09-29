@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from rlbench.backend.exceptions import TaskEnvironmentError
 
 from icgs.data.stage1.store import canonical_json
 from icgs.environments.rlbench.replay import validate_replay_report
@@ -130,14 +131,22 @@ def cmd_parity(args: argparse.Namespace) -> dict[str, Any]:
                                   "seed": args.seed}
         for label, snapshot in (("fresh_reset_each_run", None), ("restored_post_reset_snapshot", start)):
             runs = {}
+            failures = {}
             for name, mode, frames in (("upstream_1", "upstream", False), ("mirror_1", "mirror", True),
                                        ("upstream_2", "upstream", False), ("mirror_2", "mirror", False)):
                 started = time.time()
-                _, arrays, outcome = _run(session, state, args.variation, mode=mode, frames=frames,
-                                          start_snapshot=snapshot)
+                try:
+                    _, arrays, outcome = _run(session, state, args.variation, mode=mode, frames=frames,
+                                              start_snapshot=snapshot)
+                except TaskEnvironmentError as error:
+                    failures[name] = f"reset failed: {error}"
+                    continue
                 runs[name] = (arrays, {**outcome, "steps": int(arrays["cmd_phase"].shape[0]),
                                        "frames": int(arrays.get("frame_step", np.zeros(0)).shape[0]),
                                        "wall_s": round(time.time() - started, 1)})
+            if failures:
+                report[label] = {"runs": {k: v[1] for k, v in runs.items()}, "reset_failures": failures}
+                continue
             report[label] = {
                 "runs": {k: v[1] for k, v in runs.items()},
                 "comparisons": {
@@ -236,7 +245,8 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
         repeat = trajectory_discrepancy(b["arrays"], c["arrays"], 0, 0,
                                         min(b["arrays"]["cmd_phase"].shape[0], c["arrays"]["cmd_phase"].shape[0]))
         # Reset → replay the full recorded command history.
-        session.reset(args.variation, rng_state=state0)
+        report["reset_before_replay"] = {k: v for k, v in session.reset(args.variation, rng_state=state0).items()
+                                         if k.startswith("failed_placement")}
         d_rec = StepRecorder(session, monitor, frame_stride=0)
         with d_rec:
             d_rec.arm()
@@ -249,14 +259,17 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
         d_full = trajectory_discrepancy(ref_arrays, d_arrays, 0, 0, end)
         d_full["final_depth"] = _depth_diff(ref_depth, _final_depth(session))
         # Reset → closed-loop expert from scratch (full re-execution determinism).
-        _, f_arrays, f_outcome = _run(session, state0, args.variation, mode="mirror")
-        f_full = _compare(ref_arrays, f_arrays)
+        try:
+            _, f_arrays, f_outcome = _run(session, state0, args.variation, mode="mirror")
+            f_full = _compare(ref_arrays, f_arrays)
+        except TaskEnvironmentError as error:
+            f_outcome, f_full = {"status": "reset_failed", "error": str(error)}, None
         report["results"] = {
             b["label"]: b["metrics"], c["label"]: c["metrics"], e["label"]: e["metrics"],
             "openloop_replay_1_vs_2 (restore repeatability)": repeat,
             "reset_then_openloop_replay_full_history@anchor": d_anchor,
             "reset_then_openloop_replay_full_history@end": d_full,
-            "reset_then_closedloop_expert_full": {**f_full, **f_outcome},
+            "reset_then_closedloop_expert_full": {**(f_full or {}), **f_outcome},
         }
 
         def acceptable(metrics: dict[str, Any]) -> bool:
@@ -270,7 +283,7 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
             "snapshot_restore_openloop": acceptable(b["metrics"]) and acceptable(c["metrics"]),
             "snapshot_restore_closedloop_expert": acceptable(e["metrics"]),
             "reset_replay_openloop": acceptable(d_anchor) and acceptable(d_full),
-            "reset_closedloop_reexecution": acceptable(f_full),
+            "reset_closedloop_reexecution": acceptable(f_full) if f_full else None,
         }
         discrepancies = {"pose": max(b["metrics"]["max_tip_position_m"], c["metrics"]["max_tip_position_m"]),
                          "cloud": max(v for k, v in b["metrics"]["final_depth"].items() if k.endswith("mean_abs_m")),

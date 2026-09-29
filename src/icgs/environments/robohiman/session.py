@@ -176,6 +176,7 @@ class RoboHiManSession:
             np.random.set_state(rng_state)
         state = np.random.get_state()
         array, cached = rng_state_array(state)
+        factors_before = self.factor_rng_states()
         errors = []
         for _ in range(int(attempts)):
             np.random.set_state(state)
@@ -183,7 +184,8 @@ class RoboHiManSession:
                 descriptions, _ = self.task_env.reset()
                 break
             except TaskEnvironmentError as error:
-                errors.append(str(error)[:200])
+                cause = error.__cause__
+                errors.append(f"{type(cause).__name__}: {cause}"[:300] if cause else str(error)[:300])
         else:
             raise TaskEnvironmentError(f"placement failed {attempts}x from one RNG state: {errors[-1]}")
         return {
@@ -193,6 +195,9 @@ class RoboHiManSession:
             "rng_state_sha256": hashlib.sha256(array.tobytes()).hexdigest(),
             "descriptions": descriptions,
             "failed_placements_before_success": len(errors),
+            "failed_placement_causes": errors,
+            "factor_rng_before_reset": factors_before,
+            "factors_after_reset": self.factor_rng_states(),
         }
 
     def variation_factor_state(self) -> list[dict[str, Any]]:
@@ -205,6 +210,21 @@ class RoboHiManSession:
                 "enabled": bool(factor.enabled),
             })
         return factors
+
+    def factor_rng_states(self) -> list[dict[str, Any]]:
+        """Bit-generator state of every instantiated Colosseum factor (AP/CP lineage)."""
+        manager = getattr(self.scene, "_var_manager", None)
+        states = []
+        for variation in getattr(manager, "_variations", []) or []:
+            rng = getattr(variation, "_rng", None)
+            states.append({
+                "class": type(variation).__name__,
+                "name": getattr(variation, "_name", None),
+                "enabled": bool(getattr(variation, "_enabled", False)),
+                "targets_found": len(getattr(variation, "_targets", []) or []),
+                "bit_generator_state": rng.bit_generator.state if rng is not None else None,
+            })
+        return states
 
     def workspace_bounds(self) -> list[list[float]]:
         scene = self.scene

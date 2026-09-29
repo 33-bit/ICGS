@@ -11,7 +11,7 @@ import numpy as np
 
 from icgs.data.stage1.labels import LABEL_PROTOCOL_ID, derive_event_labels, label_consistency_report
 from icgs.data.stage1.schema import ONLINE_FIELDS, SCHEMA_VERSION, perturbation_families
-from icgs.environments.robohiman.camera import CAMERA_CONVENTION_ID
+from icgs.environments.robohiman.camera import CAMERA_CONVENTION_ID, decode_mask_handles
 from icgs.environments.robohiman.expert import MIRROR_ID, WaypointExpert, expert_control
 from icgs.environments.robohiman.monitors import build_monitor
 from icgs.environments.robohiman.pins import UPSTREAM
@@ -41,8 +41,15 @@ def code_identity() -> dict[str, Any]:
 def frame_capture(session: Any, *, masks: bool = False, point_cloud: bool = False) -> Callable[[], dict[str, Any]]:
     cameras = session.cameras
 
-    def capture() -> dict[str, Any]:
-        obs = session.scene.get_observation()
+    def capture() -> dict[str, Any] | None:
+        try:
+            obs = session.scene.get_observation()
+        except RuntimeError as error:
+            # RLBench reads joint forces, which CoppeliaSim only provides after a
+            # physics step; right after a state restore there is no frame yet.
+            if "No value available" in str(error):
+                return None
+            raise
         frame: dict[str, Any] = {
             "frame_gripper_pose": np.asarray(obs.gripper_pose, dtype=np.float64),
             "frame_gripper_open": np.float64(obs.gripper_open),
@@ -57,7 +64,9 @@ def frame_capture(session: Any, *, masks: bool = False, point_cloud: bool = Fals
             frame[f"cam_{name}_near"] = np.float64(obs.misc[f"{name}_camera_near"])
             frame[f"cam_{name}_far"] = np.float64(obs.misc[f"{name}_camera_far"])
             if masks:
-                frame[f"cam_{name}_mask_raw"] = np.asarray(getattr(obs, f"{name}_mask"))
+                raw = np.asarray(getattr(obs, f"{name}_mask"))
+                handles = decode_mask_handles(raw) if raw.ndim == 3 else np.rint(raw)
+                frame[f"cam_{name}_mask_handles"] = handles.astype(np.int32)
             if point_cloud:
                 frame[f"cam_{name}_point_cloud_live"] = np.asarray(getattr(obs, f"{name}_point_cloud"), dtype=np.float64)
         return frame
@@ -142,7 +151,10 @@ def collect_episode(
             "reset_rng": {"kind": "numpy MT19937 before TaskEnvironment.reset",
                           "sha256": reset["rng_state_sha256"], "array": "rng_state_mt19937",
                           "cached_gaussian": reset["rng_cached_gaussian"],
-                          "failed_placements_before_success": reset["failed_placements_before_success"]},
+                          "failed_placements_before_success": reset["failed_placements_before_success"],
+                          "failed_placement_causes": reset["failed_placement_causes"]},
+            "benchmark_factor_rng_before_reset": reset["factor_rng_before_reset"],
+            "benchmark_factors_after_reset": reset["factors_after_reset"],
         },
         "environment": {**session.provenance(), "workspace_bounds": session.workspace_bounds(),
                         "robot": {"arm_base_pose": [float(v) for v in session.robot.arm.get_pose()],
