@@ -213,6 +213,7 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
     try:
         state0 = _warm_lineage(session, args)
         session.reset(args.variation, lineage=state0)
+        reset_snap = capture_snapshot(session, 0)
         monitor = build_monitor(session.task, session.task_env, args.variation)
         # Reference run: expert to the anchor, snapshot, expert to the end.
         ref = StepRecorder(session, monitor, frame_stride=0)
@@ -264,20 +265,31 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
         e = after_restore("restore_then_closedloop_expert", True)
         repeat = trajectory_discrepancy(b["arrays"], c["arrays"], 0, 0,
                                         min(b["arrays"]["cmd_phase"].shape[0], c["arrays"]["cmd_phase"].shape[0]))
-        # Reset → replay the full recorded command history.
-        report["reset_before_replay"] = {k: v for k, v in session.reset(args.variation, lineage=state0).items()
-                                         if k.startswith("failed_placement")}
-        d_rec = StepRecorder(session, monitor, frame_stride=0)
-        with d_rec:
-            d_rec.arm()
-            with expert_control(session):
-                d_rec.phase = "replay"
-                replay_commands(session, ref_arrays, 0, end)
-            d_rec.disarm()
-        d_arrays = d_rec.arrays()
-        d_anchor = trajectory_discrepancy(ref_arrays, d_arrays, 0, 0, anchor)
-        d_full = trajectory_discrepancy(ref_arrays, d_arrays, 0, 0, end)
-        d_full["final_depth"] = _depth_diff(ref_depth, _final_depth(session))
+        def full_replay(start: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
+            if start == "fresh_reset":
+                try:
+                    session.reset(args.variation, lineage=state0)
+                except TaskEnvironmentError as error:
+                    report.setdefault("fresh_reset_failures", []).append(str(error)[:200])
+                    return None
+            else:
+                restore_snapshot(session, reset_snap)
+            rec = StepRecorder(session, monitor, frame_stride=0)
+            with rec:
+                rec.arm()
+                with expert_control(session):
+                    rec.phase = "replay"
+                    replay_commands(session, ref_arrays, 0, end)
+                rec.disarm()
+            arrays = rec.arrays()
+            at_anchor = trajectory_discrepancy(ref_arrays, arrays, 0, 0, anchor)
+            at_end = trajectory_discrepancy(ref_arrays, arrays, 0, 0, end)
+            at_end["final_depth"] = _depth_diff(ref_depth, _final_depth(session))
+            return at_anchor, at_end
+
+        snap_replay = full_replay("reset_snapshot")
+        fresh_replay = full_replay("fresh_reset")
+        d_anchor, d_full = snap_replay
         # Reset → closed-loop expert from scratch (full re-execution determinism).
         try:
             _, f_arrays, f_outcome = _run(session, state0, args.variation, mode="mirror")
@@ -287,8 +299,10 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
         report["results"] = {
             b["label"]: b["metrics"], c["label"]: c["metrics"], e["label"]: e["metrics"],
             "openloop_replay_1_vs_2 (restore repeatability)": repeat,
-            "reset_then_openloop_replay_full_history@anchor": d_anchor,
-            "reset_then_openloop_replay_full_history@end": d_full,
+            "reset_snapshot_then_openloop_replay_full_history@anchor": d_anchor,
+            "reset_snapshot_then_openloop_replay_full_history@end": d_full,
+            "fresh_reset_then_openloop_replay_full_history@anchor": fresh_replay[0] if fresh_replay else None,
+            "fresh_reset_then_openloop_replay_full_history@end": fresh_replay[1] if fresh_replay else None,
             "reset_then_closedloop_expert_full": {**(f_full or {}), **f_outcome},
         }
 
@@ -302,7 +316,9 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
         report["acceptable"] = {
             "snapshot_restore_openloop": acceptable(b["metrics"]) and acceptable(c["metrics"]),
             "snapshot_restore_closedloop_expert": acceptable(e["metrics"]),
-            "reset_replay_openloop": acceptable(d_anchor) and acceptable(d_full),
+            "reset_snapshot_replay_openloop": acceptable(d_anchor) and acceptable(d_full),
+            "fresh_reset_replay_openloop": (acceptable(fresh_replay[0]) and acceptable(fresh_replay[1]))
+                                           if fresh_replay else None,
             "reset_closedloop_reexecution": acceptable(f_full) if f_full else None,
         }
         discrepancies = {"pose": max(b["metrics"]["max_tip_position_m"], c["metrics"]["max_tip_position_m"]),
@@ -317,7 +333,7 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
                 "uncertainty": {"restore_repeat_max_tip_m": repeat["max_tip_position_m"],
                                 "restore_repeat_final_object_m": repeat["final_object_position_m"]}}),
             "reset_replay": validate_replay_report({
-                "mode": "deterministic-replay", "protocol_id": f"numpy-rng-reset+{REPLAY_ID}",
+                "mode": "deterministic-replay", "protocol_id": f"post-reset-snapshot+{REPLAY_ID}",
                 "stored_fields": ("rng", "command_history", "task_history", "monitor_history", "joints", "velocities",
                                   "object_poses", "grip", "articulations", "attachments", "controller_state"),
                 "restored_fields": ("rng", "command_history", "task_history", "monitor_history"),
@@ -419,7 +435,7 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
     report: dict[str, Any] = {
         "gate": "dependency", "task": args.task, "variation": args.variation, "seed": args.seed,
         "decision_waypoint": decision,
-        "anchor": f"after waypoint {decision - 1} (prefix replayed open loop from reset; accepted replay strategy)",
+        "anchor": f"after waypoint {decision - 1} (post-reset snapshot restored, prefix commands replayed open loop)",
         "candidate_axis": f"waypoint {decision} target offset along its approach direction",
         "continuation_policy": ("icgs mirror of the RoboHiMan scripted expert with per-trial Gaussian "
                                 f"waypoint jitter sigma={args.jitter_m} m; NOT pi_ref, diagnostic only"),
@@ -430,6 +446,7 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
         state0 = _warm_lineage(session, args)
         # Reference prefix up to the anchor, executed once by the expert.
         session.reset(args.variation, lineage=state0)
+        reset_snap = capture_snapshot(session, 0)
         monitor = build_monitor(session.task, session.task_env, args.variation)
         prefix = StepRecorder(session, monitor, frame_stride=0)
         with prefix:
@@ -453,7 +470,8 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
             for trial in range(args.trials):
                 jitter = [{"family": "execution_pose_offset", "waypoint": w,
                            "delta_m": rng.normal(0.0, args.jitter_m, 3).tolist()} for w in later]
-                session.reset(args.variation, lineage=state0)
+                restore_snapshot(session, reset_snap)  # post-reset state: no contacts, restore is exact
+                session.scene._has_init_episode = True
                 trial_monitor = build_monitor(session.task, session.task_env, args.variation)
                 rec = StepRecorder(session, trial_monitor, frame_stride=0)
                 with rec:
