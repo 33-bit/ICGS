@@ -65,9 +65,17 @@ def _session(args: argparse.Namespace, *, cameras=(), masks=False, point_cloud=F
 
 
 def _run(session, state, variation, *, mode: str, frames: bool = False, perturbations=None,
-         stop_after=None, max_steps=3000):
-    """mode: 'upstream' (Scene.get_demo) or 'mirror' (WaypointExpert)."""
-    session.reset(variation, rng_state=state)
+         stop_after=None, max_steps=3000, start_snapshot=None):
+    """mode: 'upstream' (Scene.get_demo) or 'mirror' (WaypointExpert).
+
+    With ``start_snapshot`` the run starts from a restored post-reset state
+    instead of a fresh reset, removing reset-to-reset robot residuals.
+    """
+    if start_snapshot is None:
+        session.reset(variation, rng_state=state)
+    else:
+        restore_snapshot(session, start_snapshot)
+        session.scene._has_init_episode = True  # what reset leaves; get_demo only checks it
     monitor = build_monitor(session.task, session.task_env, variation)
     capture = frame_capture(session) if frames else None
     recorder = StepRecorder(session, monitor, frame_stride=1 if frames else 0, capture_frame=capture)
@@ -102,6 +110,9 @@ def _compare(a: dict[str, np.ndarray], b: dict[str, np.ndarray]) -> dict[str, An
         result[f"{key}_mask_equal"] = bool(np.array_equal(a[f"{key}_valid"][:length], b[f"{key}_valid"][:length]))
     result["bitwise_joint_trajectory_equal"] = bool(la == lb and np.array_equal(
         a["step_joint_positions"], b["step_joint_positions"]))
+    result["waypoint_phase_sequence_equal"] = bool(la == lb and np.array_equal(a["cmd_waypoint"], b["cmd_waypoint"])
+                                                   and np.array_equal(a["cmd_phase"], b["cmd_phase"]))
+    result["final_boundary"] = trajectory_discrepancy(a, b, la, lb, 0)
     first = np.flatnonzero(np.abs(a["step_joint_positions"][:length + 1]
                                   - b["step_joint_positions"][:length + 1]).max(axis=1) > 1e-6)
     result["first_boundary_joint_diff_gt_1e-6"] = int(first[0]) if first.size else None
@@ -113,22 +124,31 @@ def cmd_parity(args: argparse.Namespace) -> dict[str, Any]:
     try:
         np.random.seed(args.seed)
         state = np.random.get_state()
-        runs = {}
-        for name, mode, frames in (("upstream_1", "upstream", False), ("mirror_1", "mirror", True),
-                                   ("upstream_2", "upstream", False), ("mirror_2", "mirror", False)):
-            started = time.time()
-            _, arrays, outcome = _run(session, state, args.variation, mode=mode, frames=frames)
-            runs[name] = (arrays, {**outcome, "steps": int(arrays["cmd_phase"].shape[0]),
-                                   "frames": int(arrays.get("frame_step", np.zeros(0)).shape[0]),
-                                   "wall_s": round(time.time() - started, 1)})
-        comparisons = {
-            "upstream_1_vs_upstream_2 (simulator determinism)": _compare(runs["upstream_1"][0], runs["upstream_2"][0]),
-            "upstream_1_vs_mirror_1 (mirror parity + per-step rendering neutrality)":
-                _compare(runs["upstream_1"][0], runs["mirror_1"][0]),
-            "mirror_1_vs_mirror_2 (rendering on vs off)": _compare(runs["mirror_1"][0], runs["mirror_2"][0]),
-        }
-        return {"gate": "parity", "task": args.task, "variation": args.variation, "seed": args.seed,
-                "runs": {k: v[1] for k, v in runs.items()}, "comparisons": comparisons}
+        session.reset(args.variation, rng_state=state)
+        start = capture_snapshot(session, 0)
+        report: dict[str, Any] = {"gate": "parity", "task": args.task, "variation": args.variation,
+                                  "seed": args.seed}
+        for label, snapshot in (("fresh_reset_each_run", None), ("restored_post_reset_snapshot", start)):
+            runs = {}
+            for name, mode, frames in (("upstream_1", "upstream", False), ("mirror_1", "mirror", True),
+                                       ("upstream_2", "upstream", False), ("mirror_2", "mirror", False)):
+                started = time.time()
+                _, arrays, outcome = _run(session, state, args.variation, mode=mode, frames=frames,
+                                          start_snapshot=snapshot)
+                runs[name] = (arrays, {**outcome, "steps": int(arrays["cmd_phase"].shape[0]),
+                                       "frames": int(arrays.get("frame_step", np.zeros(0)).shape[0]),
+                                       "wall_s": round(time.time() - started, 1)})
+            report[label] = {
+                "runs": {k: v[1] for k, v in runs.items()},
+                "comparisons": {
+                    "upstream_1_vs_upstream_2 (simulator determinism)":
+                        _compare(runs["upstream_1"][0], runs["upstream_2"][0]),
+                    "upstream_1_vs_mirror_1 (mirror parity + per-step rendering neutrality)":
+                        _compare(runs["upstream_1"][0], runs["mirror_1"][0]),
+                    "mirror_1_vs_mirror_2 (rendering on vs off)": _compare(runs["mirror_1"][0], runs["mirror_2"][0]),
+                },
+            }
+        return report
     finally:
         session.shutdown()
 
