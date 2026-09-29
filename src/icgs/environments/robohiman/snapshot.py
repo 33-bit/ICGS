@@ -48,6 +48,9 @@ class Snapshot:
     numpy_rng: tuple
     sim_time: float
     boundary: int
+    # RLBench caches validated waypoints on the task; an empty cache triggers a
+    # fresh, randomized IK feasibility check that can reject a valid scene.
+    task_waypoints: Any = None
 
 
 def capture_snapshot(session: Any, boundary: int) -> Snapshot:
@@ -76,6 +79,7 @@ def capture_snapshot(session: Any, boundary: int) -> Snapshot:
         numpy_rng=np.random.get_state(),
         sim_time=float(sim.simGetSimulationTime()),
         boundary=int(boundary),
+        task_waypoints=task_obj._waypoints,
     )
 
 
@@ -110,6 +114,7 @@ def restore_snapshot(session: Any, snap: Snapshot) -> None:
         if shape.is_dynamic():
             sim.simResetDynamicObject(shape.get_handle())
     np.random.set_state(snap.numpy_rng)
+    session.task_obj._waypoints = snap.task_waypoints
 
 
 def replay_commands(session: Any, arrays: dict[str, np.ndarray], start: int, stop: int) -> None:
