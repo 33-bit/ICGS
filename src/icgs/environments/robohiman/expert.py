@@ -125,6 +125,7 @@ class WaypointExpert:
         """Execute waypoints ``start..``; mirrors get_demo when start=0 and stop_after=None."""
         from pyrep.const import ObjectType
         from pyrep.errors import ConfigurationPathError
+        from rlbench.backend.exceptions import WaypointError
 
         scene = self.session.scene
         task = scene.task
@@ -139,7 +140,10 @@ class WaypointExpert:
                 if not scene._has_init_episode:
                     scene.init_episode(scene._variation_index, randomly_place=True)
                 scene._has_init_episode = False
-            waypoints = task.get_waypoints()
+            try:
+                waypoints = task.get_waypoints()
+            except WaypointError as error:  # upstream IK feasibility check
+                return self._finish("invalid_execution", f"infeasible_waypoints: {error}"[:300], last_completed)
             if len(waypoints) == 0:
                 return ExpertResult("invalid_execution", "no_waypoints", False, last_completed)
             if start == 0 and initial_step:

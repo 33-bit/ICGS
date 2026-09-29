@@ -394,48 +394,73 @@ def cmd_a0(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
-    from pyrep.objects.dummy import Dummy
-
     session = _session(args, cameras=(), image=(64, 64))
+    decision = args.anchor_waypoint
     report: dict[str, Any] = {
         "gate": "dependency", "task": args.task, "variation": args.variation, "seed": args.seed,
-        "decision_waypoint": args.anchor_waypoint, "candidate_axis": "pull waypoint offset along the pull direction",
+        "decision_waypoint": decision,
+        "anchor": f"after waypoint {decision - 1} (prefix replayed open loop from reset; accepted replay strategy)",
+        "candidate_axis": f"waypoint {decision} target offset along its approach direction",
         "continuation_policy": ("icgs mirror of the RoboHiMan scripted expert with per-trial Gaussian "
                                 f"waypoint jitter sigma={args.jitter_m} m; NOT pi_ref, diagnostic only"),
-        "local_success_predicate": "drawer_open (upstream DrawerCondition 0.15 m) at the anchor",
+        "local_success_predicate": f"{args.local_predicate} after waypoint {decision} completes",
         "candidates": [],
     }
     try:
         np.random.seed(args.seed)
         state0 = np.random.get_state()
+        # Reference prefix up to the anchor, executed once by the expert.
         session.reset(args.variation, rng_state=state0)
+        monitor = build_monitor(session.task, session.task_env, args.variation)
+        prefix = StepRecorder(session, monitor, frame_stride=0)
+        with prefix:
+            prefix.arm()
+            with expert_control(session):
+                WaypointExpert(session, prefix).run(stop_after=decision - 1)
+            prefix.disarm()
+        prefix_arrays = prefix.arrays()
+        anchor = prefix_arrays["cmd_phase"].shape[0]
         waypoints = session.task_obj.get_waypoints()
-        pull = waypoints[args.anchor_waypoint]._waypoint.get_position() - \
-            waypoints[args.anchor_waypoint - 1]._waypoint.get_position()
-        direction = pull / np.linalg.norm(pull)
-        report["pull_direction"] = direction.tolist()
-        later = list(range(args.anchor_waypoint + 1, len(waypoints)))
+        approach = waypoints[decision]._waypoint.get_position() - waypoints[decision - 1]._waypoint.get_position()
+        direction = approach / np.linalg.norm(approach)
+        report["approach_direction"] = direction.tolist()
+        report["anchor_boundary"] = int(anchor)
+        later = list(range(decision + 1, len(waypoints)))
         rng = np.random.default_rng(args.seed)
+        anchor_states = []
         for delta in args.deltas:
-            offset = {"family": "execution_pose_offset", "waypoint": args.anchor_waypoint,
-                      "delta_m": (direction * delta).tolist()}
+            offset = {"family": "execution_pose_offset", "waypoint": decision, "delta_m": (direction * delta).tolist()}
             trials = []
             for trial in range(args.trials):
                 jitter = [{"family": "execution_pose_offset", "waypoint": w,
                            "delta_m": rng.normal(0.0, args.jitter_m, 3).tolist()} for w in later]
-                recorder, arrays, outcome = _run(session, state0, args.variation, mode="mirror",
-                                                 perturbations=[offset] + jitter, stop_after=None)
-                names = recorder.monitor.predicate_names
-                anchor_rows = np.flatnonzero(arrays["cmd_waypoint"] > args.anchor_waypoint)
-                anchor_boundary = int(anchor_rows[0]) if anchor_rows.size else arrays["cmd_phase"].shape[0]
-                predicates = arrays["step_predicates"][anchor_boundary]
+                session.reset(args.variation, rng_state=state0)
+                trial_monitor = build_monitor(session.task, session.task_env, args.variation)
+                rec = StepRecorder(session, trial_monitor, frame_stride=0)
+                with rec:
+                    rec.arm()
+                    with expert_control(session):
+                        rec.phase = "replay"
+                        replay_commands(session, prefix_arrays, 0, anchor)
+                        result = WaypointExpert(session, rec, perturbations=[offset] + jitter).run(
+                            start=decision, initial_step=False)
+                    rec.disarm()
+                arrays = rec.arrays()
+                anchor_states.append(arrays["step_object_poses"][anchor][:, :3])
+                names = trial_monitor.predicate_names
+                after = np.flatnonzero(arrays["cmd_waypoint"] > decision)
+                local_boundary = int(after[0]) if after.size else arrays["cmd_phase"].shape[0]
+                joint_index = rec.joint_names.index(trial_monitor.tracked_joints[0].get_name())
                 trials.append({
                     "trial": trial,
-                    "anchor_boundary": anchor_boundary,
-                    "drawer_joint_at_anchor_m": float(arrays["step_task_joint_positions"][anchor_boundary][
-                        recorder.joint_names.index(recorder.monitor.tracked_joints[0].get_name())]),
-                    "local_success": bool(predicates[names.index("drawer_open")]),
-                    "final_status": outcome["status"], "final_success": outcome["task_success"],
+                    "prefix_replay_tip_drift_m": float(np.linalg.norm(
+                        arrays["step_tip_pose"][anchor][:3] - prefix_arrays["step_tip_pose"][anchor][:3])),
+                    "local_boundary": local_boundary,
+                    "drawer_joint_after_decision_m": float(arrays["step_task_joint_positions"][local_boundary][joint_index]),
+                    "local_success": bool(arrays["step_predicates"][local_boundary][names.index(args.local_predicate)]),
+                    "final_status": result.status, "final_reason": result.reason,
+                    "final_success": bool(result.task_success),
+                    "final_predicates": {n: bool(v) for n, v in zip(names, arrays["step_predicates"][-1])},
                     "steps": int(arrays["cmd_phase"].shape[0]),
                 })
             local = [t["local_success"] for t in trials]
@@ -443,9 +468,11 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
                 "delta_m": delta, "trials": trials,
                 "local_success_rate": float(np.mean(local)),
                 "final_success_rate": float(np.mean([t["final_success"] for t in trials])),
-                "final_success_rate_given_local": (float(np.mean([t["final_success"] for t in trials if t["local_success"]]))
-                                                   if any(local) else None),
+                "final_success_rate_given_local": (float(np.mean([t["final_success"] for t in trials
+                                                                  if t["local_success"]])) if any(local) else None),
             })
+        spread = np.stack(anchor_states)
+        report["anchor_object_spread_across_trials_m"] = float(np.linalg.norm(spread - spread[0], axis=-1).max())
         locals_ok = [c for c in report["candidates"] if c["local_success_rate"] == 1.0]
         rates = [c["final_success_rate"] for c in locals_ok]
         report["consequential_gap"] = (max(rates) - min(rates)) if len(rates) >= 2 else None
@@ -471,6 +498,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--deltas", type=float, nargs="+", default=(0.0, -0.05, -0.08, -0.11))
     parser.add_argument("--trials", type=int, default=3)
     parser.add_argument("--jitter-m", type=float, default=0.005)
+    parser.add_argument("--local-predicate", default="drawer_open")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
     started = time.time()
