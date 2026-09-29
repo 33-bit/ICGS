@@ -54,6 +54,10 @@ FACT (throwaway spike on `vps-a`, `outputs/spike-articulation/`, not product cod
   below the tip; finger top +0.042. The 20.5 cm palm width along the finger
   axis and the 3.7 cm palm height above the fingertips drive every clearance rule
   below.
+- The expert grasps with the tool tip at the object centre and releases with
+  the object 4 mm above its rest height, so at release the fingertips are only
+  about 2.4 mm above the rest centre (code: `expert._approach_and_grasp`,
+  `PLACE_RELEASE_CLEARANCE_M`).
 
 ## 3. Method alignment matrix
 
@@ -88,7 +92,7 @@ constant.
 ### 4.1 Drawer (T04, T05, T06, T08, T16, T19, V01, P1–P4, R3)
 
 - Housing (static, respondable): roof, two side walls, back wall; open front.
-- Tray (dynamic compound: floor, four walls 25 mm, fin) on a prismatic joint
+- Tray (dynamic compound: floor, walls obeying the release rule of 4.4, fin) on a prismatic joint
   parented to the housing; joint limits [0, stroke]; motor on, target velocity
   0, brake force 3 N (holds position against contact, yields to the arm).
 - Fin: 12 mm thick along the pull axis, 60 mm wide, in front of the housing.
@@ -119,7 +123,9 @@ constant.
 - Two static wall segments with a gap; wall height is chosen per program from
   its object height range (about 40 mm).
 - Passage height: carried object bottom at least 5 mm above the table and at
-  least 15 mm below the wall top; fingertips at least 5 mm above the wall top.
+  least 8 mm below the wall top; fingertips at least 5 mm above the wall top
+  (so passage objects are at least 30 mm tall at scale 0.8; flat boxes are not
+  used in passage programs).
   Only the object's lower part crosses the wall plane, so the gap constrains
   the object cross-section, not the fingers or palm. Both conditions must hold
   at scales 0.8 and 1.2 (static audit).
@@ -132,15 +138,21 @@ constant.
 
 ### 4.4 Holder and tray
 
-- Holder (T09, V02, G1, G2, G4): floor plate and 25 mm walls forming a pocket of
-  the object's footprint family × attempt scale + 4 mm per side. A square box
-  fits only within about ±8–12° of the aligned yaw across scales 1.2–0.8
-  (elongated boxes about ±6°), in line with the 10° fit predicate.
+- Release rule (all containers): the open fingers span ±0.061 m along the
+  finger axis, and at release the fingertips are only about 2.4 mm above the
+  object's rest centre. Any wall within 0.064 m of a release point along the
+  finger axis therefore stays at least 3 mm below that fingertip height (about
+  12 mm). Tight walls that constrain fit or packing run parallel to the finger
+  axis, beside the object, up to 25 mm tall and at least 3 mm outside the finger
+  thickness (x −0.0196..+0.0095 m about the tip).
+- Holder (T09, V02, G1, G2, G4): floor plate and walls forming a slot of the
+  object's footprint × attempt scale + 4 mm per side across the finger axis. A
+  square box fits only within about ±8–12° of the aligned yaw across scales
+  1.2–0.8 (elongated boxes about ±6°), in line with the 10° fit predicate; a
+  misaligned object rests on the wall tops and fails `inside`.
 - Tray (T07): same construction; interior holds A and B side by side with
   about 15 mm total slack, so A's placement decides whether B still fits.
 - Pad (T02, T11): flat support, unchanged.
-- Walls stay below the open fingertips at release (fingertips ≥ half object
-  height + 22 mm above the floor), so releases inside pockets are clear.
 
 ### 4.5 Adjacency blocking (T03, T13, T15, T16, T18, T20, V03, R1–R4, P4)
 
