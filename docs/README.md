@@ -48,6 +48,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Generation launch readiness](plans/completed/generation-launch-readiness.md) | Run-wide storage admission, fresh-host task build and selected-host acceptance |
 | [Generation readiness evidence](experiments/generation-validation/readiness-20260927/README.md) | VPS-only commands, live smoke and bounded publication/backpressure evidence |
 | [Colab archive capacity experiment](experiments/generation-validation/archive-v6e1-stress-20260927.md) | OAuth2 V6e-1 concurrency comparison, publication service rate and quota-aware ETA |
+| [Collector semantics audit](experiments/generation-validation/collector-semantics-20260929.md) | 36-program physical/label audit: measured timing, no snaps/freezes, step goals, clearance layouts |
 | [Third-party notices](third-party-notices.md) | Attribution and license for adapted guidance |
 
 Source code owns implementation detail; tests establish only the behavior they

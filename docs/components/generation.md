@@ -159,12 +159,47 @@ reports must not block a child before archive closure. The 12-job CPU gate
 validated all archives but had 9 successes and 3 placement failures; it is not
 a full-generation acceptance receipt.
 
-This investigation also identified pre-existing collection-semantic gaps:
-the scripted rotation branch does not execute a rotation, success correction
-contains object/handle position snaps, and high-level RLBench actions perform
-more physics substeps than the worker's fixed 0.05 s metadata implies. Archive
-integrity checks do not certify those semantics. Full generation remains stopped
-pending separate acceptance of the collector's physical/task semantics.
+The 2026-09-29 [collector-semantics audit](../experiments/generation-validation/collector-semantics-20260929.md)
+replaced the remaining collection shortcuts with executed physics:
+
+- Per-transition `achieved_duration_s` and `physics_substeps` are measured
+  from simulator time (RLBench IK/gripper actions run 1–18 physics steps);
+  `command.duration_s` keeps the declared 0.05 s nominal interval.
+- There are no handle/object snaps and no frozen or non-respondable bodies.
+  Carried bodies are released 4 mm above rest height; every routine target
+  marker follows its body's settled height.
+- The compiler emits held continuations (no mid-program release/regrasp) and
+  single-grasp retrieve→place and transport→place sequences. Rotation executes
+  and is measured.
+- Grasps turn the tool so the fingers close on body faces (across the short
+  side of elongated bodies); a grasp counts only when RLBench's `Discrete`
+  gripper would keep holding it (fingers below its 0.9 open threshold).
+- Pushes contact the object at centre height on a finger-face-centred line
+  with a measured contact offset and a forward-only closed-loop completion.
+- Each routine step has an executed goal check and at most two retries aimed
+  at its true target; an unrecoverable step stops the routine. Success
+  (`rlbench-nearcondition-history-hold-v2`) needs the RLBench conditions,
+  every step goal in program order, and all final predicates on the last five
+  boundaries. `step_outcomes`/`success_criteria` are kept in debug metadata.
+- Eighteen layouts were revised so that no planned attempt spawns
+  interpenetrating bodies, the measured Panda finger span never sweeps a
+  neighbour, and every face-aligned grasp fits the gripper; `layout_clearance.py`
+  and its tests enforce this over the full plan pool. Inserted blockers slide
+  to the nearest free spot on their declared row, recording declared and
+  applied positions.
+
+Evidence on `vps-a`: 108/108 nominal successes (36 programs × 3 seeds, no
+teleports or retries), 153/158 first-of-each-perturbation attempts successful
+with no crash or invalid observation, and a 36/36 archive-validated pipeline
+smoke at `9ef4140` whose proof passes the launcher's smoke-receipt check.
+`tests/regression/generation_program_audit.py` reproduces the simulator audit.
+
+Deliberate abstractions remain and must be accepted by the owner rather than
+read as physical claims: drawers and gates are free handle blocks slid along
+the table (the container body is static); transports travel at 0.90 m, so most
+blocker/aperture dependencies are symbolic; several multi-step nominal episodes
+exceed the method's 512-interval horizon when counted in RLBench actions.
+Full generation remains stopped until the owner accepts the record above.
 
 The checked-in `src/icgs/configuration/profiles/generation_runtime.json` is a
 **validation/setup example**, not a production launch profile. A compatible

@@ -1,7 +1,9 @@
 # Placement controller root-cause experiment
 
-Status: placement fixes partially validated; remaining T12 aperture failure under investigation.
-Full generation remains stopped.
+Status: superseded by the [collector-semantics audit](collector-semantics-20260929.md),
+which removes the release guard/freeze and handle snap introduced here and
+fixes the T12 push failure (push height, contact and recovery). Retained as
+historical evidence.
 
 Category B, CPU Colab (VPS unavailable), 2026-09-28. Baseline: local main
 `55585ea0af6e27ab9a478a41db24791646ca0723`; Colab cloned `0f92037` and
