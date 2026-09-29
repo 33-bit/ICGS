@@ -161,20 +161,38 @@ class RoboHiManSession:
         return sorted(joints, key=lambda joint: joint.get_name())
 
     # ---------------------------------------------------------------- reset
-    def reset(self, variation: int, *, rng_state: tuple | None = None) -> dict[str, Any]:
-        """Reset like ``TaskEnvironmentExt._get_live_demos``; return RNG lineage."""
+    def reset(self, variation: int, *, rng_state: tuple | None = None, attempts: int = 3) -> dict[str, Any]:
+        """Reset like ``TaskEnvironmentExt._get_live_demos``; return RNG lineage.
+
+        Upstream placement can fail for an RNG state that succeeded before
+        (robot reset residuals change collision checks). A failed placement is
+        retried from the *same* state at most ``attempts`` times and counted;
+        upstream generators instead continue with an advanced RNG state.
+        """
+        from rlbench.backend.exceptions import TaskEnvironmentError
+
         self.task_env.set_variation(int(variation))
         if rng_state is not None:
             np.random.set_state(rng_state)
         state = np.random.get_state()
         array, cached = rng_state_array(state)
-        descriptions, _ = self.task_env.reset()
+        errors = []
+        for _ in range(int(attempts)):
+            np.random.set_state(state)
+            try:
+                descriptions, _ = self.task_env.reset()
+                break
+            except TaskEnvironmentError as error:
+                errors.append(str(error)[:200])
+        else:
+            raise TaskEnvironmentError(f"placement failed {attempts}x from one RNG state: {errors[-1]}")
         return {
             "variation": int(variation),
             "rng_state": array,
             "rng_cached_gaussian": cached,
             "rng_state_sha256": hashlib.sha256(array.tobytes()).hexdigest(),
             "descriptions": descriptions,
+            "failed_placements_before_success": len(errors),
         }
 
     def variation_factor_state(self) -> list[dict[str, Any]]:

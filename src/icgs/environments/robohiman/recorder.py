@@ -185,6 +185,14 @@ class StepRecorder:
             "waypoint": self.waypoint_index,
         }
 
+    @staticmethod
+    def _forces(arm: Any) -> np.ndarray | None:
+        """Joint forces are unavailable until a physics step follows a state restore."""
+        try:
+            return np.asarray(arm.get_joint_forces(), dtype=np.float64)
+        except RuntimeError:
+            return None
+
     def _capture_state(self) -> None:
         from pyrep.backend import sim
 
@@ -200,7 +208,7 @@ class StepRecorder:
             "sim_time": float(sim.simGetSimulationTime()),
             "joint_positions": np.asarray(arm.get_joint_positions(), dtype=np.float64),
             "joint_velocities": np.asarray(arm.get_joint_velocities(), dtype=np.float64),
-            "joint_forces": np.asarray(arm.get_joint_forces(), dtype=np.float64),
+            "joint_forces": self._forces(arm),
             "joint_target_positions": np.asarray(arm.get_joint_target_positions(), dtype=np.float64),
             "tip_pose": np.asarray(tip.get_pose(), dtype=np.float64),
             "gripper_joint_positions": np.asarray(gripper.get_joint_positions(), dtype=np.float64),
@@ -262,7 +270,9 @@ class StepRecorder:
             "step_sim_time": np.array([row["sim_time"] for row in steps]),
             "step_joint_positions": stack("joint_positions"),
             "step_joint_velocities": stack("joint_velocities"),
-            "step_joint_forces": stack("joint_forces"),
+            "step_joint_forces": np.stack([row["joint_forces"] if row["joint_forces"] is not None
+                                           else np.zeros(arm_dof) for row in steps]),
+            "step_joint_forces_valid": np.array([row["joint_forces"] is not None for row in steps], dtype=bool),
             "step_joint_target_positions": stack("joint_target_positions"),
             "step_tip_pose": stack("tip_pose"),
             "step_gripper_joint_positions": stack("gripper_joint_positions"),
