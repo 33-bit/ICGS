@@ -99,12 +99,26 @@ def _run(session, lineage, variation, *, mode: str, frames: bool = False, pertur
     return recorder, recorder.arrays(), outcome
 
 
+WARM_LINEAGE_SKIPS: list[str] = []
+
+
 def _warm_lineage(session, args) -> dict[str, Any]:
-    """Reset once so factor RNGs exist, then capture the full reset lineage."""
+    """Reset once so factor RNGs exist, then pick the first placeable full lineage.
+
+    Like the upstream generators, a lineage whose sampled scene cannot be placed
+    is skipped (and recorded) rather than retried.
+    """
     np.random.seed(args.seed)
-    session.reset(args.variation)
-    np.random.seed(args.seed + 1000)
-    return session.lineage_state()
+    session.reset(args.variation, attempts=10)
+    for offset in range(20):
+        np.random.seed(args.seed + 1000 + offset)
+        lineage = session.lineage_state()
+        try:
+            session.reset(args.variation, lineage=lineage, attempts=1)
+            return lineage
+        except TaskEnvironmentError as error:
+            WARM_LINEAGE_SKIPS.append(f"seed+{1000 + offset}: {error}"[:200])
+    raise RuntimeError("no placeable lineage in 20 draws")
 
 
 def _compare(a: dict[str, np.ndarray], b: dict[str, np.ndarray]) -> dict[str, Any]:
@@ -574,6 +588,7 @@ def main(argv: list[str] | None = None) -> int:
     report = {"parity": cmd_parity, "replay": cmd_replay, "a0": cmd_a0, "dependency": cmd_dependency,
               "canonical": cmd_canonical}[args.gate](args)
     report["wall_s"] = round(time.time() - started, 1)
+    report["unplaceable_lineages_skipped"] = WARM_LINEAGE_SKIPS
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(canonical_json(report))
     print(canonical_json(report))
