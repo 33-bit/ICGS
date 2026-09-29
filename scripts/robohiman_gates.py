@@ -65,7 +65,7 @@ def _session(args: argparse.Namespace, *, cameras=(), masks=False, point_cloud=F
     return session
 
 
-def _run(session, state, variation, *, mode: str, frames: bool = False, perturbations=None,
+def _run(session, lineage, variation, *, mode: str, frames: bool = False, perturbations=None,
          stop_after=None, max_steps=3000, start_snapshot=None):
     """mode: 'upstream' (Scene.get_demo) or 'mirror' (WaypointExpert).
 
@@ -73,7 +73,7 @@ def _run(session, state, variation, *, mode: str, frames: bool = False, perturba
     instead of a fresh reset, removing reset-to-reset robot residuals.
     """
     if start_snapshot is None:
-        session.reset(variation, rng_state=state)
+        session.reset(variation, lineage=lineage)
     else:
         restore_snapshot(session, start_snapshot)
         session.scene._has_init_episode = True  # what reset leaves; get_demo only checks it
@@ -97,6 +97,14 @@ def _run(session, state, variation, *, mode: str, frames: bool = False, perturba
         recorder.disarm()
     outcome["task_success"] = bool(session.task_obj.success()[0])
     return recorder, recorder.arrays(), outcome
+
+
+def _warm_lineage(session, args) -> dict[str, Any]:
+    """Reset once so factor RNGs exist, then capture the full reset lineage."""
+    np.random.seed(args.seed)
+    session.reset(args.variation)
+    np.random.seed(args.seed + 1000)
+    return session.lineage_state()
 
 
 def _compare(a: dict[str, np.ndarray], b: dict[str, np.ndarray]) -> dict[str, Any]:
@@ -123,9 +131,8 @@ def _compare(a: dict[str, np.ndarray], b: dict[str, np.ndarray]) -> dict[str, An
 def cmd_parity(args: argparse.Namespace) -> dict[str, Any]:
     session = _session(args, cameras=("front", "wrist"), image=(64, 64))
     try:
-        np.random.seed(args.seed)
-        state = np.random.get_state()
-        session.reset(args.variation, rng_state=state)
+        state = _warm_lineage(session, args)
+        session.reset(args.variation, lineage=state)
         start = capture_snapshot(session, 0)
         report: dict[str, Any] = {"gate": "parity", "task": args.task, "variation": args.variation,
                                   "seed": args.seed}
@@ -190,9 +197,8 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
                               "seed": args.seed, "anchor_after_waypoint": args.anchor_waypoint,
                               "thresholds": REPLAY_THRESHOLDS, "snapshot_id": SNAPSHOT_ID, "replay_id": REPLAY_ID}
     try:
-        np.random.seed(args.seed)
-        state0 = np.random.get_state()
-        session.reset(args.variation, rng_state=state0)
+        state0 = _warm_lineage(session, args)
+        session.reset(args.variation, lineage=state0)
         monitor = build_monitor(session.task, session.task_env, args.variation)
         # Reference run: expert to the anchor, snapshot, expert to the end.
         ref = StepRecorder(session, monitor, frame_stride=0)
@@ -245,7 +251,7 @@ def cmd_replay(args: argparse.Namespace) -> dict[str, Any]:
         repeat = trajectory_discrepancy(b["arrays"], c["arrays"], 0, 0,
                                         min(b["arrays"]["cmd_phase"].shape[0], c["arrays"]["cmd_phase"].shape[0]))
         # Reset → replay the full recorded command history.
-        report["reset_before_replay"] = {k: v for k, v in session.reset(args.variation, rng_state=state0).items()
+        report["reset_before_replay"] = {k: v for k, v in session.reset(args.variation, lineage=state0).items()
                                          if k.startswith("failed_placement")}
         d_rec = StepRecorder(session, monitor, frame_stride=0)
         with d_rec:
@@ -407,10 +413,9 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
         "candidates": [],
     }
     try:
-        np.random.seed(args.seed)
-        state0 = np.random.get_state()
+        state0 = _warm_lineage(session, args)
         # Reference prefix up to the anchor, executed once by the expert.
-        session.reset(args.variation, rng_state=state0)
+        session.reset(args.variation, lineage=state0)
         monitor = build_monitor(session.task, session.task_env, args.variation)
         prefix = StepRecorder(session, monitor, frame_stride=0)
         with prefix:
@@ -434,7 +439,7 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
             for trial in range(args.trials):
                 jitter = [{"family": "execution_pose_offset", "waypoint": w,
                            "delta_m": rng.normal(0.0, args.jitter_m, 3).tolist()} for w in later]
-                session.reset(args.variation, rng_state=state0)
+                session.reset(args.variation, lineage=state0)
                 trial_monitor = build_monitor(session.task, session.task_env, args.variation)
                 rec = StepRecorder(session, trial_monitor, frame_stride=0)
                 with rec:

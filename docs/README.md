@@ -11,7 +11,12 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [RESEARCH](RESEARCH.md) | Baseline-change policy, experiments, reproducibility expectations |
 | [Original baseline](baselines/instant_policy.md) | Historical source/defaults, entry-point overrides, assets and reproduction limits |
 | [Policy data contract](components/policy-data-contract.md) | Current data, graph, frame, action and normalization semantics |
-| [Data generation](components/generation.md) | Canonical generation modules, HF archive lifecycle, record classes, resume and view finalization |
+| [RoboHiMan backbone](components/robohiman.md) | Primary task/environment path under migration: pinned simulator venv, Stage-1 records, instrumentation, gates |
+| [RoboHiMan decision](decisions/0016-robohiman-backbone.md) | RoboHiMan as upstream backbone; ICGS-owned instrumentation; custom generator non-primary |
+| [RoboHiMan migration plan](plans/active/robohiman-backbone-migration.md) | Phases, go/no-go gates and recovery for the backbone switch |
+| [Migration classification](audits/2026-09-30-robohiman-migration-classification.md) | Generic vs custom-generator vs mixed components before refactor |
+| [RoboHiMan validation evidence](experiments/robohiman-validation/README.md) | Parity, A0, replay, dependency, split-overlap and smoke-collection results |
+| [Data generation](components/generation.md) | Custom 36-program generator (legacy/reference since ADR 0016; not scaled): modules, HF archive lifecycle, record classes, resume and view finalization |
 | [Generation artifacts](components/generation-artifacts.md) | Legacy v2 and lossless HF archive trees, file inventories, consumers and retention |
 | [Environment setup](components/environment.md) | Portable CPU/CUDA/generation profiles, verification and credential boundary |
 | [Composition examples](components/composition-examples.md) | Current component replacement APIs and future extension boundaries |

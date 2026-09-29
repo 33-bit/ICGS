@@ -77,6 +77,32 @@ def _task_facts(root: Path, task: str, family: str) -> dict[str, Any]:
     }
 
 
+def _factors_left_enabled(root: Path, task: str, family: str) -> list[dict[str, str]]:
+    """Reproduce get_spreadsheet_config matching for strategy 0 on the YAML factor list.
+
+    Upstream toggles a YAML factor only when its (type, name) matches a strategy
+    entry (or the entry name is "any"); a YAML factor that is enabled and never
+    matched stays enabled even in the "no_variations" strategy.
+    """
+    base = root / "HiMan-Bench/robot-colosseum/colosseum/assets"
+    yaml_text = (base / f"{family}_configs/{task}.yaml").read_text()
+    strategy = json.loads((base / f"{family}_json/{task}.json").read_text())["strategy"][0]["variations"]
+    left = []
+    for block in re.split(r"\n\s*-\s+variation:\s*", yaml_text)[1:]:
+        kind = block.split()[0]
+        name = re.search(r"^\s*name:\s*(\S+)", block, re.M)
+        enabled = re.search(r"^\s*enabled:\s*(\S+)", block, re.M)
+        name = name.group(1) if name else None
+        state = enabled is not None and enabled.group(1) == "True"
+        for entry in strategy:
+            if entry["type"] == kind and (entry["name"] == "any" or entry["name"] == name):
+                state = entry["enabled"]
+        if state:
+            targets = re.search(r"^\s*targets:\s*(\[.*?\])", block, re.M)
+            left.append({"type": kind, "name": name, "targets": targets.group(1) if targets else None})
+    return left
+
+
 def _split_members(split: dict[str, Any], facts: dict[str, dict[str, Any]]) -> dict[str, set]:
     members: dict[str, set] = {k: set() for k in ("task", "primitive", "scene", "asset", "condition",
                                                    "perturbation_family", "strategy")}
@@ -116,6 +142,9 @@ def main(argv: list[str] | None = None) -> int:
             families[task] = fields["generator"]
     facts = {task: _task_facts(root, task, family) for task, family in families.items()}
     strategy0 = {task: fact["strategies"][0]["name"] for task, fact in facts.items()}
+    factors_in_no_variations = {task: _factors_left_enabled(root, task, family)
+                                for task, family in families.items()}
+    factors_in_no_variations = {k: v for k, v in factors_in_no_variations.items() if v}
     members = {name: _split_members(fields, facts) for name, fields in splits.items()}
     train = [n for n in splits if n.startswith("train")]
     test = [n for n in splits if n.startswith("test")]
@@ -142,6 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         "splits": {name: {**fields, "tasks": list(fields["tasks"])} for name, fields in splits.items()},
         "tasks": facts,
         "pairs": pairs,
+        "factors_enabled_in_no_variations_strategy": factors_in_no_variations,
         "test_compositional_tasks_unseen_in_any_train_split": unseen_test_tasks,
         "seed_lineage": {
             "script_env_seed": {name: fields["seed"] for name, fields in splits.items()},
@@ -157,6 +187,7 @@ def main(argv: list[str] | None = None) -> int:
     }
     Path(args.out).write_text(json.dumps(report, indent=1, sort_keys=True))
     summary = {"pins_drift": drift, "unseen_test_compositional_tasks": unseen_test_tasks,
+               "factors_enabled_in_no_variations_strategy": factors_in_no_variations,
                "strategy_index_0_names": report["strategy_index_0_names"]}
     for pair in pairs:
         summary[f"{pair['train']}→{pair['test']}"] = {

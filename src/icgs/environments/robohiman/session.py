@@ -161,7 +161,22 @@ class RoboHiManSession:
         return sorted(joints, key=lambda joint: joint.get_name())
 
     # ---------------------------------------------------------------- reset
-    def reset(self, variation: int, *, rng_state: tuple | None = None, attempts: int = 3) -> dict[str, Any]:
+    def lineage_state(self) -> dict[str, Any]:
+        """Everything reset draws from: numpy's global RNG and every factor RNG."""
+        return {"numpy": np.random.get_state(), "factors": self.factor_rng_states()}
+
+    def _restore_factor_rngs(self, states: list[dict[str, Any]]) -> None:
+        variations = list(getattr(getattr(self.scene, "_var_manager", None), "_variations", []) or [])
+        if len(variations) != len(states):
+            raise RuntimeError("factor RNG restore needs the same instantiated factors (reset once first)")
+        for variation, state in zip(variations, states):
+            if type(variation).__name__ != state["class"] or getattr(variation, "_name", None) != state["name"]:
+                raise RuntimeError("factor RNG restore order mismatch")
+            if state["bit_generator_state"] is not None:
+                variation._rng.bit_generator.state = state["bit_generator_state"]
+
+    def reset(self, variation: int, *, rng_state: tuple | None = None, attempts: int = 3,
+              lineage: dict[str, Any] | None = None) -> dict[str, Any]:
         """Reset like ``TaskEnvironmentExt._get_live_demos``; return RNG lineage.
 
         Upstream placement can fail for an RNG state that succeeded before
@@ -172,14 +187,20 @@ class RoboHiManSession:
         from rlbench.backend.exceptions import TaskEnvironmentError
 
         self.task_env.set_variation(int(variation))
+        if lineage is not None:
+            rng_state = lineage["numpy"]
         if rng_state is not None:
             np.random.set_state(rng_state)
         state = np.random.get_state()
         array, cached = rng_state_array(state)
-        factors_before = self.factor_rng_states()
+        factors_before = lineage["factors"] if lineage is not None else self.factor_rng_states()
         errors = []
         for _ in range(int(attempts)):
             np.random.set_state(state)
+            if factors_before:
+                # Colosseum factors own RNGs that advance every reset; restoring
+                # them is what makes a retry (or a replay) see the same scene.
+                self._restore_factor_rngs(factors_before)
             try:
                 descriptions, _ = self.task_env.reset()
                 break
