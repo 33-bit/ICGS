@@ -59,6 +59,27 @@ def _plan(program_id: str, kind: str, index: int):
     return plans[-1]
 
 
+def first_index_per_perturbation_kind(program_id: str) -> list[int]:
+    """Production perturbed-plan index of the first attempt of every kind."""
+    from icgs.data.collection.generation.batch import AttemptPlanner, bounds_from_row
+    from icgs.data.collection.generation.quota import quota_for_program
+
+    row = {item["program_id"]: item for item in json.loads(MANIFEST.read_text())["catalog"]}[program_id]
+    quota = quota_for_program(program_id)
+    planner = AttemptPlanner(
+        program_id,
+        bounds=bounds_from_row(row),
+        asset_family_id=row.get("asset_family_id"),
+        n_perturbed=quota.perturbed_attempt_target,
+    )
+    for _ in range(quota.nominal_success_target):
+        planner.next_plan("nominal")
+    first: dict[str, int] = {}
+    for index in range(quota.perturbed_attempt_target):
+        first.setdefault(planner.next_plan("perturbed").intervention["kind"], index)
+    return sorted(first.values())
+
+
 def run_child(program_id: str, kind: str, index: int, out_dir: Path) -> int:
     os.environ.setdefault("ICGS_GENERATION_TRACE", "1")
     loader = importlib.util.spec_from_file_location("generation_episode_worker", REPO / "scripts" / "generation_episode_worker.py")
@@ -191,7 +212,10 @@ def run_parent(args) -> int:
     if programs == ["all"]:
         programs = [row["program_id"] for row in json.loads(MANIFEST.read_text())["catalog"]]
     jobs = [(program, "nominal", int(index)) for program in programs for index in args.nominal.split(",") if index]
-    jobs += [(program, "perturbed", int(index)) for program in programs for index in args.perturbed.split(",") if index]
+    if args.perturbed == "each-kind":
+        jobs += [(program, "perturbed", index) for program in programs for index in first_index_per_perturbation_kind(program)]
+    else:
+        jobs += [(program, "perturbed", int(index)) for program in programs for index in args.perturbed.split(",") if index]
     out_dir = Path(args.out).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     simulator = str(REPO / "outputs" / "CoppeliaSim")
@@ -258,7 +282,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--out", required=True)
     run.add_argument("--programs", nargs="+", default=["all"])
     run.add_argument("--nominal", default="0")
-    run.add_argument("--perturbed", default="")
+    run.add_argument("--perturbed", default="", help="comma-separated indices or 'each-kind'")
     run.add_argument("--parallel", type=int, default=4)
     run.add_argument("--timeout", type=int, default=1500)
     run.add_argument("--force", action="store_true")

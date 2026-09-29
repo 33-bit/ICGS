@@ -732,7 +732,7 @@
   "T08": {
     "class_name": "T08PackTwoObjects",
     "module": "t08_pack_two_objects",
-    "description": "place B then A into distinct tray slots",
+    "description": "place B then A into distinct drawer slots and close the drawer",
     "objects": {
       "object_a": {
         "pos": [
@@ -1427,7 +1427,7 @@
   "T14": {
     "class_name": "T14ParkAndRestore",
     "module": "t14_park_and_restore",
-    "description": "park blocker and restore it after a retrieval motion",
+    "description": "park blocker and restore it",
     "objects": {
       "blocker": {
         "pos": [
@@ -2211,7 +2211,7 @@
   "T20": {
     "class_name": "T20ParkRetrievePlace",
     "module": "t20_park_retrieve_place",
-    "description": "park blocker, retrieve object A, and place it on pad",
+    "description": "park blocker, retrieve object A, and place it at the target",
     "objects": {
       "blocker": {
         "pos": [
@@ -2529,7 +2529,7 @@
   "V03": {
     "class_name": "V03ParkRetrievePlaceRestore",
     "module": "v03_park_retrieve_place_restore",
-    "description": "park blocker, retrieve object, place on pad, and restore blocker",
+    "description": "park blocker, retrieve object, place it at the target, and restore blocker",
     "objects": {
       "blocker": {
         "pos": [

@@ -242,6 +242,12 @@ def test_push_contact_offset_uses_measured_fingers_and_object_face(monkeypatch):
     assert worker.push_contact_offset_m([1.0, 0.0], [0.05, 0.05], 0.0) == pytest.approx(0.0095 + 0.025)
 
 
+def test_pusher_centre_follows_tool_yaw(monkeypatch):
+    worker = _load_generation_episode_worker_without_simulator(monkeypatch)
+    np.testing.assert_allclose(worker.pusher_center_offset(90.0), [-0.00505, 0.0], atol=1e-12)
+    np.testing.assert_allclose(worker.pusher_center_offset(180.0), [0.0, -0.00505], atol=1e-12)
+
+
 def test_marker_pairs_include_articulation_targets_once(monkeypatch):
     worker = _load_generation_episode_worker_without_simulator(monkeypatch)
     conditions = (("object_a", "target_a", 0.01), ("drawer_handle", "close_target", 0.01))

@@ -110,6 +110,14 @@ def plan_step(step: Mapping[str, Any], poses: Mapping[str, Sequence[float]], *, 
 
         path = [via, target] if via is not None else [target]
         ux, uy = unit(obj, path[0])
+        # Centre the finger contact face on the push line: the worker supplies
+        # the finger-box centre relative to the tool tip (world axes).  Only its
+        # component across the push direction shifts the tool path.
+        cx, cy = (float(v) for v in step.get("pusher_center_offset_m", (0.0, 0.0)))
+        along = cx * ux + cy * uy
+        shift_x, shift_y = -(cx - along * ux), -(cy - along * uy)
+        obj = [obj[0] + shift_x, obj[1] + shift_y, obj[2]]
+        path = [[point[0] + shift_x, point[1] + shift_y, point[2]] for point in path]
         # No lateral waypoint noise behind the object: an off-centre start
         # turns the push into a rotation.  Only the approach height varies.
         pre = [obj[0] - ux * (contact_offset_m + clearance_m), obj[1] - uy * (contact_offset_m + clearance_m)]

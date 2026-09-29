@@ -226,3 +226,17 @@ class HeldContinuationTests(unittest.TestCase):
             self.assertIs(transport.get("release"), False, program_id)
             motions = plan_step(transport, {name: geom[0] for name, geom in compiled[program_id].objects.items()})
             self.assertFalse([item for item in motions if item["kind"] == "grip"], program_id)
+
+    def test_push_line_is_centred_on_the_finger_face(self):
+        poses = {"blocker": [0.25, -0.05, 0.775], "push_target": [0.25, 0.08, 0.775]}
+        base = {"type": "push", "obj": "blocker", "target": "push_target", "push_z": 0.0, "contact_offset_m": 0.04}
+        plain = plan_step(base, poses)
+        centred = plan_step({**base, "pusher_center_offset_m": [-0.005, 0.0]}, poses)
+        for before, after in zip(plain, centred):
+            self.assertAlmostEqual(after["xyz"][0], before["xyz"][0] + 0.005, places=9)
+            self.assertAlmostEqual(after["xyz"][1], before["xyz"][1], places=9)
+        # A centre offset along the push direction does not move the path.
+        along = plan_step({**base, "pusher_center_offset_m": [0.0, 0.004]}, poses)
+        for before, after in zip(plain, along):
+            self.assertAlmostEqual(after["xyz"][0], before["xyz"][0], places=9)
+            self.assertAlmostEqual(after["xyz"][1], before["xyz"][1], places=9)

@@ -180,6 +180,19 @@ PUSH_COMPLETION_MAX_ADVANCE_M = 0.03
 PANDA_CLOSED_FINGER_EXTENT_M = ((-0.0196, 0.0095), (-0.021, 0.021))
 
 
+def pusher_center_offset(finger_axis_deg: float, finger_extent=PANDA_CLOSED_FINGER_EXTENT_M) -> list[float]:
+    """Closed-finger box centre relative to the tool tip in world axes.
+
+    The measured box is asymmetric about the tip (tool tilt), and it turns with
+    the tool yaw (finger axis at 90 degrees for the default yaw).
+    """
+    (x0, x1), (y0, y1) = finger_extent
+    local = np.asarray([(x0 + x1) / 2.0, (y0 + y1) / 2.0])
+    turn = np.deg2rad(float(finger_axis_deg) - 90.0)
+    c, s = np.cos(turn), np.sin(turn)
+    return [float(c * local[0] - s * local[1]), float(s * local[0] + c * local[1])]
+
+
 def push_contact_offset_m(direction_xy, size_xy, yaw_rad: float,
                           finger_extent=PANDA_CLOSED_FINGER_EXTENT_M) -> float:
     """Tool-tip to object-centre distance while pushing along ``direction_xy``.
@@ -1122,7 +1135,11 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
         align_grasp_yaw(exec_step, pending_yaw_deg)
         poses = live_poses(spec.objects)
         if exec_step["type"] == "push" and exec_step.get("obj") in poses:
-            exec_step = {**exec_step, "contact_offset_m": measured_push_contact_offset(exec_step, poses)}
+            exec_step = {
+                **exec_step,
+                "contact_offset_m": measured_push_contact_offset(exec_step, poses),
+                "pusher_center_offset_m": pusher_center_offset(finger_axis_deg),
+            }
         place_like = exec_step.get("type") in PLACE_STEP_TYPES
         for motion in plan_step(exec_step, poses):
             kind = motion["kind"]
