@@ -62,15 +62,15 @@ the design element that meets it, and the check that proves it.
 
 | # | Method requirement | Design element | Verification |
 | --- | --- | --- | --- |
-| M1 | Cross-stage dependencies are physical; test families define delayed consequences (pack–add–close, grasp–transport–fit, park–retrieve–restore) | Fixture library and layout rules (sections 4–5) | Static skip audit and consequence audit (section 11); simulator skip spot checks |
-| M2 | Custom predicates: stable grasp/lift, stable placement, inside container (OBB, 2 mm), drawer closed (joint within 5 mm, 5 intervals), fit ≤1 cm/10°, restored blocker, full success = final and mandatory-history predicates for 5 intervals | Shared relation library (section 7) used by success, step goals and labels | Unit tests per relation; simulator audit |
+| M1 | Cross-stage dependencies are physical; test families define delayed consequences (pack–add–close, grasp–transport–fit, park–retrieve–restore) | Fixture library and layout rules (sections 4–5) | Skip and consequence audits (G1); skipped-step simulator runs (G2) |
+| M2 | Custom predicates: stable grasp/lift, stable placement, inside container (OBB, 2 mm), drawer closed (joint within 5 mm, 5 intervals), fit ≤1 cm/10°, restored blocker, full success = final and mandatory-history predicates for 5 intervals | Shared relation library (section 7) used by success, step goals and labels | Unit tests per relation; G2 |
 | M3 | Task labels: occurrence ρ historical; current relation ν recomputed from state at t; eligibility ε = conjunction of prerequisites at t; free-space postconditions masked; ρ=1, ν=0 cases after displacement | Label materialisation from the relation library (section 7.3) | Unit tests; displacement episodes contain ρ=1, ν=0 rows |
-| M4 | Perturbations: target offset ≤2 cm/10°, gripper closing one interval early/late, object shift ≤3 cm after the robot reaches a stationary state, blocker inserted into a free-space path, physics executed after the intervention, pre/post states and intervention ID stored | Perturbation semantics (section 8) | Unit tests; perturbed simulator audit |
-| M5 | At least two distinct valid execution modes when the task permits | Two scripted modes differing in route and speed (section 6.6) | Both modes pass nominal audits |
+| M4 | Perturbations: target offset ≤2 cm/10°, gripper closing one interval early/late, object shift ≤3 cm after the robot reaches a stationary state, blocker inserted into a free-space path, physics executed after the intervention, pre/post states and intervention ID stored | Perturbation semantics (section 8) | Unit tests; G3 |
+| M5 | At least two distinct valid execution modes when the task permits | Two scripted modes differing in route and speed (section 6.6) | G2 covers both modes |
 | M6 | Asset families split 70/15/15 by mesh family or generator before augmentation; test uses new mesh families | Parametric prism families (section 9) | Manifest validator rejects cross-split generators; pool audit |
-| M7 | Randomization: translation in task regions, yaw, size 0.8–1.2, nuisance lighting/camera; balanced target position, favourable side and grasp accessibility | Keep 0.8–1.2; fit fixtures resize with the object; balanced scene mirroring (section 5.3) | Pool audit; per-program mirror balance report |
-| M8 | Contact segments re-executed; free-space connectors from a planner; no teleportation | Collision-checked lift–transit–descend connectors (section 6.1) | Static connector audit; teleport detector in simulator audit |
-| M9 | Generation stops at a fixed interval cap; timing measured | Interval = one recorded controller transition; cap from measured lengths, enforced by the worker (section 10) | Audit length report; worker test |
+| M7 | Randomization: translation in task regions, yaw, size 0.8–1.2, nuisance lighting/camera; balanced target position, favourable side and grasp accessibility | Keep 0.8–1.2; fit fixtures resize with the object; balanced scene mirroring (section 5.3) | Pool audit (G1); plan unit test for 50/50 mirror balance |
+| M8 | Contact segments re-executed; free-space connectors from a planner; no teleportation | Collision-checked lift–transit–descend connectors (section 6.1) | Connector audit (G1); teleport detector (G2) |
+| M9 | Generation stops at a fixed interval cap; timing measured | Interval = one recorded controller transition; cap from measured lengths, enforced by the worker (section 10) | G2 episode lengths; worker cap test |
 | M10 | Snapshots and labels see articulation state | Joint position/velocity recorded every boundary (section 12) | Archive validator; label tests |
 | M11 | Foreground segmentation is a perception assumption; policy `declared_objects_and_blockers` | Declared-foreground list including fixtures, and wrist masks recorded (section 12) | Archive validator |
 
@@ -326,7 +326,7 @@ mass scaled with volume. Holders and apertures follow the generator footprint.
 
 - One interval = one recorded controller transition with measured duration.
 - Generation cap = max(512, round up to a multiple of 128 of 1.5 × the longest
-  nominal expert episode in the final audit). The worker enforces it
+  nominal expert episode in gate G2). The worker enforces it
   (`interval_limit` valid failure).
 - Benchmark horizon H = max(512, round up to a multiple of 128 of 2 × the
   longest nominal test-composition expert episode).
@@ -359,14 +359,14 @@ receipts and the unused HF prefix are retired.
 Extend `layout_clearance` with fixture solids (roof, walls, panels, pockets),
 the palm box and finger boxes at the measured offsets, connectors at transit
 height, passage heights, articulation sweeps, and releases inside pockets. It
-runs over every planned attempt of both execution modes and both mirror states.
+runs over every planned attempt, each with its planned mode and mirror side.
 
 ### 11.2 Dependency audits (regression tests)
 
 - Skip audit: removing any declared enabling step produces a clearance
   violation in a later step, except the section 4.7 allow-list.
-- Consequence audit: a representative wrong decision produces a downstream
-  conflict. Cases: A placed 30 mm towards the tray centre (P1–P3, T07, T08,
+- Consequence audit, on each program's nominal layout at scales 0.8 and 1.2:
+  a representative wrong decision produces a downstream conflict. Cases: A placed 30 mm towards the tray centre (P1–P3, T07, T08,
   T19), park pose shifted 30 mm (R1–R4, T13, T15, T16, T20, V03), held-object
   yaw rotated 90° at the aperture or holder (G1, G2, G4, T09, T11, T17, V02),
   drawer object top above the roof clearance (drawer programs).
@@ -386,13 +386,24 @@ runs over every planned attempt of both execution modes and both mirror states.
 
 ## 13. Acceptance gates before full generation
 
-| Gate | Criterion |
-| --- | --- |
-| G1 static | section 11 audits pass for the whole pool (all modes, mirrors); unit tests and L0 pass |
-| G2 nominal | simulator audit 36 programs × 3 seeds × 2 modes: ≥ 212/216 success, 0 crashes, 0 teleports, every failure diagnosed; no episode above the cap |
-| G3 dependency | simulator spot check per mechanism family: skipping the enabling step fails physically |
-| G4 perturbed | one attempt per applicable kind per program: 0 crashes or invalid observations; failures classified; ρ=1, ν=0 rows present in displacement episodes |
-| G5 archive | 36-program smoke through the canonical worker and archive writer; launcher accepts the receipt; new fields validated |
+Each gate protects one thing nothing else checks. Gates find defects; they do
+not estimate yield (section 13.1).
+
+| Gate | Runs | Pass |
+| --- | --- | --- |
+| G1 static | unit tests, L0, section 11 audits | all pass |
+| G2 simulator coverage | one nominal attempt per program × execution mode × mirror side (144), plus one attempt per mechanism family (drawer, gate, aperture, holder, adjacency blocker) with its enabling step skipped | 0 crashes, invalid observations, teleports or runaway episodes (provisional cap 2048); every failure diagnosed from its trace: expert or scene defects are fixed and the program re-run, genuine physical variation is accepted; every skipped-step attempt fails physically (the static model cannot tell whether fingers shove a movable blocker aside) |
+| G3 perturbations | one attempt per perturbation kind on one program per mechanism family | 0 crashes or invalid observations; intervention boundary and pre/post state recorded; the displacement run yields ρ=1, ν=0 rows |
+| G4 archive smoke | canonical worker and archive writer, one nominal attempt per program | launcher accepts the receipt; archive validator accepts the new fields |
+
+The final generation cap and horizon (section 10.1) are computed from the G2
+episode lengths.
+
+### 13.1 Launch-time yield check
+
+After roughly the first 10 attempts per program, the operator reads the run
+report. Any program below about 70% success is paused and diagnosed before it
+consumes its attempt cap. The run is resumable, so this needs no new tooling.
 
 ## 14. Phases
 
@@ -402,7 +413,7 @@ runs over every planned attempt of both execution modes and both mirror states.
    passage primitives, recorded articulations and masks.
 3. Prism asset families, manifest schema, validator.
 4. Layouts for 36 programs with mirroring; static audits green.
-5. Simulator gates G2–G5; documentation; owner go-ahead for full generation.
+5. Simulator gates G2–G4; documentation; owner go-ahead for full generation.
 
 Each phase is committed on `main` with its validation evidence. Simulator runs
 use `~/ICGS` on `vps-a` at the pushed commit.
