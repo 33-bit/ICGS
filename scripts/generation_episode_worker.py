@@ -175,6 +175,7 @@ ARTICULATION_STEP_TYPES = frozenset({"open_articulation", "close_articulation"})
 PUSH_COMPLETION_STEPS = 3
 PUSH_COMPLETION_TOLERANCE_M = 0.002
 PUSH_COMPLETION_MAX_ADVANCE_M = 0.03
+PUSH_COMPLETION_MAX_LATERAL_M = 0.015
 # Measured closed Panda finger extent around the tool tip in world axes for the
 # default tool yaw (x: -0.0196..0.0095 m, y: -0.021..0.021 m).
 PANDA_CLOSED_FINGER_EXTENT_M = ((-0.0196, 0.0095), (-0.021, 0.021))
@@ -255,9 +256,11 @@ def step_retry(step: dict) -> dict | None:
             "place_z": float(step.get("place_z", 0.0)),
         }
     if kind in {"grasp", "push", "reach"} | ARTICULATION_STEP_TYPES:
+        # A corrective push goes straight to the target from the measured
+        # pose: an aperture waypoint the body already passed would push it back.
         return {
             key: value for key, value in step.items()
-            if key not in {"approach_waypoint", "release_waypoint", "place_offset_m", "contact_offset_m"}
+            if key not in {"approach_waypoint", "release_waypoint", "place_offset_m", "contact_offset_m", "via"}
         }
     return None
 
@@ -1246,9 +1249,17 @@ def run_program(env, spec, plan=None, *, capture: dict | None = None) -> dict:
         unit = np.asarray(direction, dtype=np.float64)
         unit = unit / max(float(np.linalg.norm(unit)), 1e-9)
         tip_target = np.asarray(contact_xyz, dtype=np.float64).copy()
+        normal = np.asarray([-unit[1], unit[0]])
         for _ in range(PUSH_COMPLETION_STEPS):
-            remaining = float(unit @ (np.asarray(target.get_position())[:2] - np.asarray(obj.get_position())[:2]))
+            body = np.asarray(obj.get_position())[:2]
+            remaining = float(unit @ (np.asarray(target.get_position())[:2] - body))
             if remaining <= PUSH_COMPLETION_TOLERANCE_M:
+                break
+            # Advance only while the body is still in front of the fingers; a
+            # body that slid off the push line is left to the step goal/retry.
+            tip = np.asarray(env._scene.robot.arm.get_tip().get_position())[:2]
+            if abs(float(normal @ (body - tip))) > PUSH_COMPLETION_MAX_LATERAL_M:
+                trace_event("push_completion_lost_contact", lateral_m=float(normal @ (body - tip)))
                 break
             tip_target[:2] += unit * min(remaining, PUSH_COMPLETION_MAX_ADVANCE_M)
             trace_event("push_completion", remaining_m=remaining)

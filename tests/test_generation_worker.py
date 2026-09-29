@@ -218,7 +218,7 @@ def test_step_retry_targets_the_true_goal_without_perturbation_offsets(monkeypat
     }
     push = {"type": "push", "obj": "object_a", "target": "target_a", "via": "gate_wp",
             "contact_offset_m": 0.04, "release_waypoint": {"dx_m": 0.01}}
-    assert worker.step_retry(push) == {"type": "push", "obj": "object_a", "target": "target_a", "via": "gate_wp"}
+    assert worker.step_retry(push) == {"type": "push", "obj": "object_a", "target": "target_a"}
     close = {"type": "close_articulation", "obj": "drawer_handle", "target": "close_target", "axis": "y"}
     assert worker.step_retry(close) == close
     grasp = {"type": "grasp", "obj": "object_a", "grasp_z": 0.02, "approach_waypoint": {"dx_m": 0.003}}
