@@ -114,8 +114,10 @@ def _checks(session: Any, manifest: dict[str, Any], arrays: dict[str, np.ndarray
         "achieved_logging": {"finite": bool(np.isfinite(arrays["step_joint_positions"]).all()
                                             and np.isfinite(arrays["step_tip_pose"]).all()),
                              "command_differs_from_achieved": bool(tracking.size and tracking.max() > 0),
-                             "sim_dt_constant": bool(np.allclose(np.diff(arrays["step_sim_time"]),
-                                                                 manifest["controller"]["physics_dt"], atol=1e-6))},
+                             # CoppeliaSim keeps simulation time in float32; allow its spacing at t_end.
+                             "sim_dt_constant": bool(np.allclose(
+                                 np.diff(arrays["step_sim_time"]), manifest["controller"]["physics_dt"],
+                                 atol=float(np.spacing(np.float32(arrays["step_sim_time"][-1]))) + 1e-9))},
         "cameras_and_pointcloud": {**geometry, "ok": bool(cams_ok and len(geometry["cameras"]) == len(session.cameras))},
         "predicates": {"success_conjunction_matches_task_success": float((conj == arrays["step_task_success"]).mean()),
                        "any_edge": bool((np.diff(trace.astype(np.int8), axis=0) != 0).any())},

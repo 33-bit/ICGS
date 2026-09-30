@@ -106,7 +106,8 @@ def _a1(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> dict[str, An
     result: dict[str, Any] = {
         "physics_dt_declared": manifest["controller"]["physics_dt"],
         "sim_dt_min_max": [float(dt.min()), float(dt.max())],
-        "sim_dt_all_equal_declared": bool(np.allclose(dt, manifest["controller"]["physics_dt"], atol=1e-6)),
+        "sim_dt_all_equal_declared": bool(np.allclose(  # float32 simulator clock spacing at t_end
+            dt, manifest["controller"]["physics_dt"], atol=float(np.spacing(np.float32(times[-1]))) + 1e-9)),
         "steps": int(steps),
         "arm_target_command_rows": int(target_valid.sum()),
         "gripper_velocity_command_rows": int(arrays["cmd_gripper_joint_velocity_valid"].any(axis=1).sum()),
