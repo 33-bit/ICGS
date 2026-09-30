@@ -145,6 +145,10 @@ def main(argv: list[str] | None = None) -> int:
     factors_in_no_variations = {task: _factors_left_enabled(root, task, family)
                                 for task, family in families.items()}
     factors_in_no_variations = {k: v for k, v in factors_in_no_variations.items() if v}
+    # A split script with IDX_TO_COLLECT=0 silently collects nothing for these tasks.
+    strategy0_disabled = sorted(task for task, fact in facts.items() if not fact["strategies"][0]["enabled"])
+    affected = {name: sorted(set(fields["tasks"]) & set(strategy0_disabled))
+                for name, fields in splits.items() if fields["idx"] == 0}
     members = {name: _split_members(fields, facts) for name, fields in splits.items()}
     train = [n for n in splits if n.startswith("train")]
     test = [n for n in splits if n.startswith("test")]
@@ -172,6 +176,8 @@ def main(argv: list[str] | None = None) -> int:
         "tasks": facts,
         "pairs": pairs,
         "factors_enabled_in_no_variations_strategy": factors_in_no_variations,
+        "strategy_0_disabled_tasks": strategy0_disabled,
+        "idx0_splits_missing_tasks": affected,
         "test_compositional_tasks_unseen_in_any_train_split": unseen_test_tasks,
         "seed_lineage": {
             "script_env_seed": {name: fields["seed"] for name, fields in splits.items()},
@@ -188,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
     Path(args.out).write_text(json.dumps(report, indent=1, sort_keys=True))
     summary = {"pins_drift": drift, "unseen_test_compositional_tasks": unseen_test_tasks,
                "factors_enabled_in_no_variations_strategy": factors_in_no_variations,
+               "strategy_0_disabled_tasks": strategy0_disabled, "idx0_splits_missing_tasks": affected,
                "strategy_index_0_names": report["strategy_index_0_names"]}
     for pair in pairs:
         summary[f"{pair['train']}→{pair['test']}"] = {

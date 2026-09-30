@@ -90,6 +90,12 @@
    }
   ]
  },
+ "idx0_splits_missing_tasks": {
+  "train_A": [
+   "rubbish_in_dustpan"
+  ],
+  "train_C": []
+ },
  "pairs": [
   {
    "overlap": {
@@ -1125,6 +1131,9 @@
    ]
   }
  },
+ "strategy_0_disabled_tasks": [
+  "rubbish_in_dustpan"
+ ],
  "strategy_index_0_names": [
   "no_variations"
  ],
