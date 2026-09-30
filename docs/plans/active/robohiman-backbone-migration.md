@@ -44,10 +44,24 @@ archives, `icgs_episode_v1/v2` schemas.
 - [x] P2 source-neutral `icgs.data.stage1` (schema, store, labels, views).
 - [x] P3 adapter modules (`session`, `recorder`, `expert`, `monitors`, `camera`,
       `snapshot`, `kinematics`, `episode`) and scripts.
-- [ ] P4 gates on `vps-a`: parity/neutrality, A0, A1, B, failure retention,
-      snapshot/replay, dependency audit, split overlap. Evidence goes to
-      `docs/experiments/robohiman-validation/`.
-- [ ] P5 report, README/generation docs switch notes (default switch only after gates).
+- [x] P4 gates on `vps-a` ([evidence](../../experiments/robohiman-validation/README.md)):
+      A0 PASS, A1 PASS, B PASS (2 tasks), failure retention PASS, mirror parity
+      PASS (distributional), snapshot/replay PARTIAL, dependency PARTIAL.
+- [x] P5 documentation map/component doc; custom generator marked legacy in the map.
+- [ ] P6 dependency audit at n≥20 per candidate in the 0.14–0.16 m band plus a
+      second decision axis (grasp point / place pose) on ≥2 compositional tasks.
+- [ ] P7 replay strategy for long horizons (shorter anchors, or post-reset
+      snapshot + replay with measured per-anchor drift carried as label noise).
+- [ ] P8 default-path switch after gates 4–5 are decided.
+
+Findings that changed the design during P4: upstream is not bitwise
+reproducible (robot reset residuals + RRTConnect); Colosseum factors own RNGs
+that advance per reset, so reset lineage = numpy + every factor bit-generator
+state; 13 configs leave a misnamed `object_size` factor enabled in
+`no_variations`; configuration-tree restore loses physical grip; analytic DH
+FK does not match the CoppeliaSim Panda (canonical commands use the
+simulator chain, ~1 mm residual; tolerance revised from 1e-4 m to 5 mm after
+measurement); RLBench's waypoint cache is part of snapshot state.
 
 ID decisions recorded here: alpha = first non-occurred eligible event, null
 otherwise; drawer open/close thresholds are taken from the upstream tasks that
@@ -86,4 +100,7 @@ No checkpoint/config/evaluation change. New dataset identity
 
 ## Final evidence
 
-Pending P4/P5.
+See [robohiman-validation](../../experiments/robohiman-validation/README.md).
+Recommendation at 2026-09-30: READY_FOR_SMALL_SCALE_COLLECTION of Stage-1
+D_geom/D_dyn/D_task on reviewed tasks only; NOT ready for branch/continuation
+collection or bulk Stage-1 collection. Plan stays active until P6–P8.

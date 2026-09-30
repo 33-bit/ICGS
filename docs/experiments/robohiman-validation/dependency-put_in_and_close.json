@@ -1,0 +1,163 @@
+{
+ "anchor": "after waypoint 2 (post-reset snapshot restored, prefix commands replayed open loop)",
+ "anchor_boundary": 160,
+ "anchor_object_spread_across_trials_m": 0.00017297509889114553,
+ "approach_direction": [
+  -0.09153052404738357,
+  0.9958021795247674,
+  -0.0004271081060298711
+ ],
+ "candidate_axis": "waypoint 3 target offset along its approach direction",
+ "candidates": [
+  {
+   "delta_m": 0.0,
+   "final_success_rate": 1.0,
+   "final_success_rate_given_local": 1.0,
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "drawer_joint_after_decision_m": 0.24172604084014893,
+     "final_predicates": {
+      "drawer_closed": true,
+      "drawer_open": false,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 199,
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 0.0005826139173622505,
+     "steps": 594,
+     "trial": 0
+    },
+    {
+     "drawer_joint_after_decision_m": 0.2418661117553711,
+     "final_predicates": {
+      "drawer_closed": true,
+      "drawer_open": false,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 199,
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 0.0005905415045783496,
+     "steps": 610,
+     "trial": 1
+    }
+   ]
+  },
+  {
+   "delta_m": -0.06,
+   "final_success_rate": 1.0,
+   "final_success_rate_given_local": 1.0,
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "drawer_joint_after_decision_m": 0.18130046129226685,
+     "final_predicates": {
+      "drawer_closed": true,
+      "drawer_open": false,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 195,
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 0.0005637202250609927,
+     "steps": 616,
+     "trial": 0
+    },
+    {
+     "drawer_joint_after_decision_m": 0.18163233995437622,
+     "final_predicates": {
+      "drawer_closed": true,
+      "drawer_open": false,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 195,
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 0.0005692028583731248,
+     "steps": 596,
+     "trial": 1
+    }
+   ]
+  },
+  {
+   "delta_m": -0.09,
+   "final_success_rate": 0.5,
+   "final_success_rate_given_local": 0.5,
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "drawer_joint_after_decision_m": 0.1554887592792511,
+     "final_predicates": {
+      "drawer_closed": true,
+      "drawer_open": false,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 193,
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 0.0005778360092978738,
+     "steps": 604,
+     "trial": 0
+    },
+    {
+     "drawer_joint_after_decision_m": 0.1517491638660431,
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false,
+      "success_condition_1": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 193,
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 0.0005788898449607,
+     "steps": 372,
+     "trial": 1
+    }
+   ]
+  }
+ ],
+ "consequential": true,
+ "consequential_gap": 0.5,
+ "continuation_policy": "icgs mirror of the RoboHiMan scripted expert with per-trial Gaussian waypoint jitter sigma=0.005 m; NOT pi_ref, diagnostic only",
+ "decision_waypoint": 3,
+ "gate": "dependency",
+ "interpretation_rule": "consequential if >=2 candidates are locally successful in every trial and their downstream success rates differ by >=0.5; with n<=5 trials this is a screening signal, not an estimate",
+ "local_success_predicate": "drawer_open after waypoint 3 completes",
+ "seed": 8,
+ "task": "put_in_and_close",
+ "unplaceable_lineages_skipped": [],
+ "variation": 0,
+ "wall_s": 152.8
+}

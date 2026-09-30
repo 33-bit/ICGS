@@ -1,0 +1,234 @@
+{
+ "acceptable": {
+  "fresh_reset_replay_openloop": null,
+  "reset_closedloop_reexecution": null,
+  "reset_snapshot_replay_openloop": false,
+  "snapshot_restore_closedloop_expert": false,
+  "snapshot_restore_openloop": false
+ },
+ "anchor_after_waypoint": 3,
+ "fresh_reset_failures": [
+  "placement failed 3x from one RNG state: BoundaryError: Could not place within boundary.Perhaps the object is too big for it?"
+ ],
+ "gate": "replay",
+ "reference": {
+  "anchor_boundary": 204,
+  "anchor_status": "anchor",
+  "end_boundary": 429,
+  "final_status": "success",
+  "task_success": true
+ },
+ "replay_id": "robohiman-openloop-command-replay-v1",
+ "replay_reports": {
+  "reset_replay": {
+   "discrepancies": {
+    "cloud": 0.007138506011024881,
+    "outcome": 0.0,
+    "pose": 0.000837610230649463
+   },
+   "mode": "deterministic-replay",
+   "protocol_id": "post-reset-snapshot+robohiman-openloop-command-replay-v1",
+   "restored_fields": [
+    "rng",
+    "command_history",
+    "task_history",
+    "monitor_history"
+   ],
+   "stored_fields": [
+    "rng",
+    "command_history",
+    "task_history",
+    "monitor_history",
+    "joints",
+    "velocities",
+    "object_poses",
+    "grip",
+    "articulations",
+    "attachments",
+    "controller_state"
+   ],
+   "unavailable_fields": [
+    "constraints",
+    "integrators",
+    "solver"
+   ]
+  },
+  "snapshot": {
+   "discrepancies": {
+    "cloud": 0.0015049322796425004,
+    "outcome": 0.0,
+    "pose": 0.0008693092178323371
+   },
+   "mode": "approximate-reset",
+   "protocol_id": "robohiman-configtree-snapshot-v1+robohiman-openloop-command-replay-v1",
+   "repetitions": 2,
+   "restored_fields": [
+    "joints",
+    "articulations",
+    "attachments",
+    "monitor_history",
+    "rng",
+    "object_poses",
+    "grip",
+    "controller_state",
+    "task_history"
+   ],
+   "stored_fields": [
+    "joints",
+    "velocities",
+    "articulations",
+    "attachments",
+    "monitor_history",
+    "rng",
+    "object_poses",
+    "grip",
+    "controller_state",
+    "task_history",
+    "command_history"
+   ],
+   "unavailable_fields": [
+    "constraints",
+    "integrators",
+    "solver"
+   ],
+   "uncertainty": {
+    "restore_repeat_final_object_m": 0.015219779375523617,
+    "restore_repeat_max_tip_m": 0.00019997184437494641
+   }
+  }
+ },
+ "results": {
+  "fresh_reset_then_openloop_replay_full_history@anchor": null,
+  "fresh_reset_then_openloop_replay_full_history@end": null,
+  "openloop_replay_1_vs_2 (restore repeatability)": {
+   "final_object_position_m": 0.015219779375523617,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 1.715779297321958e-05,
+   "max_articulation_m": 0.001550436019897461,
+   "max_finger_m": 0.00017878413200378418,
+   "max_joint_rad": 0.0005996227264404297,
+   "max_object_position_m": 0.015226222574592359,
+   "max_tip_position_m": 0.00019997184437494641,
+   "predicate_disagreement_fraction": 0.0
+  },
+  "reset_snapshot_then_openloop_replay_full_history@anchor": {
+   "final_object_position_m": 0.014142350681490085,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 0.0004577626748251891,
+   "max_articulation_m": 0.01414257287979126,
+   "max_finger_m": 0.0002948641777038574,
+   "max_joint_rad": 0.0006315708160400391,
+   "max_object_position_m": 0.014142350681490085,
+   "max_tip_position_m": 0.0008142385521845339,
+   "predicate_disagreement_fraction": 0.0
+  },
+  "reset_snapshot_then_openloop_replay_full_history@end": {
+   "final_depth": {
+    "front_frac_gt_1cm": 0.01416015625,
+    "front_mean_abs_m": 0.007138506011024881,
+    "front_validity_mismatch_frac": 0.0,
+    "left_shoulder_frac_gt_1cm": 0.016357421875,
+    "left_shoulder_mean_abs_m": 0.0016484024394040554,
+    "left_shoulder_validity_mismatch_frac": 0.0
+   },
+   "final_object_position_m": 0.0201238339527461,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 0.0005714651240634087,
+   "max_articulation_m": 0.01414257287979126,
+   "max_finger_m": 0.0002948641777038574,
+   "max_joint_rad": 0.0006315708160400391,
+   "max_object_position_m": 0.020124227117717657,
+   "max_tip_position_m": 0.000837610230649463,
+   "predicate_disagreement_fraction": 0.0
+  },
+  "reset_then_closedloop_expert_full": {
+   "error": "placement failed 3x from one RNG state: BoundaryError: Could not place within boundary.Perhaps the object is too big for it?",
+   "status": "reset_failed"
+  },
+  "restore_then_closedloop_expert": {
+   "final_depth": {
+    "front_frac_gt_1cm": 0.07275390625,
+    "front_mean_abs_m": 0.06850120799786001,
+    "front_validity_mismatch_frac": 0.0,
+    "left_shoulder_frac_gt_1cm": 0.129638671875,
+    "left_shoulder_mean_abs_m": 0.03408897781349049,
+    "left_shoulder_validity_mismatch_frac": 0.0
+   },
+   "final_object_position_m": 0.012011586604630094,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 0.00035533948383589163,
+   "max_articulation_m": 0.00029046833515167236,
+   "max_finger_m": 0.0140133798122406,
+   "max_joint_rad": 1.0889702141284943,
+   "max_object_position_m": 0.11277413787239916,
+   "max_tip_position_m": 0.1125506827911711,
+   "predicate_disagreement_fraction": 0.021238938053097345,
+   "restored_state_articulation_err_m": 2.086162567138672e-07,
+   "restored_state_joint_err_rad": 0.0,
+   "restored_state_object_err_m": 2.388837865275353e-07,
+   "status": "success",
+   "steps": 232
+  },
+  "restore_then_openloop_replay_1": {
+   "final_depth": {
+    "front_frac_gt_1cm": 0.0068359375,
+    "front_mean_abs_m": 0.0015049322796425004,
+    "front_validity_mismatch_frac": 0.0,
+    "left_shoulder_frac_gt_1cm": 0.004150390625,
+    "left_shoulder_mean_abs_m": 0.0007182537317022193,
+    "left_shoulder_validity_mismatch_frac": 0.0
+   },
+   "final_object_position_m": 0.026581801071524854,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 0.0005484286544739918,
+   "max_articulation_m": 0.0017064064741134644,
+   "max_finger_m": 0.00015598535537719727,
+   "max_joint_rad": 0.0004734992980957031,
+   "max_object_position_m": 0.026592411472831593,
+   "max_tip_position_m": 0.0008693092178323371,
+   "predicate_disagreement_fraction": 0.0,
+   "restored_state_articulation_err_m": 2.086162567138672e-07,
+   "restored_state_joint_err_rad": 0.0,
+   "restored_state_object_err_m": 2.388837865275353e-07,
+   "status": "replayed",
+   "steps": 225
+  },
+  "restore_then_openloop_replay_2": {
+   "final_depth": {
+    "front_frac_gt_1cm": 0.00390625,
+    "front_mean_abs_m": 0.0013298242948374425,
+    "front_validity_mismatch_frac": 0.0,
+    "left_shoulder_frac_gt_1cm": 0.00146484375,
+    "left_shoulder_mean_abs_m": 0.0004285476351618402,
+    "left_shoulder_validity_mismatch_frac": 0.0
+   },
+   "final_object_position_m": 0.01152549852389736,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 0.0005364642968574731,
+   "max_articulation_m": 0.0002124309539794922,
+   "max_finger_m": 9.322166442871094e-05,
+   "max_joint_rad": 0.0006012916564941406,
+   "max_object_position_m": 0.011530259143003499,
+   "max_tip_position_m": 0.0008631244674959762,
+   "predicate_disagreement_fraction": 0.0,
+   "restored_state_articulation_err_m": 2.086162567138672e-07,
+   "restored_state_joint_err_rad": 0.0,
+   "restored_state_object_err_m": 2.388837865275353e-07,
+   "status": "replayed",
+   "steps": 225
+  }
+ },
+ "seed": 3,
+ "snapshot_id": "robohiman-configtree-snapshot-v1",
+ "task": "put_in_without_close",
+ "thresholds": {
+  "final_object_position_m": 0.005,
+  "final_success_equal": 1.0,
+  "max_articulation_m": 0.005,
+  "max_tip_position_m": 0.005,
+  "predicate_disagreement_fraction": 0.0
+ },
+ "unplaceable_lineages_skipped": [],
+ "variation": 0,
+ "wall_s": 85.8
+}

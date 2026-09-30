@@ -1,0 +1,107 @@
+{
+ "episodes": [
+  {
+   "commanded_ee_vs_achieved_next_ee_m": {
+    "max": 0.009168864663659931,
+    "mean": 0.002857119851133325,
+    "p95": 0.008065652427590416
+   },
+   "derivable": true,
+   "episode_id": "smoke-open_drawer-v0-s0-0000",
+   "fk_residual_max_m": 0.0010670144842109535,
+   "fk_residual_rot_max_deg": 0.23712880783346224
+  },
+  {
+   "commanded_ee_vs_achieved_next_ee_m": {
+    "max": 0.03211821971443315,
+    "mean": 0.0034444345835064143,
+    "p95": 0.006044046637068634
+   },
+   "derivable": true,
+   "episode_id": "smoke-open_drawer-v1-s14-0010",
+   "fk_residual_max_m": 0.003730534965473189,
+   "fk_residual_rot_max_deg": 0.35352425892341754
+  },
+  {
+   "commanded_ee_vs_achieved_next_ee_m": {
+    "max": 0.008544021077440267,
+    "mean": 0.0024336140978353546,
+    "p95": 0.007029733968984768
+   },
+   "derivable": true,
+   "episode_id": "smoke-open_drawer-v1-s14-0011",
+   "fk_residual_max_m": 0.001030700453039849,
+   "fk_residual_rot_max_deg": 0.22306134119895424
+  },
+  {
+   "commanded_ee_vs_achieved_next_ee_m": {
+    "max": 0.010325819858912778,
+    "mean": 0.0027595734246425633,
+    "p95": 0.009163360787506368
+   },
+   "derivable": true,
+   "episode_id": "smoke-open_drawer-v2-s6-0020",
+   "fk_residual_max_m": 0.0010552480907321442,
+   "fk_residual_rot_max_deg": 0.23123625639459125
+  },
+  {
+   "commanded_ee_vs_achieved_next_ee_m": {
+    "max": 0.015496253532266262,
+    "mean": 0.004147188200485143,
+    "p95": 0.009847201033450267
+   },
+   "derivable": true,
+   "episode_id": "smoke-put_in_and_close-v1-s0-0000",
+   "fk_residual_max_m": 0.0011060036626471806,
+   "fk_residual_rot_max_deg": 0.27294052007925906
+  },
+  {
+   "commanded_ee_vs_achieved_next_ee_m": {
+    "max": 0.012185167566703544,
+    "mean": 0.004144211255377736,
+    "p95": 0.008584669610190157
+   },
+   "derivable": true,
+   "episode_id": "smoke-put_in_without_close-v0-s0-0000",
+   "fk_residual_max_m": 0.0008989641295171453,
+   "fk_residual_rot_max_deg": 0.28155278980506976
+  },
+  {
+   "commanded_ee_vs_achieved_next_ee_m": {
+    "max": 0.011712999660040144,
+    "mean": 0.004133997875325426,
+    "p95": 0.009203533272613605
+   },
+   "derivable": true,
+   "episode_id": "smoke-put_in_without_close-v0-s0-0001",
+   "fk_residual_max_m": 0.0011450484007764778,
+   "fk_residual_rot_max_deg": 0.2513148608178121
+  },
+  {
+   "commanded_ee_vs_achieved_next_ee_m": {
+    "max": 0.010920613454229466,
+    "mean": 0.004214096284695299,
+    "p95": 0.009199320262962853
+   },
+   "derivable": true,
+   "episode_id": "smoke-put_in_without_close-v0-s0-0002",
+   "fk_residual_max_m": 0.0009524094172959202,
+   "fk_residual_rot_max_deg": 0.25985821306643897
+  },
+  {
+   "commanded_ee_vs_achieved_next_ee_m": {
+    "max": 0.011679280967652266,
+    "mean": 0.00397666297631382,
+    "p95": 0.00953131987840037
+   },
+   "derivable": true,
+   "episode_id": "smoke-put_in_without_close-v0-s0-0003",
+   "fk_residual_max_m": 0.0010845486901065807,
+   "fk_residual_rot_max_deg": 0.25116376930870615
+  }
+ ],
+ "gate": "canonical",
+ "tolerance_m": 0.005,
+ "unplaceable_lineages_skipped": [],
+ "wall_s": 5.5
+}

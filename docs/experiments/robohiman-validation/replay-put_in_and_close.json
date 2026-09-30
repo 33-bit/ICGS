@@ -1,0 +1,289 @@
+{
+ "acceptable": {
+  "fresh_reset_replay_openloop": false,
+  "reset_closedloop_reexecution": false,
+  "reset_snapshot_replay_openloop": false,
+  "snapshot_restore_closedloop_expert": false,
+  "snapshot_restore_openloop": false
+ },
+ "anchor_after_waypoint": 10,
+ "gate": "replay",
+ "reference": {
+  "anchor_boundary": 417,
+  "anchor_status": "anchor",
+  "end_boundary": 603,
+  "final_status": "success",
+  "task_success": true
+ },
+ "replay_id": "robohiman-openloop-command-replay-v1",
+ "replay_reports": {
+  "reset_replay": {
+   "discrepancies": {
+    "cloud": 0.00028562420462216465,
+    "outcome": 0.0,
+    "pose": 0.017857546770530485
+   },
+   "mode": "deterministic-replay",
+   "protocol_id": "post-reset-snapshot+robohiman-openloop-command-replay-v1",
+   "restored_fields": [
+    "rng",
+    "command_history",
+    "task_history",
+    "monitor_history"
+   ],
+   "stored_fields": [
+    "rng",
+    "command_history",
+    "task_history",
+    "monitor_history",
+    "joints",
+    "velocities",
+    "object_poses",
+    "grip",
+    "articulations",
+    "attachments",
+    "controller_state"
+   ],
+   "unavailable_fields": [
+    "constraints",
+    "integrators",
+    "solver"
+   ]
+  },
+  "snapshot": {
+   "discrepancies": {
+    "cloud": 0.000277618030362774,
+    "outcome": 0.0,
+    "pose": 0.0008016092311994699
+   },
+   "mode": "approximate-reset",
+   "protocol_id": "robohiman-configtree-snapshot-v1+robohiman-openloop-command-replay-v1",
+   "repetitions": 2,
+   "restored_fields": [
+    "joints",
+    "articulations",
+    "attachments",
+    "monitor_history",
+    "rng",
+    "object_poses",
+    "grip",
+    "controller_state",
+    "task_history"
+   ],
+   "stored_fields": [
+    "joints",
+    "velocities",
+    "articulations",
+    "attachments",
+    "monitor_history",
+    "rng",
+    "object_poses",
+    "grip",
+    "controller_state",
+    "task_history",
+    "command_history"
+   ],
+   "unavailable_fields": [
+    "constraints",
+    "integrators",
+    "solver"
+   ],
+   "uncertainty": {
+    "restore_repeat_final_object_m": 0.0013315774603613094,
+    "restore_repeat_max_tip_m": 0.00024085403761693754
+   }
+  }
+ },
+ "results": {
+  "fresh_reset_then_openloop_replay_full_history@anchor": {
+   "final_object_position_m": 0.015018610838832332,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 2.1178597416458608e-05,
+   "max_articulation_m": 0.06123051047325134,
+   "max_finger_m": 0.00018519163131713867,
+   "max_joint_rad": 0.06873250007629395,
+   "max_object_position_m": 0.061292146241209905,
+   "max_tip_position_m": 0.0173998073554035,
+   "predicate_disagreement_fraction": 0.04784688995215311
+  },
+  "fresh_reset_then_openloop_replay_full_history@end": {
+   "final_depth": {
+    "front_frac_gt_1cm": 0.000244140625,
+    "front_mean_abs_m": 0.0007173498842887638,
+    "front_validity_mismatch_frac": 0.0,
+    "left_shoulder_frac_gt_1cm": 0.0009765625,
+    "left_shoulder_mean_abs_m": 7.809861498535254e-05,
+    "left_shoulder_validity_mismatch_frac": 0.0
+   },
+   "final_object_position_m": 0.017180598921165035,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 4.569009975699562e-05,
+   "max_articulation_m": 0.06123051047325134,
+   "max_finger_m": 0.00018519163131713867,
+   "max_joint_rad": 0.06873250007629395,
+   "max_object_position_m": 0.061292146241209905,
+   "max_tip_position_m": 0.0173998073554035,
+   "predicate_disagreement_fraction": 0.0336644591611479
+  },
+  "openloop_replay_1_vs_2 (restore repeatability)": {
+   "final_object_position_m": 0.0013315774603613094,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 2.6860583064440076e-05,
+   "max_articulation_m": 0.0019009411334991455,
+   "max_finger_m": 9.846687316894531e-05,
+   "max_joint_rad": 0.0005216598510742188,
+   "max_object_position_m": 0.0019009418588895664,
+   "max_tip_position_m": 0.00024085403761693754,
+   "predicate_disagreement_fraction": 0.0
+  },
+  "reset_snapshot_then_openloop_replay_full_history@anchor": {
+   "final_object_position_m": 0.0015072831552566117,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 0.000726250908611207,
+   "max_articulation_m": 0.06086131930351257,
+   "max_finger_m": 0.00030487775802612305,
+   "max_joint_rad": 0.06868529319763184,
+   "max_object_position_m": 0.06089088216300656,
+   "max_tip_position_m": 0.017857546770530485,
+   "predicate_disagreement_fraction": 0.04784688995215311
+  },
+  "reset_snapshot_then_openloop_replay_full_history@end": {
+   "final_depth": {
+    "front_frac_gt_1cm": 0.000732421875,
+    "front_mean_abs_m": 6.302878959418151e-05,
+    "front_validity_mismatch_frac": 0.0,
+    "left_shoulder_frac_gt_1cm": 0.003173828125,
+    "left_shoulder_mean_abs_m": 0.00028562420462216465,
+    "left_shoulder_validity_mismatch_frac": 0.0
+   },
+   "final_object_position_m": 0.0029650963498743617,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 0.0005610698858536109,
+   "max_articulation_m": 0.06086131930351257,
+   "max_finger_m": 0.00030487775802612305,
+   "max_joint_rad": 0.06868529319763184,
+   "max_object_position_m": 0.06089088216300656,
+   "max_tip_position_m": 0.017857546770530485,
+   "predicate_disagreement_fraction": 0.0336644591611479
+  },
+  "reset_then_closedloop_expert_full": {
+   "bitwise_joint_trajectory_equal": false,
+   "cmd_arm_joint_target_mask_equal": false,
+   "cmd_gripper_joint_velocity_mask_equal": false,
+   "final_boundary": {
+    "final_object_position_m": 0.034407901566339154,
+    "final_success_equal": 1.0,
+    "final_tip_position_m": 4.304504704135745e-05,
+    "max_articulation_m": 0.03441765904426575,
+    "max_finger_m": 0.014195919036865234,
+    "max_joint_rad": 0.2618315517902374,
+    "max_object_position_m": 0.034407901566339154,
+    "max_tip_position_m": 4.304504704135745e-05,
+    "predicate_disagreement_fraction": 0.0
+   },
+   "final_object_position_m": 0.03439788324352063,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 3.363325113112819e-05,
+   "first_boundary_joint_diff_gt_1e-6": 0,
+   "max_articulation_m": 0.07860010862350464,
+   "max_cmd_arm_joint_target_diff": 0.30412078267148357,
+   "max_cmd_gripper_joint_velocity_diff": 0.04,
+   "max_finger_m": 0.01417696475982666,
+   "max_joint_rad": 0.3028228282928467,
+   "max_object_position_m": 0.07859907540432877,
+   "max_tip_position_m": 0.08190870861183779,
+   "predicate_disagreement_fraction": 0.04194260485651214,
+   "reason": null,
+   "status": "success",
+   "steps_a": 603,
+   "steps_b": 607,
+   "task_success": true,
+   "waypoint_phase_sequence_equal": false
+  },
+  "restore_then_closedloop_expert": {
+   "final_depth": {
+    "front_frac_gt_1cm": 0.015625,
+    "front_mean_abs_m": 0.009078779872376732,
+    "front_validity_mismatch_frac": 0.0,
+    "left_shoulder_frac_gt_1cm": 0.029296875,
+    "left_shoulder_mean_abs_m": 0.006110101941896985,
+    "left_shoulder_validity_mismatch_frac": 0.0
+   },
+   "final_object_position_m": 0.00429295266350945,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 6.223972262225096e-05,
+   "max_articulation_m": 0.008606791496276855,
+   "max_finger_m": 0.00015032291412353516,
+   "max_joint_rad": 0.0433504581451416,
+   "max_object_position_m": 0.008605635261993868,
+   "max_tip_position_m": 0.0008146812259360014,
+   "predicate_disagreement_fraction": 0.0017825311942959,
+   "restored_state_articulation_err_m": 1.4901161193847656e-07,
+   "restored_state_joint_err_rad": 0.0,
+   "restored_state_object_err_m": 1.3075715880680267e-07,
+   "status": "success",
+   "steps": 186
+  },
+  "restore_then_openloop_replay_1": {
+   "final_depth": {
+    "front_frac_gt_1cm": 0.00048828125,
+    "front_mean_abs_m": 6.010121804437407e-05,
+    "front_validity_mismatch_frac": 0.0,
+    "left_shoulder_frac_gt_1cm": 0.0029296875,
+    "left_shoulder_mean_abs_m": 0.000277618030362774,
+    "left_shoulder_validity_mismatch_frac": 0.0
+   },
+   "final_object_position_m": 0.0021452104545627735,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 0.0005681849123025321,
+   "max_articulation_m": 0.004673480987548828,
+   "max_finger_m": 0.00020354986190795898,
+   "max_joint_rad": 0.0005803108215332031,
+   "max_object_position_m": 0.004918018515463281,
+   "max_tip_position_m": 0.0008016092311994699,
+   "predicate_disagreement_fraction": 0.0017825311942959,
+   "restored_state_articulation_err_m": 1.4901161193847656e-07,
+   "restored_state_joint_err_rad": 0.0,
+   "restored_state_object_err_m": 1.3075715880680267e-07,
+   "status": "replayed",
+   "steps": 186
+  },
+  "restore_then_openloop_replay_2": {
+   "final_depth": {
+    "front_frac_gt_1cm": 0.00048828125,
+    "front_mean_abs_m": 6.0851691453836303e-05,
+    "front_validity_mismatch_frac": 0.0,
+    "left_shoulder_frac_gt_1cm": 0.004638671875,
+    "left_shoulder_mean_abs_m": 0.0003925639099563084,
+    "left_shoulder_validity_mismatch_frac": 0.0
+   },
+   "final_object_position_m": 0.003166320164083041,
+   "final_success_equal": 1.0,
+   "final_tip_position_m": 0.0005919388352620664,
+   "max_articulation_m": 0.0027725398540496826,
+   "max_finger_m": 0.00015592575073242188,
+   "max_joint_rad": 0.0006792545318603516,
+   "max_object_position_m": 0.004607482884903139,
+   "max_tip_position_m": 0.0007934783735854064,
+   "predicate_disagreement_fraction": 0.0017825311942959,
+   "restored_state_articulation_err_m": 1.4901161193847656e-07,
+   "restored_state_joint_err_rad": 0.0,
+   "restored_state_object_err_m": 1.3075715880680267e-07,
+   "status": "replayed",
+   "steps": 186
+  }
+ },
+ "seed": 6,
+ "snapshot_id": "robohiman-configtree-snapshot-v1",
+ "task": "put_in_and_close",
+ "thresholds": {
+  "final_object_position_m": 0.005,
+  "final_success_equal": 1.0,
+  "max_articulation_m": 0.005,
+  "max_tip_position_m": 0.005,
+  "predicate_disagreement_fraction": 0.0
+ },
+ "unplaceable_lineages_skipped": [],
+ "variation": 0,
+ "wall_s": 118.7
+}

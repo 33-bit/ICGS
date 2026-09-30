@@ -1,0 +1,349 @@
+{
+ "cameras": {
+  "front": {
+   "camera_position_m": [
+    1.349999189376831,
+    3.715465624054559e-08,
+    1.579999327659607
+   ],
+   "extrinsics_det": 0.9999999867252856,
+   "fx_fy": [
+    -175.83856040078922,
+    -175.83856040078922
+   ],
+   "mask": {
+    "encoding": "one_channel",
+    "known_handle_frac_of_valid": 1.0,
+    "non_integer_frac": 0.0,
+    "objects": {
+     "Panda_leftfinger_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 9
+     },
+     "Panda_link0_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 162
+     },
+     "Panda_link1_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 290
+     },
+     "Panda_link2_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 284
+     },
+     "Panda_link3_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 238
+     },
+     "Panda_link4_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 198
+     },
+     "Panda_rightfinger_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 6
+     },
+     "ResizableFloor_5_25_visibleElement": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 561
+     },
+     "Wall3": {
+      "inside_world_box_1cm_frac": 0.9886986301369863,
+      "pixels": 5840
+     },
+     "diningTable_visible": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 1220
+     },
+     "drawer_frame": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 3646
+     },
+     "drawer_legs": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 30
+     },
+     "drawer_top": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 5
+     },
+     "item": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 33
+     },
+     "workspace": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 3862
+     }
+    }
+   },
+   "metric_depth_range_m": [
+    0.961795151504572,
+    4.159759957773437
+   ],
+   "near_far_m": [
+    0.009999999776482582,
+    4.5
+   ],
+   "numpy_vs_live_pointcloud_max_abs_m": 3.388610734234021e-07,
+   "numpy_vs_pyrep_max_abs_m": 0.0,
+   "valid_depth_frac": 1.0
+  },
+  "left_shoulder": {
+   "camera_position_m": [
+    -0.17499971389770508,
+    0.20000000298023224,
+    1.9799989461898804
+   ],
+   "extrinsics_det": 1.000000208365662,
+   "fx_fy": [
+    -175.83856040078922,
+    -175.83856040078922
+   ],
+   "mask": {
+    "encoding": "one_channel",
+    "known_handle_frac_of_valid": 1.0,
+    "non_integer_frac": 0.0,
+    "objects": {
+     "Panda_link3_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 562
+     },
+     "Panda_link4_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 370
+     },
+     "Panda_link5_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 2498
+     },
+     "Panda_link6_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 47
+     },
+     "ResizableFloor_5_25_visibleElement": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 655
+     },
+     "diningTable_visible": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 4647
+     },
+     "drawer_bottom": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 201
+     },
+     "drawer_frame": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 1008
+     },
+     "drawer_legs": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 9
+     },
+     "drawer_middle": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 200
+     },
+     "drawer_top": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 32
+     },
+     "item": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 58
+     },
+     "workspace": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 6097
+     }
+    }
+   },
+   "metric_depth_range_m": [
+    0.38558208970018504,
+    2.6312201134378097
+   ],
+   "near_far_m": [
+    0.009999999776482582,
+    3.200000047683716
+   ],
+   "numpy_vs_live_pointcloud_max_abs_m": 9.320076133079169e-08,
+   "numpy_vs_pyrep_max_abs_m": 0.0,
+   "valid_depth_frac": 1.0
+  },
+  "right_shoulder": {
+   "camera_position_m": [
+    -0.17499709129333496,
+    -0.20000000298023224,
+    1.9799922704696655
+   ],
+   "extrinsics_det": 1.000000228085544,
+   "fx_fy": [
+    -175.83856040078922,
+    -175.83856040078922
+   ],
+   "mask": {
+    "encoding": "one_channel",
+    "known_handle_frac_of_valid": 1.0,
+    "non_integer_frac": 0.0,
+    "objects": {
+     "Panda_gripper_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 130
+     },
+     "Panda_leftfinger_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 21
+     },
+     "Panda_link4_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 1017
+     },
+     "Panda_link5_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 740
+     },
+     "Panda_link6_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 346
+     },
+     "ResizableFloor_5_25_visibleElement": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 655
+     },
+     "diningTable_visible": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 4521
+     },
+     "drawer_frame": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 4196
+     },
+     "drawer_legs": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 6
+     },
+     "drawer_middle": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 9
+     },
+     "drawer_top": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 28
+     },
+     "item": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 54
+     },
+     "workspace": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 4661
+     }
+    }
+   },
+   "metric_depth_range_m": [
+    0.39847732821884474,
+    2.6312201134378097
+   ],
+   "near_far_m": [
+    0.009999999776482582,
+    3.200000047683716
+   ],
+   "numpy_vs_live_pointcloud_max_abs_m": 1.582249458120799e-07,
+   "numpy_vs_pyrep_max_abs_m": 0.0,
+   "valid_depth_frac": 1.0
+  },
+  "wrist": {
+   "camera_position_m": [
+    0.3051494359970093,
+    -0.006141288205981255,
+    1.5729612112045288
+   ],
+   "extrinsics_det": 1.0000004453627076,
+   "fx_fy": [
+    -110.85124795436963,
+    -110.85124795436963
+   ],
+   "mask": {
+    "encoding": "one_channel",
+    "known_handle_frac_of_valid": 1.0,
+    "non_integer_frac": 0.0,
+    "objects": {
+     "Panda_leftfinger_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 360
+     },
+     "Panda_rightfinger_visual": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 460
+     },
+     "diningTable_visible": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 5759
+     },
+     "drawer_bottom": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 49
+     },
+     "drawer_frame": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 3920
+     },
+     "drawer_middle": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 87
+     },
+     "drawer_top": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 236
+     },
+     "item": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 114
+     },
+     "workspace": {
+      "inside_world_box_1cm_frac": 1.0,
+      "pixels": 5398
+     }
+    }
+   },
+   "metric_depth_range_m": [
+    0.0778915753072768,
+    0.9150145988000892
+   ],
+   "near_far_m": [
+    0.009999999776482582,
+    3.5
+   ],
+   "numpy_vs_live_pointcloud_max_abs_m": 4.814087761761954e-08,
+   "numpy_vs_pyrep_max_abs_m": 0.0,
+   "valid_depth_frac": 1.0
+  }
+ },
+ "cross_camera_centroid_spread_m": {
+  "Panda_leftfinger_visual": 0.006654964997281838,
+  "Panda_link3_visual": 0.035267485708889226,
+  "Panda_link4_visual": 0.0833256236725146,
+  "Panda_link5_visual": 0.07087825933031096,
+  "Panda_link6_visual": 0.01719224720931433,
+  "Panda_rightfinger_visual": 0.0019132889803921318,
+  "ResizableFloor_5_25_visibleElement": 2.0387714731264386,
+  "diningTable_visible": 0.7017547069964251,
+  "drawer_bottom": 0.01048961690294687,
+  "drawer_frame": 0.11478436637993093,
+  "drawer_legs": 0.18771370874637458,
+  "drawer_middle": 0.018420932233954045,
+  "drawer_top": 0.08425920007011169,
+  "item": 0.006775031508395819,
+  "workspace": 0.1375189627051844
+ },
+ "gate": "a0",
+ "image_size": [
+  128,
+  128
+ ],
+ "masks_as_one_channel": true,
+ "task": "put_in_without_close",
+ "wall_s": 5.6
+}

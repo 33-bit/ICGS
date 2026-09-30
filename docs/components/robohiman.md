@@ -97,3 +97,12 @@ Benchmark perturbations are selected with `--strategy` (Colosseum strategy index
 - Robot reset leaves up to ~3e-4 rad joint residuals; RRTConnect plans are then
   different, so re-executing an episode from the same RNG state is not bitwise
   reproducible, and placement can even fail for a previously valid state.
+- Colosseum factors own RNGs that advance every reset; reset lineage is numpy
+  state plus every factor bit-generator state (`session.lineage_state`).
+- 13 task configs leave an `object_size` factor (named `recv_obj_color`)
+  enabled in the `no_variations` strategy; those A/C episodes correctly carry
+  `perturbation.families = ["benchmark_factor"]`.
+- Configuration-tree restore loses physical grip at contact anchors. Branch
+  trials start from a post-reset snapshot (contact-free) and replay the
+  recorded prefix open loop; long-horizon replay drifts by centimetres in
+  articulated/free objects while predicates and outcome agree.

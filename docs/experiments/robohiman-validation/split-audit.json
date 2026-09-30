@@ -1,0 +1,5077 @@
+{
+ "claims_supported_by_native_split": {
+  "asset_heldout": false,
+  "exact_task_heldout": true,
+  "note": "per-factor fractions above; a claim needs the corresponding factor held out"
+ },
+ "factors_enabled_in_no_variations_strategy": {
+  "box_out_of_opened_drawer": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "put_in_and_close": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "put_in_opened_drawer": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "put_in_without_close": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "put_two_in_different": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "put_two_in_same": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "take_out_and_close": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "take_out_of_opened_drawer": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "take_out_without_close": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "take_two_out_of_different": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "take_two_out_of_same": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame]",
+    "type": "object_size"
+   }
+  ],
+  "transfer_box": [
+   {
+    "name": "recv_obj_color",
+    "targets": "[drawer_frame, cupboard, cupboard_visual]",
+    "type": "object_size"
+   }
+  ]
+ },
+ "pairs": [
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "broom_holder",
+      "dirt",
+      "item"
+     ],
+     "shared": 9,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 9
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition",
+      "DrawerCondition"
+     ],
+     "shared": 2,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 2
+    },
+    "perturbation_family": {
+     "examples": [
+      "none"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.08333333333333333,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "move close drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom cupboard"
+     ],
+     "shared": 20,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 20
+    },
+    "scene": {
+     "examples": [
+      "069e02eae5bc05edd7c58b9d859f3c485ace7d666341ac4c0791a5ff0c890f27",
+      "3cc00b7acce57f08b7c66ff33277a11165beafcb1fc270fa972b71bf856b6fd4",
+      "651003854158ae1ad27f00303598a10aa6fbf53fe0bbe5202770d238ebe891ce",
+      "6e4ed0714f8f1d12993392ddcd5acc20ca8a365715988834b6efef25e0b28755",
+      "7b587e0e3af7be1b8d9c5036c67e6abe96a49084d8aad682da14dc140300f708",
+      "836e31667a67cd0d2295680d62350199487fab64c8756b876d360d743ed14b32"
+     ],
+     "shared": 10,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 10
+    },
+    "strategy": {
+     "examples": [
+      "no_variations"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.0625,
+     "test_total": 16
+    },
+    "task": {
+     "examples": [
+      "box_in_cupboard",
+      "box_out_of_cupboard",
+      "box_out_of_opened_drawer",
+      "broom_out_of_cupboard",
+      "close_drawer",
+      "open_drawer"
+     ],
+     "shared": 10,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 10
+    }
+   },
+   "test": "test_atomic",
+   "train": "train_A"
+  },
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "dirt",
+      "item",
+      "rubbish"
+     ],
+     "shared": 8,
+     "test_fraction_seen_in_train": 0.7272727272727273,
+     "test_total": 11
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition",
+      "DrawerCondition"
+     ],
+     "shared": 2,
+     "test_fraction_seen_in_train": 0.5,
+     "test_total": 4
+    },
+    "perturbation_family": {
+     "examples": [
+      "none"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.08333333333333333,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "move close drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom cupboard"
+     ],
+     "shared": 14,
+     "test_fraction_seen_in_train": 0.7368421052631579,
+     "test_total": 19
+    },
+    "scene": {
+     "examples": [],
+     "shared": 0,
+     "test_fraction_seen_in_train": 0.0,
+     "test_total": 12
+    },
+    "strategy": {
+     "examples": [
+      "no_variations"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.07142857142857142,
+     "test_total": 14
+    },
+    "task": {
+     "examples": [],
+     "shared": 0,
+     "test_fraction_seen_in_train": 0.0,
+     "test_total": 12
+    }
+   },
+   "test": "test_compositional",
+   "train": "train_A"
+  },
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "broom_holder",
+      "dirt",
+      "item"
+     ],
+     "shared": 9,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 9
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition",
+      "DrawerCondition"
+     ],
+     "shared": 2,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 2
+    },
+    "perturbation_family": {
+     "examples": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "none",
+      "object_color"
+     ],
+     "shared": 12,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "move close drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom cupboard"
+     ],
+     "shared": 20,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 20
+    },
+    "scene": {
+     "examples": [
+      "069e02eae5bc05edd7c58b9d859f3c485ace7d666341ac4c0791a5ff0c890f27",
+      "3cc00b7acce57f08b7c66ff33277a11165beafcb1fc270fa972b71bf856b6fd4",
+      "651003854158ae1ad27f00303598a10aa6fbf53fe0bbe5202770d238ebe891ce",
+      "6e4ed0714f8f1d12993392ddcd5acc20ca8a365715988834b6efef25e0b28755",
+      "7b587e0e3af7be1b8d9c5036c67e6abe96a49084d8aad682da14dc140300f708",
+      "836e31667a67cd0d2295680d62350199487fab64c8756b876d360d743ed14b32"
+     ],
+     "shared": 10,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 10
+    },
+    "strategy": {
+     "examples": [
+      "all_mixed",
+      "background_texture",
+      "camera_pose",
+      "distractor",
+      "friction",
+      "light_color"
+     ],
+     "shared": 16,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 16
+    },
+    "task": {
+     "examples": [
+      "box_in_cupboard",
+      "box_out_of_cupboard",
+      "box_out_of_opened_drawer",
+      "broom_out_of_cupboard",
+      "close_drawer",
+      "open_drawer"
+     ],
+     "shared": 10,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 10
+    }
+   },
+   "test": "test_atomic",
+   "train": "train_AP"
+  },
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "dirt",
+      "item",
+      "rubbish"
+     ],
+     "shared": 8,
+     "test_fraction_seen_in_train": 0.7272727272727273,
+     "test_total": 11
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition",
+      "DrawerCondition"
+     ],
+     "shared": 2,
+     "test_fraction_seen_in_train": 0.5,
+     "test_total": 4
+    },
+    "perturbation_family": {
+     "examples": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "none",
+      "object_color"
+     ],
+     "shared": 12,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "move close drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom cupboard"
+     ],
+     "shared": 14,
+     "test_fraction_seen_in_train": 0.7368421052631579,
+     "test_total": 19
+    },
+    "scene": {
+     "examples": [],
+     "shared": 0,
+     "test_fraction_seen_in_train": 0.0,
+     "test_total": 12
+    },
+    "strategy": {
+     "examples": [
+      "all_mixed",
+      "background_texture",
+      "camera_pose",
+      "distractor",
+      "light_color",
+      "manip_obj_color"
+     ],
+     "shared": 14,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 14
+    },
+    "task": {
+     "examples": [],
+     "shared": 0,
+     "test_fraction_seen_in_train": 0.0,
+     "test_total": 12
+    }
+   },
+   "test": "test_compositional",
+   "train": "train_AP"
+  },
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "dirt",
+      "item",
+      "rubbish"
+     ],
+     "shared": 8,
+     "test_fraction_seen_in_train": 0.8888888888888888,
+     "test_total": 9
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.5,
+     "test_total": 2
+    },
+    "perturbation_family": {
+     "examples": [
+      "none"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.08333333333333333,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom table",
+      "pick up rubbish table"
+     ],
+     "shared": 11,
+     "test_fraction_seen_in_train": 0.55,
+     "test_total": 20
+    },
+    "scene": {
+     "examples": [],
+     "shared": 0,
+     "test_fraction_seen_in_train": 0.0,
+     "test_total": 10
+    },
+    "strategy": {
+     "examples": [
+      "no_variations"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.0625,
+     "test_total": 16
+    },
+    "task": {
+     "examples": [],
+     "shared": 0,
+     "test_fraction_seen_in_train": 0.0,
+     "test_total": 10
+    }
+   },
+   "test": "test_atomic",
+   "train": "train_C"
+  },
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "dirt",
+      "item",
+      "rubbish"
+     ],
+     "shared": 8,
+     "test_fraction_seen_in_train": 0.7272727272727273,
+     "test_total": 11
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.25,
+     "test_total": 4
+    },
+    "perturbation_family": {
+     "examples": [
+      "none"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.08333333333333333,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom table",
+      "pick up rubbish table"
+     ],
+     "shared": 12,
+     "test_fraction_seen_in_train": 0.631578947368421,
+     "test_total": 19
+    },
+    "scene": {
+     "examples": [
+      "6f5f1bb607b1f6c7e25c8b10e6518db3963b229b94a86352db8e37d4664e5e4e",
+      "7f65b1e88e2f0f2ba4ba6e98e213a2a7c1502d38d0a1d560928155c772b6eca8",
+      "cafcee2eafedd0aadafb654f718df25dae186c2a3b669f26cfff08f37dbe2d0f",
+      "d45750fe3f1de1cc874f45354821e95b4c3030dfbf1f92df4ec27380a55d27a9"
+     ],
+     "shared": 4,
+     "test_fraction_seen_in_train": 0.3333333333333333,
+     "test_total": 12
+    },
+    "strategy": {
+     "examples": [
+      "no_variations"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.07142857142857142,
+     "test_total": 14
+    },
+    "task": {
+     "examples": [
+      "put_in_without_close",
+      "sweep_and_drop",
+      "take_out_without_close",
+      "transfer_box"
+     ],
+     "shared": 4,
+     "test_fraction_seen_in_train": 0.3333333333333333,
+     "test_total": 12
+    }
+   },
+   "test": "test_compositional",
+   "train": "train_C"
+  },
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "dirt",
+      "item",
+      "rubbish"
+     ],
+     "shared": 8,
+     "test_fraction_seen_in_train": 0.8888888888888888,
+     "test_total": 9
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.5,
+     "test_total": 2
+    },
+    "perturbation_family": {
+     "examples": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "none",
+      "object_color"
+     ],
+     "shared": 12,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom table",
+      "pick up rubbish table"
+     ],
+     "shared": 11,
+     "test_fraction_seen_in_train": 0.55,
+     "test_total": 20
+    },
+    "scene": {
+     "examples": [],
+     "shared": 0,
+     "test_fraction_seen_in_train": 0.0,
+     "test_total": 10
+    },
+    "strategy": {
+     "examples": [
+      "all_mixed",
+      "background_texture",
+      "camera_pose",
+      "distractor",
+      "light_color",
+      "manip_obj_color"
+     ],
+     "shared": 14,
+     "test_fraction_seen_in_train": 0.875,
+     "test_total": 16
+    },
+    "task": {
+     "examples": [],
+     "shared": 0,
+     "test_fraction_seen_in_train": 0.0,
+     "test_total": 10
+    }
+   },
+   "test": "test_atomic",
+   "train": "train_CP"
+  },
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "dirt",
+      "item",
+      "rubbish"
+     ],
+     "shared": 8,
+     "test_fraction_seen_in_train": 0.7272727272727273,
+     "test_total": 11
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition"
+     ],
+     "shared": 1,
+     "test_fraction_seen_in_train": 0.25,
+     "test_total": 4
+    },
+    "perturbation_family": {
+     "examples": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "none",
+      "object_color"
+     ],
+     "shared": 12,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom table",
+      "pick up rubbish table"
+     ],
+     "shared": 12,
+     "test_fraction_seen_in_train": 0.631578947368421,
+     "test_total": 19
+    },
+    "scene": {
+     "examples": [
+      "6f5f1bb607b1f6c7e25c8b10e6518db3963b229b94a86352db8e37d4664e5e4e",
+      "7f65b1e88e2f0f2ba4ba6e98e213a2a7c1502d38d0a1d560928155c772b6eca8",
+      "cafcee2eafedd0aadafb654f718df25dae186c2a3b669f26cfff08f37dbe2d0f",
+      "d45750fe3f1de1cc874f45354821e95b4c3030dfbf1f92df4ec27380a55d27a9"
+     ],
+     "shared": 4,
+     "test_fraction_seen_in_train": 0.3333333333333333,
+     "test_total": 12
+    },
+    "strategy": {
+     "examples": [
+      "all_mixed",
+      "background_texture",
+      "camera_pose",
+      "distractor",
+      "light_color",
+      "manip_obj_color"
+     ],
+     "shared": 14,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 14
+    },
+    "task": {
+     "examples": [
+      "put_in_without_close",
+      "sweep_and_drop",
+      "take_out_without_close",
+      "transfer_box"
+     ],
+     "shared": 4,
+     "test_fraction_seen_in_train": 0.3333333333333333,
+     "test_total": 12
+    }
+   },
+   "test": "test_compositional",
+   "train": "train_CP"
+  },
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "broom_holder",
+      "dirt",
+      "item"
+     ],
+     "shared": 9,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 9
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition",
+      "DrawerCondition"
+     ],
+     "shared": 2,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 2
+    },
+    "perturbation_family": {
+     "examples": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "none",
+      "object_color"
+     ],
+     "shared": 12,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "move close drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom cupboard"
+     ],
+     "shared": 20,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 20
+    },
+    "scene": {
+     "examples": [
+      "069e02eae5bc05edd7c58b9d859f3c485ace7d666341ac4c0791a5ff0c890f27",
+      "3cc00b7acce57f08b7c66ff33277a11165beafcb1fc270fa972b71bf856b6fd4",
+      "651003854158ae1ad27f00303598a10aa6fbf53fe0bbe5202770d238ebe891ce",
+      "6e4ed0714f8f1d12993392ddcd5acc20ca8a365715988834b6efef25e0b28755",
+      "7b587e0e3af7be1b8d9c5036c67e6abe96a49084d8aad682da14dc140300f708",
+      "836e31667a67cd0d2295680d62350199487fab64c8756b876d360d743ed14b32"
+     ],
+     "shared": 10,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 10
+    },
+    "strategy": {
+     "examples": [
+      "all_mixed",
+      "background_texture",
+      "camera_pose",
+      "distractor",
+      "friction",
+      "light_color"
+     ],
+     "shared": 16,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 16
+    },
+    "task": {
+     "examples": [
+      "box_in_cupboard",
+      "box_out_of_cupboard",
+      "box_out_of_opened_drawer",
+      "broom_out_of_cupboard",
+      "close_drawer",
+      "open_drawer"
+     ],
+     "shared": 10,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 10
+    }
+   },
+   "test": "test_atomic",
+   "train": "train_L4_union"
+  },
+  {
+   "overlap": {
+    "asset": {
+     "examples": [
+      "boundary_root",
+      "boundary_root2",
+      "broom",
+      "dirt",
+      "item",
+      "rubbish"
+     ],
+     "shared": 8,
+     "test_fraction_seen_in_train": 0.7272727272727273,
+     "test_total": 11
+    },
+    "condition": {
+     "examples": [
+      "DetectedCondition",
+      "DrawerCondition"
+     ],
+     "shared": 2,
+     "test_fraction_seen_in_train": 0.5,
+     "test_total": 4
+    },
+    "perturbation_family": {
+     "examples": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "none",
+      "object_color"
+     ],
+     "shared": 12,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 12
+    },
+    "primitive": {
+     "examples": [
+      "drop rubbish dustpan",
+      "grasp drawer handle",
+      "move close drawer handle",
+      "pick up block drawer",
+      "pick up block drawer's surface",
+      "pick up broom cupboard"
+     ],
+     "shared": 15,
+     "test_fraction_seen_in_train": 0.7894736842105263,
+     "test_total": 19
+    },
+    "scene": {
+     "examples": [
+      "6f5f1bb607b1f6c7e25c8b10e6518db3963b229b94a86352db8e37d4664e5e4e",
+      "7f65b1e88e2f0f2ba4ba6e98e213a2a7c1502d38d0a1d560928155c772b6eca8",
+      "cafcee2eafedd0aadafb654f718df25dae186c2a3b669f26cfff08f37dbe2d0f",
+      "d45750fe3f1de1cc874f45354821e95b4c3030dfbf1f92df4ec27380a55d27a9"
+     ],
+     "shared": 4,
+     "test_fraction_seen_in_train": 0.3333333333333333,
+     "test_total": 12
+    },
+    "strategy": {
+     "examples": [
+      "all_mixed",
+      "background_texture",
+      "camera_pose",
+      "distractor",
+      "light_color",
+      "manip_obj_color"
+     ],
+     "shared": 14,
+     "test_fraction_seen_in_train": 1.0,
+     "test_total": 14
+    },
+    "task": {
+     "examples": [
+      "put_in_without_close",
+      "sweep_and_drop",
+      "take_out_without_close",
+      "transfer_box"
+     ],
+     "shared": 4,
+     "test_fraction_seen_in_train": 0.3333333333333333,
+     "test_total": 12
+    }
+   },
+   "test": "test_compositional",
+   "train": "train_L4_union"
+  }
+ ],
+ "pins_drift": [],
+ "robohiman_root": "/tmp/RoboHiMan",
+ "seed_lineage": {
+  "finding": "dataset generators call np.random.seed(None) in every worker, so env.seed only seeds Colosseum factor sampling; episode placement lineage is not recoverable from the native scripts. ICGS collection stores the full numpy MT19937 state per episode.",
+  "script_env_seed": {
+   "test_atomic": 244,
+   "test_compositional": 244,
+   "train_A": 42,
+   "train_AP": 42,
+   "train_C": 42,
+   "train_CP": 42
+  }
+ },
+ "splits": {
+  "test_atomic": {
+   "cameras": {
+    "front": true,
+    "left_shoulder": true,
+    "overhead": false,
+    "right_shoulder": true,
+    "wrist": true
+   },
+   "episodes": 1,
+   "generator": "atomic",
+   "idx": -1,
+   "image_size": [
+    128,
+    128
+   ],
+   "images": {
+    "depth": true,
+    "mask": false,
+    "pointcloud": false,
+    "rgb": true
+   },
+   "seed": 244,
+   "tasks": [
+    "box_in_cupboard",
+    "box_out_of_opened_drawer",
+    "close_drawer",
+    "put_in_opened_drawer",
+    "sweep_to_dustpan",
+    "box_out_of_cupboard",
+    "broom_out_of_cupboard",
+    "open_drawer",
+    "rubbish_in_dustpan",
+    "take_out_of_opened_drawer"
+   ]
+  },
+  "test_compositional": {
+   "cameras": {
+    "front": true,
+    "left_shoulder": true,
+    "overhead": false,
+    "right_shoulder": true,
+    "wrist": true
+   },
+   "episodes": 1,
+   "generator": "compositional",
+   "idx": -1,
+   "image_size": [
+    128,
+    128
+   ],
+   "images": {
+    "depth": true,
+    "mask": false,
+    "pointcloud": false,
+    "rgb": true
+   },
+   "seed": 244,
+   "tasks": [
+    "box_exchange",
+    "put_in_and_close",
+    "put_in_without_close",
+    "put_two_in_different",
+    "put_two_in_same",
+    "retrieve_and_sweep",
+    "sweep_and_drop",
+    "take_out_and_close",
+    "take_out_without_close",
+    "take_two_out_of_different",
+    "take_two_out_of_same",
+    "transfer_box"
+   ]
+  },
+  "train_A": {
+   "cameras": {
+    "front": true,
+    "left_shoulder": true,
+    "overhead": false,
+    "right_shoulder": true,
+    "wrist": true
+   },
+   "episodes": 20,
+   "generator": "atomic",
+   "idx": 0,
+   "image_size": [
+    256,
+    256
+   ],
+   "images": {
+    "depth": true,
+    "mask": false,
+    "pointcloud": false,
+    "rgb": true
+   },
+   "seed": 42,
+   "tasks": [
+    "box_in_cupboard",
+    "box_out_of_opened_drawer",
+    "close_drawer",
+    "put_in_opened_drawer",
+    "sweep_to_dustpan",
+    "box_out_of_cupboard",
+    "broom_out_of_cupboard",
+    "open_drawer",
+    "rubbish_in_dustpan",
+    "take_out_of_opened_drawer"
+   ]
+  },
+  "train_AP": {
+   "cameras": {
+    "front": true,
+    "left_shoulder": true,
+    "overhead": false,
+    "right_shoulder": true,
+    "wrist": true
+   },
+   "episodes": 1,
+   "generator": "atomic",
+   "idx": -1,
+   "image_size": [
+    256,
+    256
+   ],
+   "images": {
+    "depth": true,
+    "mask": false,
+    "pointcloud": false,
+    "rgb": true
+   },
+   "seed": 42,
+   "tasks": [
+    "box_in_cupboard",
+    "box_out_of_opened_drawer",
+    "close_drawer",
+    "put_in_opened_drawer",
+    "sweep_to_dustpan",
+    "box_out_of_cupboard",
+    "broom_out_of_cupboard",
+    "open_drawer",
+    "rubbish_in_dustpan",
+    "take_out_of_opened_drawer"
+   ]
+  },
+  "train_C": {
+   "cameras": {
+    "front": true,
+    "left_shoulder": true,
+    "overhead": false,
+    "right_shoulder": true,
+    "wrist": true
+   },
+   "episodes": 5,
+   "generator": "compositional",
+   "idx": 0,
+   "image_size": [
+    256,
+    256
+   ],
+   "images": {
+    "depth": true,
+    "mask": false,
+    "pointcloud": false,
+    "rgb": true
+   },
+   "seed": 42,
+   "tasks": [
+    "put_in_without_close",
+    "sweep_and_drop",
+    "take_out_without_close",
+    "transfer_box"
+   ]
+  },
+  "train_CP": {
+   "cameras": {
+    "front": true,
+    "left_shoulder": true,
+    "overhead": false,
+    "right_shoulder": true,
+    "wrist": true
+   },
+   "episodes": 1,
+   "generator": "compositional",
+   "idx": -1,
+   "image_size": [
+    256,
+    256
+   ],
+   "images": {
+    "depth": true,
+    "mask": false,
+    "pointcloud": false,
+    "rgb": true
+   },
+   "seed": 42,
+   "tasks": [
+    "put_in_without_close",
+    "sweep_and_drop",
+    "take_out_without_close",
+    "transfer_box"
+   ]
+  }
+ },
+ "strategy_index_0_names": [
+  "no_variations"
+ ],
+ "tasks": {
+  "box_exchange": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up sugar cupboard",
+    "place sugar table",
+    "pick up spam table",
+    "place spam cupboard"
+   ],
+   "py_sha256": "41827568733d107dd462412771eb5180f487c1f451603e12e59bfffd53e121d9",
+   "shapes": [
+    "boundary_root",
+    "spam",
+    "sugar",
+    "workspace1"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "924cb4dad85a19aac224e4bfd2933aa9a678af62ee5b8f37d8352c41abf6f5ea"
+  },
+  "box_in_cupboard": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up table",
+    "place cupboard"
+   ],
+   "py_sha256": "23d853bd3c08d094a25b0a358de540f444157c407f33c8e9674b86f48cc1a09f",
+   "shapes": [
+    "boundary_root",
+    "workspace"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "9454bbb06c789fa06a4f8c688017ac96f1d298a01476445dca99cb05e26c1f11"
+  },
+  "box_out_of_cupboard": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up cupboard",
+    "place table"
+   ],
+   "py_sha256": "6eab758feed3d834763695acdec21cda30c834811e85e7030e3c43a2097c2d82",
+   "shapes": [
+    "boundary_root"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "6e4ed0714f8f1d12993392ddcd5acc20ca8a365715988834b6efef25e0b28755"
+  },
+  "box_out_of_opened_drawer": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up strawberry jello drawer",
+    "place strawberry jello drawer's surface"
+   ],
+   "py_sha256": "8a8e4adf3b27666d66e705e2d739187967b40a555871ad863e9d5b5f6fe329e8",
+   "shapes": [
+    "strawberry_jello"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "9f2027a652262bccd5ca5eb96f9bb4460d6b4dc58ee843bc24d7a53bd70307c5"
+  },
+  "broom_out_of_cupboard": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up broom cupboard",
+    "place broom table"
+   ],
+   "py_sha256": "c8e9d334b5194cfc89d2e5f3ab316a21b966ed63c9563473e636f8cb084d4582",
+   "shapes": [
+    "boundary_root",
+    "boundary_root2",
+    "broom",
+    "broom_holder",
+    "workspace"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "3cc00b7acce57f08b7c66ff33277a11165beafcb1fc270fa972b71bf856b6fd4"
+  },
+  "close_drawer": {
+   "conditions": [
+    "DrawerCondition"
+   ],
+   "primitives": [
+    "move close drawer handle",
+    "push drawer shut"
+   ],
+   "py_sha256": "69b674d6eee583ab5a05e828234dce6257d72d9ea1c1ed9d72c1298a91f9bc15",
+   "shapes": [],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "7b587e0e3af7be1b8d9c5036c67e6abe96a49084d8aad682da14dc140300f708"
+  },
+  "open_drawer": {
+   "conditions": [
+    "DrawerCondition"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open"
+   ],
+   "py_sha256": "53ed993cc982dfa559d592fbf1a0f52015876b43e8a69389d686ab1a226fcd23",
+   "shapes": [],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "f838e8f8c3b934d31bf74e099b3e5e7c7e705595f4dafa3d81d108a670ed351d"
+  },
+  "put_in_and_close": {
+   "conditions": [
+    "DetectedCondition",
+    "DrawerCondition"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer's surface",
+    "place block drawer",
+    "move close drawer handle",
+    "push drawer shut"
+   ],
+   "py_sha256": "ce6f2f3c5b6074d3a21704b6ff3a5a2cca81173d4ee2a9bf3688e0b2d12c0f7a",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "69c684e80485085c5c47f9f5985e537f16b2f43eaa7090a0fc8fb53317aa0f7b"
+  },
+  "put_in_opened_drawer": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up block drawer's surface",
+    "place block drawer"
+   ],
+   "py_sha256": "f1840f50bb4041677962c14997d70fd6be3a0dd95e372dbccd56ba721dba6acb",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "651003854158ae1ad27f00303598a10aa6fbf53fe0bbe5202770d238ebe891ce"
+  },
+  "put_in_without_close": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer's surface",
+    "place block drawer"
+   ],
+   "py_sha256": "6372fd4fe70f01a954f0bff531bcb0f4b4d32573674bb6d1b525e3cc0d3c6ef6",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "6f5f1bb607b1f6c7e25c8b10e6518db3963b229b94a86352db8e37d4664e5e4e"
+  },
+  "put_two_in_different": {
+   "conditions": [
+    "AndCondition",
+    "DetectedCondition",
+    "OrConditions"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer's surface",
+    "place block drawer",
+    "move close drawer handle",
+    "push drawer shut",
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer's surface",
+    "place block drawer"
+   ],
+   "py_sha256": "c81635c12a316193447cfed7c8dbcca33cd317cf6d20917a66e9617c1fe73b4f",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "f62283a65b0091d01f4b4955df4290cb7790e0cdc69e2b1b1eb550705b14e1c9"
+  },
+  "put_two_in_same": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer's surface",
+    "place block drawer",
+    "pick up block drawer's surface",
+    "place block drawer"
+   ],
+   "py_sha256": "7e34947e8d8ddd4108e5eff4c64a29cff13e0a75c2a40d7d20880fa1c17e1fea",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "0e4441f5ffeabb1560b9d3514747f23ef38c767bde6a1ead13b9322ba1a29a8c"
+  },
+  "retrieve_and_sweep": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up broom cupboard",
+    "sweep dirt dustpan"
+   ],
+   "py_sha256": "15b2a943eab154db2da04a8182a86866828470647b9d40acde23cf2ba1330b7d",
+   "shapes": [
+    "boundary_root",
+    "boundary_root2",
+    "broom",
+    "dirt",
+    "workspace"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "4069b47068d97acc68119ddf36c78c1780b7ff76ff38c4435297ca7ddbab2f94"
+  },
+  "rubbish_in_dustpan": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up rubbish table",
+    "drop rubbish dustpan"
+   ],
+   "py_sha256": "be2aa395a6742c2b61e2366828833a007fa64472bbc83a0b7042bc987c3f675d",
+   "shapes": [
+    "rubbish"
+   ],
+   "strategies": [
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "ffabb97b297352c090b86fda94779463fbc17a393fda8a768b4c01705bd7e54d"
+  },
+  "sweep_and_drop": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up rubbish table",
+    "drop rubbish dustpan",
+    "pick up broom table",
+    "sweep dirt dustpan"
+   ],
+   "py_sha256": "cff8f87ec6a485d9335c21f5bb4e45a0f0261ac0485557780f67be308186c7d0",
+   "shapes": [
+    "broom",
+    "dirt",
+    "rubbish"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "d45750fe3f1de1cc874f45354821e95b4c3030dfbf1f92df4ec27380a55d27a9"
+  },
+  "sweep_to_dustpan": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up broom table",
+    "sweep dirt dustpan"
+   ],
+   "py_sha256": "d13fd2e0b01cffb11ca243a1bf17586c9a7fc96788bbfd0aaf1eaf86015213c9",
+   "shapes": [
+    "boundary_root2",
+    "broom",
+    "dirt",
+    "workspace"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "836e31667a67cd0d2295680d62350199487fab64c8756b876d360d743ed14b32"
+  },
+  "take_out_and_close": {
+   "conditions": [
+    "DetectedCondition",
+    "DrawerCondition"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer",
+    "place block drawer's surface",
+    "move close drawer handle",
+    "push drawer shut"
+   ],
+   "py_sha256": "8325b9ff55c547e547192609e316a904bc7183f7cacd4c2c838d6224faf8ffb9",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "7aecd84e197677909f213a3392836b126910b8b528bc8ab0c0b5faf6e5670aa5"
+  },
+  "take_out_of_opened_drawer": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "pick up block drawer",
+    "place block drawer's surface"
+   ],
+   "py_sha256": "c26369b17d7bd720b956983b217eb179148f0a2260c1fa4827fabb13584b6b05",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "069e02eae5bc05edd7c58b9d859f3c485ace7d666341ac4c0791a5ff0c890f27"
+  },
+  "take_out_without_close": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer",
+    "place block drawer's surface"
+   ],
+   "py_sha256": "0875c482f50c9a54ec180a3b5440631ad634fdc16a90631b5d4a538a8ea2a946",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "cafcee2eafedd0aadafb654f718df25dae186c2a3b669f26cfff08f37dbe2d0f"
+  },
+  "take_two_out_of_different": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer",
+    "place block drawer's surface",
+    "move close drawer handle",
+    "push drawer shut",
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer",
+    "place block drawer's surface"
+   ],
+   "py_sha256": "56f7e1eb5dca2f0d8e64b375bc88d7ef80e9d0d497d765db2cca0d62b1a18955",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "8a4b72a913e8313bdb3f92f4e18bd05203de4182fe9cb75d4c7b0b4980587389"
+  },
+  "take_two_out_of_same": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up block drawer",
+    "place block drawer's surface",
+    "pick up block drawer",
+    "place block drawer's surface"
+   ],
+   "py_sha256": "e8bceb27c572fb2017c0e719db4921b9cf8dadf45f625e837e7875b9bc41d690",
+   "shapes": [
+    "item"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "214fe05cde3c9e47e38d302f69153a663e6ba5903d1ef1249ac9125b85fb6d08"
+  },
+  "transfer_box": {
+   "conditions": [
+    "DetectedCondition"
+   ],
+   "primitives": [
+    "grasp drawer handle",
+    "pull drawer open",
+    "pick up strawberry jello drawer",
+    "place strawberry jello cupboard"
+   ],
+   "py_sha256": "b646f5a1b7a73173a201fe3b7a3f828efbbc596763760a3e976fc1cc44a91a43",
+   "shapes": [
+    "boundary_root",
+    "boundary_root2",
+    "strawberry_jello",
+    "workspace"
+   ],
+   "strategies": [
+    {
+     "enabled": true,
+     "factor_types": [],
+     "index": 0,
+     "name": "no_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 1,
+     "name": "all_mixed"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 2,
+     "name": "manip_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_color"
+     ],
+     "index": 3,
+     "name": "recv_obj_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 4,
+     "name": "manip_obj_tex"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_texture"
+     ],
+     "index": 5,
+     "name": "recv_obj_tex"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 6,
+     "name": "manip_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "object_size"
+     ],
+     "index": 7,
+     "name": "recv_obj_size"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "light_color"
+     ],
+     "index": 8,
+     "name": "light_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_color"
+     ],
+     "index": 9,
+     "name": "table_color"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "table_texture"
+     ],
+     "index": 10,
+     "name": "table_texture"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "distractor_object"
+     ],
+     "index": 11,
+     "name": "distractor"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "background_texture"
+     ],
+     "index": 12,
+     "name": "background_texture"
+    },
+    {
+     "enabled": false,
+     "factor_types": [],
+     "index": 13,
+     "name": "rlbench_variations"
+    },
+    {
+     "enabled": true,
+     "factor_types": [
+      "camera_pose"
+     ],
+     "index": 14,
+     "name": "camera_pose"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "background_texture",
+      "camera_pose",
+      "distractor_object",
+      "light_color",
+      "object_color",
+      "object_friction",
+      "object_mass",
+      "object_size",
+      "object_texture",
+      "table_color",
+      "table_texture"
+     ],
+     "index": 15,
+     "name": "rlbench_and_colosseum"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_friction"
+     ],
+     "index": 16,
+     "name": "friction"
+    },
+    {
+     "enabled": false,
+     "factor_types": [
+      "object_mass"
+     ],
+     "index": 17,
+     "name": "mass"
+    }
+   ],
+   "ttm_sha256": "7f65b1e88e2f0f2ba4ba6e98e213a2a7c1502d38d0a1d560928155c772b6eca8"
+  }
+ },
+ "test_compositional_tasks_unseen_in_any_train_split": [
+  "box_exchange",
+  "put_in_and_close",
+  "put_two_in_different",
+  "put_two_in_same",
+  "retrieve_and_sweep",
+  "take_out_and_close",
+  "take_two_out_of_different",
+  "take_two_out_of_same"
+ ]
+}

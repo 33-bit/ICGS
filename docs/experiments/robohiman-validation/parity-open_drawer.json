@@ -1,0 +1,265 @@
+{
+ "fresh_reset_each_run": {
+  "comparisons": {
+   "mirror_1_vs_mirror_2 (rendering on vs off)": {
+    "bitwise_joint_trajectory_equal": false,
+    "cmd_arm_joint_target_mask_equal": true,
+    "cmd_gripper_joint_velocity_mask_equal": true,
+    "final_boundary": {
+     "final_object_position_m": 0.00012986788426203638,
+     "final_success_equal": 1.0,
+     "final_tip_position_m": 2.2887451135630263e-05,
+     "max_articulation_m": 0.00012987852096557617,
+     "max_finger_m": 1.4722347259521484e-05,
+     "max_joint_rad": 0.0015985965728759766,
+     "max_object_position_m": 0.00012986788426203638,
+     "max_tip_position_m": 2.2887451135630263e-05,
+     "predicate_disagreement_fraction": 0.0
+    },
+    "final_object_position_m": 0.00012986788426203638,
+    "final_success_equal": 1.0,
+    "final_tip_position_m": 2.2887451135630263e-05,
+    "first_boundary_joint_diff_gt_1e-6": 0,
+    "max_articulation_m": 0.00019963085651397705,
+    "max_cmd_arm_joint_target_diff": 0.001918196678161621,
+    "max_cmd_gripper_joint_velocity_diff": 0.0,
+    "max_finger_m": 7.528066635131836e-05,
+    "max_joint_rad": 0.0019295215606689453,
+    "max_object_position_m": 0.00019965255417062525,
+    "max_tip_position_m": 0.00020888677421842253,
+    "predicate_disagreement_fraction": 0.0,
+    "steps_a": 208,
+    "steps_b": 208,
+    "waypoint_phase_sequence_equal": true
+   },
+   "upstream_1_vs_mirror_1 (mirror parity + per-step rendering neutrality)": {
+    "bitwise_joint_trajectory_equal": false,
+    "cmd_arm_joint_target_mask_equal": false,
+    "cmd_gripper_joint_velocity_mask_equal": false,
+    "final_boundary": {
+     "final_object_position_m": 0.000872524664891491,
+     "final_success_equal": 1.0,
+     "final_tip_position_m": 7.381691744692839e-05,
+     "max_articulation_m": 0.0008723735809326172,
+     "max_finger_m": 2.4259090423583984e-05,
+     "max_joint_rad": 0.6300320327281952,
+     "max_object_position_m": 0.000872524664891491,
+     "max_tip_position_m": 7.381691744692839e-05,
+     "predicate_disagreement_fraction": 0.0
+    },
+    "final_object_position_m": 0.0008729469658653674,
+    "final_success_equal": 1.0,
+    "final_tip_position_m": 4.785262168372844e-05,
+    "first_boundary_joint_diff_gt_1e-6": 0,
+    "max_articulation_m": 0.08191099762916565,
+    "max_cmd_arm_joint_target_diff": 0.7929640725679279,
+    "max_cmd_gripper_joint_velocity_diff": 0.04,
+    "max_finger_m": 0.012186646461486816,
+    "max_joint_rad": 0.790154218673706,
+    "max_object_position_m": 0.08191414627669129,
+    "max_tip_position_m": 0.08192197447049872,
+    "predicate_disagreement_fraction": 0.03189792663476874,
+    "steps_a": 214,
+    "steps_b": 208,
+    "waypoint_phase_sequence_equal": false
+   },
+   "upstream_1_vs_upstream_2 (simulator determinism)": {
+    "bitwise_joint_trajectory_equal": false,
+    "cmd_arm_joint_target_mask_equal": false,
+    "cmd_gripper_joint_velocity_mask_equal": false,
+    "final_boundary": {
+     "final_object_position_m": 0.0006667880149910948,
+     "final_success_equal": 1.0,
+     "final_tip_position_m": 8.530112165275089e-05,
+     "max_articulation_m": 0.0006665587425231934,
+     "max_finger_m": 1.1980533599853516e-05,
+     "max_joint_rad": 0.5945505797863007,
+     "max_object_position_m": 0.0006667880149910948,
+     "max_tip_position_m": 8.530112165275089e-05,
+     "predicate_disagreement_fraction": 0.0
+    },
+    "final_object_position_m": 0.0006672102896042134,
+    "final_success_equal": 1.0,
+    "final_tip_position_m": 5.994183746285391e-05,
+    "first_boundary_joint_diff_gt_1e-6": 0,
+    "max_articulation_m": 0.0813421905040741,
+    "max_cmd_arm_joint_target_diff": 0.7562290270374542,
+    "max_cmd_gripper_joint_velocity_diff": 0.04,
+    "max_finger_m": 0.012168705463409424,
+    "max_joint_rad": 0.7536900043487549,
+    "max_object_position_m": 0.08134635979673226,
+    "max_tip_position_m": 0.0814987183618751,
+    "predicate_disagreement_fraction": 0.03189792663476874,
+    "steps_a": 214,
+    "steps_b": 208,
+    "waypoint_phase_sequence_equal": false
+   }
+  },
+  "runs": {
+   "mirror_1": {
+    "frames": 209,
+    "reason": null,
+    "status": "success",
+    "steps": 208,
+    "task_success": true,
+    "wall_s": 16.6
+   },
+   "mirror_2": {
+    "frames": 0,
+    "reason": null,
+    "status": "success",
+    "steps": 208,
+    "task_success": true,
+    "wall_s": 10.3
+   },
+   "upstream_1": {
+    "frames": 0,
+    "status": "success",
+    "steps": 214,
+    "task_success": true,
+    "wall_s": 14.3
+   },
+   "upstream_2": {
+    "frames": 0,
+    "status": "success",
+    "steps": 208,
+    "task_success": true,
+    "wall_s": 14.4
+   }
+  }
+ },
+ "gate": "parity",
+ "restored_post_reset_snapshot": {
+  "comparisons": {
+   "mirror_1_vs_mirror_2 (rendering on vs off)": {
+    "bitwise_joint_trajectory_equal": false,
+    "cmd_arm_joint_target_mask_equal": false,
+    "cmd_gripper_joint_velocity_mask_equal": false,
+    "final_boundary": {
+     "final_object_position_m": 0.002371580992400821,
+     "final_success_equal": 1.0,
+     "final_tip_position_m": 0.0008888851483010865,
+     "max_articulation_m": 0.0023714005947113037,
+     "max_finger_m": 4.017353057861328e-05,
+     "max_joint_rad": 0.3163480758666992,
+     "max_object_position_m": 0.002371580992400821,
+     "max_tip_position_m": 0.0008888851483010865,
+     "predicate_disagreement_fraction": 0.0
+    },
+    "final_object_position_m": 0.0022356750305127255,
+    "final_success_equal": 1.0,
+    "final_tip_position_m": 0.0008787788026449769,
+    "first_boundary_joint_diff_gt_1e-6": 1,
+    "max_articulation_m": 0.0051927268505096436,
+    "max_cmd_arm_joint_target_diff": 0.35668053004499617,
+    "max_cmd_gripper_joint_velocity_diff": 0.04,
+    "max_finger_m": 0.0021141767501831055,
+    "max_joint_rad": 0.35645031929016113,
+    "max_object_position_m": 0.005194358138720385,
+    "max_tip_position_m": 0.015319519486048093,
+    "predicate_disagreement_fraction": 0.003205128205128205,
+    "steps_a": 208,
+    "steps_b": 207,
+    "waypoint_phase_sequence_equal": false
+   },
+   "upstream_1_vs_mirror_1 (mirror parity + per-step rendering neutrality)": {
+    "bitwise_joint_trajectory_equal": false,
+    "cmd_arm_joint_target_mask_equal": false,
+    "cmd_gripper_joint_velocity_mask_equal": false,
+    "final_boundary": {
+     "final_object_position_m": 0.0017119382359091673,
+     "final_success_equal": 1.0,
+     "final_tip_position_m": 7.87498751415906e-05,
+     "max_articulation_m": 0.001711726188659668,
+     "max_finger_m": 1.2874603271484375e-05,
+     "max_joint_rad": 0.341214656829834,
+     "max_object_position_m": 0.0017119382359091673,
+     "max_tip_position_m": 7.87498751415906e-05,
+     "predicate_disagreement_fraction": 0.0
+    },
+    "final_object_position_m": 0.001576032344154625,
+    "final_success_equal": 1.0,
+    "final_tip_position_m": 8.699657409111345e-05,
+    "first_boundary_joint_diff_gt_1e-6": 1,
+    "max_articulation_m": 0.005530416965484619,
+    "max_cmd_arm_joint_target_diff": 0.384081772900451,
+    "max_cmd_gripper_joint_velocity_diff": 0.04,
+    "max_finger_m": 0.0020644068717956543,
+    "max_joint_rad": 0.3838372230529785,
+    "max_object_position_m": 0.0055291721972506695,
+    "max_tip_position_m": 0.016570642310404993,
+    "predicate_disagreement_fraction": 0.003205128205128205,
+    "steps_a": 207,
+    "steps_b": 208,
+    "waypoint_phase_sequence_equal": false
+   },
+   "upstream_1_vs_upstream_2 (simulator determinism)": {
+    "bitwise_joint_trajectory_equal": false,
+    "cmd_arm_joint_target_mask_equal": false,
+    "cmd_gripper_joint_velocity_mask_equal": false,
+    "final_boundary": {
+     "final_object_position_m": 0.0007767465776483365,
+     "final_success_equal": 1.0,
+     "final_tip_position_m": 5.713801635038991e-05,
+     "max_articulation_m": 0.000776633620262146,
+     "max_finger_m": 2.580881118774414e-05,
+     "max_joint_rad": 0.23525238037109375,
+     "max_object_position_m": 0.0007767465776483365,
+     "max_tip_position_m": 5.713801635038991e-05,
+     "predicate_disagreement_fraction": 0.0
+    },
+    "final_object_position_m": 0.0007765717575298915,
+    "final_success_equal": 1.0,
+    "final_tip_position_m": 5.453894209552862e-05,
+    "first_boundary_joint_diff_gt_1e-6": 1,
+    "max_articulation_m": 0.003134310245513916,
+    "max_cmd_arm_joint_target_diff": 0.2617686970318374,
+    "max_cmd_gripper_joint_velocity_diff": 0.04,
+    "max_finger_m": 0.002077341079711914,
+    "max_joint_rad": 0.26163315773010254,
+    "max_object_position_m": 0.003132610162667518,
+    "max_tip_position_m": 0.011477077377016691,
+    "predicate_disagreement_fraction": 0.003205128205128205,
+    "steps_a": 207,
+    "steps_b": 208,
+    "waypoint_phase_sequence_equal": false
+   }
+  },
+  "runs": {
+   "mirror_1": {
+    "frames": 208,
+    "reason": null,
+    "status": "success",
+    "steps": 208,
+    "task_success": true,
+    "wall_s": 13.5
+   },
+   "mirror_2": {
+    "frames": 0,
+    "reason": null,
+    "status": "success",
+    "steps": 207,
+    "task_success": true,
+    "wall_s": 9.2
+   },
+   "upstream_1": {
+    "frames": 0,
+    "status": "success",
+    "steps": 207,
+    "task_success": true,
+    "wall_s": 12.3
+   },
+   "upstream_2": {
+    "frames": 0,
+    "status": "success",
+    "steps": 208,
+    "task_success": true,
+    "wall_s": 12.0
+   }
+  }
+ },
+ "seed": 1,
+ "task": "open_drawer",
+ "variation": 0,
+ "wall_s": 109.5
+}
