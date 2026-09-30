@@ -1,0 +1,65 @@
+{
+ "objects": {
+  "Dustpan_3": {
+   "extents_mm_sorted": [
+    2,
+    13,
+    147
+   ],
+   "graspable": false,
+   "signature": "5b7f54f725d7",
+   "vertices": 772
+  },
+  "Dustpan_4": {
+   "extents_mm_sorted": [
+    83,
+    218,
+    274
+   ],
+   "graspable": false,
+   "signature": "3c08ea8fcafb",
+   "vertices": 19936
+  },
+  "Dustpan_5": {
+   "extents_mm_sorted": [
+    21,
+    21,
+    595
+   ],
+   "graspable": false,
+   "signature": "1e518be2b906",
+   "vertices": 1442
+  },
+  "broom": {
+   "extents_mm_sorted": [
+    36,
+    240,
+    274
+   ],
+   "graspable": false,
+   "signature": "d285a5dc4534",
+   "vertices": 16
+  },
+  "rubbish": {
+   "extents_mm_sorted": [
+    34,
+    50,
+    87
+   ],
+   "graspable": true,
+   "signature": "b4d4f01c8657",
+   "vertices": 230
+  },
+  "rubbish_visual": {
+   "extents_mm_sorted": [
+    34,
+    50,
+    87
+   ],
+   "graspable": false,
+   "signature": "04f7653845cf",
+   "vertices": 182
+  }
+ },
+ "task": "rubbish_in_dustpan"
+}

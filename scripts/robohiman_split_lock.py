@@ -82,7 +82,7 @@ STRUCTURE = {
 _GENERIC = re.compile(r"^(Panda_|ResizableFloor|Wall|diningTable|workspace|boundary_root|Dummy|cam_)")
 
 UNSUPPORTED_CLAIMS = {
-    "asset_generalization": "every object/asset in DEV/TEST also appears in TRAIN (see overlap: asset); "
+    "asset_generalization": "held-out tasks reuse TRAIN object geometry (see overlap: asset_geometry); "
                             "RoboHiMan provides no held-out asset factor. Not claimable without new assets.",
     "unseen_primitive_generalization": "all DEV/TEST primitive steps occur in TRAIN tasks.",
     "dependency_mechanism_generalization": "the n=20 dependency audit found one consequential band "
@@ -118,6 +118,15 @@ def _allowed_strategies(root: Path, task: str, *, held_out_perturbations: bool) 
     return allowed
 
 
+def _asset_signatures(inventory_dir: Path) -> dict[str, dict[str, str]]:
+    """task -> {object name: geometry signature} from robohiman_asset_inventory.py."""
+    result = {}
+    for path in inventory_dir.glob("*.json"):
+        data = json.loads(path.read_text())
+        result[data["task"]] = {name: obj["signature"] for name, obj in data["objects"].items()}
+    return result
+
+
 def _assets(store: Path) -> dict[str, set[str]]:
     assets: dict[str, set[str]] = {}
     for manifest_path in store.glob("episodes/*/manifest.json"):
@@ -135,6 +144,9 @@ def _primitives(root: Path, task: str) -> list[str]:
     for line in (match.group(1).split("\\n") if match else []):
         line = re.sub(r"\{[^}]*\}", "", line.lower())
         line = re.sub(r"\b(bottom|middle|top|the|a|an|of|on|in|into|to|from|it|one|other)\b", " ", line)
+        # Action + place only: manipulated-object nouns are templated in some tasks and
+        # literal in others ("pick up the sugar"), so they are removed for comparison.
+        line = re.sub(r"\b(block|blocks|spam|sugar|strawberry|jello|rubbish|broom|dirt)\b", " ", line)
         steps.append(" ".join(line.split()))
     return steps
 
@@ -229,6 +241,7 @@ def build(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
 
     # ---------------------------------------------------------------- overlap
     assets = _assets(Path(args.store))
+    signatures = _asset_signatures(Path(args.asset_inventory))
     groups = {"TRAIN": list(train_tasks), "DEV-composition": list(DEV_HELD_OUT),
               "TEST-held-out-composition": list(TEST_HELD_OUT), "TEST-dependency-stress": list(DEPENDENCY_STRESS)}
 
@@ -239,7 +252,8 @@ def build(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
             "scene_ttm": {hashlib.sha256((root / f"HiMan-Bench/robot-colosseum/colosseum/rlbench/"
                                                   f"{task_family(t)}_task_ttms/{t}.ttm").read_bytes()).hexdigest()[:16]
                           for t in tasks},
-            "asset": {a for t in tasks for a in assets.get(t, set())},
+            "asset_name": {a for t in tasks for a in assets.get(t, set())},
+            "asset_geometry": {sig for t in tasks for sig in signatures.get(t, {}).values()},
             "structure_sequence": {">".join(STRUCTURE[t]) for t in tasks},
             "structure_bigram": {b for t in tasks for b in _bigrams(STRUCTURE[t])},
             "structure_step": {s for t in tasks for s in STRUCTURE[t]},
@@ -270,7 +284,9 @@ def build(args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
             "unseen_bigrams": sorted(_bigrams(STRUCTURE[task]) - train_bigrams),
             "exact_structure_in_train": any(STRUCTURE[t] == STRUCTURE[task] for t in train_tasks),
             "nearest_train_task_by_structure": nearest,
-            "assets_unseen_in_train": sorted(assets.get(task, set()) - group_facts["TRAIN"]["asset"]),
+            "asset_names_unseen_in_train": sorted(assets.get(task, set()) - group_facts["TRAIN"]["asset_name"]),
+            "assets_unseen_in_train_by_geometry": sorted(
+                name for name, sig in signatures.get(task, {}).items() if sig not in group_facts["TRAIN"]["asset_geometry"]),
             "primitives_unseen_in_train": sorted(set(_primitives(root, task)) - group_facts["TRAIN"]["primitive"]),
         }
     perturbation = {
@@ -293,7 +309,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--robohiman", required=True)
     parser.add_argument("--compat-dir", required=True)
-    parser.add_argument("--store", required=True, help="pre-flight store (assets)")
+    parser.add_argument("--store", required=True, help="pre-flight store (asset names)")
+    parser.add_argument("--asset-inventory", required=True, help="robohiman_asset_inventory.py output dir")
     parser.add_argument("--out-dir", required=True)
     parser.add_argument("--report", required=True)
     args = parser.parse_args(argv)

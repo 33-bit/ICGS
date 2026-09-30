@@ -1,0 +1,135 @@
+{
+ "objects": {
+  "Dustpan_3": {
+   "extents_mm_sorted": [
+    2,
+    13,
+    147
+   ],
+   "graspable": false,
+   "signature": "5b7f54f725d7",
+   "vertices": 772
+  },
+  "Dustpan_4": {
+   "extents_mm_sorted": [
+    83,
+    218,
+    274
+   ],
+   "graspable": false,
+   "signature": "3c08ea8fcafb",
+   "vertices": 19936
+  },
+  "Dustpan_5": {
+   "extents_mm_sorted": [
+    21,
+    21,
+    595
+   ],
+   "graspable": false,
+   "signature": "1e518be2b906",
+   "vertices": 1442
+  },
+  "broom": {
+   "extents_mm_sorted": [
+    36,
+    240,
+    274
+   ],
+   "graspable": true,
+   "signature": "d285a5dc4534",
+   "vertices": 16
+  },
+  "broom_holder": {
+   "extents_mm_sorted": [
+    100,
+    100,
+    200
+   ],
+   "graspable": false,
+   "signature": "1f94eb72d02f",
+   "vertices": 8
+  },
+  "cupboard": {
+   "extents_mm_sorted": [
+    250,
+    254,
+    418
+   ],
+   "graspable": false,
+   "signature": "279d693b2dc6",
+   "vertices": 40
+  },
+  "cupboard_visual": {
+   "extents_mm_sorted": [
+    1,
+    220,
+    420
+   ],
+   "graspable": false,
+   "signature": "720d93e0ebd1",
+   "vertices": 8
+  },
+  "dirt0": {
+   "extents_mm_sorted": [
+    10,
+    10,
+    10
+   ],
+   "graspable": false,
+   "signature": "8dc0d2887cb0",
+   "vertices": 8
+  },
+  "dirt1": {
+   "extents_mm_sorted": [
+    10,
+    10,
+    10
+   ],
+   "graspable": false,
+   "signature": "8dc0d2887cb0",
+   "vertices": 8
+  },
+  "dirt2": {
+   "extents_mm_sorted": [
+    10,
+    10,
+    10
+   ],
+   "graspable": false,
+   "signature": "8dc0d2887cb0",
+   "vertices": 8
+  },
+  "dirt3": {
+   "extents_mm_sorted": [
+    10,
+    10,
+    10
+   ],
+   "graspable": false,
+   "signature": "8dc0d2887cb0",
+   "vertices": 8
+  },
+  "dirt4": {
+   "extents_mm_sorted": [
+    10,
+    10,
+    10
+   ],
+   "graspable": false,
+   "signature": "8dc0d2887cb0",
+   "vertices": 8
+  },
+  "sweep_to_dustpan_broom_visual": {
+   "extents_mm_sorted": [
+    43,
+    253,
+    280
+   ],
+   "graspable": false,
+   "signature": "e7f716010277",
+   "vertices": 174
+  }
+ },
+ "task": "retrieve_and_sweep"
+}

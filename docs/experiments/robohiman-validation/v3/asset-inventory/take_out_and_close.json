@@ -1,0 +1,65 @@
+{
+ "objects": {
+  "drawer_bottom": {
+   "extents_mm_sorted": [
+    103,
+    321,
+    333
+   ],
+   "graspable": false,
+   "signature": "fe1d96212904",
+   "vertices": 122
+  },
+  "drawer_frame": {
+   "extents_mm_sorted": [
+    329,
+    331,
+    335
+   ],
+   "graspable": false,
+   "signature": "be42c0e906be",
+   "vertices": 40
+  },
+  "drawer_legs": {
+   "extents_mm_sorted": [
+    81,
+    325,
+    333
+   ],
+   "graspable": false,
+   "signature": "6c4ba76c6b72",
+   "vertices": 264
+  },
+  "drawer_middle": {
+   "extents_mm_sorted": [
+    103,
+    321,
+    333
+   ],
+   "graspable": false,
+   "signature": "fe1d96212904",
+   "vertices": 122
+  },
+  "drawer_top": {
+   "extents_mm_sorted": [
+    103,
+    321,
+    333
+   ],
+   "graspable": false,
+   "signature": "fe1d96212904",
+   "vertices": 122
+  },
+  "item": {
+   "extents_mm_sorted": [
+    32,
+    32,
+    32
+   ],
+   "graspable": true,
+   "signature": "8dc0d2887cb0",
+   "vertices": 8
+  }
+ },
+ "task": "take_out_and_close"
+}

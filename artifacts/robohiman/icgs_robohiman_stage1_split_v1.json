@@ -1,0 +1,1792 @@
+{
+ "benchmark": {
+  "coppeliasim": {
+   "archive": "CoppeliaSim_Edu_V4_1_0_Ubuntu20_04.tar.xz",
+   "version": "4.1.0"
+  },
+  "pyrep": {
+   "revision": "231a1ac6b0a179cff53c1d403d379260b9f05f2f",
+   "url": "https://github.com/stepjam/PyRep.git"
+  },
+  "rlbench": {
+   "revision": "587a6a0e6dc8cd36612a208724eb275fe8cb4470",
+   "url": "https://github.com/buttomnutstoast/RLBench.git"
+  },
+  "robohiman": {
+   "revision": "33f71d30d9a100a83725ff00dfcc27374d5ce810",
+   "url": "https://github.com/chenyt31/RoboHiMan.git"
+  }
+ },
+ "excluded": [
+  {
+   "reason": "legacy ICGS custom benchmark; not RoboHiMan semantics; known physical abstractions (handle-block drawers, marker predicates). Kept recoverable as a possible mechanistic diagnostic suite; no scientific reason found to add it to TRAIN.",
+   "task": "custom-36-program-generator (T01\u2013T20, V01\u2013V04, P/G/R)"
+  },
+  {
+   "reason": "not part of HiMan-Bench A/AP/C/CP; outside the benchmark scope.",
+   "task": "colosseum original 20 tasks (colosseum/rlbench/tasks)"
+  }
+ ],
+ "frozen_on": "2026-09-30",
+ "held_out_perturbation_strategies": [
+  "distractor",
+  "background_texture",
+  "all_mixed"
+ ],
+ "lineage_rules": [
+  "every episode carries split_id, split, per-episode numpy seed and factor env seed; the collector refuses (task, strategy, variation, seed) outside the split",
+  "Stage-2 anchors, branches and continuations inherit the split of their source episode",
+  "no DEV or TEST episode, failure, perturbation, branch or statistic enters gradient training or normalization statistics",
+  "held-out tasks (DEV-composition, TEST-held-out-composition) never appear in TRAIN in any form",
+  "TEST demonstrations used as inference-time context come only from test.context_seed_range",
+  "changing this manifest requires a new split_id and a new ADR; the lock file hash is checked by the collector"
+ ],
+ "monitor_version": "robohiman-monitor-v4",
+ "split_id": "icgs-robohiman-stage1-split-v1",
+ "splits": {
+  "dev": {
+   "factor_env_seed": 4242,
+   "numpy_seed_range": [
+    200000000,
+    299999999
+   ],
+   "tasks": {
+    "box_in_cupboard": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "box_out_of_cupboard": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "box_out_of_opened_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "broom_out_of_cupboard": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "close_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      6,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "open_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      6,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "put_in_opened_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "put_in_without_close": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "rubbish_in_dustpan": {
+     "compat_verdict": "PARTIAL",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "collection strategy 0 is disabled: native train_A (IDX_TO_COLLECT=0) collects nothing"
+     ],
+     "strategies": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14,
+      16,
+      17
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "sweep_and_drop": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "expert executes broom sweeping before the rubbish drop; oracle language lists rubbish first"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "sweep_to_dustpan": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "take_out_and_close": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "take_out_of_opened_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "take_out_without_close": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "take_two_out_of_different": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)",
+      "success does not require closing the first drawer, but the upstream expert closes it"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ]
+    },
+    "take_two_out_of_same": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "transfer_box": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    }
+   }
+  },
+  "test": {
+   "context_seed_range": [
+    390000000,
+    399999999
+   ],
+   "factor_env_seed": 244,
+   "numpy_seed_range": [
+    300000000,
+    399999999
+   ],
+   "tasks": {
+    "box_exchange": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "box_in_cupboard": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "box_out_of_cupboard": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "box_out_of_opened_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "broom_out_of_cupboard": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "close_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      6,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "open_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      6,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "put_in_and_close": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "put_in_opened_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "put_in_without_close": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "put_two_in_different": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)",
+      "success does not require closing the first drawer, but the upstream expert closes it"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5
+     ]
+    },
+    "put_two_in_same": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "retrieve_and_sweep": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "rubbish_in_dustpan": {
+     "compat_verdict": "PARTIAL",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "collection strategy 0 is disabled: native train_A (IDX_TO_COLLECT=0) collects nothing"
+     ],
+     "strategies": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14,
+      16,
+      17
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "sweep_and_drop": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "expert executes broom sweeping before the rubbish drop; oracle language lists rubbish first"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "sweep_to_dustpan": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "take_out_of_opened_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "take_out_without_close": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "transfer_box": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    }
+   }
+  },
+  "train": {
+   "factor_env_seed": 42,
+   "numpy_seed_range": [
+    100000000,
+    199999999
+   ],
+   "tasks": {
+    "box_in_cupboard": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "box_out_of_cupboard": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "box_out_of_opened_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "broom_out_of_cupboard": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "close_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      6,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "open_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      6,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "put_in_opened_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "put_in_without_close": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "rubbish_in_dustpan": {
+     "compat_verdict": "PARTIAL",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "collection strategy 0 is disabled: native train_A (IDX_TO_COLLECT=0) collects nothing"
+     ],
+     "strategies": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14,
+      16,
+      17
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "sweep_and_drop": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "expert executes broom sweeping before the rubbish drop; oracle language lists rubbish first"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "sweep_to_dustpan": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      5,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0
+     ]
+    },
+    "take_out_of_opened_drawer": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "take_out_without_close": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    },
+    "transfer_box": {
+     "compat_verdict": "PASS",
+     "known_upstream_quirks": [
+      "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+      "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+      "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+      "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+      "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+      "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+      "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps before release (ICGS placement events require release)",
+      "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+      "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera does move (up to ~10 cm) under that strategy",
+      "object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy (drawer/cupboard scale 0.9-1.15 in A/C levels)"
+     ],
+     "strategies": [
+      0,
+      2,
+      3,
+      4,
+      6,
+      7,
+      8,
+      9,
+      10,
+      14
+     ],
+     "variations": [
+      0,
+      1,
+      2
+     ]
+    }
+   }
+  }
+ },
+ "status": "frozen",
+ "tracks": [
+  {
+   "claim": "selection signal for known-task configuration robustness",
+   "not_claimed": "any generalization result; DEV is never reported as a test",
+   "split": "dev",
+   "strategies": "same as TRAIN",
+   "task_novelty": "seen_task",
+   "tasks": [
+    "box_in_cupboard",
+    "box_out_of_cupboard",
+    "box_out_of_opened_drawer",
+    "broom_out_of_cupboard",
+    "close_drawer",
+    "open_drawer",
+    "put_in_opened_drawer",
+    "rubbish_in_dustpan",
+    "sweep_to_dustpan",
+    "take_out_of_opened_drawer",
+    "put_in_without_close",
+    "sweep_and_drop",
+    "take_out_without_close",
+    "transfer_box"
+   ],
+   "track_id": "DEV-config",
+   "use": "model selection / early stopping"
+  },
+  {
+   "claim": "selection signal for composition of seen primitives into unseen task structures",
+   "not_claimed": "test performance; no gradient from these tasks",
+   "split": "dev",
+   "strategies": "strategy 0 + TRAIN perturbation families",
+   "task_novelty": "held_out_task",
+   "tasks": [
+    "take_out_and_close",
+    "take_two_out_of_different",
+    "take_two_out_of_same"
+   ],
+   "track_id": "DEV-composition",
+   "use": "model selection for held-out composition"
+  },
+  {
+   "claim": "known-task robustness to new placements and new samples of TRAIN perturbation families (disjoint seeds and factor seed)",
+   "not_claimed": "task, composition, asset or perturbation-family generalization",
+   "split": "test",
+   "strategies": "same as TRAIN",
+   "task_novelty": "seen_task",
+   "tasks": [
+    "box_in_cupboard",
+    "box_out_of_cupboard",
+    "box_out_of_opened_drawer",
+    "broom_out_of_cupboard",
+    "close_drawer",
+    "open_drawer",
+    "put_in_opened_drawer",
+    "rubbish_in_dustpan",
+    "sweep_to_dustpan",
+    "take_out_of_opened_drawer",
+    "put_in_without_close",
+    "sweep_and_drop",
+    "take_out_without_close",
+    "transfer_box"
+   ],
+   "track_id": "TEST-config"
+  },
+  {
+   "claim": "robustness of known tasks to Colosseum perturbation families absent from TRAIN",
+   "not_claimed": "new tasks; distractor YCB objects are new only as distractors, not as manipulated assets",
+   "split": "test",
+   "strategies": [
+    "distractor",
+    "background_texture",
+    "all_mixed"
+   ],
+   "task_novelty": "seen_task",
+   "tasks": [
+    "box_in_cupboard",
+    "box_out_of_cupboard",
+    "box_out_of_opened_drawer",
+    "broom_out_of_cupboard",
+    "close_drawer",
+    "open_drawer",
+    "put_in_opened_drawer",
+    "rubbish_in_dustpan",
+    "sweep_to_dustpan",
+    "take_out_of_opened_drawer",
+    "put_in_without_close",
+    "sweep_and_drop",
+    "take_out_without_close",
+    "transfer_box"
+   ],
+   "track_id": "TEST-unseen-perturbation"
+  },
+  {
+   "claim": "composition of seen primitives and assets into task structures unseen in TRAIN and DEV",
+   "not_claimed": "unseen primitives or assets (overlap matrix shows both are seen)",
+   "split": "test",
+   "strategies": "strategy 0 + TRAIN perturbation families",
+   "task_novelty": "held_out_task",
+   "tasks": [
+    "box_exchange",
+    "put_in_and_close",
+    "put_two_in_different",
+    "put_two_in_same",
+    "retrieve_and_sweep"
+   ],
+   "track_id": "TEST-held-out-composition"
+  },
+  {
+   "claim": "behaviour on held-out tasks with explicit prerequisite chains (open\u2192place\u2192close; close first drawer before second)",
+   "not_claimed": "generalization of consequential decisions (audit: consequences are sparse)",
+   "split": "test",
+   "strategies": "strategy 0",
+   "task_novelty": "held_out_task",
+   "tasks": [
+    "put_in_and_close",
+    "put_two_in_different"
+   ],
+   "track_id": "TEST-dependency-stress"
+  }
+ ],
+ "unsupported_claims": {
+  "asset_generalization": "held-out tasks reuse TRAIN object geometry (see overlap: asset_geometry); RoboHiMan provides no held-out asset factor. Not claimable without new assets.",
+  "dependency_mechanism_generalization": "the n=20 dependency audit found one consequential band (put_in_without_close, TRAIN) and none in audited DEV/TEST tasks.",
+  "unseen_primitive_generalization": "all DEV/TEST primitive steps occur in TRAIN tasks."
+ }
+}

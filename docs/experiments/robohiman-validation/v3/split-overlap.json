@@ -1,0 +1,801 @@
+{
+ "assets_by_task": {
+  "box_exchange": [
+   "cupboard",
+   "cupboard_visual",
+   "spam",
+   "spam_visual",
+   "sugar",
+   "sugar_visual"
+  ],
+  "box_in_cupboard": [
+   "cupboard",
+   "cupboard_visual",
+   "spam",
+   "spam_visual",
+   "strawberry_jello",
+   "strawberry_jello_visual",
+   "sugar",
+   "sugar_visual"
+  ],
+  "box_out_of_cupboard": [
+   "cupboard",
+   "cupboard_visual",
+   "spam",
+   "spam_visual",
+   "strawberry_jello",
+   "strawberry_jello_visual",
+   "sugar",
+   "sugar_visual"
+  ],
+  "box_out_of_opened_drawer": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "strawberry_jello",
+   "strawberry_jello_visual"
+  ],
+  "broom_out_of_cupboard": [
+   "broom",
+   "broom_holder",
+   "cupboard",
+   "cupboard_visual",
+   "sweep_to_dustpan_broom_visual"
+  ],
+  "close_drawer": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top"
+  ],
+  "open_drawer": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top"
+  ],
+  "put_in_and_close": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item"
+  ],
+  "put_in_opened_drawer": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item"
+  ],
+  "put_in_without_close": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item"
+  ],
+  "put_two_in_different": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item0",
+   "item1"
+  ],
+  "put_two_in_same": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item0",
+   "item1"
+  ],
+  "retrieve_and_sweep": [
+   "Dustpan_3",
+   "Dustpan_4",
+   "Dustpan_5",
+   "broom",
+   "broom_holder",
+   "cupboard",
+   "cupboard_visual",
+   "dirt0",
+   "dirt1",
+   "dirt2",
+   "dirt3",
+   "dirt4",
+   "sweep_to_dustpan_broom_visual"
+  ],
+  "rubbish_in_dustpan": [
+   "Dustpan_3",
+   "Dustpan_4",
+   "Dustpan_5",
+   "broom",
+   "rubbish",
+   "rubbish_visual"
+  ],
+  "sweep_and_drop": [
+   "Dustpan_3",
+   "Dustpan_4",
+   "Dustpan_5",
+   "broom",
+   "broom_holder",
+   "dirt0",
+   "dirt1",
+   "dirt2",
+   "dirt3",
+   "dirt4",
+   "rubbish",
+   "rubbish_visual",
+   "sweep_to_dustpan_broom_visual"
+  ],
+  "sweep_to_dustpan": [
+   "Dustpan_3",
+   "Dustpan_4",
+   "Dustpan_5",
+   "broom",
+   "broom_holder",
+   "dirt0",
+   "dirt1",
+   "dirt2",
+   "dirt3",
+   "dirt4",
+   "sweep_to_dustpan_broom_visual"
+  ],
+  "take_out_and_close": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item"
+  ],
+  "take_out_of_opened_drawer": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item"
+  ],
+  "take_out_without_close": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item"
+  ],
+  "take_two_out_of_different": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item0",
+   "item1"
+  ],
+  "take_two_out_of_same": [
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "item0",
+   "item1"
+  ],
+  "transfer_box": [
+   "cupboard",
+   "cupboard_visual",
+   "drawer_bottom",
+   "drawer_frame",
+   "drawer_legs",
+   "drawer_middle",
+   "drawer_top",
+   "strawberry_jello",
+   "strawberry_jello_visual"
+  ]
+ },
+ "lineage": {
+  "factor_env_seeds": {
+   "dev": 4242,
+   "test": 244,
+   "train": 42
+  },
+  "native_note": "native RoboHiMan train/test used env seeds 42/244 with np.random.seed(None); native episodes carry no recoverable lineage and are not part of this split",
+  "seed_ranges": {
+   "dev": [
+    200000000,
+    299999999
+   ],
+   "test": [
+    300000000,
+    399999999
+   ],
+   "train": [
+    100000000,
+    199999999
+   ]
+  },
+  "test_context_seeds": [
+   390000000,
+   399999999
+  ]
+ },
+ "matrix": {
+  "DEV-composition vs TEST-held-out-composition": {
+   "asset_geometry": {
+    "fraction_of_test_seen_in_dev": 0.25
+   },
+   "asset_name": {
+    "fraction_of_test_seen_in_dev": 0.32
+   },
+   "primitive": {
+    "fraction_of_test_seen_in_dev": 0.36363636363636365
+   },
+   "scene_ttm": {
+    "fraction_of_test_seen_in_dev": 0.0
+   },
+   "structure_bigram": {
+    "fraction_of_test_seen_in_dev": 0.1111111111111111
+   },
+   "structure_sequence": {
+    "fraction_of_test_seen_in_dev": 0.0
+   },
+   "structure_step": {
+    "fraction_of_test_seen_in_dev": 0.2
+   },
+   "task": {
+    "fraction_of_test_seen_in_dev": 0.0
+   }
+  },
+  "TRAIN vs DEV-composition": {
+   "asset_geometry": {
+    "eval_only": [],
+    "fraction_of_eval_seen_in_train": 1.0,
+    "shared": [
+     "6c4ba76c6b72",
+     "8dc0d2887cb0",
+     "be42c0e906be",
+     "fe1d96212904"
+    ]
+   },
+   "asset_name": {
+    "eval_only": [
+     "item0",
+     "item1"
+    ],
+    "fraction_of_eval_seen_in_train": 0.75,
+    "shared": [
+     "drawer_bottom",
+     "drawer_frame",
+     "drawer_legs",
+     "drawer_middle",
+     "drawer_top",
+     "item"
+    ]
+   },
+   "primitive": {
+    "eval_only": [],
+    "fraction_of_eval_seen_in_train": 1.0,
+    "shared": [
+     "grasp drawer handle",
+     "move close drawer handle",
+     "pick up drawer",
+     "place drawer's surface",
+     "pull drawer open",
+     "push drawer shut"
+    ]
+   },
+   "scene_ttm": {
+    "eval_only": [
+     "214fe05cde3c9e47",
+     "7aecd84e19767790",
+     "8a4b72a913e8313b"
+    ],
+    "fraction_of_eval_seen_in_train": 0.0,
+    "shared": []
+   },
+   "structure_bigram": {
+    "eval_only": [
+     "CLOSE>OPEN",
+     "PLACE:surface>CLOSE",
+     "PLACE:surface>PICK:drawer_in"
+    ],
+    "fraction_of_eval_seen_in_train": 0.4,
+    "shared": [
+     "OPEN>PICK:drawer_in",
+     "PICK:drawer_in>PLACE:surface"
+    ]
+   },
+   "structure_sequence": {
+    "eval_only": [
+     "OPEN>PICK:drawer_in>PLACE:surface>CLOSE",
+     "OPEN>PICK:drawer_in>PLACE:surface>CLOSE>OPEN>PICK:drawer_in>PLACE:surface",
+     "OPEN>PICK:drawer_in>PLACE:surface>PICK:drawer_in>PLACE:surface"
+    ],
+    "fraction_of_eval_seen_in_train": 0.0,
+    "shared": []
+   },
+   "structure_step": {
+    "eval_only": [],
+    "fraction_of_eval_seen_in_train": 1.0,
+    "shared": [
+     "CLOSE",
+     "OPEN",
+     "PICK:drawer_in",
+     "PLACE:surface"
+    ]
+   },
+   "task": {
+    "eval_only": [
+     "take_out_and_close",
+     "take_two_out_of_different",
+     "take_two_out_of_same"
+    ],
+    "fraction_of_eval_seen_in_train": 0.0,
+    "shared": []
+   }
+  },
+  "TRAIN vs TEST-dependency-stress": {
+   "asset_geometry": {
+    "eval_only": [],
+    "fraction_of_eval_seen_in_train": 1.0,
+    "shared": [
+     "6c4ba76c6b72",
+     "8dc0d2887cb0",
+     "be42c0e906be",
+     "fe1d96212904"
+    ]
+   },
+   "asset_name": {
+    "eval_only": [
+     "item0",
+     "item1"
+    ],
+    "fraction_of_eval_seen_in_train": 0.75,
+    "shared": [
+     "drawer_bottom",
+     "drawer_frame",
+     "drawer_legs",
+     "drawer_middle",
+     "drawer_top",
+     "item"
+    ]
+   },
+   "primitive": {
+    "eval_only": [],
+    "fraction_of_eval_seen_in_train": 1.0,
+    "shared": [
+     "grasp drawer handle",
+     "move close drawer handle",
+     "pick up drawer's surface",
+     "place drawer",
+     "pull drawer open",
+     "push drawer shut"
+    ]
+   },
+   "scene_ttm": {
+    "eval_only": [
+     "69c684e80485085c",
+     "f62283a65b0091d0"
+    ],
+    "fraction_of_eval_seen_in_train": 0.0,
+    "shared": []
+   },
+   "structure_bigram": {
+    "eval_only": [
+     "CLOSE>OPEN",
+     "PLACE:drawer_in>CLOSE"
+    ],
+    "fraction_of_eval_seen_in_train": 0.5,
+    "shared": [
+     "OPEN>PICK:surface",
+     "PICK:surface>PLACE:drawer_in"
+    ]
+   },
+   "structure_sequence": {
+    "eval_only": [
+     "OPEN>PICK:surface>PLACE:drawer_in>CLOSE",
+     "OPEN>PICK:surface>PLACE:drawer_in>CLOSE>OPEN>PICK:surface>PLACE:drawer_in"
+    ],
+    "fraction_of_eval_seen_in_train": 0.0,
+    "shared": []
+   },
+   "structure_step": {
+    "eval_only": [],
+    "fraction_of_eval_seen_in_train": 1.0,
+    "shared": [
+     "CLOSE",
+     "OPEN",
+     "PICK:surface",
+     "PLACE:drawer_in"
+    ]
+   },
+   "task": {
+    "eval_only": [
+     "put_in_and_close",
+     "put_two_in_different"
+    ],
+    "fraction_of_eval_seen_in_train": 0.0,
+    "shared": []
+   }
+  },
+  "TRAIN vs TEST-held-out-composition": {
+   "asset_geometry": {
+    "eval_only": [],
+    "fraction_of_eval_seen_in_train": 1.0,
+    "shared": [
+     "1e518be2b906",
+     "1f94eb72d02f",
+     "235bafb33a20",
+     "279d693b2dc6",
+     "3c08ea8fcafb",
+     "3d3fb6148b99",
+     "5b7f54f725d7",
+     "65aac700499e",
+     "6c4ba76c6b72",
+     "720d93e0ebd1",
+     "8dc0d2887cb0",
+     "be42c0e906be"
+    ]
+   },
+   "asset_name": {
+    "eval_only": [
+     "item0",
+     "item1"
+    ],
+    "fraction_of_eval_seen_in_train": 0.92,
+    "shared": [
+     "Dustpan_3",
+     "Dustpan_4",
+     "Dustpan_5",
+     "broom",
+     "broom_holder",
+     "cupboard",
+     "cupboard_visual",
+     "dirt0",
+     "dirt1",
+     "dirt2",
+     "dirt3",
+     "dirt4"
+    ]
+   },
+   "primitive": {
+    "eval_only": [],
+    "fraction_of_eval_seen_in_train": 1.0,
+    "shared": [
+     "grasp drawer handle",
+     "move close drawer handle",
+     "pick up cupboard",
+     "pick up drawer's surface",
+     "pick up table",
+     "place cupboard",
+     "place drawer",
+     "place table",
+     "pull drawer open",
+     "push drawer shut",
+     "sweep dustpan"
+    ]
+   },
+   "scene_ttm": {
+    "eval_only": [
+     "0e4441f5ffeabb15",
+     "4069b47068d97acc",
+     "69c684e80485085c",
+     "924cb4dad85a19aa",
+     "f62283a65b0091d0"
+    ],
+    "fraction_of_eval_seen_in_train": 0.0,
+    "shared": []
+   },
+   "structure_bigram": {
+    "eval_only": [
+     "CLOSE>OPEN",
+     "PICK_TOOL:cupboard>SWEEP:dustpan",
+     "PLACE:drawer_in>CLOSE",
+     "PLACE:drawer_in>PICK:surface",
+     "PLACE:table>PICK:table"
+    ],
+    "fraction_of_eval_seen_in_train": 0.4444444444444444,
+    "shared": [
+     "OPEN>PICK:surface",
+     "PICK:cupboard>PLACE:table",
+     "PICK:surface>PLACE:drawer_in",
+     "PICK:table>PLACE:cupboard"
+    ]
+   },
+   "structure_sequence": {
+    "eval_only": [
+     "OPEN>PICK:surface>PLACE:drawer_in>CLOSE",
+     "OPEN>PICK:surface>PLACE:drawer_in>CLOSE>OPEN>PICK:surface>PLACE:drawer_in",
+     "OPEN>PICK:surface>PLACE:drawer_in>PICK:surface>PLACE:drawer_in",
+     "PICK:cupboard>PLACE:table>PICK:table>PLACE:cupboard",
+     "PICK_TOOL:cupboard>SWEEP:dustpan"
+    ],
+    "fraction_of_eval_seen_in_train": 0.0,
+    "shared": []
+   },
+   "structure_step": {
+    "eval_only": [],
+    "fraction_of_eval_seen_in_train": 1.0,
+    "shared": [
+     "CLOSE",
+     "OPEN",
+     "PICK:cupboard",
+     "PICK:surface",
+     "PICK:table",
+     "PICK_TOOL:cupboard",
+     "PLACE:cupboard",
+     "PLACE:drawer_in",
+     "PLACE:table",
+     "SWEEP:dustpan"
+    ]
+   },
+   "task": {
+    "eval_only": [
+     "box_exchange",
+     "put_in_and_close",
+     "put_two_in_different",
+     "put_two_in_same",
+     "retrieve_and_sweep"
+    ],
+    "fraction_of_eval_seen_in_train": 0.0,
+    "shared": []
+   }
+  }
+ },
+ "per_held_out_task": {
+  "box_exchange": {
+   "asset_names_unseen_in_train": [],
+   "assets_unseen_in_train_by_geometry": [],
+   "exact_structure_in_train": false,
+   "nearest_train_task_by_structure": "box_in_cupboard",
+   "primitives_unseen_in_train": [],
+   "structure": "PICK:cupboard>PLACE:table>PICK:table>PLACE:cupboard",
+   "unseen_bigrams": [
+    "PLACE:table>PICK:table"
+   ]
+  },
+  "put_in_and_close": {
+   "asset_names_unseen_in_train": [],
+   "assets_unseen_in_train_by_geometry": [],
+   "exact_structure_in_train": false,
+   "nearest_train_task_by_structure": "put_in_without_close",
+   "primitives_unseen_in_train": [],
+   "structure": "OPEN>PICK:surface>PLACE:drawer_in>CLOSE",
+   "unseen_bigrams": [
+    "PLACE:drawer_in>CLOSE"
+   ]
+  },
+  "put_two_in_different": {
+   "asset_names_unseen_in_train": [
+    "item0",
+    "item1"
+   ],
+   "assets_unseen_in_train_by_geometry": [],
+   "exact_structure_in_train": false,
+   "nearest_train_task_by_structure": "put_in_without_close",
+   "primitives_unseen_in_train": [],
+   "structure": "OPEN>PICK:surface>PLACE:drawer_in>CLOSE>OPEN>PICK:surface>PLACE:drawer_in",
+   "unseen_bigrams": [
+    "CLOSE>OPEN",
+    "PLACE:drawer_in>CLOSE"
+   ]
+  },
+  "put_two_in_same": {
+   "asset_names_unseen_in_train": [
+    "item0",
+    "item1"
+   ],
+   "assets_unseen_in_train_by_geometry": [],
+   "exact_structure_in_train": false,
+   "nearest_train_task_by_structure": "put_in_without_close",
+   "primitives_unseen_in_train": [],
+   "structure": "OPEN>PICK:surface>PLACE:drawer_in>PICK:surface>PLACE:drawer_in",
+   "unseen_bigrams": [
+    "PLACE:drawer_in>PICK:surface"
+   ]
+  },
+  "retrieve_and_sweep": {
+   "asset_names_unseen_in_train": [],
+   "assets_unseen_in_train_by_geometry": [],
+   "exact_structure_in_train": false,
+   "nearest_train_task_by_structure": "box_in_cupboard",
+   "primitives_unseen_in_train": [],
+   "structure": "PICK_TOOL:cupboard>SWEEP:dustpan",
+   "unseen_bigrams": [
+    "PICK_TOOL:cupboard>SWEEP:dustpan"
+   ]
+  },
+  "take_out_and_close": {
+   "asset_names_unseen_in_train": [],
+   "assets_unseen_in_train_by_geometry": [],
+   "exact_structure_in_train": false,
+   "nearest_train_task_by_structure": "take_out_without_close",
+   "primitives_unseen_in_train": [],
+   "structure": "OPEN>PICK:drawer_in>PLACE:surface>CLOSE",
+   "unseen_bigrams": [
+    "PLACE:surface>CLOSE"
+   ]
+  },
+  "take_two_out_of_different": {
+   "asset_names_unseen_in_train": [
+    "item0",
+    "item1"
+   ],
+   "assets_unseen_in_train_by_geometry": [],
+   "exact_structure_in_train": false,
+   "nearest_train_task_by_structure": "take_out_without_close",
+   "primitives_unseen_in_train": [],
+   "structure": "OPEN>PICK:drawer_in>PLACE:surface>CLOSE>OPEN>PICK:drawer_in>PLACE:surface",
+   "unseen_bigrams": [
+    "CLOSE>OPEN",
+    "PLACE:surface>CLOSE"
+   ]
+  },
+  "take_two_out_of_same": {
+   "asset_names_unseen_in_train": [
+    "item0",
+    "item1"
+   ],
+   "assets_unseen_in_train_by_geometry": [],
+   "exact_structure_in_train": false,
+   "nearest_train_task_by_structure": "take_out_without_close",
+   "primitives_unseen_in_train": [],
+   "structure": "OPEN>PICK:drawer_in>PLACE:surface>PICK:drawer_in>PLACE:surface",
+   "unseen_bigrams": [
+    "PLACE:surface>PICK:drawer_in"
+   ]
+  }
+ },
+ "perturbation": {
+  "always_on_quirk": "13 tasks keep a misnamed object_size factor enabled in every strategy; present in all splits",
+  "held_out_strategy_names": [
+   "distractor",
+   "background_texture",
+   "all_mixed"
+  ],
+  "train_strategy_names": [
+   "camera_pose",
+   "friction",
+   "light_color",
+   "manip_obj_color",
+   "manip_obj_size",
+   "manip_obj_tex",
+   "mass",
+   "no_variations",
+   "recv_obj_color",
+   "recv_obj_size",
+   "recv_obj_tex",
+   "table_color",
+   "table_texture"
+  ]
+ },
+ "split_id": "icgs-robohiman-stage1-split-v1",
+ "structure": {
+  "box_exchange": [
+   "PICK:cupboard",
+   "PLACE:table",
+   "PICK:table",
+   "PLACE:cupboard"
+  ],
+  "box_in_cupboard": [
+   "PICK:table",
+   "PLACE:cupboard"
+  ],
+  "box_out_of_cupboard": [
+   "PICK:cupboard",
+   "PLACE:table"
+  ],
+  "box_out_of_opened_drawer": [
+   "PICK:drawer_in",
+   "PLACE:surface"
+  ],
+  "broom_out_of_cupboard": [
+   "PICK_TOOL:cupboard",
+   "PLACE_TOOL:table"
+  ],
+  "close_drawer": [
+   "CLOSE"
+  ],
+  "open_drawer": [
+   "OPEN"
+  ],
+  "put_in_and_close": [
+   "OPEN",
+   "PICK:surface",
+   "PLACE:drawer_in",
+   "CLOSE"
+  ],
+  "put_in_opened_drawer": [
+   "PICK:surface",
+   "PLACE:drawer_in"
+  ],
+  "put_in_without_close": [
+   "OPEN",
+   "PICK:surface",
+   "PLACE:drawer_in"
+  ],
+  "put_two_in_different": [
+   "OPEN",
+   "PICK:surface",
+   "PLACE:drawer_in",
+   "CLOSE",
+   "OPEN",
+   "PICK:surface",
+   "PLACE:drawer_in"
+  ],
+  "put_two_in_same": [
+   "OPEN",
+   "PICK:surface",
+   "PLACE:drawer_in",
+   "PICK:surface",
+   "PLACE:drawer_in"
+  ],
+  "retrieve_and_sweep": [
+   "PICK_TOOL:cupboard",
+   "SWEEP:dustpan"
+  ],
+  "rubbish_in_dustpan": [
+   "PICK:table",
+   "DROP:dustpan"
+  ],
+  "sweep_and_drop": [
+   "PICK_TOOL:table",
+   "SWEEP:dustpan",
+   "PLACE_TOOL:holder",
+   "PICK:table",
+   "DROP:dustpan"
+  ],
+  "sweep_to_dustpan": [
+   "PICK_TOOL:table",
+   "SWEEP:dustpan"
+  ],
+  "take_out_and_close": [
+   "OPEN",
+   "PICK:drawer_in",
+   "PLACE:surface",
+   "CLOSE"
+  ],
+  "take_out_of_opened_drawer": [
+   "PICK:drawer_in",
+   "PLACE:surface"
+  ],
+  "take_out_without_close": [
+   "OPEN",
+   "PICK:drawer_in",
+   "PLACE:surface"
+  ],
+  "take_two_out_of_different": [
+   "OPEN",
+   "PICK:drawer_in",
+   "PLACE:surface",
+   "CLOSE",
+   "OPEN",
+   "PICK:drawer_in",
+   "PLACE:surface"
+  ],
+  "take_two_out_of_same": [
+   "OPEN",
+   "PICK:drawer_in",
+   "PLACE:surface",
+   "PICK:drawer_in",
+   "PLACE:surface"
+  ],
+  "transfer_box": [
+   "OPEN",
+   "PICK:drawer_in",
+   "PLACE:cupboard"
+  ]
+ }
+}

@@ -1,0 +1,6 @@
+{
+ "split_id": "icgs-robohiman-stage1-split-v1",
+ "manifest": "icgs_robohiman_stage1_split_v1.json",
+ "manifest_sha256": "2d1e7dcfd300480854d9d35e1c7abbf196863790be7ff6fcaa65317a73b032ef",
+ "frozen_on": "2026-09-30"
+}

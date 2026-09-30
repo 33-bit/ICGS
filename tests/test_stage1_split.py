@@ -95,3 +95,22 @@ class SplitTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FrozenRepositorySplitTests(unittest.TestCase):
+    """The committed split-v1 must stay byte-identical to its lock."""
+
+    def test_committed_split_matches_lock_and_rules(self):
+        root = Path(__file__).resolve().parents[1] / "artifacts/robohiman"
+        manifest = load_locked_manifest(root / "icgs_robohiman_stage1_split_v1.json")
+        self.assertEqual(manifest["split_id"], "icgs-robohiman-stage1-split-v1")
+        held_out = {t for track in manifest["tracks"] if track["task_novelty"] == "held_out_task"
+                    for t in track["tasks"]}
+        self.assertFalse(held_out & set(manifest["splits"]["train"]["tasks"]))
+        self.assertEqual(len(manifest["splits"]["train"]["tasks"]), 14)
+        info = assert_allowed(manifest, split="test", task="put_in_and_close", strategy=0, variation=1,
+                              seed=300_000_001, factor_env_seed=244)
+        self.assertIn("TEST-dependency-stress", info["tracks"])
+        with self.assertRaises(SplitViolation):
+            assert_allowed(manifest, split="train", task="put_in_and_close", strategy=0, variation=0,
+                           seed=100_000_001, factor_env_seed=42)

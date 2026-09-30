@@ -1,0 +1,125 @@
+{
+ "episodes": [
+  {
+   "checks": {
+    "achieved_logging": {
+     "command_differs_from_achieved": true,
+     "finite": true,
+     "sim_dt_constant": true
+    },
+    "action_logging": {
+     "arm_target_rows": 345,
+     "grasp_events": 2,
+     "gripper_rows": 39,
+     "ok": true
+    },
+    "cameras_and_pointcloud": {
+     "cameras": {
+      "front": {
+       "calibration_ok": true,
+       "graspable_mask_containment": {},
+       "numpy_vs_pyrep_max_abs_m": 0.0,
+       "valid_frac": 1.0,
+       "valid_in_workspace_5cm_frac": 0.84820556640625
+      },
+      "left_shoulder": {
+       "calibration_ok": true,
+       "graspable_mask_containment": {},
+       "numpy_vs_pyrep_max_abs_m": 0.0,
+       "valid_frac": 1.0,
+       "valid_in_workspace_5cm_frac": 0.87066650390625
+      },
+      "right_shoulder": {
+       "calibration_ok": true,
+       "graspable_mask_containment": {},
+       "numpy_vs_pyrep_max_abs_m": 0.0,
+       "valid_frac": 1.0,
+       "valid_in_workspace_5cm_frac": 0.87060546875
+      },
+      "wrist": {
+       "calibration_ok": true,
+       "graspable_mask_containment": {},
+       "numpy_vs_pyrep_max_abs_m": 0.0,
+       "valid_frac": 1.0,
+       "valid_in_workspace_5cm_frac": 0.94970703125
+      }
+     },
+     "min_graspable_containment": null,
+     "ok": true
+    },
+    "expert_status": "success",
+    "frames": 63,
+    "monitor": {
+     "all_events_occurred": true,
+     "consistency": {
+      "events": [
+       {
+        "event_id": "broom_grasped",
+        "final_nu": false,
+        "first_occurrence": 150,
+        "occurred_while_ineligible": false,
+        "undone_after_occurrence": true
+       },
+       {
+        "event_id": "all_dirt_swept",
+        "final_nu": true,
+        "first_occurrence": 245,
+        "occurred_while_ineligible": false,
+        "undone_after_occurrence": false
+       }
+      ],
+      "occurrences_in_spec_order": true
+     },
+     "events": [
+      "broom_grasped",
+      "all_dirt_swept"
+     ],
+     "final_alpha_null": true,
+     "missing_events": []
+    },
+    "predicates": {
+     "any_edge": true,
+     "success_conjunction_matches_task_success": 1.0
+    },
+    "provenance": {
+     "code_revision": "06efd14583cc3f4a742080b31f876e112009a1c6",
+     "factor_states_recorded": true,
+     "quirks_recorded": 6,
+     "reset_rng_sha256": "27764ccfb67bdac77f99666c99988d7ea8c1c4e29f4e56de50f62b9b5d986c7c",
+     "robohiman_revision": "33f71d30d9a100a83725ff00dfcc27374d5ce810",
+     "task_ttm_sha256": "4069b47068d97acc68119ddf36c78c1780b7ff76ff38c4435297ca7ddbab2f94"
+    },
+    "reset_ok": true,
+    "steps": 388,
+    "success": true
+   },
+   "episode_id": "preflight-retrieve_and_sweep-v0-s0-0000",
+   "kind": "nominal",
+   "seed": 100
+  }
+ ],
+ "failure_retention": {
+  "episode_id": "preflight-retrieve_and_sweep-v0-s0-0009",
+  "perturbation_families": [
+   "gripper_timing"
+  ],
+  "reason": "task_success_false_after_expert",
+  "status": "failure",
+  "stored": true
+ },
+ "first_close_gripper_waypoint": 2,
+ "known_upstream_quirks": [
+  "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the last physics step of a close_gripper waypoint",
+  "path.visualize() teleports the arm along each planned path and back before execution (rows with cmd_arm_teleport_calls > 0)",
+  "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from one RNG state is not bitwise reproducible",
+  "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+  "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) that configuration-tree restore removes",
+  "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable"
+ ],
+ "notes": [],
+ "reasons": [],
+ "strategy": 0,
+ "task": "retrieve_and_sweep",
+ "verdict": "PASS",
+ "wall_s": 96.1
+}

@@ -1,0 +1,1251 @@
+{
+ "d_value_refused": true,
+ "episodes": [
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "sugar_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "sugar_placed_on_table",
+      "from_boundary": 147
+     },
+     {
+      "alpha": 2,
+      "event": "spam_grasped",
+      "from_boundary": 283
+     },
+     {
+      "alpha": 3,
+      "event": "spam_placed_in_cupboard",
+      "from_boundary": 459
+     },
+     {
+      "alpha": 4,
+      "event": "null",
+      "from_boundary": 642
+     }
+    ],
+    "event_first_occurrence": {
+     "spam_grasped": 459,
+     "spam_placed_in_cupboard": 642,
+     "sugar_grasped": 147,
+     "sugar_placed_on_table": 283
+    },
+    "task_success_first_boundary": 617
+   },
+   "episode_id": "preflight-box_exchange-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "box_exchange"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "sugar_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "spam_grasped": 362,
+     "spam_placed_in_cupboard": 483,
+     "sugar_grasped": null,
+     "sugar_placed_on_table": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-box_exchange-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "box_exchange"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "target_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "target_placed_in_cupboard",
+      "from_boundary": 151
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 352
+     }
+    ],
+    "event_first_occurrence": {
+     "target_grasped": 151,
+     "target_placed_in_cupboard": 352
+    },
+    "task_success_first_boundary": 329
+   },
+   "episode_id": "preflight-box_in_cupboard-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "box_in_cupboard"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "target_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "target_grasped": null,
+     "target_placed_in_cupboard": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-box_in_cupboard-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "box_in_cupboard"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "target_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "target_placed",
+      "from_boundary": 150
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 259
+     }
+    ],
+    "event_first_occurrence": {
+     "target_grasped": 150,
+     "target_placed": 259
+    },
+    "task_success_first_boundary": 259
+   },
+   "episode_id": "preflight-box_out_of_cupboard-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "box_out_of_cupboard"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "target_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "target_grasped": null,
+     "target_placed": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-box_out_of_cupboard-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "box_out_of_cupboard"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "strawberry_jello_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "strawberry_jello_placed",
+      "from_boundary": 109
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 197
+     }
+    ],
+    "event_first_occurrence": {
+     "strawberry_jello_grasped": 109,
+     "strawberry_jello_placed": 197
+    },
+    "task_success_first_boundary": 192
+   },
+   "episode_id": "preflight-box_out_of_opened_drawer-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "box_out_of_opened_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "strawberry_jello_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "strawberry_jello_placed",
+      "from_boundary": 99
+     }
+    ],
+    "event_first_occurrence": {
+     "strawberry_jello_grasped": 99,
+     "strawberry_jello_placed": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-box_out_of_opened_drawer-v0-s0-0009",
+   "outcome": "invalid_execution",
+   "reason": "no_path_waypoint_6",
+   "task": "box_out_of_opened_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "broom_placed",
+      "from_boundary": 158
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 315
+     }
+    ],
+    "event_first_occurrence": {
+     "broom_grasped": 158,
+     "broom_placed": 315
+    },
+    "task_success_first_boundary": 315
+   },
+   "episode_id": "preflight-broom_out_of_cupboard-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "broom_out_of_cupboard"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "broom_grasped": null,
+     "broom_placed": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-broom_out_of_cupboard-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "broom_out_of_cupboard"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_closed",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "null",
+      "from_boundary": 168
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_closed": 168
+    },
+    "task_success_first_boundary": 168
+   },
+   "episode_id": "preflight-close_drawer-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "close_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_closed",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "null",
+      "from_boundary": 180
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_closed": 180
+    },
+    "task_success_first_boundary": 180
+   },
+   "episode_id": "preflight-close_drawer-v0-s0-0009",
+   "outcome": "success",
+   "reason": null,
+   "task": "close_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "null",
+      "from_boundary": 172
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": 172
+    },
+    "task_success_first_boundary": 172
+   },
+   "episode_id": "preflight-open_drawer-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "open_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-open_drawer-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "open_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "item_grasped",
+      "from_boundary": 168
+     },
+     {
+      "alpha": 2,
+      "event": "item_placed_in_drawer",
+      "from_boundary": 339
+     },
+     {
+      "alpha": 3,
+      "event": "drawer_closed_after_placement",
+      "from_boundary": 405
+     },
+     {
+      "alpha": 4,
+      "event": "null",
+      "from_boundary": 578
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_closed_after_placement": 578,
+     "drawer_opened": 168,
+     "item_grasped": 339,
+     "item_placed_in_drawer": 405
+    },
+    "task_success_first_boundary": 578
+   },
+   "episode_id": "preflight-put_in_and_close-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "put_in_and_close"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_closed_after_placement": null,
+     "drawer_opened": null,
+     "item_grasped": 354,
+     "item_placed_in_drawer": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-put_in_and_close-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "put_in_and_close"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "item_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "item_placed",
+      "from_boundary": 64
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 129
+     }
+    ],
+    "event_first_occurrence": {
+     "item_grasped": 64,
+     "item_placed": 129
+    },
+    "task_success_first_boundary": 129
+   },
+   "episode_id": "preflight-put_in_opened_drawer-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "put_in_opened_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "item_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "item_grasped": null,
+     "item_placed": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-put_in_opened_drawer-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "put_in_opened_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "item_grasped",
+      "from_boundary": 169
+     },
+     {
+      "alpha": 2,
+      "event": "item_placed_in_drawer",
+      "from_boundary": 340
+     },
+     {
+      "alpha": 3,
+      "event": "null",
+      "from_boundary": 406
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": 169,
+     "item_grasped": 340,
+     "item_placed_in_drawer": 406
+    },
+    "task_success_first_boundary": 406
+   },
+   "episode_id": "preflight-put_in_without_close-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "put_in_without_close"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": null,
+     "item_grasped": 355,
+     "item_placed_in_drawer": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-put_in_without_close-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "put_in_without_close"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer0_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "block_placed_in_drawer0",
+      "from_boundary": 180
+     },
+     {
+      "alpha": 2,
+      "event": "drawer0_closed",
+      "from_boundary": 420
+     },
+     {
+      "alpha": 3,
+      "event": "drawer1_opened",
+      "from_boundary": 599
+     },
+     {
+      "alpha": 4,
+      "event": "block_placed_in_drawer1",
+      "from_boundary": 697
+     },
+     {
+      "alpha": 5,
+      "event": "null",
+      "from_boundary": 940
+     }
+    ],
+    "event_first_occurrence": {
+     "block_placed_in_drawer0": 420,
+     "block_placed_in_drawer1": 940,
+     "drawer0_closed": 599,
+     "drawer0_opened": 180,
+     "drawer1_opened": 697
+    },
+    "task_success_first_boundary": 936
+   },
+   "episode_id": "preflight-put_two_in_different-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "put_two_in_different"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer0_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "block_placed_in_drawer0": null,
+     "block_placed_in_drawer1": 989,
+     "drawer0_closed": null,
+     "drawer0_opened": null,
+     "drawer1_opened": 691
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-put_two_in_different-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "put_two_in_different"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "first_block_placed",
+      "from_boundary": 168
+     },
+     {
+      "alpha": 2,
+      "event": "second_block_placed",
+      "from_boundary": 403
+     },
+     {
+      "alpha": 3,
+      "event": "null",
+      "from_boundary": 566
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": 168,
+     "first_block_placed": 403,
+     "second_block_placed": 566
+    },
+    "task_success_first_boundary": 566
+   },
+   "episode_id": "preflight-put_two_in_same-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "put_two_in_same"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": null,
+     "first_block_placed": null,
+     "second_block_placed": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-put_two_in_same-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "put_two_in_same"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "all_dirt_swept",
+      "from_boundary": 150
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 245
+     }
+    ],
+    "event_first_occurrence": {
+     "all_dirt_swept": 245,
+     "broom_grasped": 150
+    },
+    "task_success_first_boundary": 245
+   },
+   "episode_id": "preflight-retrieve_and_sweep-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "retrieve_and_sweep"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "all_dirt_swept": null,
+     "broom_grasped": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-retrieve_and_sweep-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "retrieve_and_sweep"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "rubbish_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "rubbish_dropped_in_dustpan",
+      "from_boundary": 70
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 128
+     }
+    ],
+    "event_first_occurrence": {
+     "rubbish_dropped_in_dustpan": 128,
+     "rubbish_grasped": 70
+    },
+    "task_success_first_boundary": 128
+   },
+   "episode_id": "preflight-rubbish_in_dustpan-v0-s2-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "rubbish_in_dustpan"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "rubbish_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "rubbish_dropped_in_dustpan": null,
+     "rubbish_grasped": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-rubbish_in_dustpan-v0-s2-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "rubbish_in_dustpan"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "all_dirt_swept",
+      "from_boundary": 149
+     },
+     {
+      "alpha": 2,
+      "event": "rubbish_grasped",
+      "from_boundary": 259
+     },
+     {
+      "alpha": 3,
+      "event": "rubbish_dropped_in_dustpan",
+      "from_boundary": 497
+     },
+     {
+      "alpha": 4,
+      "event": "null",
+      "from_boundary": 575
+     }
+    ],
+    "event_first_occurrence": {
+     "all_dirt_swept": 259,
+     "broom_grasped": 149,
+     "rubbish_dropped_in_dustpan": 575,
+     "rubbish_grasped": 497
+    },
+    "task_success_first_boundary": 575
+   },
+   "episode_id": "preflight-sweep_and_drop-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "sweep_and_drop"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "all_dirt_swept": null,
+     "broom_grasped": null,
+     "rubbish_dropped_in_dustpan": 534,
+     "rubbish_grasped": 456
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-sweep_and_drop-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "sweep_and_drop"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "all_dirt_swept",
+      "from_boundary": 132
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 232
+     }
+    ],
+    "event_first_occurrence": {
+     "all_dirt_swept": 232,
+     "broom_grasped": 132
+    },
+    "task_success_first_boundary": 232
+   },
+   "episode_id": "preflight-sweep_to_dustpan-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "sweep_to_dustpan"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "all_dirt_swept": null,
+     "broom_grasped": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-sweep_to_dustpan-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "sweep_to_dustpan"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "item_grasped",
+      "from_boundary": 170
+     },
+     {
+      "alpha": 2,
+      "event": "item_placed",
+      "from_boundary": 352
+     },
+     {
+      "alpha": 3,
+      "event": "drawer_closed_after_removal",
+      "from_boundary": 447
+     },
+     {
+      "alpha": 4,
+      "event": "null",
+      "from_boundary": 627
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_closed_after_removal": 627,
+     "drawer_opened": 170,
+     "item_grasped": 352,
+     "item_placed": 447
+    },
+    "task_success_first_boundary": 627
+   },
+   "episode_id": "preflight-take_out_and_close-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "take_out_and_close"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_closed_after_removal": null,
+     "drawer_opened": null,
+     "item_grasped": null,
+     "item_placed": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-take_out_and_close-v0-s0-0009",
+   "outcome": "invalid_execution",
+   "reason": "no_path_waypoint_5",
+   "task": "take_out_and_close"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "item_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "item_placed",
+      "from_boundary": 108
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 197
+     }
+    ],
+    "event_first_occurrence": {
+     "item_grasped": 108,
+     "item_placed": 197
+    },
+    "task_success_first_boundary": 191
+   },
+   "episode_id": "preflight-take_out_of_opened_drawer-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "take_out_of_opened_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "item_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "item_grasped": null,
+     "item_placed": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-take_out_of_opened_drawer-v0-s0-0009",
+   "outcome": "failure",
+   "reason": "task_success_false_after_expert",
+   "task": "take_out_of_opened_drawer"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "item_grasped",
+      "from_boundary": 168
+     },
+     {
+      "alpha": 2,
+      "event": "item_placed",
+      "from_boundary": 335
+     },
+     {
+      "alpha": 3,
+      "event": "null",
+      "from_boundary": 425
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": 168,
+     "item_grasped": 335,
+     "item_placed": 425
+    },
+    "task_success_first_boundary": 419
+   },
+   "episode_id": "preflight-take_out_without_close-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "take_out_without_close"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": null,
+     "item_grasped": null,
+     "item_placed": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-take_out_without_close-v0-s0-0009",
+   "outcome": "invalid_execution",
+   "reason": "no_path_waypoint_5",
+   "task": "take_out_without_close"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer0_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "first_block_out",
+      "from_boundary": 168
+     },
+     {
+      "alpha": 2,
+      "event": "drawer0_closed",
+      "from_boundary": 433
+     },
+     {
+      "alpha": 3,
+      "event": "drawer1_opened",
+      "from_boundary": 608
+     },
+     {
+      "alpha": 4,
+      "event": "second_block_out",
+      "from_boundary": 704
+     },
+     {
+      "alpha": 5,
+      "event": "null",
+      "from_boundary": 948
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer0_closed": 608,
+     "drawer0_opened": 168,
+     "drawer1_opened": 704,
+     "first_block_out": 433,
+     "second_block_out": 948
+    },
+    "task_success_first_boundary": 941
+   },
+   "episode_id": "preflight-take_two_out_of_different-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "take_two_out_of_different"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer0_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer0_closed": null,
+     "drawer0_opened": null,
+     "drawer1_opened": null,
+     "first_block_out": null,
+     "second_block_out": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-take_two_out_of_different-v0-s0-0009",
+   "outcome": "invalid_execution",
+   "reason": "no_path_waypoint_5",
+   "task": "take_two_out_of_different"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "first_block_out",
+      "from_boundary": 174
+     },
+     {
+      "alpha": 2,
+      "event": "second_block_out",
+      "from_boundary": 439
+     },
+     {
+      "alpha": 3,
+      "event": "null",
+      "from_boundary": 660
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": 174,
+     "first_block_out": 439,
+     "second_block_out": 660
+    },
+    "task_success_first_boundary": 654
+   },
+   "episode_id": "preflight-take_two_out_of_same-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "take_two_out_of_same"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": null,
+     "first_block_out": null,
+     "second_block_out": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-take_two_out_of_same-v0-s0-0009",
+   "outcome": "invalid_execution",
+   "reason": "no_path_waypoint_5",
+   "task": "take_two_out_of_same"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "strawberry_jello_grasped",
+      "from_boundary": 164
+     },
+     {
+      "alpha": 2,
+      "event": "strawberry_jello_placed",
+      "from_boundary": 334
+     },
+     {
+      "alpha": 3,
+      "event": "null",
+      "from_boundary": 500
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": 164,
+     "strawberry_jello_grasped": 334,
+     "strawberry_jello_placed": 500
+    },
+    "task_success_first_boundary": 486
+   },
+   "episode_id": "preflight-transfer_box-v0-s0-0000",
+   "outcome": "success",
+   "reason": null,
+   "task": "transfer_box"
+  },
+  {
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     }
+    ],
+    "event_first_occurrence": {
+     "drawer_opened": null,
+     "strawberry_jello_grasped": null,
+     "strawberry_jello_placed": null
+    },
+    "task_success_first_boundary": null
+   },
+   "episode_id": "preflight-transfer_box-v0-s0-0009",
+   "outcome": "invalid_execution",
+   "reason": "no_path_waypoint_5",
+   "task": "transfer_box"
+  }
+ ],
+ "views": {
+  "D_dyn": {
+   "file": "D_dyn.jsonl",
+   "rows": 17026,
+   "sha256": "bbe3a7977aba0c3bd2f5310f2a296cc71c1a0a60a171e8b4753633aade03debf"
+  },
+  "D_geom": {
+   "file": "D_geom.jsonl",
+   "rows": 2802,
+   "sha256": "7a44fc2fa59c34b5ee959936b7822c22ed3c15eb7bbd38cfb08bb183e01665ae"
+  },
+  "D_task": {
+   "file": "D_task.jsonl",
+   "rows": 17376,
+   "sha256": "dcb0192f9aaec1e6faada04c44c3c35df8f90e8ff184ca331bfaf6e83b099e52"
+  }
+ }
+}

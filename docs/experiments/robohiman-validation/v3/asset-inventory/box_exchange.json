@@ -1,0 +1,65 @@
+{
+ "objects": {
+  "cupboard": {
+   "extents_mm_sorted": [
+    250,
+    254,
+    418
+   ],
+   "graspable": false,
+   "signature": "279d693b2dc6",
+   "vertices": 40
+  },
+  "cupboard_visual": {
+   "extents_mm_sorted": [
+    1,
+    220,
+    420
+   ],
+   "graspable": false,
+   "signature": "720d93e0ebd1",
+   "vertices": 8
+  },
+  "spam": {
+   "extents_mm_sorted": [
+    50,
+    80,
+    100
+   ],
+   "graspable": true,
+   "signature": "65aac700499e",
+   "vertices": 8
+  },
+  "spam_visual": {
+   "extents_mm_sorted": [
+    57,
+    84,
+    102
+   ],
+   "graspable": false,
+   "signature": "c23001887905",
+   "vertices": 8170
+  },
+  "sugar": {
+   "extents_mm_sorted": [
+    35,
+    90,
+    175
+   ],
+   "graspable": true,
+   "signature": "235bafb33a20",
+   "vertices": 8
+  },
+  "sugar_visual": {
+   "extents_mm_sorted": [
+    45,
+    93,
+    176
+   ],
+   "graspable": false,
+   "signature": "3d3fb6148b99",
+   "vertices": 8194
+  }
+ },
+ "task": "box_exchange"
+}

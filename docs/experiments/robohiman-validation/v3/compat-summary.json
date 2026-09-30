@@ -1,0 +1,645 @@
+{
+ "counts": {
+  "PARTIAL": 1,
+  "PASS": 21
+ },
+ "tasks": [
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "sugar_grasped",
+    "sugar_placed_on_table",
+    "spam_grasped",
+    "spam_placed_in_cupboard"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 8,
+   "reasons": [],
+   "semantic_family": "container_pick_place",
+   "steps": 616,
+   "success_conjunction_match": 1.0,
+   "task": "box_exchange",
+   "verdict": "PASS",
+   "wall_s": 120.6
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "target_grasped",
+    "target_placed_in_cupboard"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "container_pick_place",
+   "steps": 366,
+   "success_conjunction_match": 1.0,
+   "task": "box_in_cupboard",
+   "verdict": "PASS",
+   "wall_s": 64.5
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "target_grasped",
+    "target_placed"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 6,
+   "reasons": [],
+   "semantic_family": "container_pick_place",
+   "steps": 273,
+   "success_conjunction_match": 1.0,
+   "task": "box_out_of_cupboard",
+   "verdict": "PASS",
+   "wall_s": 45.9
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "strawberry_jello_grasped",
+    "strawberry_jello_placed"
+   ],
+   "failure_retention": {
+    "reason": "no_path_waypoint_6",
+    "status": "invalid_execution",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 211,
+   "success_conjunction_match": 1.0,
+   "task": "box_out_of_opened_drawer",
+   "verdict": "PASS",
+   "wall_s": 28.3
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "broom_grasped",
+    "broom_placed"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 6,
+   "reasons": [],
+   "semantic_family": "container_pick_place",
+   "steps": 334,
+   "success_conjunction_match": 1.0,
+   "task": "broom_out_of_cupboard",
+   "verdict": "PASS",
+   "wall_s": 31.3
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer_closed"
+   ],
+   "failure_retention": {
+    "reason": null,
+    "status": "success",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [
+    "early-close perturbation still succeeded (retention path not exercised here)"
+   ],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 6,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 195,
+   "success_conjunction_match": 1.0,
+   "task": "close_drawer",
+   "verdict": "PASS",
+   "wall_s": 53.3
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer_opened"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 6,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 199,
+   "success_conjunction_match": 1.0,
+   "task": "open_drawer",
+   "verdict": "PASS",
+   "wall_s": 56.2
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer_opened",
+    "item_grasped",
+    "item_placed_in_drawer",
+    "drawer_closed_after_placement"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 604,
+   "success_conjunction_match": 1.0,
+   "task": "put_in_and_close",
+   "verdict": "PASS",
+   "wall_s": 163.6
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "item_grasped",
+    "item_placed"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": 1.0,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 142,
+   "success_conjunction_match": 1.0,
+   "task": "put_in_opened_drawer",
+   "verdict": "PASS",
+   "wall_s": 15.9
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer_opened",
+    "item_grasped",
+    "item_placed_in_drawer"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": 1.0,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 420,
+   "success_conjunction_match": 1.0,
+   "task": "put_in_without_close",
+   "verdict": "PASS",
+   "wall_s": 126.6
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer0_opened",
+    "block_placed_in_drawer0",
+    "drawer0_closed",
+    "drawer1_opened",
+    "block_placed_in_drawer1"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": 1.0,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 924,
+   "success_conjunction_match": 1.0,
+   "task": "put_two_in_different",
+   "verdict": "PASS",
+   "wall_s": 182.1
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer_opened",
+    "first_block_placed",
+    "second_block_placed"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": 1.0,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 579,
+   "success_conjunction_match": 1.0,
+   "task": "put_two_in_same",
+   "verdict": "PASS",
+   "wall_s": 196.0
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "broom_grasped",
+    "all_dirt_swept"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 6,
+   "reasons": [],
+   "semantic_family": "dustpan_tool_use",
+   "steps": 388,
+   "success_conjunction_match": 1.0,
+   "task": "retrieve_and_sweep",
+   "verdict": "PASS",
+   "wall_s": 96.1
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 2,
+   "events": [
+    "rubbish_grasped",
+    "rubbish_dropped_in_dustpan"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [
+    "strategy 0 disabled upstream; audited on AP strategy 2 only"
+   ],
+   "semantic_family": "dustpan_tool_use",
+   "steps": 130,
+   "success_conjunction_match": 1.0,
+   "task": "rubbish_in_dustpan",
+   "verdict": "PARTIAL",
+   "wall_s": 33.8
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "broom_grasped",
+    "all_dirt_swept",
+    "rubbish_grasped",
+    "rubbish_dropped_in_dustpan"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "dustpan_tool_use",
+   "steps": 578,
+   "success_conjunction_match": 1.0,
+   "task": "sweep_and_drop",
+   "verdict": "PASS",
+   "wall_s": 98.7
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "broom_grasped",
+    "all_dirt_swept"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 6,
+   "reasons": [],
+   "semantic_family": "dustpan_tool_use",
+   "steps": 262,
+   "success_conjunction_match": 1.0,
+   "task": "sweep_to_dustpan",
+   "verdict": "PASS",
+   "wall_s": 80.8
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer_opened",
+    "item_grasped",
+    "item_placed",
+    "drawer_closed_after_removal"
+   ],
+   "failure_retention": {
+    "reason": "no_path_waypoint_5",
+    "status": "invalid_execution",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": 1.0,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 628,
+   "success_conjunction_match": 1.0,
+   "task": "take_out_and_close",
+   "verdict": "PASS",
+   "wall_s": 110.8
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "item_grasped",
+    "item_placed"
+   ],
+   "failure_retention": {
+    "reason": "task_success_false_after_expert",
+    "status": "failure",
+    "stored": true
+   },
+   "family": "atomic",
+   "min_graspable_mask_containment": 1.0,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 210,
+   "success_conjunction_match": 1.0,
+   "task": "take_out_of_opened_drawer",
+   "verdict": "PASS",
+   "wall_s": 26.2
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer_opened",
+    "item_grasped",
+    "item_placed"
+   ],
+   "failure_retention": {
+    "reason": "no_path_waypoint_5",
+    "status": "invalid_execution",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": 1.0,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 438,
+   "success_conjunction_match": 1.0,
+   "task": "take_out_without_close",
+   "verdict": "PASS",
+   "wall_s": 99.9
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer0_opened",
+    "first_block_out",
+    "drawer0_closed",
+    "drawer1_opened",
+    "second_block_out"
+   ],
+   "failure_retention": {
+    "reason": "no_path_waypoint_5",
+    "status": "invalid_execution",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": 1.0,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 975,
+   "success_conjunction_match": 1.0,
+   "task": "take_two_out_of_different",
+   "verdict": "PASS",
+   "wall_s": 137.1
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer_opened",
+    "first_block_out",
+    "second_block_out"
+   ],
+   "failure_retention": {
+    "reason": "no_path_waypoint_5",
+    "status": "invalid_execution",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": 1.0,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 636,
+   "success_conjunction_match": 1.0,
+   "task": "take_two_out_of_same",
+   "verdict": "PASS",
+   "wall_s": 100.8
+  },
+  {
+   "achieved_logging_ok": true,
+   "action_logging_ok": true,
+   "audited_strategy": 0,
+   "events": [
+    "drawer_opened",
+    "strawberry_jello_grasped",
+    "strawberry_jello_placed"
+   ],
+   "failure_retention": {
+    "reason": "no_path_waypoint_5",
+    "status": "invalid_execution",
+    "stored": true
+   },
+   "family": "compositional",
+   "min_graspable_mask_containment": null,
+   "missing_events": [],
+   "nominal_attempts": 1,
+   "notes": [],
+   "pointcloud_numpy_vs_pyrep_max_m": 0.0,
+   "quirks": 7,
+   "reasons": [],
+   "semantic_family": "articulated_drawer",
+   "steps": 514,
+   "success_conjunction_match": 1.0,
+   "task": "transfer_box",
+   "verdict": "PASS",
+   "wall_s": 113.7
+  }
+ ]
+}

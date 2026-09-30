@@ -1,0 +1,95 @@
+{
+ "objects": {
+  "cupboard": {
+   "extents_mm_sorted": [
+    273,
+    278,
+    457
+   ],
+   "graspable": false,
+   "signature": "279d693b2dc6",
+   "vertices": 40
+  },
+  "cupboard_visual": {
+   "extents_mm_sorted": [
+    1,
+    222,
+    424
+   ],
+   "graspable": false,
+   "signature": "720d93e0ebd1",
+   "vertices": 8
+  },
+  "drawer_bottom": {
+   "extents_mm_sorted": [
+    105,
+    328,
+    339
+   ],
+   "graspable": false,
+   "signature": "110a3d643888",
+   "vertices": 122
+  },
+  "drawer_frame": {
+   "extents_mm_sorted": [
+    336,
+    338,
+    341
+   ],
+   "graspable": false,
+   "signature": "8ba3bfc70cd6",
+   "vertices": 40
+  },
+  "drawer_legs": {
+   "extents_mm_sorted": [
+    83,
+    332,
+    340
+   ],
+   "graspable": false,
+   "signature": "6c4ba76c6b72",
+   "vertices": 264
+  },
+  "drawer_middle": {
+   "extents_mm_sorted": [
+    105,
+    328,
+    339
+   ],
+   "graspable": false,
+   "signature": "110a3d643888",
+   "vertices": 122
+  },
+  "drawer_top": {
+   "extents_mm_sorted": [
+    105,
+    328,
+    339
+   ],
+   "graspable": false,
+   "signature": "110a3d643888",
+   "vertices": 122
+  },
+  "strawberry_jello": {
+   "extents_mm_sorted": [
+    27,
+    73,
+    86
+   ],
+   "graspable": true,
+   "signature": "ecb4a4217c32",
+   "vertices": 8
+  },
+  "strawberry_jello_visual": {
+   "extents_mm_sorted": [
+    30,
+    73,
+    89
+   ],
+   "graspable": false,
+   "signature": "1f2a81c8d52a",
+   "vertices": 8190
+  }
+ },
+ "task": "transfer_box"
+}

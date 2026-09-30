@@ -58,7 +58,10 @@ archives, `icgs_episode_v1/v2` schemas.
 - [ ] P8 decide the consequential-evidence source: extend the RoboHiMan audit (grasp point,
       drawer choice in put_two_in_different/take_two_*) and/or a small mechanistic diagnostic
       suite; only then Stage-2 design.
-- [ ] P9 default-path switch and Stage-1 scale-up after the owner accepts the round-2 verdicts.
+- [x] P9a pre-flight over all 22 HiMan-Bench tasks (21 PASS, 1 PARTIAL), monitors for all 22,
+      overlap audit and frozen split `icgs-robohiman-stage1-split-v1`
+      ([round 3](../../experiments/robohiman-validation/v3/README.md), [ADR 0017](../../decisions/0017-icgs-stage1-split.md)).
+- [ ] P9 Stage-1 generation under the locked split (not started; needs owner go-ahead).
 
 Findings that changed the design during P4: upstream is not bitwise
 reproducible (robot reset residuals + RRTConnect); Colosseum factors own RNGs

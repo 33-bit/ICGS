@@ -64,6 +64,8 @@ GLOBAL_QUIRKS = (
     "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps "
     "before release (ICGS placement events require release)",
     "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
+    "camera_pose factor resolves 2 of its 3 configured camera targets (upstream warning); the front camera "
+    "does move (up to ~10 cm) under that strategy",
 )
 _DRAWER_SIZE_LEAK = ("object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy "
                      "(drawer/cupboard scale 0.9-1.15 in A/C levels)")
