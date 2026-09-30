@@ -91,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--max-anchors", type=int, default=8)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--dump", help="write reference and reset-replay arrays (npz) for debugging")
     args = parser.parse_args(argv)
     started = time.time()
     session = _session(args, cameras=("front", "left_shoulder"), image=(64, 64))
@@ -183,6 +184,10 @@ def main(argv: list[str] | None = None) -> int:
                 reset_runs[anchor["boundary"]].append({"arrays": arrays, "start": 0,
                                                        "anchor_depth": depths[anchor["boundary"]],
                                                        "final_depth": final_depth})
+        if args.dump:
+            first = reset_runs[chosen[0]["boundary"]][0]["arrays"]
+            np.savez_compressed(args.dump, **{f"ref_{k}": v for k, v in ref.items()},
+                                **{f"rep_{k}": v for k, v in first.items()})
         for anchor in chosen:
             b = anchor["boundary"]
             free = [a for a in anchors if a["boundary"] <= b and a["contact_free"]]
