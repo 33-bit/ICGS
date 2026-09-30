@@ -83,7 +83,7 @@ def capture_snapshot(session: Any, boundary: int) -> Snapshot:
     )
 
 
-def restore_snapshot(session: Any, snap: Snapshot) -> None:
+def restore_snapshot(session: Any, snap: Snapshot, *, reset_dynamics: bool = True) -> None:
     """Restore the stored fields without stepping physics."""
     from pyrep.backend import sim
     from pyrep.objects.shape import Shape
@@ -110,9 +110,12 @@ def restore_snapshot(session: Any, snap: Snapshot) -> None:
         raise RuntimeError(f"attachment restore mismatch: {sorted(held)}")
     gripper._prev_positions = list(snap.gripper_prev_positions)
     gripper._prev_vels = list(snap.gripper_prev_vels)
-    for shape in session.task_shapes():
-        if shape.is_dynamic():
-            sim.simResetDynamicObject(shape.get_handle())
+    if reset_dynamics:
+        # Clears Bullet contact/solver caches of task bodies; without it stale
+        # engine state from the pre-restore trajectory may persist.
+        for shape in session.task_shapes():
+            if shape.is_dynamic():
+                sim.simResetDynamicObject(shape.get_handle())
     np.random.set_state(snap.numpy_rng)
     session.task_obj._waypoints = snap.task_waypoints
 
