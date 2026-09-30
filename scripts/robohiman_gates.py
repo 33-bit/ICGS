@@ -468,7 +468,8 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
     report: dict[str, Any] = {
         "gate": "dependency", "task": args.task, "variation": args.variation, "seed": args.seed,
         "decision_waypoint": decision, "trials_per_candidate": args.trials,
-        "anchor": f"after waypoint {decision - 1} (post-reset snapshot restored, prefix commands replayed open loop)",
+        "anchor": (f"after waypoint {decision - 1}: canonical start (post-reset snapshot restored before the "
+                   "reference prefix and every trial), prefix commands replayed open loop"),
         "continuation_policy": ("icgs mirror of the RoboHiMan scripted expert with per-trial Gaussian "
                                 f"waypoint jitter sigma={args.jitter_m} m on every later waypoint; NOT pi_ref"),
         "local_success_predicate": f"{args.local_predicate} at the first boundary after waypoint {decision} completes",
@@ -478,6 +479,8 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
         state0 = _warm_lineage(session, args)
         session.reset(args.variation, lineage=state0)
         reset_snap = capture_snapshot(session, 0)
+        restore_snapshot(session, reset_snap)  # canonical start: prefix and trials share engine state
+        session.scene._has_init_episode = True
         monitor = build_monitor(session.task, session.task_env, args.variation)
         prefix = StepRecorder(session, monitor, frame_stride=0)
         with prefix:

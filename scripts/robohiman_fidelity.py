@@ -91,17 +91,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--max-anchors", type=int, default=8)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--canonical-start", action=argparse.BooleanOptionalAction, default=True,
+                        help="restore the post-reset snapshot before the reference run")
     parser.add_argument("--dump", help="write reference and reset-replay arrays (npz) for debugging")
     args = parser.parse_args(argv)
     started = time.time()
     session = _session(args, cameras=("front", "left_shoulder"), image=(64, 64))
     report: dict[str, Any] = {"task": args.task, "seed": args.seed, "repeats": args.repeats,
+                              "canonical_start": args.canonical_start,
                               "anchor_state_limits": ANCHOR_STATE_LIMITS,
                               "continuation_limits": CONTINUATION_LIMITS, "anchors": []}
     try:
         lineage = _warm_lineage(session, args)
         session.reset(args.variation, lineage=lineage)
         s0 = capture_snapshot(session, 0)
+        if args.canonical_start:
+            # Drop engine-internal state left by the upstream reset (contacts,
+            # solver caches) so the reference starts where every replay starts.
+            restore_snapshot(session, s0)
+            session.scene._has_init_episode = True
         monitor = build_monitor(session.task, session.task_env, args.variation)
         n_waypoints = len(session.task_obj.get_waypoints())
         ref_rec = StepRecorder(session, monitor, frame_stride=0)
