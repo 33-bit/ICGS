@@ -57,6 +57,7 @@ class StepRecorder:
         self.frame_steps: list[int] = []
         self.events: list[dict[str, Any]] = []
         self.object_names: list[str] = []
+        self.event_boundaries: list[int] = []
         self.joint_names: list[str] = []
 
     # ------------------------------------------------------------- wrappers
@@ -222,8 +223,29 @@ class StepRecorder:
         }
         self.steps.append(row)
         boundary = len(self.steps) - 1
-        if self._capture_frame is not None and self.frame_stride > 0 and boundary % self.frame_stride == 0:
+        if self._capture_frame is not None and self.frame_stride > 0 and (
+                boundary % self.frame_stride == 0 or self._event_boundary(boundary)):
             self._append_frame(boundary)
+
+    def _event_boundary(self, boundary: int) -> bool:
+        """Frames are forced where supervision changes, whatever the stride.
+
+        A boundary is an event boundary if any raw predicate or the task-success
+        flag changed in the step that produced it, a grasp/release was applied
+        in that step, or the command phase/waypoint changed.
+        """
+        if boundary == 0 or len(self.commands) < boundary:
+            return False
+        prev, cur = self.steps[boundary - 1], self.steps[boundary]
+        row = self.commands[boundary - 1]
+        before = self.commands[boundary - 2] if boundary >= 2 else row
+        changed = bool(not np.array_equal(prev["predicates"], cur["predicates"])
+                       or prev["task_success"] != cur["task_success"]
+                       or row["grasp_event"] != 0
+                       or row["phase"] != before["phase"] or row["waypoint"] != before["waypoint"])
+        if changed:
+            self.event_boundaries.append(boundary)
+        return changed
 
     def _append_frame(self, boundary: int) -> None:
         frame = self._capture_frame()

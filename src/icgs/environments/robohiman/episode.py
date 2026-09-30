@@ -181,6 +181,9 @@ def collect_episode(
             "depth_encoding": "normalized between per-frame near/far clipping planes (float32)",
             "convention": CAMERA_CONVENTION_ID,
             "frame_stride": int(frame_stride),
+            "frame_policy": "every frame_stride-th boundary plus every event boundary "
+                            "(predicate/success change, grasp/release, phase or waypoint change)",
+            "event_boundaries": recorder.event_boundaries,
             "masks_recorded": bool(masks),
             "live_point_cloud_recorded": bool(point_cloud),
         },
