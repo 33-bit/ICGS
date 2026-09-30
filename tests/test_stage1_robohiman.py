@@ -63,6 +63,14 @@ class LabelTests(unittest.TestCase):
         self.assertEqual(labels["alpha"].tolist(), [0, 0])
         self.assertFalse(labels["epsilon"][1, 2])
 
+    def test_conjunctive_relation_requires_release(self):
+        names = ["in_region", "grasped"]
+        trace = np.array([[0, 1], [1, 1], [1, 0]], dtype=bool)  # detected while carried, then released
+        labels = derive_event_labels(trace, names, [{"event_id": "placed", "relation": "in_region&!grasped"}])
+        self.assertEqual(labels["first_occurrence"].tolist(), [2])
+        with self.assertRaises(ValueError):
+            derive_event_labels(trace, names, [{"event_id": "x", "relation": "in_region&!missing"}])
+
     def test_unknown_predicate_and_order_rejected(self):
         with self.assertRaises(ValueError):
             derive_event_labels(_trace([[0, 0, 0, 0]]), PREDICATES,

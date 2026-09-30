@@ -4,7 +4,7 @@ Inputs are per-boundary simulator predicates, never task names or language.
 An event spec names the relation predicate whose *current* truth is ``nu`` and
 the prerequisites that make it eligible:
 
-``{"event_id": str, "relation": str, "prerequisites": [event_id, ...],
+``{"event_id": str, "relation": "pred" | "pred&!other", "prerequisites": [event_id, ...],
    "current_requirements": [predicate or "!predicate", ...], "hold_steps": int,
    "count_only_when_eligible": bool}``
 
@@ -35,6 +35,12 @@ LABEL_PROTOCOL_ID = "icgs-predicate-trace-labels-v1"
 
 
 def _column(trace: np.ndarray, names: Sequence[str], token: str) -> np.ndarray:
+    if "&" in token:  # conjunction of raw predicates, e.g. "in_region&!grasped"
+        parts = [part.strip() for part in token.split("&")]
+        result = np.ones(trace.shape[0], dtype=bool)
+        for part in parts:
+            result &= _column(trace, names, part)
+        return result
     negate = token.startswith("!")
     name = token[1:] if negate else token
     if name not in names:
@@ -49,8 +55,10 @@ def validate_event_specs(specs: Sequence[Mapping[str, Any]], predicate_names: Se
         event_id = spec.get("event_id")
         if not isinstance(event_id, str) or not event_id or event_id in seen:
             raise ValueError(f"invalid or duplicate event_id {event_id!r}")
-        if spec.get("relation") not in predicate_names:
-            raise ValueError(f"event {event_id} relation must be a recorded predicate")
+        relation = spec.get("relation")
+        if not isinstance(relation, str) or any(part.strip().lstrip("!") not in predicate_names
+                                                 for part in relation.split("&")):
+            raise ValueError(f"event {event_id} relation must use recorded predicates")
         for prerequisite in spec.get("prerequisites", ()):
             if prerequisite not in seen:
                 raise ValueError(f"event {event_id} prerequisite {prerequisite!r} must precede it")

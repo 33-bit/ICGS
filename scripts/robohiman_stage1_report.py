@@ -145,9 +145,28 @@ def _a1(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> dict[str, An
     return result
 
 
-def _b(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> dict[str, Any]:
+def _relabel(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> tuple[list, dict[str, np.ndarray]] | None:
+    """Re-derive labels offline from the stored raw trace with the current reviewed spec."""
+    from icgs.data.stage1.labels import derive_event_labels
+    from icgs.environments.robohiman.monitors import TASK_SPECS
+
+    spec = TASK_SPECS.get(manifest["source"]["task"])
+    if spec is None:
+        return None
+    events = [dict({"prerequisites": [], "current_requirements": [], "hold_steps": 1,
+                    "count_only_when_eligible": False}, **event) for event in spec["events"]]
+    labels = derive_event_labels(arrays["step_predicates"], manifest["predicates"]["names"], events)
+    return events, {f"label_{k}": v for k, v in labels.items()}
+
+
+def _b(manifest: dict[str, Any], arrays: dict[str, np.ndarray], relabel: bool = False) -> dict[str, Any]:
     names = manifest["predicates"]["names"]
     specs = manifest["events"]["specs"]
+    if relabel:
+        derived = _relabel(manifest, arrays)
+        if derived is not None:
+            specs, labels = derived
+            arrays = {**arrays, **labels}
     alpha = arrays["label_alpha"]
     changes = [0] + [int(i) for i in np.flatnonzero(np.diff(alpha)) + 1]
     first = arrays["label_first_occurrence"]
@@ -163,7 +182,10 @@ def _b(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> dict[str, Any
         "final": {"nu": arrays["label_nu"][-1].astype(int).tolist(),
                   "rho": arrays["label_rho"][-1].astype(int).tolist(),
                   "epsilon": arrays["label_epsilon"][-1].astype(int).tolist()},
-        "consistency": manifest["events"]["consistency"],
+        "consistency": (manifest["events"]["consistency"] if not relabel else __import__(
+            "icgs.data.stage1.labels", fromlist=["label_consistency_report"]).label_consistency_report(
+            {k[6:]: v for k, v in arrays.items() if k.startswith("label_")}, specs)),
+        "labels_source": "offline relabel with current TASK_SPECS" if relabel else "stored at collection",
     }
 
 
@@ -192,6 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--store", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--frames-dir")
+    parser.add_argument("--relabel", action="store_true", help="also re-derive labels with current monitor specs")
     args = parser.parse_args(argv)
     report: dict[str, Any] = {"store": str(args.store), "episodes": []}
     report["views"] = build_views(args.store)["views"]
@@ -222,6 +245,7 @@ def main(argv: list[str] | None = None) -> int:
             "A0": _a0(manifest, arrays),
             "A1": _a1(manifest, arrays),
             "B": _b(manifest, arrays),
+            "B_relabel": _b(manifest, arrays, relabel=True) if args.relabel else None,
         }
         if args.frames_dir:
             entry["review_frames"] = _frames(manifest, arrays, Path(args.frames_dir))

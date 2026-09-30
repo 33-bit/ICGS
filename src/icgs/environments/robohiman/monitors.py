@@ -8,6 +8,9 @@ Two layers, kept separate on purpose:
   ``DetectedCondition``), probes of the task's own registered success
   conditions, template resolution of object names from the task instance, and
   label derivation (``icgs.data.stage1.labels``).
+* Event relations may conjoin raw predicates (``"in_region&!grasped"``): a
+  sensor can detect an object that is still being carried, so "placed" means
+  detected *and* released. Raw traces stay stored, so labels are recomputable.
 * **Task-specific** (``TASK_SPECS``): which objects/sensors/joints a task uses,
   which upstream file a threshold comes from, and the event specs (relation,
   prerequisites, current requirements). These are reviewed ICGS adapter
@@ -24,7 +27,7 @@ from typing import Any, Callable
 import numpy as np
 
 
-MONITOR_VERSION = "robohiman-monitor-v2"
+MONITOR_VERSION = "robohiman-monitor-v3"
 _DRAWER_OPTIONS = ("bottom", "middle", "top")
 # Thresholds registered by upstream task code at the pinned commit.
 _OPEN = (0.15, "colosseum/rlbench/atomic_tasks/open_drawer.py: DrawerCondition(joint, 0.15, 'open')")
@@ -174,7 +177,7 @@ TASK_SPECS: dict[str, dict[str, Any]] = {
         ("target_grasped", "grasped", {"object": "{grocery}"}),
         ("target_in_cupboard", "detected", {"object": "{grocery}", "sensor": "success"})], "events": [
         {"event_id": "target_grasped", "relation": "target_grasped"},
-        {"event_id": "target_placed_in_cupboard", "relation": "target_in_cupboard",
+        {"event_id": "target_placed_in_cupboard", "relation": "target_in_cupboard&!target_grasped",
          "prerequisites": ["target_grasped"], "count_only_when_eligible": True}]},
     "box_exchange": {"family": "container_pick_place", "predicates": [
         ("sugar_grasped", "grasped", {"object": "sugar"}),
@@ -184,10 +187,10 @@ TASK_SPECS: dict[str, dict[str, Any]] = {
         ("spam_in_cupboard", "detected", {"object": "spam", "sensor": "success_cupboard"}),
         ("spam_on_table", "detected", {"object": "spam", "sensor": "success_ground"})], "events": [
         {"event_id": "sugar_grasped", "relation": "sugar_grasped"},
-        {"event_id": "sugar_placed_on_table", "relation": "sugar_on_table",
+        {"event_id": "sugar_placed_on_table", "relation": "sugar_on_table&!sugar_grasped",
          "prerequisites": ["sugar_grasped"], "count_only_when_eligible": True},
         {"event_id": "spam_grasped", "relation": "spam_grasped"},
-        {"event_id": "spam_placed_in_cupboard", "relation": "spam_in_cupboard",
+        {"event_id": "spam_placed_in_cupboard", "relation": "spam_in_cupboard&!spam_grasped",
          "prerequisites": ["spam_grasped"], "count_only_when_eligible": True}]},
     "rubbish_in_dustpan": {"family": "dustpan_tool_use", "predicates": [
         ("rubbish_grasped", "grasped", {"object": "rubbish"}),
