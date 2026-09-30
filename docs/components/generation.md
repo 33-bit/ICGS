@@ -108,6 +108,58 @@ own `<output-prefix>/<source-revision>/seed-<mixture-seed>/` directory.
 The 70/30 nominal/perturbed mixture is applied only to final train
 `D_temporal`/`D_dyn` transition references, in complete 7:3 units.
 
+### Training export and lazy reader
+
+After final views are frozen, `scripts/generation_training_export.py` materializes
+an immutable compact export under the exact unsuffixed HF prefix `training`:
+
+```text
+training/manifest.json
+training/views/{train,validation,evaluation}/{D_geom,D_temporal,D_dyn,D_task}.json
+```
+
+The export records both the archive commit and final-view commit, exact source/view
+hashes, archive/preprocessing identities, split membership, the mixture seed and
+per-sample deterministic seed. It contains references only: no `.npz` chunks are
+copied. The exporter accepts an identical existing prefix but rejects partial,
+conflicting or extra files before writing.
+
+Use the pinned lazy reader when the native source archive is available locally:
+
+```python
+from icgs.data.datasets.training_export import TrainingExportReader
+
+reader = TrainingExportReader.from_local("training", source_root="archive/source")
+ref = next(reader.sample_refs("D_dyn", role="train"))
+sample = reader.read_sample(ref, supervised_intervals=1)
+```
+
+`TrainingExportReader.from_hf(...)` fetches the export manifest and twelve view
+files first, validates them before reading archive data, then downloads only the
+selected episode manifest and chunks with SHA256 checks and a bounded cache. The
+reader preserves valid failures and the final 7:3 mixture, rejects forged sample
+references, and derives the native SOR20/std2 2,048-point local-frame view lazily.
+It exposes A0/A1-shaped dictionaries; typed `ExecutedTransition` conversion and
+native `icgs train` integration remain separate work. No training run is started
+by export or reader commands.
+
+To publish after the source archive and final-view commits have been independently
+validated, pass full commit OIDs and the complete final-view prefix:
+
+```bash
+python3 -B scripts/generation_training_export.py \
+  --repo-id "$HF_DATASET_REPO" \
+  --source-prefix "$HF_SOURCE_PREFIX" \
+  --source-revision "$HF_SOURCE_REVISION" \
+  --views-prefix "$HF_FINAL_VIEWS_PREFIX/$HF_SOURCE_REVISION/seed-20260920" \
+  --views-revision "$HF_VIEWS_REVISION" \
+  --output-prefix training \
+  --cache-dir "$ICGS_SCRATCH"
+```
+
+The command is a publication operation, not a validation side effect; it is not
+run by the local fixture suite.
+
 The native `icgs train` command still consumes its existing PyG sample directory.
 It does not automatically ingest archive-backed views and does not persist their
 view metadata. Open3D statistical-outlier filtering (SOR, 20 neighbours and

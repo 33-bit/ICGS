@@ -509,6 +509,31 @@ source-revision/manifest mismatch at the same target directory; a different
 source revision receives its own `<source-revision>` directory and is not a
 conflict by itself.
 
+### Compact training export (`training/`)
+
+The derived training publication is intentionally a separate, exact prefix:
+
+```text
+training/
+├── manifest.json
+└── views/{train,validation,evaluation}/
+    ├── D_geom.json
+    ├── D_temporal.json
+    ├── D_dyn.json
+    └── D_task.json
+```
+
+`manifest.json` pins the archive revision and final-view revision, source dataset
+hash, twelve view hashes, archive/preprocessing identities, and the final mixture
+seed. View rows preserve valid failures, role/split membership, deterministic
+sample seeds and causal pointers. The export is metadata-only; chunks remain in
+the immutable archive prefix. `TrainingExportReader` validates all twelve files,
+checks source membership and hashes, then lazily fetches only the selected episode
+manifest/chunk with a bounded revision-scoped cache. It provides A0/A1-shaped
+sample dictionaries and native lazy preprocessing; it does not change the native
+PyG `icgs train` input contract or start training. Partial, conflicting or extra
+files under `training/` are rejected.
+
 The lazy archive reader is a separate dataset API. Native `icgs train` still
 consumes PyG sample directories, does not automatically ingest archive-backed
 views and does not persist their metadata. Open3D SOR execution was not run in

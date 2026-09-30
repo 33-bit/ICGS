@@ -36,6 +36,10 @@ PYTHONPATH=src .venv/bin/python -B -m pytest -q \
 PYTHONPATH=src .venv/bin/python -B -m pytest -q \
   tests/test_generation_views.py tests/test_generation_view_finalization.py
 
+# compact training export and revision-bound lazy reader (local/fake-HF only)
+PYTHONPATH=src .venv/bin/python -B -m pytest -q \
+  tests/test_training_export.py
+
 # remote-resume contract fixtures and receipt-only publication/recovery
 PYTHONPATH=src .venv/bin/python -B -m pytest -q \
   tests/test_generation_control.py tests/test_generation_planner.py \
@@ -49,9 +53,10 @@ PYTHONPATH=src .venv/bin/python -B -m pytest -q \
 These tests use tiny local archives or fake HF clients. They do not download a
 dataset, launch a simulator, run preprocessing, execute Open3D SOR, start
 training, publish to HF or prove that native `icgs train` consumes archive-backed
-views. The current trainer still reads PyG sample directories and does not
-persist archive view metadata. A clean-machine reader, resume command and
-revision-bound finalizer are documented in [Data generation](../docs/components/generation.md).
+views. The current trainer still reads PyG sample directories; the compact
+`training/` export and reader are a separate boundary, and native trainer
+integration remains a deliberate follow-up. A clean-machine reader, resume
+command and revision-bound finalizer are documented in [Data generation](../docs/components/generation.md).
 
 Shared-storage fixtures exercise real multiprocess claim admission, retained
 reservations across lease expiry/backlog, verified-prune release, physical disk
