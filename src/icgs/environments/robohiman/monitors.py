@@ -27,7 +27,7 @@ from typing import Any, Callable
 import numpy as np
 
 
-MONITOR_VERSION = "robohiman-monitor-v3"
+MONITOR_VERSION = "robohiman-monitor-v4"
 _DRAWER_OPTIONS = ("bottom", "middle", "top")
 # Thresholds registered by upstream task code at the pinned commit.
 _OPEN = (0.15, "colosseum/rlbench/atomic_tasks/open_drawer.py: DrawerCondition(joint, 0.15, 'open')")
@@ -83,6 +83,9 @@ def _template_values(task: str, task_obj: Any, variation: int) -> dict[str, str]
     values: dict[str, str] = {}
     if hasattr(task_obj, "_options"):
         values["option"] = _DRAWER_OPTIONS[variation % 3]
+    if hasattr(task_obj, "index_comb"):  # two-drawer tasks bind an ordered drawer pair
+        first, second = task_obj.index_comb[variation]
+        values["option0"], values["option1"] = _DRAWER_OPTIONS[first], _DRAWER_OPTIONS[second]
     groceries = getattr(task_obj, "groceries", None)
     if groceries:
         values["grocery"] = groceries[variation % len(groceries)].get_name()
@@ -119,6 +122,18 @@ def _build_predicate(kind: str, params: dict[str, Any], scene: Any) -> tuple[Any
             def condition_met(self):
                 return sum(c.condition_met()[0] for c in conditions) >= need, False
         return _Count(), f"count(DetectedCondition({params['objects']}, '{params['sensor']}')) >= {need}"
+    if kind == "released_count_ge":
+        sensor = ProximitySensor(params["sensor"])
+        pairs = [(DetectedCondition(Shape(name), sensor), GraspedCondition(scene.robot.gripper, Shape(name)))
+                 for name in params["objects"]]
+        need = int(params["k"])
+
+        class _Released:
+            def condition_met(self):
+                count = sum(d.condition_met()[0] and not g.condition_met()[0] for d, g in pairs)
+                return count >= need, False
+        return _Released(), (f"count(DetectedCondition(obj, '{params['sensor']}') and not GraspedCondition(obj) "
+                             f"for obj in {params['objects']}) >= {need}")
     if kind in ("drawer_open", "drawer_closed"):
         threshold, origin = _OPEN if kind == "drawer_open" else _CLOSE
         mode = "open" if kind == "drawer_open" else "close"
@@ -140,6 +155,20 @@ def _resolve(value: Any, values: dict[str, str]) -> Any:
 _DRAWER = [("drawer_open", "drawer_open", {"joint": "drawer_joint_{option}"}),
            ("drawer_closed", "drawer_closed", {"joint": "drawer_joint_{option}"})]
 _DIRT = [f"dirt{i}" for i in range(5)]
+_BLOCKS = ["item0", "item1"]
+
+
+def _pick_place(obj: str, sensor: str, *, grasp_requires: list[str] | None = None,
+                alias: str | None = None) -> tuple[list, list]:
+    """Predicates/events for 'grasp obj, release it where sensor detects it'."""
+    name = alias or obj
+    predicates = [(f"{name}_grasped", "grasped", {"object": obj}),
+                  (f"{name}_at_goal", "detected", {"object": obj, "sensor": sensor})]
+    events = [{"event_id": f"{name}_grasped", "relation": f"{name}_grasped",
+               "prerequisites": list(grasp_requires or [])},
+              {"event_id": f"{name}_placed", "relation": f"{name}_at_goal&!{name}_grasped",
+               "prerequisites": [f"{name}_grasped"], "count_only_when_eligible": True}]
+    return predicates, events
 
 TASK_SPECS: dict[str, dict[str, Any]] = {
     "open_drawer": {"family": "articulated_drawer", "predicates": _DRAWER, "events": [
@@ -163,15 +192,17 @@ TASK_SPECS: dict[str, dict[str, Any]] = {
         {"event_id": "drawer_closed_after_placement", "relation": "drawer_closed",
          "prerequisites": ["item_placed_in_drawer"], "count_only_when_eligible": True}]},
     "put_two_in_same": {"family": "articulated_drawer", "predicates": _DRAWER + [
-        ("block_grasped", "grasped_any", {"objects": ["item0", "item1"]}),
-        ("blocks_in_drawer_ge1", "detected_count_ge", {"objects": ["item0", "item1"], "sensor": "success_{option}", "k": 1}),
-        ("blocks_in_drawer_ge2", "detected_count_ge", {"objects": ["item0", "item1"], "sensor": "success_{option}", "k": 2})],
+        ("block_grasped", "grasped_any", {"objects": _BLOCKS}),
+        ("blocks_in_drawer_ge1", "detected_count_ge", {"objects": _BLOCKS, "sensor": "success_{option}", "k": 1}),
+        ("blocks_in_drawer_ge2", "detected_count_ge", {"objects": _BLOCKS, "sensor": "success_{option}", "k": 2}),
+        ("blocks_released_in_drawer_ge1", "released_count_ge", {"objects": _BLOCKS, "sensor": "success_{option}", "k": 1}),
+        ("blocks_released_in_drawer_ge2", "released_count_ge", {"objects": _BLOCKS, "sensor": "success_{option}", "k": 2})],
         # Order-invariant events: which block goes first is the expert's choice.
         "events": [
             {"event_id": "drawer_opened", "relation": "drawer_open"},
-            {"event_id": "first_block_placed", "relation": "blocks_in_drawer_ge1",
+            {"event_id": "first_block_placed", "relation": "blocks_released_in_drawer_ge1",
              "current_requirements": ["drawer_open"]},
-            {"event_id": "second_block_placed", "relation": "blocks_in_drawer_ge2",
+            {"event_id": "second_block_placed", "relation": "blocks_released_in_drawer_ge2",
              "prerequisites": ["first_block_placed"], "current_requirements": ["drawer_open"]}]},
     "box_in_cupboard": {"family": "container_pick_place", "predicates": [
         ("target_grasped", "grasped", {"object": "{grocery}"}),
@@ -221,6 +252,79 @@ TASK_SPECS: dict[str, dict[str, Any]] = {
         {"event_id": "rubbish_dropped_in_dustpan", "relation": "rubbish_in_dustpan",
          "prerequisites": ["rubbish_grasped"], "count_only_when_eligible": True}]},
 }
+
+# ---- remaining HiMan-Bench tasks, composed from the same generic pieces ----
+_DRAWER0 = [("drawer0_open", "drawer_open", {"joint": "drawer_joint_{option0}"}),
+            ("drawer0_closed", "drawer_closed", {"joint": "drawer_joint_{option0}"}),
+            ("drawer1_open", "drawer_open", {"joint": "drawer_joint_{option1}"}),
+            ("drawer1_closed", "drawer_closed", {"joint": "drawer_joint_{option1}"})]
+
+
+def _spec(family: str, predicates: list, events: list) -> dict[str, Any]:
+    return {"family": family, "predicates": predicates, "events": events}
+
+
+_p, _e = _pick_place("item", "success_{option}")
+TASK_SPECS["put_in_opened_drawer"] = _spec("articulated_drawer", _DRAWER + _p, _e)
+_p, _e = _pick_place("item", "success")
+TASK_SPECS["take_out_of_opened_drawer"] = _spec("articulated_drawer", _DRAWER + _p, _e)
+_p, _e = _pick_place("strawberry_jello", "success")
+TASK_SPECS["box_out_of_opened_drawer"] = _spec("articulated_drawer", _DRAWER + _p, _e)
+_p, _e = _pick_place("{grocery}", "success", alias="target")
+TASK_SPECS["box_out_of_cupboard"] = _spec("container_pick_place", _p, _e)
+_p, _e = _pick_place("broom", "success")
+TASK_SPECS["broom_out_of_cupboard"] = _spec("container_pick_place", _p, _e)
+_p, _e = _pick_place("item", "success", grasp_requires=["drawer_opened"])
+TASK_SPECS["take_out_without_close"] = _spec("articulated_drawer", _DRAWER + _p,
+                                             [{"event_id": "drawer_opened", "relation": "drawer_open"}] + _e)
+TASK_SPECS["take_out_and_close"] = _spec("articulated_drawer", _DRAWER + _p,
+                                         [{"event_id": "drawer_opened", "relation": "drawer_open"}] + _e + [
+                                             {"event_id": "drawer_closed_after_removal", "relation": "drawer_closed",
+                                              "prerequisites": ["item_placed"], "count_only_when_eligible": True}])
+_p, _e = _pick_place("strawberry_jello", "success", grasp_requires=["drawer_opened"])
+TASK_SPECS["transfer_box"] = _spec("articulated_drawer", _DRAWER + _p,
+                                   [{"event_id": "drawer_opened", "relation": "drawer_open"}] + _e)
+TASK_SPECS["retrieve_and_sweep"] = _spec("dustpan_tool_use", [
+    ("broom_grasped", "grasped", {"object": "broom"}),
+    ("dirt_in_dustpan_ge1", "detected_count_ge", {"objects": _DIRT, "sensor": "success", "k": 1}),
+    ("dirt_in_dustpan_all", "detected_count_ge", {"objects": _DIRT, "sensor": "success", "k": 5})], [
+    {"event_id": "broom_grasped", "relation": "broom_grasped"},
+    {"event_id": "all_dirt_swept", "relation": "dirt_in_dustpan_all", "prerequisites": ["broom_grasped"],
+     "count_only_when_eligible": True}])
+TASK_SPECS["take_two_out_of_same"] = _spec("articulated_drawer", _DRAWER + [
+    ("block_grasped", "grasped_any", {"objects": _BLOCKS}),
+    ("blocks_released_on_surface_ge1", "released_count_ge", {"objects": _BLOCKS, "sensor": "success", "k": 1}),
+    ("blocks_released_on_surface_ge2", "released_count_ge", {"objects": _BLOCKS, "sensor": "success", "k": 2})], [
+    {"event_id": "drawer_opened", "relation": "drawer_open"},
+    {"event_id": "first_block_out", "relation": "blocks_released_on_surface_ge1", "prerequisites": ["drawer_opened"]},
+    {"event_id": "second_block_out", "relation": "blocks_released_on_surface_ge2",
+     "prerequisites": ["first_block_out"]}])
+# The two-drawer tasks' success conditions do not require closing the first
+# drawer; the close event is kept only because the upstream expert executes it
+# (verified from runtime traces in the pre-flight audit).
+TASK_SPECS["take_two_out_of_different"] = _spec("articulated_drawer", _DRAWER0 + [
+    ("block_grasped", "grasped_any", {"objects": _BLOCKS}),
+    ("blocks_released_on_surface_ge1", "released_count_ge", {"objects": _BLOCKS, "sensor": "success", "k": 1}),
+    ("blocks_released_on_surface_ge2", "released_count_ge", {"objects": _BLOCKS, "sensor": "success", "k": 2})], [
+    {"event_id": "drawer0_opened", "relation": "drawer0_open"},
+    {"event_id": "first_block_out", "relation": "blocks_released_on_surface_ge1", "prerequisites": ["drawer0_opened"]},
+    {"event_id": "drawer0_closed", "relation": "drawer0_closed", "prerequisites": ["first_block_out"],
+     "count_only_when_eligible": True},
+    {"event_id": "drawer1_opened", "relation": "drawer1_open"},
+    {"event_id": "second_block_out", "relation": "blocks_released_on_surface_ge2",
+     "prerequisites": ["first_block_out", "drawer1_opened"]}])
+TASK_SPECS["put_two_in_different"] = _spec("articulated_drawer", _DRAWER0 + [
+    ("block_grasped", "grasped_any", {"objects": _BLOCKS}),
+    ("block_released_in_drawer0", "released_count_ge", {"objects": _BLOCKS, "sensor": "success_{option0}", "k": 1}),
+    ("block_released_in_drawer1", "released_count_ge", {"objects": _BLOCKS, "sensor": "success_{option1}", "k": 1})], [
+    {"event_id": "drawer0_opened", "relation": "drawer0_open"},
+    {"event_id": "block_placed_in_drawer0", "relation": "block_released_in_drawer0",
+     "current_requirements": ["drawer0_open"]},
+    {"event_id": "drawer0_closed", "relation": "drawer0_closed", "prerequisites": ["block_placed_in_drawer0"],
+     "count_only_when_eligible": True},
+    {"event_id": "drawer1_opened", "relation": "drawer1_open"},
+    {"event_id": "block_placed_in_drawer1", "relation": "block_released_in_drawer1",
+     "current_requirements": ["drawer1_open"]}])
 SUPPORTED_TASKS = tuple(TASK_SPECS)
 
 
