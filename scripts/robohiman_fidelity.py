@@ -131,6 +131,11 @@ def main(argv: list[str] | None = None) -> int:
                         "grasped": [o.get_name() for o in gripper.get_grasped_objects()],
                         "gripper_open_amount": float(min(gripper.get_open_amount())),
                         "snapshot": capture_snapshot(session, len(ref_rec.steps) - 1),
+                        # Snapshot-time truth: RLBench attaches after the last step of a
+                        # waypoint, so the recorded row at this boundary is pre-attach.
+                        "predicates_at_snapshot": monitor.evaluate(),
+                        "grasped_at_snapshot": np.array([n in {o.get_name() for o in gripper.get_grasped_objects()}
+                                                         for n in ref_rec.object_names], dtype=bool),
                         "depth": _final_depth(session),
                     })
                 final = WaypointExpert(session, ref_rec).run(start=previous + 1, initial_step=False)
@@ -142,6 +147,8 @@ def main(argv: list[str] | None = None) -> int:
                                "waypoints": n_waypoints}
         for anchor in anchors:
             anchor["contact_free"] = not anchor["grasped"] and anchor["gripper_open_amount"] > 0.95
+        for anchor in anchors:
+            anchor["predicates_at_snapshot"] = np.asarray(anchor["predicates_at_snapshot"])
         chosen = anchors if len(anchors) <= args.max_anchors else [
             anchors[int(i)] for i in np.linspace(0, len(anchors) - 1, args.max_anchors).round()]
 
@@ -217,6 +224,11 @@ def main(argv: list[str] | None = None) -> int:
                 for run in runs:
                     arrays, local_b = run["arrays"], b - run["start"]
                     state = _state_error(ref, b, arrays, local_b)
+                    if run["start"] == b:  # restored at the anchor: compare with snapshot-time truth
+                        state["predicates_equal"] = bool(np.array_equal(anchor["predicates_at_snapshot"],
+                                                                        arrays["step_predicates"][0]))
+                        state["grasp_set_equal"] = bool(np.array_equal(anchor["grasped_at_snapshot"],
+                                                                       arrays["step_grasped"][0]))
                     state["depth"] = (_depth_diff(anchor["depth"], run["anchor_depth"])
                                       if run["anchor_depth"] is not None else None)
                     cont = _continuation(ref, b, arrays, local_b)

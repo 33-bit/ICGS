@@ -146,13 +146,22 @@ class RoboHiManSession:
         return self.task_env._task
 
     def task_shapes(self) -> list[Any]:
-        from pyrep.const import ObjectType
+        """Task shapes plus graspables and their subtrees, independent of grasp state.
 
-        shapes = list(self.task_obj.get_base().get_objects_in_tree(object_type=ObjectType.SHAPE))
-        # Grasped objects are re-parented to the gripper and leave the task tree.
-        names = {shape.get_name() for shape in shapes}
-        shapes += [obj for obj in self.task_obj.get_graspable_objects() if obj.get_name() not in names]
-        return sorted(shapes, key=lambda shape: shape.get_name())
+        A grasped object is re-parented to the gripper, taking its child shapes
+        out of the task tree, so the set is built from the task tree and every
+        graspable's own subtree and frozen per reset (``_shape_names``).
+        """
+        from pyrep.const import ObjectType
+        from pyrep.objects.shape import Shape
+
+        if getattr(self, "_shape_names", None) is None:
+            shapes = list(self.task_obj.get_base().get_objects_in_tree(object_type=ObjectType.SHAPE))
+            for obj in self.task_obj.get_graspable_objects():
+                shapes.append(obj)
+                shapes += list(obj.get_objects_in_tree(object_type=ObjectType.SHAPE))
+            self._shape_names = sorted({shape.get_name() for shape in shapes})
+        return [Shape(name) for name in self._shape_names]
 
     def task_joints(self) -> list[Any]:
         from pyrep.const import ObjectType
@@ -195,6 +204,7 @@ class RoboHiManSession:
         array, cached = rng_state_array(state)
         factors_before = lineage["factors"] if lineage is not None else self.factor_rng_states()
         errors = []
+        self._shape_names = None
         for _ in range(int(attempts)):
             np.random.set_state(state)
             if factors_before:
