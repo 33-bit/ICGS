@@ -47,6 +47,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="restore the post-reset snapshot before execution (branchable episodes; deviation)")
     parser.add_argument("--masks", action="store_true")
     parser.add_argument("--point-cloud", action="store_true")
+    parser.add_argument("--split-manifest", help="locked split manifest (required for Stage-1 generation)")
+    parser.add_argument("--split", choices=("train", "dev", "test"))
     parser.add_argument("--max-episodes-guard", type=int, default=20,
                         help="refuse larger runs; bulk collection is gated")
     args = parser.parse_args(argv)
@@ -55,6 +57,13 @@ def main(argv: list[str] | None = None) -> int:
     perturbations = [json.loads(item) for item in args.perturbation]
     store = Path(args.store)
     (store / "attempts").mkdir(parents=True, exist_ok=True)
+    split_manifest = None
+    if args.split_manifest or args.split:
+        if not (args.split_manifest and args.split):
+            parser.error("--split-manifest and --split go together")
+        from icgs.data.stage1.split import load_locked_manifest
+
+        split_manifest = load_locked_manifest(args.split_manifest)
     np.random.seed(args.seed)
     session = RoboHiManSession(args.task, strategy_index=args.strategy, image_size=args.image_size,
                                cameras=args.cameras, env_seed=args.env_seed, masks=args.masks,
@@ -65,6 +74,15 @@ def main(argv: list[str] | None = None) -> int:
         for offset in range(args.episodes):
             index = args.first_index + offset
             started = time.time()
+            split_provenance = None
+            if split_manifest is not None:
+                from icgs.data.stage1.split import assert_allowed
+
+                # One seed per episode so every episode's lineage is checkable against the split.
+                split_provenance = assert_allowed(split_manifest, split=args.split, task=args.task,
+                                                  strategy=args.strategy, variation=args.variation,
+                                                  seed=args.seed + offset, factor_env_seed=args.env_seed)
+                np.random.seed(args.seed + offset)
             try:
                 manifest, arrays, runtime = collect_episode(
                     session, run_id=args.run_id, episode_index=index, variation=args.variation,
@@ -78,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
                 path.write_text(canonical_json(record))
                 summary.append({"episode_index": index, "outcome": "simulator_error", "error": record["error"]})
                 continue
+            if split_provenance is not None:
+                manifest["lineage"]["split"] = {**split_provenance, "episode_seed": args.seed + offset}
             path = write_episode(store, manifest, arrays)
             summary.append({"episode_id": manifest["episode_id"], "outcome": manifest["outcome"]["status"],
                             "reason": manifest["outcome"]["reason"], "steps": manifest["counts"]["steps"],

@@ -150,17 +150,25 @@ def main(argv: list[str] | None = None) -> int:
         Path(args.out).write_text(canonical_json(report))
         return 0
     strategy = 0
+    reasons: list[str] = []
+    notes: list[str] = []
     session = RoboHiManSession(args.task, strategy_index=0, cameras=NATIVE_CAMERAS, masks=True)
     try:
         session.build_config()
     except ValueError:
+        # Strategy 0 disabled upstream: audit the first enabled perturbation
+        # strategy that is not withheld from TRAIN, and cap the verdict.
+        import colosseum
+
+        family = session.family.upper()
+        json_dir = getattr(colosseum, f"ASSETS_{family}_JSON_FOLDER")
+        strategies = json.loads(Path(json_dir, f"{args.task}.json").read_text())["strategy"]
+        withheld = {"distractor", "background_texture", "all_mixed"}
+        strategy = next(s["spreadsheet_idx"] for s in strategies if s["enabled"] and s["variation_name"] not in withheld)
         report["strategy_0_disabled_upstream"] = True
-        report.update(verdict="UNSUPPORTED",
-                      reasons=["collection strategy 0 (A/C level) is disabled upstream; no faithful nominal level"])
-        Path(args.out).write_text(canonical_json(report))
-        return 0
-    reasons: list[str] = []
-    notes: list[str] = []
+        reasons.append(f"strategy 0 disabled upstream; audited on AP strategy {strategy} only")
+        session = RoboHiManSession(args.task, strategy_index=strategy, cameras=NATIVE_CAMERAS, masks=True)
+        session.build_config()
     try:
         session.launch()
         report["strategy"] = strategy
@@ -225,6 +233,8 @@ def main(argv: list[str] | None = None) -> int:
             if len(report["episodes"]) > 1:
                 notes.append("first nominal expert attempt failed; second seed succeeded")
             report["verdict"] = "PASS" if not reasons else "PARTIAL"
+            if report.get("strategy_0_disabled_upstream"):
+                report["ap_only_verdict"] = report["verdict"] if len(reasons) > 1 else "PASS"
     except Exception as error:
         report["verdict"] = "FAIL"
         reasons.append(f"{type(error).__name__}: {error}"[:300])
