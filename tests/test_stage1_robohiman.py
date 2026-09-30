@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
-import json
 import tempfile
 import unittest
 from pathlib import Path
 
 import numpy as np
 
-from icgs.data.stage1.labels import derive_event_labels, label_consistency_report
-from icgs.data.stage1.schema import SCHEMA_VERSION, perturbation_families, validate_manifest
+from icgs.data.stage1.labels import (
+    context_alignment,
+    context_event_tokens,
+    derive_monitor_states,
+    label_consistency_report,
+)
+from icgs.data.stage1.schema import validate_arrays, validate_manifest
 from icgs.data.stage1.store import read_episode, write_episode
-from icgs.data.stage1.views import ReferencePolicyRequired, build_views
 from icgs.environments.robohiman.camera import (
     camera_cloud,
     decode_mask_handles,
@@ -21,6 +24,7 @@ from icgs.environments.robohiman.camera import (
     project_world,
 )
 from icgs.environments.robohiman.pins import level_for, task_family
+from stage1_fixtures import make_episode
 
 
 PREDICATES = ["drawer_open", "drawer_closed", "item_grasped", "item_in_drawer"]
@@ -38,7 +42,12 @@ def _trace(rows):
     return np.array(rows, dtype=bool)
 
 
-class LabelTests(unittest.TestCase):
+def _slow(rows, repeat=5):
+    """Hold every row ``repeat`` boundaries so validity margins leave stable interiors."""
+    return np.repeat(_trace(rows), repeat, axis=0)
+
+
+class MonitorStateTests(unittest.TestCase):
     def test_history_is_not_current_relation(self):
         trace = _trace([
             [0, 1, 0, 0],  # closed drawer at reset: not an occurrence of the close event
@@ -48,126 +57,191 @@ class LabelTests(unittest.TestCase):
             [1, 0, 0, 1],  # released: rho stays, nu drops
             [0, 1, 0, 1],  # closed after placement
         ])
-        labels = derive_event_labels(trace, PREDICATES, SPECS)
-        self.assertEqual(labels["first_occurrence"].tolist(), [1, 2, 3, 5])
-        self.assertFalse(labels["rho"][0, 3], "closed-at-reset must not count as the close event")
-        self.assertTrue(labels["rho"][4, 1] and not labels["nu"][4, 1], "history true, relation false")
-        self.assertEqual(labels["alpha"].tolist(), [0, 1, 2, 3, 3, 4])
-        report = label_consistency_report(labels, SPECS)
+        states = derive_monitor_states(trace, PREDICATES, SPECS, margin=0)
+        self.assertEqual(states["first_occurrence"].tolist(), [1, 2, 3, 5])
+        self.assertFalse(states["rho"][0, 3], "closed-at-reset must not count as the close event")
+        self.assertTrue(states["rho"][4, 1] and not states["nu"][4, 1], "history true, relation false")
+        self.assertEqual(states["event_id"].tolist(), [0, 1, 2, 3, 3, 4])
+        report = label_consistency_report(states, SPECS)
         self.assertTrue(report["occurrences_in_spec_order"])
         self.assertTrue(report["events"][1]["undone_after_occurrence"])
 
-    def test_ineligible_pending_event_aligns_to_null(self):
+    def test_ineligible_pending_event_is_not_eligible(self):
         trace = _trace([[0, 1, 0, 0], [0, 1, 1, 0]])  # grasped but drawer never opened
-        labels = derive_event_labels(trace, PREDICATES, SPECS)
-        self.assertEqual(labels["alpha"].tolist(), [0, 0])
-        self.assertFalse(labels["epsilon"][1, 2])
+        states = derive_monitor_states(trace, PREDICATES, SPECS, margin=0)
+        self.assertEqual(states["event_id"].tolist(), [0, 0])
+        self.assertFalse(states["epsilon"][1, 2])
+
+    def test_validity_masks_near_changes(self):
+        trace = _slow([[0, 1, 0, 0], [1, 0, 0, 0]])  # drawer opens at boundary 5
+        states = derive_monitor_states(trace, PREDICATES, SPECS, margin=2)
+        self.assertEqual(states["nu_valid"][:, 0].tolist(), [1, 1, 1, 0, 0, 0, 0, 1, 1, 1])
+        self.assertEqual(states["rho_valid"][:, 0].tolist(), [1, 1, 1, 0, 0, 0, 0, 1, 1, 1])
+        self.assertTrue(states["nu_valid"][:, 2].all(), "unchanged relations stay valid")
+        self.assertFalse(states["event_id_valid"][4], "event id is uncertain at its transition")
+
+    def test_unobservable_event_gets_no_fabricated_postcondition(self):
+        names = ["near_handle", "grasped"]
+        specs = [{"event_id": "reach", "relation": "near_handle", "observable": False},
+                 {"event_id": "grasp", "relation": "grasped"}]
+        trace = np.repeat(np.array([[0, 0], [1, 0], [1, 1]], dtype=bool), 5, axis=0)
+        states = derive_monitor_states(trace, names, specs)
+        self.assertFalse(states["nu_valid"][:, 0].any())
+        self.assertFalse(states["rho_valid"][:, 0].any())
+        self.assertFalse(states["rho"][:, 0].any(), "free-space event never claims an occurrence")
+        self.assertEqual(states["first_occurrence"][0], -1)
+        self.assertTrue(states["epsilon_valid"][:, 0].all(), "prerequisites stay observable")
+        self.assertFalse(states["event_id_valid"][states["event_id"] == 0].any())
+
+    def test_unordered_pending_events_make_event_id_invalid(self):
+        names = ["a", "b"]
+        specs = [{"event_id": "a", "relation": "a"}, {"event_id": "b", "relation": "b"}]
+        states = derive_monitor_states(np.zeros((6, 2), dtype=bool), names, specs)
+        self.assertEqual(states["event_id"].tolist(), [0] * 6)
+        self.assertFalse(states["event_id_valid"].any(), "two unordered pending events: no single next event")
+        ordered = [{"event_id": "a", "relation": "a"}, {"event_id": "b", "relation": "b", "prerequisites": ["a"]}]
+        self.assertTrue(derive_monitor_states(np.zeros((6, 2), dtype=bool), names, ordered)["event_id_valid"].all())
 
     def test_conjunctive_relation_requires_release(self):
         names = ["in_region", "grasped"]
         trace = np.array([[0, 1], [1, 1], [1, 0]], dtype=bool)  # detected while carried, then released
-        labels = derive_event_labels(trace, names, [{"event_id": "placed", "relation": "in_region&!grasped"}])
-        self.assertEqual(labels["first_occurrence"].tolist(), [2])
+        states = derive_monitor_states(trace, names, [{"event_id": "placed", "relation": "in_region&!grasped"}])
+        self.assertEqual(states["first_occurrence"].tolist(), [2])
         with self.assertRaises(ValueError):
-            derive_event_labels(trace, names, [{"event_id": "x", "relation": "in_region&!missing"}])
+            derive_monitor_states(trace, names, [{"event_id": "x", "relation": "in_region&!missing"}])
 
     def test_unknown_predicate_and_order_rejected(self):
         with self.assertRaises(ValueError):
-            derive_event_labels(_trace([[0, 0, 0, 0]]), PREDICATES,
-                                [{"event_id": "x", "relation": "not_recorded"}])
+            derive_monitor_states(_trace([[0, 0, 0, 0]]), PREDICATES,
+                                  [{"event_id": "x", "relation": "not_recorded"}])
         with self.assertRaises(ValueError):
-            derive_event_labels(_trace([[0, 0, 0, 0]]), PREDICATES,
-                                [{"event_id": "a", "relation": "drawer_open", "prerequisites": ["b"]},
-                                 {"event_id": "b", "relation": "drawer_open"}])
+            derive_monitor_states(_trace([[0, 0, 0, 0]]), PREDICATES,
+                                  [{"event_id": "a", "relation": "drawer_open", "prerequisites": ["b"]},
+                                   {"event_id": "b", "relation": "drawer_open"}])
 
 
-def _episode(episode_id="run-open_drawer-v0-s0-0000", status="success", execution=()):
-    steps = 4
-    arrays = {
-        "step_sim_time": np.arange(steps + 1) * 0.05,
-        "step_joint_positions": np.zeros((steps + 1, 7)),
-        "step_joint_velocities": np.zeros((steps + 1, 7)),
-        "step_tip_pose": np.tile([0, 0, 1, 0, 0, 0, 1.0], (steps + 1, 1)),
-        "step_gripper_joint_positions": np.zeros((steps + 1, 2)),
-        "step_predicates": np.zeros((steps + 1, 1), dtype=bool),
-        "step_task_success": np.array([0, 0, 0, 1, 1], dtype=bool),
-        "cmd_arm_joint_target": np.ones((steps, 7)),
-        "cmd_arm_joint_target_valid": np.array([1, 1, 0, 0], dtype=bool),
-        "cmd_arm_joint_velocity_valid": np.zeros(steps, dtype=bool),
-        "cmd_gripper_joint_velocity": np.zeros((steps, 2)),
-        "cmd_gripper_joint_velocity_valid": np.array([[0, 0], [0, 0], [1, 1], [1, 1]], dtype=bool),
-        "cmd_grasp_event": np.zeros(steps, dtype=np.int8),
-        "cmd_arm_teleport_calls": np.array([1, 0, 0, 0], dtype=np.int16),
-        "cmd_phase": np.array([1, 1, 2, 2], dtype=np.int8),
-        "frame_step": np.array([0, 2, 4]),
-        "label_alpha": np.array([0, 0, 0, 1, 1]),
-    }
-    perturbation = {"benchmark_factors": [{"type": "camera_pose", "name": "any", "enabled": False}],
-                    "execution": list(execution)}
-    perturbation["families"] = list(perturbation_families(perturbation))
-    manifest = {
-        "schema_version": SCHEMA_VERSION,
-        "episode_id": episode_id,
-        "source": {"benchmark": "robohiman", "benchmark_revision": "x", "task": "open_drawer",
-                   "task_family": "atomic", "level": "A", "variation_index": 0},
-        "perturbation": perturbation,
-        "outcome": {"status": status, "recoverability": "unknown", "task_success_final": status == "success"},
-        "lineage": {"collection_run_id": "run", "parent_episode_id": None},
-        "environment": {}, "controller": {"physics_dt": 0.05, "native_command": "joint targets"},
-        "code": {}, "cameras": {"names": ["front"]},
-        "predicates": {"names": ["drawer_open"]},
-        "events": {"specs": [{"event_id": "drawer_opened"}]},
-        "arrays": {"sha256": "pending"},
-        "counts": {"steps": steps, "frames": 3},
-    }
-    return manifest, arrays
+class ContextAlignmentTests(unittest.TestCase):
+    """alpha is built from a query prefix and an independent context, not stored per episode."""
+
+    def setUp(self):
+        rows = [[0, 1, 0, 0], [1, 0, 0, 0], [1, 0, 1, 0], [1, 0, 1, 1], [1, 0, 0, 1], [0, 1, 0, 1]]
+        self.query = derive_monitor_states(_slow(rows), PREDICATES, SPECS, margin=1)
+        self.events = [spec["event_id"] for spec in SPECS]
+        self.boundaries = [2, 7, 12, 17, 22, 27, 29]  # interiors of the held rows
+
+    def test_target_advances_and_ends_null(self):
+        tokens = context_event_tokens({"drawer_opened": 3, "item_grasped": 9, "item_placed": 14,
+                                       "drawer_closed_after": 20})
+        labels = context_alignment(self.query, self.events, tokens, self.boundaries)
+        self.assertEqual(labels["alignment_target"].tolist(), [0, 1, 2, 3, 3, 4, 4])
+        self.assertEqual(int(labels["alignment_target"][-1]), len(tokens), "null index = number of tokens")
+        self.assertTrue(labels["alignment_valid"].all())
+
+    def test_alignment_depends_on_the_context(self):
+        # A context that never closed the drawer (e.g. a *_without_close demo) has three tokens,
+        # so the same query prefix aligns to null as soon as the item is placed.
+        short = context_event_tokens({"drawer_opened": 3, "item_grasped": 9, "item_placed": 14,
+                                      "drawer_closed_after": -1})
+        full = context_event_tokens({"drawer_opened": 3, "item_grasped": 9, "item_placed": 14,
+                                     "drawer_closed_after": 20})
+        a = context_alignment(self.query, self.events, short, self.boundaries)["alignment_target"]
+        b = context_alignment(self.query, self.events, full, self.boundaries)["alignment_target"]
+        self.assertEqual((len(short), int(a[4])), (3, 3), "short context: null after placement")
+        self.assertEqual((len(full), int(b[4])), (4, 3), "full context: closing is still pending")
+
+    def test_order_disagreement_and_uncertain_history_are_invalid(self):
+        # The context grasped before opening; the query opened first.
+        tokens = context_event_tokens({"item_grasped": 2, "drawer_opened": 6})
+        labels = context_alignment(self.query, self.events, tokens, [7, 12])
+        self.assertEqual(labels["alignment_target"].tolist(), [0, 2])
+        self.assertEqual(labels["alignment_valid"].tolist(), [False, True])
+        near = context_alignment(self.query, self.events, context_event_tokens({"drawer_opened": 1}), [5])
+        self.assertFalse(bool(near["alignment_valid"][0]), "a token whose history is uncertain is invalid")
+        with self.assertRaises(ValueError):
+            context_alignment(self.query, self.events, [("not_in_query", 0)], [0])
 
 
-class StoreAndViewTests(unittest.TestCase):
-    def test_roundtrip_views_and_refusals(self):
+class StoreAndSchemaTests(unittest.TestCase):
+    def setUp(self):
+        self.id = "ep-open_drawer-a81f2c3d-0000"
+
+    def test_roundtrip_is_atomic_immutable_and_verified(self):
         with tempfile.TemporaryDirectory() as tmp:
-            manifest, arrays = _episode()
-            write_episode(tmp, manifest, arrays)
-            failure = [{"family": "object_displacement", "external_intervention": True, "applied_at_step": 2}]
-            manifest2, arrays2 = _episode("run-open_drawer-v0-s0-0001", "failure", failure)
-            write_episode(tmp, manifest2, arrays2)
-            stored, loaded = read_episode(Path(tmp) / "episodes" / manifest["episode_id"])
+            manifest, arrays = make_episode(self.id, provenance=None, seed=1)
+            path = write_episode(tmp, manifest, arrays)
+            self.assertEqual(sorted(p.name for p in (Path(tmp) / "episodes").iterdir()), [self.id])
+            for item in path.iterdir():
+                self.assertEqual(item.stat().st_mode & 0o777, 0o444, item.name)
+            stored, loaded = read_episode(path)
             self.assertEqual(stored["arrays"]["members"]["cmd_phase"]["dtype"], "int8")
             np.testing.assert_array_equal(loaded["frame_step"], arrays["frame_step"])
-            summary = build_views(tmp)
-            self.assertEqual(summary["views"]["D_geom"]["rows"], 6)
-            self.assertEqual(summary["views"]["D_dyn"]["rows"], 8)
-            self.assertEqual(summary["views"]["D_task"]["rows"], 10)
-            rows = [json.loads(line) for line in (Path(tmp) / "views" / "D_dyn.jsonl").read_text().splitlines()]
-            self.assertTrue(any(row["external_intervention"] for row in rows))
-            self.assertTrue(any(row["kinematic_arm_excursion"] for row in rows))
-            self.assertEqual({row["outcome"] for row in rows}, {"success", "failure"})
-            with self.assertRaises(ReferencePolicyRequired):
-                build_views(tmp, view_names=("D_value",))
             with self.assertRaises(FileExistsError):
                 write_episode(tmp, manifest, arrays)
-            (Path(tmp) / "episodes" / manifest["episode_id"] / "arrays.npz").write_bytes(b"corrupt")
+            path.joinpath("arrays.npz").chmod(0o644)
+            path.joinpath("arrays.npz").write_bytes(b"corrupt")
             with self.assertRaises(ValueError):
-                read_episode(Path(tmp) / "episodes" / manifest["episode_id"])
+                read_episode(path)
+
+    def test_failed_write_leaves_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            manifest, arrays = make_episode(self.id, provenance=None, seed=1)
+            arrays["label_alpha"] = np.zeros(13, dtype=np.int64)
+            with self.assertRaisesRegex(ValueError, "retired"):
+                write_episode(tmp, manifest, arrays)
+            self.assertEqual(list((Path(tmp) / "episodes").iterdir()), [], "no partial or temporary directory")
+
+    def test_episode_id_format(self):
+        manifest, _ = make_episode(self.id, provenance=None, seed=1)
+        validate_manifest(manifest)
+        for bad in ("run-open_drawer-v0-s0-0000", "ep-open_drawer-v0-s0-a81f2c3d-0000",
+                    "ep-open_drawer-A81F2C3D-0000", "ep-close_drawer-a81f2c3d-0000", "ep-open_drawer-a81f2c3d-7"):
+            manifest["episode_id"] = bad
+            with self.subTest(bad), self.assertRaises(ValueError):
+                validate_manifest(manifest)
+
+    def test_timing_semantics(self):
+        manifest, arrays = make_episode(self.id, provenance=None, seed=1)
+        validate_arrays(manifest, arrays)
+        jumped = dict(arrays, step_sim_time=arrays["step_sim_time"].copy())
+        jumped["step_sim_time"][5:] += 0.05  # one row spans two physics steps
+        with self.assertRaisesRegex(ValueError, "one physics step"):
+            validate_arrays(manifest, jumped)
+        with self.assertRaisesRegex(ValueError, "retired"):
+            validate_arrays(manifest, dict(arrays, cmd_wall_s=np.zeros(12)))
+        for key, value in (("model_dt_s", 0.05), ("transition", "one model step"), ("physics_dt_s", 0.1)):
+            broken, _ = make_episode(self.id, provenance=None, seed=1)
+            broken["timing"][key] = value
+            with self.subTest(key), self.assertRaises(ValueError):
+                validate_manifest(broken)
+
+    def test_frame_arrays_follow_frame_step(self):
+        manifest, arrays = make_episode(self.id, provenance=None, seed=1)
+        with self.assertRaisesRegex(ValueError, "F="):
+            validate_arrays(manifest, dict(arrays, cam_front_depth=arrays["cam_front_depth"][:-1]))
+
+    def test_mask_legend_required_when_masks_recorded(self):
+        manifest, _ = make_episode(self.id, provenance=None, seed=1)
+        del manifest["cameras"]["mask_legend"]
+        with self.assertRaises(ValueError):
+            validate_manifest(manifest)
+        manifest, _ = make_episode(self.id, provenance=None, seed=1)
+        manifest["cameras"]["mask_legend"]["17"].pop("role")
+        with self.assertRaisesRegex(ValueError, "role"):
+            validate_manifest(manifest)
 
     def test_manifest_rejects_conflated_or_unsupported_claims(self):
-        manifest, _ = _episode()
+        manifest, _ = make_episode(self.id, provenance=None, seed=1)
         manifest["perturbation"]["families"] = ["execution_pose_offset"]
         with self.assertRaisesRegex(ValueError, "families"):
             validate_manifest(manifest)
-        manifest, _ = _episode(status="failure")
+        manifest, _ = make_episode(self.id, provenance=None, seed=1, status="failure")
         manifest["outcome"]["recoverability"] = "recoverable"
         with self.assertRaisesRegex(ValueError, "evidence"):
             validate_manifest(manifest)
-        manifest, _ = _episode(status="success")
+        manifest, _ = make_episode(self.id, provenance=None, seed=1)
         manifest["outcome"]["task_success_final"] = False
         with self.assertRaisesRegex(ValueError, "success"):
             validate_manifest(manifest)
-        manifest, arrays = _episode()
-        arrays["step_sim_time"][2] = arrays["step_sim_time"][1]
-        with tempfile.TemporaryDirectory() as tmp, self.assertRaisesRegex(ValueError, "increase"):
-            write_episode(tmp, manifest, arrays)
-        self.assertEqual(list(Path(tmp).glob("episodes/*")) if Path(tmp).exists() else [], [])
 
 
 def _pyrep_reference(depth, extrinsics, intrinsics):

@@ -25,6 +25,7 @@ from typing import Any
 
 import numpy as np
 
+from icgs.data.stage1.dataset import make_episode_id, new_run8
 from icgs.data.stage1.labels import label_consistency_report
 from icgs.data.stage1.store import canonical_json, write_episode
 from icgs.environments.robohiman.camera import decode_mask_handles, depth_to_world, metric_depth, valid_depth_mask
@@ -97,7 +98,7 @@ def _checks(session: Any, manifest: dict[str, Any], arrays: dict[str, np.ndarray
     target = arrays["cmd_arm_joint_target_valid"]
     tracking = np.abs(arrays["cmd_arm_joint_target"][target] - arrays["step_joint_positions"][1:][target])
     specs = manifest["events"]["specs"]
-    first = arrays["label_first_occurrence"]
+    first = arrays["monitor_first_occurrence"]
     success = manifest["outcome"]["status"] == "success"
     missing_events = [spec["event_id"] for j, spec in enumerate(specs) if first[j] < 0]
     geometry = _geometry_check(session, arrays)
@@ -123,9 +124,9 @@ def _checks(session: Any, manifest: dict[str, Any], arrays: dict[str, np.ndarray
                        "any_edge": bool((np.diff(trace.astype(np.int8), axis=0) != 0).any())},
         "monitor": {"events": [s["event_id"] for s in specs], "missing_events": missing_events,
                     "consistency": label_consistency_report(
-                        {k[6:]: v for k, v in arrays.items() if k.startswith("label_")}, specs),
+                        {k[8:]: v for k, v in arrays.items() if k.startswith("monitor_")}, specs),
                     "all_events_occurred": not missing_events,
-                    "final_alpha_null": bool(arrays["label_alpha"][-1] == len(specs))},
+                    "final_monitor_event_id_null": bool(arrays["monitor_event_id"][-1] == len(specs))},
         "provenance": {"reset_rng_sha256": manifest["lineage"]["reset_rng"]["sha256"],
                        "factor_states_recorded": bool(manifest["lineage"].get("benchmark_factor_rng_before_reset")
                                                       is not None),
@@ -143,8 +144,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--store", required=True)
     parser.add_argument("--out", required=True)
     parser.add_argument("--seed", type=int, default=100)
-    parser.add_argument("--run-id", default="preflight")
+    parser.add_argument("--run8", default=None, help="8 hex characters; default: random")
     args = parser.parse_args(argv)
+    run8 = args.run8 or new_run8()
     started = time.time()
     report: dict[str, Any] = {"task": args.task, "known_upstream_quirks": quirks_for(args.task), "episodes": []}
     if args.task not in SUPPORTED_TASKS:
@@ -178,7 +180,8 @@ def main(argv: list[str] | None = None) -> int:
         for attempt, seed in enumerate((args.seed, args.seed + 1)):
             np.random.seed(seed)
             try:
-                manifest, arrays, _ = collect_episode(session, run_id=args.run_id, episode_index=attempt,
+                manifest, arrays, _ = collect_episode(session, episode_id=make_episode_id(args.task, run8, attempt),
+                                                      run_id=run8, episode_index=attempt,
                                                       variation=0, rng_state=None, frame_stride=8, masks=True)
             except Exception as error:  # reset/simulator failure
                 report["episodes"].append({"kind": "nominal", "seed": seed, "error": f"{type(error).__name__}: {error}"[:300]})
@@ -198,7 +201,8 @@ def main(argv: list[str] | None = None) -> int:
             np.random.seed(args.seed + 7)
             try:
                 manifest, arrays, _ = collect_episode(
-                    session, run_id=args.run_id, episode_index=9, variation=0, rng_state=None, frame_stride=8,
+                    session, episode_id=make_episode_id(args.task, run8, 9), run_id=run8, episode_index=9,
+                    variation=0, rng_state=None, frame_stride=8,
                     masks=True, perturbations=[{"family": "gripper_timing", "waypoint": close_index,
                                                 "close_early_at_distance_m": 0.05}])
                 write_episode(args.store, manifest, arrays)

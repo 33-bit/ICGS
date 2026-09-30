@@ -1,7 +1,8 @@
-"""Collect one instrumented RoboHiMan episode into an ``icgs_stage1_episode_v1`` record."""
+"""Collect one instrumented RoboHiMan episode into an ``icgs_stage1_episode_v2`` record."""
 
 from __future__ import annotations
 
+import re
 import subprocess
 import traceback
 from pathlib import Path
@@ -9,8 +10,8 @@ from typing import Any, Callable
 
 import numpy as np
 
-from icgs.data.stage1.labels import LABEL_PROTOCOL_ID, derive_event_labels, label_consistency_report
-from icgs.data.stage1.schema import ONLINE_FIELDS, SCHEMA_VERSION, perturbation_families
+from icgs.data.stage1.labels import LABEL_PROTOCOL_ID, derive_monitor_states, label_consistency_report
+from icgs.data.stage1.schema import ONLINE_FIELDS, PHYSICS_TRANSITION, SCHEMA_VERSION, perturbation_families
 from icgs.environments.robohiman.camera import CAMERA_CONVENTION_ID, decode_mask_handles
 from icgs.environments.robohiman.expert import MIRROR_ID, WaypointExpert, expert_control
 from icgs.environments.robohiman.monitors import build_monitor
@@ -36,6 +37,40 @@ def code_identity() -> dict[str, Any]:
         return {"icgs_revision": run("rev-parse", "HEAD") or None, "icgs_src_dirty": bool(status)}
     except Exception:  # pragma: no cover
         return {"icgs_revision": None, "icgs_src_dirty": None}
+
+
+def mask_legend(session: Any) -> dict[str, dict[str, Any]]:
+    """Simulator handle -> object instance -> semantic role/category for every scene shape.
+
+    ``0`` is the background (no shape rendered). Roles: ``robot`` (arm and
+    gripper trees), ``task_object`` (graspables and their subtrees),
+    ``task_fixture`` (other shapes of the task tree), ``scene_static``
+    (everything else, e.g. table, walls, distractors). The category is the
+    instance name without trailing digits/separators.
+    """
+    from pyrep.const import ObjectType
+
+    def shapes(root: Any) -> list[Any]:
+        return [root, *root.get_objects_in_tree(object_type=ObjectType.SHAPE)]
+
+    legend: dict[str, dict[str, Any]] = {
+        "0": {"object": None, "instance": None, "role": "background", "category": "background"}}
+    owners: dict[int, tuple[str, str]] = {}
+    for obj in session.task_obj.get_graspable_objects():
+        for shape in shapes(obj):
+            owners.setdefault(shape.get_handle(), (obj.get_name(), "task_object"))
+    base = session.task_obj.get_base()
+    for shape in shapes(base):
+        owners.setdefault(shape.get_handle(), (base.get_name(), "task_fixture"))
+    for root in (session.robot.arm, session.robot.gripper):
+        for shape in shapes(root):
+            owners[shape.get_handle()] = (root.get_name(), "robot")
+    for shape in session.pyrep.get_objects_in_tree(object_type=ObjectType.SHAPE):
+        handle, name = shape.get_handle(), shape.get_name()
+        owner, role = owners.get(handle, (name, "scene_static"))
+        legend[str(handle)] = {"object": owner, "instance": name, "role": role,
+                               "category": re.sub(r"[_#\d]+$", "", name) or name}
+    return legend
 
 
 def frame_capture(session: Any, *, masks: bool = False, point_cloud: bool = False) -> Callable[[], dict[str, Any]]:
@@ -76,6 +111,7 @@ def frame_capture(session: Any, *, masks: bool = False, point_cloud: bool = Fals
 def collect_episode(
     session: Any,
     *,
+    episode_id: str,
     run_id: str,
     episode_index: int,
     variation: int,
@@ -100,6 +136,7 @@ def collect_episode(
 
         restore_snapshot(session, capture_snapshot(session, 0))
         session.scene._has_init_episode = True
+    legend = mask_legend(session) if masks else None
     monitor = build_monitor(session.task, session.task_env, variation)
     recorder = StepRecorder(session, monitor, frame_stride=frame_stride,
                             capture_frame=frame_capture(session, masks=masks, point_cloud=point_cloud))
@@ -113,9 +150,10 @@ def collect_episode(
         trailing = recorder.trailing_command()
     arrays = recorder.arrays()
     arrays["rng_state_mt19937"] = reset["rng_state"]
-    labels = derive_event_labels(arrays["step_predicates"], monitor.predicate_names, monitor.event_specs)
-    for key, value in labels.items():
-        arrays[f"label_{key}"] = value
+    states = derive_monitor_states(arrays["step_predicates"], monitor.predicate_names, monitor.event_specs)
+    for key, value in states.items():
+        arrays[f"monitor_{key}"] = value
+    physics_dt = float(session.pyrep.get_simulation_timestep())
     steps = int(arrays["cmd_phase"].shape[0])
     frames = int(arrays["frame_step"].shape[0]) if "frame_step" in arrays else 0
     status = "failure" if result.status == "anchor" and not result.task_success else result.status
@@ -127,7 +165,6 @@ def collect_episode(
     factors = session.variation_factor_state()
     perturbation = {"benchmark_factors": factors, "execution": execution}
     perturbation["families"] = list(perturbation_families(perturbation))
-    episode_id = f"{run_id}-{session.task}-v{variation}-s{session.strategy_index}-{episode_index:04d}"
     manifest = {
         "schema_version": SCHEMA_VERSION,
         "episode_id": episode_id,
@@ -176,7 +213,7 @@ def collect_episode(
                                   "tip": session.robot.arm.get_tip().get_name(),
                                   "arm_joint_names": [j.get_name() for j in session.robot.arm.joints]}},
         "controller": {
-            "physics_dt": float(session.pyrep.get_simulation_timestep()),
+            "physics_dt": physics_dt,
             "native_command": NATIVE_COMMAND,
             "expert": MIRROR_ID,
             "declared_action_mode": "MoveArmThenGripper(JointVelocity, Discrete); unused by the waypoint expert",
@@ -189,6 +226,15 @@ def collect_episode(
             },
             "grasp_events": recorder.events,
         },
+        "timing": {
+            "physics_dt_s": physics_dt,
+            "transition": PHYSICS_TRANSITION,
+            "frame_stride": int(frame_stride),
+            "model_dt_s": int(frame_stride) * physics_dt,
+            "clock": "step_sim_time is the float32 CoppeliaSim clock at each boundary",
+            "d_dyn_row": "one physics-step transition; model-cadence transitions group frame_stride rows",
+            "prof_step_wall_s": "host wall time spent per step; profiling only, never an action duration",
+        },
         "code": code_identity(),
         "cameras": {
             "names": list(session.cameras),
@@ -200,6 +246,7 @@ def collect_episode(
                             "(predicate/success change, grasp/release, phase or waypoint change)",
             "event_boundaries": recorder.event_boundaries,
             "masks_recorded": bool(masks),
+            **({"mask_legend": legend} if masks else {}),
             "live_point_cloud_recorded": bool(point_cloud),
         },
         "predicates": {**monitor.describe(),
@@ -208,13 +255,15 @@ def collect_episode(
         "events": {
             "specs": monitor.event_specs,
             "label_protocol": LABEL_PROTOCOL_ID,
-            "consistency": label_consistency_report(labels, monitor.event_specs),
+            "consistency": label_consistency_report(states, monitor.event_specs),
+            "monitor_arrays": "monitor_* are per-episode monitor states; monitor_event_id is a diagnostic, "
+                              "not the ICGS alignment target (built in D_task from an independent context)",
         },
         "arrays": {"sha256": "pending"},
         "counts": {"steps": steps, "frames": frames},
         "model_boundary": {
             "online_fields": list(ONLINE_FIELDS),
-            "offline_only": ["step_predicates", "label_*", "step_object_poses", "step_task_success",
+            "offline_only": ["step_predicates", "monitor_*", "step_object_poses", "step_task_success",
                              "frame_task_low_dim_state", "source", "events"],
         },
     }
@@ -236,4 +285,4 @@ def attempt_record(*, run_id: str, task: str, variation: int, episode_index: int
     }
 
 
-__all__ = ["NATIVE_COMMAND", "attempt_record", "code_identity", "collect_episode", "frame_capture"]
+__all__ = ["NATIVE_COMMAND", "attempt_record", "code_identity", "collect_episode", "frame_capture", "mask_legend"]

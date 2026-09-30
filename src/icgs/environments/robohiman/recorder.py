@@ -321,7 +321,7 @@ class StepRecorder:
             "cmd_arm_teleport_calls": np.array([row["teleport_calls"] for row in commands], dtype=np.int16),
             "cmd_phase": np.array([row["phase"] for row in commands], dtype=np.int8),
             "cmd_waypoint": np.array([row["waypoint"] for row in commands], dtype=np.int16),
-            "cmd_wall_s": np.array([row.get("wall_s", 0.0) for row in commands]),
+            "prof_step_wall_s": np.array([row.get("wall_s", 0.0) for row in commands]),
         }
         if self.frames:
             result["frame_step"] = np.array(self.frame_steps, dtype=np.int64)

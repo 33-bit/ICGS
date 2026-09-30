@@ -61,6 +61,10 @@ archives, `icgs_episode_v1/v2` schemas.
 - [x] P9a pre-flight over all 22 HiMan-Bench tasks (21 PASS, 1 PARTIAL), monitors for all 22,
       overlap audit and frozen split `icgs-robohiman-stage1-split-v1`
       ([round 3](../../experiments/robohiman-validation/v3/README.md), [ADR 0017](../../decisions/0017-icgs-stage1-split.md)).
+- [x] P9b dataset layout and episode schema v2 before generation: `datasets/robohiman/`,
+      `ep-<task>-<run8>-<index>` IDs, split enforcement at commit, immutable raw episodes +
+      versioned `derived/`, physics-step timing block, `monitor_*` with validity masks,
+      context-conditioned `D_task`, mask legend ([ADR 0018](../../decisions/0018-robohiman-dataset-layout.md)).
 - [ ] P9 Stage-1 generation under the locked split (not started; needs owner go-ahead).
 
 Findings that changed the design during P4: upstream is not bitwise
@@ -72,8 +76,9 @@ FK does not match the CoppeliaSim Panda (canonical commands use the
 simulator chain, ~1 mm residual; tolerance revised from 1e-4 m to 5 mm after
 measurement); RLBench's waypoint cache is part of snapshot state.
 
-ID decisions recorded here: alpha = first non-occurred eligible event, null
-otherwise; drawer open/close thresholds are taken from the upstream tasks that
+ID decisions recorded here: alpha is the first context token not yet achieved
+by the query prefix, null when all are (context-conditioned in `D_task` since
+ADR 0018; the per-episode `monitor_event_id` is only a diagnostic); drawer open/close thresholds are taken from the upstream tasks that
 register them (0.15 open, 0.03 close); "drawer closed" events only count while
 eligible because the relation holds at reset.
 

@@ -85,11 +85,60 @@ def write_episode(root: str | Path, manifest: Mapping[str, Any], arrays: Mapping
         validate_manifest(manifest)
         validate_arrays(manifest, arrays)
         (scratch / "manifest.json").write_text(canonical_json(manifest))
+        for item in scratch.iterdir():
+            item.chmod(0o444)  # committed raw episodes are never modified in place
+        scratch.chmod(0o755)
         os.replace(scratch, destination)
     except BaseException:
         shutil.rmtree(scratch, ignore_errors=True)
         raise
     return destination
+
+
+DERIVED_REQUIRED = ("is_derived", "derivation", "derivation_version", "source_episode_id",
+                    "source_manifest_sha256", "source_arrays_sha256", "conventions", "reconstruction_error")
+
+
+def write_derived(root: str | Path, episode_id: str, name: str, arrays: Mapping[str, np.ndarray],
+                  metadata: Mapping[str, Any]) -> Path:
+    """Atomically write ``derived/<episode_id>/<name>.{npz,json}`` next to a committed episode.
+
+    Derived products never replace native data. The metadata must say that the
+    values are derived, how (method + version), from which exact source
+    hashes, in which conventions, and with what reconstruction error.
+    """
+    root = Path(root)
+    if not re.match(r"^[a-z0-9_]+_v[0-9]+$", name):
+        raise ValueError("derived product names must be versioned, e.g. canonical_ee_actions_v1")
+    missing = [key for key in DERIVED_REQUIRED if key not in metadata]
+    if missing or metadata.get("is_derived") is not True:
+        raise ValueError(f"derived metadata incomplete: {missing or ['is_derived must be true']}")
+    episode_dir = root / "episodes" / episode_id
+    source = read_manifest(episode_dir)
+    if metadata["source_arrays_sha256"] != source["arrays"]["sha256"]:
+        raise ValueError("derived metadata does not match the committed episode arrays")
+    if metadata["source_manifest_sha256"] != _sha256_file(episode_dir / "manifest.json"):
+        raise ValueError("derived metadata does not match the committed episode manifest")
+    target = root / "derived" / episode_id
+    target.mkdir(parents=True, exist_ok=True)
+    if (target / f"{name}.npz").exists() or (target / f"{name}.json").exists():
+        raise FileExistsError(f"derived product already exists: {target / name}")
+    scratch = Path(tempfile.mkdtemp(prefix=f".{name}.", dir=target))
+    try:
+        np.savez_compressed(scratch / f"{name}.npz", **{k: np.ascontiguousarray(v) for k, v in arrays.items()})
+        record = dict(metadata)
+        record["arrays_sha256"] = _sha256_file(scratch / f"{name}.npz")
+        (scratch / f"{name}.json").write_text(canonical_json(record))
+        for suffix in (".npz", ".json"):
+            (scratch / f"{name}{suffix}").chmod(0o444)
+            os.replace(scratch / f"{name}{suffix}", target / f"{name}{suffix}")
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    return target
+
+
+def manifest_sha256(episode_dir: str | Path) -> str:
+    return _sha256_file(Path(episode_dir) / "manifest.json")
 
 
 def read_manifest(episode_dir: str | Path) -> dict[str, Any]:
@@ -122,4 +171,5 @@ def iter_episode_dirs(root: str | Path) -> Iterator[Path]:
             yield path
 
 
-__all__ = ["canonical_json", "iter_episode_dirs", "read_episode", "read_manifest", "write_episode"]
+__all__ = ["DERIVED_REQUIRED", "canonical_json", "iter_episode_dirs", "manifest_sha256", "read_episode",
+           "read_manifest", "write_derived", "write_episode"]

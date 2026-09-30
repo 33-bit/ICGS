@@ -124,7 +124,8 @@ def _a1(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> dict[str, An
         },
         "frames_per_boundary": (float(arrays["frame_step"].shape[0] / (steps + 1))
                                 if "frame_step" in arrays else 0.0),
-        "wall_s_per_step_mean": float(arrays["cmd_wall_s"].mean()) if "cmd_wall_s" in arrays else None,
+        "prof_wall_s_per_step_mean": (float(arrays["prof_step_wall_s"].mean())
+                                      if "prof_step_wall_s" in arrays else None),
     }
     robot = manifest["environment"].get("robot", {})
     if robot.get("arm_base_pose"):
@@ -134,7 +135,7 @@ def _a1(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> dict[str, An
                   and calibration["residual_rotation_max_deg"] <= FK_TOLERANCE["rotation_deg"])
         fk = {key: value for key, value in calibration.items() if not isinstance(value, np.ndarray)}
         fk["tolerance"] = FK_TOLERANCE
-        fk["canonical_commands_derivable"] = bool(passes)
+        fk["canonical_ee_actions_derivable"] = bool(passes)
         if passes and target_valid.any():
             canonical = canonical_targets(arrays["cmd_arm_joint_target"][target_valid], calibration)
             achieved = arrays["step_tip_pose"][1:][target_valid]
@@ -147,8 +148,8 @@ def _a1(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> dict[str, An
 
 
 def _relabel(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> tuple[list, dict[str, np.ndarray]] | None:
-    """Re-derive labels offline from the stored raw trace with the current reviewed spec."""
-    from icgs.data.stage1.labels import derive_event_labels
+    """Re-derive monitor states offline from the stored raw trace with the current reviewed spec."""
+    from icgs.data.stage1.labels import derive_monitor_states
     from icgs.environments.robohiman.monitors import TASK_SPECS
 
     spec = TASK_SPECS.get(manifest["source"]["task"])
@@ -156,8 +157,8 @@ def _relabel(manifest: dict[str, Any], arrays: dict[str, np.ndarray]) -> tuple[l
         return None
     events = [dict({"prerequisites": [], "current_requirements": [], "hold_steps": 1,
                     "count_only_when_eligible": False}, **event) for event in spec["events"]]
-    labels = derive_event_labels(arrays["step_predicates"], manifest["predicates"]["names"], events)
-    return events, {f"label_{k}": v for k, v in labels.items()}
+    states = derive_monitor_states(arrays["step_predicates"], manifest["predicates"]["names"], events)
+    return events, {f"monitor_{k}": v for k, v in states.items()}
 
 
 def _b(manifest: dict[str, Any], arrays: dict[str, np.ndarray], relabel: bool = False) -> dict[str, Any]:
@@ -168,24 +169,25 @@ def _b(manifest: dict[str, Any], arrays: dict[str, np.ndarray], relabel: bool = 
         if derived is not None:
             specs, labels = derived
             arrays = {**arrays, **labels}
-    alpha = arrays["label_alpha"]
-    changes = [0] + [int(i) for i in np.flatnonzero(np.diff(alpha)) + 1]
-    first = arrays["label_first_occurrence"]
+    event_id = arrays["monitor_event_id"]
+    changes = [0] + [int(i) for i in np.flatnonzero(np.diff(event_id)) + 1]
+    first = arrays["monitor_first_occurrence"]
     return {
         "predicate_edges": _edges(arrays["step_predicates"], names),
         "task_success_first_boundary": (int(np.argmax(arrays["step_task_success"]))
                                         if arrays["step_task_success"].any() else None),
         "event_first_occurrence": {spec["event_id"]: (int(first[j]) if first[j] >= 0 else None)
                                    for j, spec in enumerate(specs)},
-        "alpha_segments": [{"from_boundary": b, "alpha": int(alpha[b]),
-                            "event": specs[int(alpha[b])]["event_id"] if alpha[b] < len(specs) else "null"}
-                           for b in changes],
-        "final": {"nu": arrays["label_nu"][-1].astype(int).tolist(),
-                  "rho": arrays["label_rho"][-1].astype(int).tolist(),
-                  "epsilon": arrays["label_epsilon"][-1].astype(int).tolist()},
+        "monitor_event_id_segments": [
+            {"from_boundary": b, "monitor_event_id": int(event_id[b]),
+             "event": specs[int(event_id[b])]["event_id"] if event_id[b] < len(specs) else "null"}
+            for b in changes],
+        "final": {"nu": arrays["monitor_nu"][-1].astype(int).tolist(),
+                  "rho": arrays["monitor_rho"][-1].astype(int).tolist(),
+                  "epsilon": arrays["monitor_epsilon"][-1].astype(int).tolist()},
         "consistency": (manifest["events"]["consistency"] if not relabel else __import__(
             "icgs.data.stage1.labels", fromlist=["label_consistency_report"]).label_consistency_report(
-            {k[6:]: v for k, v in arrays.items() if k.startswith("label_")}, specs)),
+            {k[8:]: v for k, v in arrays.items() if k.startswith("monitor_")}, specs)),
         "labels_source": "offline relabel with current TASK_SPECS" if relabel else "stored at collection",
     }
 
@@ -198,7 +200,7 @@ def _frames(manifest: dict[str, Any], arrays: dict[str, np.ndarray], out: Path) 
     frame_step = arrays["frame_step"]
     written = []
     boundaries = {0, int(frame_step[-1])}
-    for value in arrays["label_first_occurrence"]:
+    for value in arrays["monitor_first_occurrence"]:
         if value >= 0:
             boundaries.update({max(int(value) - 1, 0), int(value)})
     for boundary in sorted(boundaries):
@@ -212,7 +214,7 @@ def _frames(manifest: dict[str, Any], arrays: dict[str, np.ndarray], out: Path) 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--store", required=True)
+    parser.add_argument("--store", required=True, help="one split directory or scratch store (has episodes/)")
     parser.add_argument("--out", required=True)
     parser.add_argument("--frames-dir")
     parser.add_argument("--relabel", action="store_true", help="also re-derive labels with current monitor specs")

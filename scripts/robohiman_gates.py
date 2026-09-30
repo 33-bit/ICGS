@@ -570,6 +570,7 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
 # cannot reproduce achieved tips exactly. The per-episode residual is stored as
 # the canonical command's uncertainty.
 CANONICAL_TOLERANCE_M = 5e-3
+CANONICAL_EE_ACTIONS = "canonical_ee_actions_v1"
 
 
 def cmd_canonical(args: argparse.Namespace) -> dict[str, Any]:
@@ -579,10 +580,12 @@ def cmd_canonical(args: argparse.Namespace) -> dict[str, Any]:
     and ``Panda_tip`` is read. The chain is first validated by reproducing every
     recorded achieved tip pose from the recorded achieved joints; commanded
     targets are converted only if that residual is below tolerance. Results go
-    to ``<store>/derived/<episode>/canonical_commands.npz``; episodes are not
-    modified.
+    to ``<store>/derived/<episode>/canonical_ee_actions_v1.{npz,json}`` via
+    ``write_derived`` (source hashes, conventions, residual); raw episodes and
+    their native commands are not modified. ``--store`` is a split directory
+    or a scratch store.
     """
-    from icgs.data.stage1.store import iter_episode_dirs, read_episode
+    from icgs.data.stage1.store import iter_episode_dirs, manifest_sha256, read_episode, write_derived
 
     session = _session(args, cameras=(), image=(64, 64))
     report: dict[str, Any] = {"gate": "canonical", "tolerance_m": CANONICAL_TOLERANCE_M, "episodes": []}
@@ -617,16 +620,33 @@ def cmd_canonical(args: argparse.Namespace) -> dict[str, Any]:
                 entry["commanded_ee_vs_achieved_next_ee_m"] = {"mean": float(gap.mean()),
                                                                "p95": float(np.percentile(gap, 95)),
                                                                "max": float(gap.max())}
-                out = Path(args.store) / "derived" / manifest["episode_id"]
-                out.mkdir(parents=True, exist_ok=True)
-                np.savez_compressed(out / "canonical_commands.npz", cmd_ee_target_pose=targets,
-                                    cmd_ee_target_valid=valid)
-                (out / "canonical_commands.json").write_text(canonical_json({
-                    "episode_id": manifest["episode_id"], "source_arrays_sha256": manifest["arrays"]["sha256"],
-                    "method": "CoppeliaSim kinematic chain (Panda_tip) at pinned environment",
-                    "representation": "world tip pose xyz + quaternion xyzw per commanded joint target",
-                    "validation": {k: entry[k] for k in ("fk_residual_max_m", "fk_residual_rot_max_deg")},
-                    "uncertainty_note": "residual = kinematic chain vs dynamic tip body on achieved joints"}))
+                if (Path(args.store) / "derived" / manifest["episode_id"] / f"{CANONICAL_EE_ACTIONS}.json").exists():
+                    entry["derived"] = "already present (derived products are never overwritten)"
+                    report["episodes"].append(entry)
+                    continue
+                write_derived(args.store, manifest["episode_id"], CANONICAL_EE_ACTIONS,
+                              {"ee_target_pose": targets, "ee_target_valid": valid}, {
+                    "is_derived": True,
+                    "derivation": "forward kinematics of the native commanded arm joint targets "
+                                  "(cmd_arm_joint_target) with the CoppeliaSim kinematic chain to Panda_tip "
+                                  "in the pinned RoboHiMan environment",
+                    "derivation_version": 1,
+                    "source_episode_id": manifest["episode_id"],
+                    "source_manifest_sha256": manifest_sha256(episode_dir),
+                    "source_arrays_sha256": manifest["arrays"]["sha256"],
+                    "source_arrays": ["cmd_arm_joint_target", "cmd_arm_joint_target_valid"],
+                    "conventions": {"frame": "world", "position_unit": "m",
+                                    "orientation": "quaternion xyzw (PyRep get_pose order)",
+                                    "row": "command row s of the episode (one physics step); "
+                                           "ee_target_valid mirrors cmd_arm_joint_target_valid",
+                                    "semantics": "commanded target, not the achieved step_tip_pose[s+1]"},
+                    "reconstruction_error": {
+                        "method": "same chain on recorded achieved joints vs recorded achieved tip pose",
+                        "position_max_m": entry["fk_residual_max_m"],
+                        "rotation_max_deg": entry["fk_residual_rot_max_deg"],
+                        "tolerance_m": CANONICAL_TOLERANCE_M},
+                    "commanded_vs_achieved_next_m": entry["commanded_ee_vs_achieved_next_ee_m"],
+                })
             report["episodes"].append(entry)
         return report
     finally:
@@ -636,7 +656,7 @@ def cmd_canonical(args: argparse.Namespace) -> dict[str, Any]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("gate", choices=("parity", "replay", "a0", "dependency", "canonical"))
-    parser.add_argument("--store", help="stage1 store (canonical gate)")
+    parser.add_argument("--store", help="split directory or scratch store with episodes/ (canonical gate)")
     parser.add_argument("--task", required=True)
     parser.add_argument("--variation", type=int, default=0)
     parser.add_argument("--strategy", type=int, default=0)

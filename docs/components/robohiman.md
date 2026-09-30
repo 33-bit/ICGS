@@ -10,10 +10,11 @@ not scaled further.
 
 | Owner | Responsibility |
 | --- | --- |
-| `icgs.data.stage1.schema` | `icgs_stage1_episode_v1` manifest/array contract; perturbation vs outcome vocabularies |
-| `icgs.data.stage1.store` | Atomic episode directory (`manifest.json` + `arrays.npz`), hash-verified reads, no pickle |
-| `icgs.data.stage1.labels` | alpha/rho/nu/epsilon from raw predicate traces |
-| `icgs.data.stage1.views` | D_geom / D_dyn / D_task indexes; refuses D_value/D_pair/D_terminal without pi_ref |
+| `icgs.data.stage1.schema` | `icgs_stage1_episode_v2` manifest/array contract: episode IDs, `timing`, mask legend, retired names |
+| `icgs.data.stage1.store` | Atomic, read-only episode directory (`manifest.json` + `arrays.npz`); hash-verified reads; versioned `derived/` products |
+| `icgs.data.stage1.dataset` | `datasets/robohiman/` layout, split enforcement at commit, attempts, TRAIN-only preprocessing, reports |
+| `icgs.data.stage1.labels` | Per-episode monitor states (`monitor_*` + validity masks); context-conditioned alignment |
+| `icgs.data.stage1.views` | D_geom / D_dyn / D_task reference indexes per split; refuses D_value/D_pair/D_terminal without pi_ref |
 | `icgs.environments.robohiman.pins` | Upstream pins and native A/AP/C/CP/test split table |
 | `…robohiman.session` | Builds the environment with the upstream generator's own calls |
 | `…robohiman.recorder` | Per-physics-step command/state capture through instance wrappers |
@@ -21,8 +22,10 @@ not scaled further.
 | `…robohiman.monitors` | Upstream-condition predicates and reviewed event specs per task |
 | `…robohiman.snapshot` | Config-tree snapshot/restore candidate and open-loop command replay |
 | `…robohiman.camera` / `kinematics` | Offline depth→world XYZ; Panda FK for canonical EE commands |
-| `scripts/robohiman_collect.py` | Bounded smoke collection (refuses >20 episodes per call) |
-| `scripts/robohiman_gates.py` | parity / replay / a0 / dependency simulator gates |
+| `scripts/robohiman_dataset_init.py` | Create/re-open the dataset root bound to the frozen split |
+| `scripts/robohiman_collect.py` | Bounded collection into a dataset split or a scratch store (refuses >20 episodes per call) |
+| `scripts/robohiman_views.py` | Build one split's views and record its pairing/leakage summary |
+| `scripts/robohiman_gates.py` | parity / replay / a0 / dependency / canonical (`canonical_ee_actions_v1`) gates |
 | `scripts/robohiman_stage1_report.py` | Offline views + A0/A1/B report over a store |
 | `scripts/robohiman_split_audit.py` | Static train/test factor-overlap audit |
 
@@ -55,13 +58,16 @@ the resolved checkouts, dirty paths, task TTM/py hashes, Python and platform.
 
 ```bash
 X='xvfb-run -a -s "-screen 0 1024x768x24"'
-$X .venv/bin/python -B scripts/robohiman_collect.py --store STORE --run-id RUN \
-    --task open_drawer --variation 0 --episodes 1 --seed 1
+python -B scripts/robohiman_dataset_init.py --root DATASET
+$X .venv/bin/python -B scripts/robohiman_collect.py --dataset DATASET --split train \
+    --task open_drawer --variation 0 --episodes 1 --seed 100000000
+python -B scripts/robohiman_views.py --root DATASET --split train
+$X .venv/bin/python -B scripts/robohiman_collect.py --store STORE --task open_drawer --episodes 1 --seed 1  # scratch
 $X .venv/bin/python -B scripts/robohiman_gates.py parity --task open_drawer --seed 1 --out parity.json
 $X .venv/bin/python -B scripts/robohiman_gates.py replay --task put_in_without_close --anchor-waypoint 3 --seed 3 --out replay.json
 $X .venv/bin/python -B scripts/robohiman_gates.py a0 --task put_in_without_close --seed 4 --out a0.json
 $X .venv/bin/python -B scripts/robohiman_gates.py dependency --task put_in_without_close --anchor-waypoint 3 --out dep.json
-python -B scripts/robohiman_stage1_report.py --store STORE --out report.json --frames-dir frames/
+python -B scripts/robohiman_stage1_report.py --store STORE_OR_SPLIT_DIR --out report.json --frames-dir frames/
 python -B scripts/robohiman_split_audit.py --robohiman outputs/robohiman/RoboHiMan --out split.json
 ```
 
@@ -77,8 +83,14 @@ Benchmark perturbations are selected with `--strategy` (Colosseum strategy index
 - `step_*` rows are measured boundaries (S+1); `cmd_*` rows (S) are what was
   written to the controller during that step: arm joint targets (Reflexxes path
   point, PD loop), arm joint velocities (policy action mode), finger joint
-  target velocities, and kinematic grasp/release events. Canonical EE targets
-  are derived offline by fitted Panda FK only when its residual passes.
+  target velocities, and kinematic grasp/release events. A row is exactly one
+  physics step: `(step[s], cmd[s]) -> step[s+1]` of `timing.physics_dt_s`
+  (0.05 s); `timing.model_dt_s = frame_stride * physics_dt_s` is the model
+  cadence. `prof_step_wall_s` is host profiling only, never an action duration.
+- Canonical EE targets are derived offline with the simulator chain only when
+  its residual passes, into `derived/<episode>/canonical_ee_actions_v1.{npz,json}`
+  (source hashes, frame/quaternion conventions, reconstruction residual);
+  native `cmd_*` are never replaced.
 - `frame_*`/`cam_*` rows are rendered at every boundary by default (upstream
   skips gripper-actuation steps). Depth is stored normalized with per-frame
   near/far, K and camera-to-world T; `camera.depth_to_world` reproduces PyRep.
@@ -86,8 +98,30 @@ Benchmark perturbations are selected with `--strategy` (Colosseum strategy index
   `lineage`) and applied execution perturbations; `outcome.status` is measured:
   `success | failure | timeout | invalid_execution`; simulator errors become
   `attempts/*.json`. Recoverability stays `unknown` without executed evidence.
-- `model_boundary` lists online fields; predicates, object poses, labels and
-  task identity are offline-only.
+- `monitor_*` are per-episode monitor states: `monitor_event_id` (a monitor
+  diagnostic, not alpha), `monitor_rho/nu/epsilon`, each with `*_valid`
+  (false near relation changes, for unobservable events, and for unordered
+  pending events). The ICGS alignment target is built only in `D_task`.
+- With masks, `cameras.mask_legend` maps every simulator handle to object,
+  instance, role (`background | robot | task_object | task_fixture |
+  scene_static`) and category; the dataset refuses unmapped handles.
+- `model_boundary` lists online fields; predicates, object poses, monitor
+  states and task identity are offline-only.
+
+## Dataset layout and split enforcement
+
+`datasets/robohiman/` (git-ignored) holds `manifest.json`, `splits.json` (a
+byte copy of the locked split), `preprocessing/` (TRAIN-only statistics),
+`reports/{audit,leakage,reproducibility}.json` + `generation_log.jsonl`, and
+`train/ dev/ test/`, each with `episodes/`, `attempts/`, `derived/` and
+`views/`. Episode IDs are `ep-<task>-<run8>-<index>`; variation, strategy,
+split and seed live only in the manifest. `Dataset.commit_episode` refuses an
+episode whose split, frozen-split hash, task, strategy, variation, seed range,
+factor seed, reset RNG, gradient flag, tracks, TEST role, withheld strategy,
+parent, ID or destination disagrees. `D_task` pairs each query with an
+independent successful context of the same task (distinct episode and lineage
+root; in TEST, contexts only from the context seed range). See
+[ADR 0018](../decisions/0018-robohiman-dataset-layout.md).
 
 ## Known upstream behaviour recorded, not hidden
 
