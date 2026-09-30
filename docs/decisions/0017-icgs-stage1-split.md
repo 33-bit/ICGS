@@ -59,7 +59,8 @@ hash differs from its lock.
 - Unsupported claims are named in the manifest: asset generalization, unseen
   primitives, and dependency-mechanism generalization.
 
-**Excluded.** The custom 36-program generator stays recoverable as a possible
+**Excluded.** The custom 36-program generator (removed from the tree by
+[ADR 0019](0019-remove-legacy-generation.md); recoverable from Git) was a possible
 mechanistic diagnostic suite. There is no scientific reason to put it into
 TRAIN: its dependency value is unproven, and it has known physical
 abstractions. The original Colosseum 20 tasks are out of benchmark scope.

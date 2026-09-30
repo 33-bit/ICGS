@@ -24,7 +24,7 @@ work. No duplicate story database or experimental results are created here.
 | --- | --- | --- |
 | [P00](../../plans/active/icgs-p00-contracts.md) | contracts/config/composition seams | current native contracts; no new runtime stub claims |
 | [P01](../../plans/active/icgs-p01-timed-execution.md) | timed execution/sensors | P00; G1 controller protocol before C |
-| [P02](../../plans/active/icgs-p02-episode-data.md) | executed episodes/tasks/labels | P00/P01; G2 assets/splits/monitors |
+| P02 (removed with the legacy data stack; superseded by RoboHiMan Stage-1, [ADR 0018](../../decisions/0018-robohiman-dataset-layout.md)) | executed episodes/tasks/labels | P00/P01; G2 assets/splits/monitors |
 | [P03](../../plans/active/icgs-p03-geometry-bridge.md) | blocks/physical encoder/decoder | P00, synthetic geometry; observed data P02 for A0; G3 bridge |
 | [P04](../../plans/active/icgs-p04-physical-memory.md) | causal physical history | P00/P03; A1 pilot dynamics from P07 |
 | [P05](../../plans/active/icgs-p05-event-memory.md) | event segmentation/encoding | P00/P03; P02 annotations for B |
@@ -68,8 +68,8 @@ Read [ADR0006](../../decisions/0006-icgs-target-boundaries.md),
 ## Release phases and acceptance gates
 
 - [ ] Foundation: P00/P01/P02 synthetic tests; select supported Linux model environment;
-  generation execution is governed by [ADR0014](../../decisions/0014-canonical-generation.md),
-  but its physical gate remains pending measured evidence before any main collection.
+  data collection is RoboHiMan Stage-1 ([ADR 0018](../../decisions/0018-robohiman-dataset-layout.md));
+  large-scale collection remains gated by its pre-collection smoke and quota.
 - [ ] Representation: P03/P04/P07 pilot model plus P11 A0/A1; pass G3 bridge,
   train P05/P06 B, pass G4 and freeze reference manifest.
 - [ ] Executed labels: pass G5 replay; authorize bounded pilot P08 collection.

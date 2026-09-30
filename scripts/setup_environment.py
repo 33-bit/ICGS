@@ -1,7 +1,7 @@
 """Install one of the supported ICGS dependency profiles.
 
 The command planner is intentionally separate from execution.  Tests and
-operators can inspect the exact ``uv``/simulator commands before running them,
+operators can inspect the exact ``uv`` commands before running them,
 and callers can inject a command runner without touching a real host.
 """
 
@@ -18,13 +18,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-PROFILE_NAMES = ("cpu", "cuda118", "generation")
+PROFILE_NAMES = ("cpu", "cuda118")
 PROFILE_EXTRAS: dict[str, tuple[str, ...]] = {
     "cpu": ("cpu", "test"),
     "cuda118": ("cuda118", "test"),
-    # The generation profile includes the CPU runtime because the pinned
-    # simulator acceptance path is CPU rendered unless a host opts into CUDA.
-    "generation": ("cpu", "generation", "test"),
 }
 _SECRET_NAME = re.compile(
     r"(?:token|secret|password|passwd|api[_-]?key|access[_-]?key)", re.IGNORECASE
@@ -128,14 +125,9 @@ def plan_setup(
     repo_root: str | Path,
     venv_root: str | Path,
     python_version: str = "3.10",
-    provision_simulator: bool = False,
-    runtime_config: str | Path | None = None,
-    build_generation_tasks: bool = False,
 ) -> tuple[tuple[str, ...], ...]:
     """Build an idempotent command plan without executing anything."""
     profile = _validate_profile(profile)
-    if build_generation_tasks and (profile != "generation" or not provision_simulator):
-        raise ValueError("building tasks requires generation --provision-simulator")
     root = Path(repo_root).resolve()
     venv = Path(venv_root).resolve()
     if not root.is_dir():
@@ -148,20 +140,6 @@ def plan_setup(
     for extra in PROFILE_EXTRAS[profile]:
         sync_command.extend(("--extra", extra))
     commands.append(tuple(sync_command))
-    if profile == "generation" and provision_simulator:
-        if runtime_config is None:
-            raise ValueError("runtime_config is required with --provision-simulator")
-        commands.append(
-            (
-                str(_python_executable(venv)),
-                "-B",
-                "scripts/generation_environment.py",
-                "--runtime-config",
-                str(Path(runtime_config).resolve()),
-            )
-        )
-        if build_generation_tasks:
-            commands[-1] = (*commands[-1], "--build-tasks")
     return tuple(commands)
 
 
@@ -212,9 +190,6 @@ def setup_environment(
     python_version: str = "3.10",
     receipt_path: str | Path | None = None,
     dry_run: bool = False,
-    provision_simulator: bool = False,
-    runtime_config: str | Path | None = None,
-    build_generation_tasks: bool = False,
     runner: Runner = subprocess.run,
     environment: Mapping[str, str] | None = None,
 ) -> SetupReceipt:
@@ -229,9 +204,6 @@ def setup_environment(
         repo_root=root,
         venv_root=venv,
         python_version=python_version,
-        provision_simulator=provision_simulator,
-        runtime_config=runtime_config,
-        build_generation_tasks=build_generation_tasks,
     )
     status = "DRY_RUN" if dry_run else "PASS"
     clean_env = _safe_environment(environment)
@@ -269,9 +241,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--python-version", default="3.10")
     parser.add_argument("--receipt")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--provision-simulator", action="store_true")
-    parser.add_argument("--runtime-config")
-    parser.add_argument("--build-generation-tasks", action="store_true", help="explicitly launch headless simulator to build all task assets")
     args = parser.parse_args(argv)
     receipt = setup_environment(
         args.profile,
@@ -280,9 +249,6 @@ def main(argv: list[str] | None = None) -> int:
         python_version=args.python_version,
         receipt_path=args.receipt,
         dry_run=args.dry_run,
-        provision_simulator=args.provision_simulator,
-        runtime_config=args.runtime_config,
-        build_generation_tasks=args.build_generation_tasks,
     )
     print(json.dumps(receipt.as_dict(), indent=2, sort_keys=True))
     return 0

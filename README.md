@@ -18,10 +18,9 @@ python3 scripts/setup_environment.py --profile cpu
 python3 scripts/verify_environment.py --profile cpu --json
 ```
 
-Use `--profile cuda118` on a Linux host with the NVIDIA CUDA 11.8 runtime. Use
-`--profile generation` for the pinned Xvfb/Mesa/RLBench/CoppeliaSim setup, then add
-`--provision-simulator --runtime-config <absolute-runtime-config>` when simulator
-assets are explicitly wanted. Setup is idempotent and writes a redacted receipt to
+Use `--profile cuda118` on a Linux host with the NVIDIA CUDA 11.8 runtime. The
+RoboHiMan simulator has its own isolated venv
+([RoboHiMan backbone](docs/components/robohiman.md)). Setup is idempotent and writes a redacted receipt to
 `.icgs/setup_receipt.json`.
 
 The historical published inference stack is still available in
@@ -60,7 +59,7 @@ No training, full benchmark or physical robot execution is automatic.
 
 ```bash
 python3 -B scripts/validate_fast.py
-python3 -B -m pytest -q tests/test_environment_setup.py tests/test_generation_environment.py
+python3 -B -m pytest -q tests/test_environment_setup.py
 python3 -B -m unittest discover -s tests -p 'test_*.py'
 ```
 

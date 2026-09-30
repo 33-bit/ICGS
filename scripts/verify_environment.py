@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import platform
 import subprocess
 import sys
@@ -21,13 +20,12 @@ if __package__ in {None, ""}:
 from scripts.setup_environment import (
     PROFILE_NAMES,
     _redact_string,
-    _safe_environment,
     _validate_profile,
 )
 
 Runner = Callable[..., Any]
 _IMPORT_PROBES = {
-    "icgs_imports": "import icgs; import icgs.data.collection.generation",
+    "icgs_imports": "import icgs; import icgs.environments.robohiman.pins",
     "core_dependencies": "import numpy; import scipy; import torch",
     "pyg_abi": "import torch; import torch_geometric",
 }
@@ -86,30 +84,6 @@ def _python_check(
     return _status("PASS", f"Python {major}.{minor}")
 
 
-def _generation_probe_environment(
-    repo_root: Path,
-    simulator_root: str | Path | None,
-    rlbench_root: str | Path | None,
-) -> dict[str, str]:
-    """Build the headless simulator environment without credential variables."""
-    environment = _safe_environment()
-    if simulator_root is not None:
-        simulator = str(Path(simulator_root).resolve())
-        environment["COPPELIASIM_ROOT"] = simulator
-        environment["LD_LIBRARY_PATH"] = os.pathsep.join(
-            filter(None, (simulator, environment.get("LD_LIBRARY_PATH", "")))
-        )
-        environment["QT_QPA_PLATFORM_PLUGIN_PATH"] = simulator
-        environment["QT_QPA_PLATFORM"] = "xcb"
-    paths = [str(repo_root / "src")]
-    if rlbench_root is not None:
-        paths.append(str(Path(rlbench_root).resolve()))
-    if environment.get("PYTHONPATH"):
-        paths.append(environment["PYTHONPATH"])
-    environment["PYTHONPATH"] = os.pathsep.join(paths)
-    return environment
-
-
 def _credential_check(paths: Sequence[str | Path]) -> dict[str, str]:
     if not paths:
         return _status("NOT_RUN", "no credential path was supplied")
@@ -133,8 +107,6 @@ def verify_environment(
     *,
     repo_root: str | Path = ".",
     python_executable: str | Path | None = None,
-    simulator_root: str | Path | None = None,
-    rlbench_root: str | Path | None = None,
     credential_paths: Sequence[str | Path] = (),
     receipt_path: str | Path | None = None,
     runner: Runner = subprocess.run,
@@ -147,11 +119,7 @@ def verify_environment(
     profile = _validate_profile(profile)
     root = Path(repo_root).resolve()
     python = str(python_executable or sys.executable)
-    probe_environment = (
-        _generation_probe_environment(root, simulator_root, rlbench_root)
-        if profile == "generation"
-        else None
-    )
+    probe_environment = None
     checks: dict[str, dict[str, str]] = {}
     checks["python"] = _python_check(python, runner, environment=probe_environment)
     for name, expression in _IMPORT_PROBES.items():
@@ -175,52 +143,6 @@ def verify_environment(
         checks["cuda"] = _status("PASS" if ok else "FAIL", output or "CUDA 11.8 runtime is unavailable")
     else:
         checks["cuda"] = _status("NOT_RUN", "CUDA profile not selected")
-
-    if profile == "generation":
-        ok, output = _probe(
-            ["sh", "-c", "command -v Xvfb"],
-            runner=runner,
-            environment=probe_environment,
-        )
-        checks["renderer"] = _status("PASS", output or "Xvfb found") if ok else _status("FAIL", "Xvfb is not installed")
-        if simulator_root is None:
-            checks["simulator"] = _status("FAIL", "simulator_root was not supplied")
-        else:
-            simulator = Path(simulator_root)
-            checks["simulator"] = _status("PASS", "simulator root exists") if simulator.is_dir() else _status("FAIL", "simulator root is missing")
-        if rlbench_root is None:
-            checks["rlbench_pyrep"] = _status("FAIL", "rlbench_root was not supplied")
-        else:
-            rlbench = Path(rlbench_root)
-            if not rlbench.is_dir():
-                checks["rlbench_pyrep"] = _status("FAIL", "RLBench root is missing")
-            else:
-                ok, output = _probe(
-                    [python, "-c", "import pyrep; import rlbench"],
-                    runner=runner,
-                    cwd=rlbench,
-                    environment=probe_environment,
-                )
-                detail = output if not ok else "PyRep and RLBench imports succeeded"
-                checks["rlbench_pyrep"] = _status(
-                    "PASS" if ok else "FAIL",
-                    detail or "PyRep/RLBench imports failed",
-                )
-        checks["generation_tasks"] = _status("FAIL", "RLBench root was not supplied")
-        if rlbench_root is not None:
-            ok, output = _probe(
-                [python, "-c", (
-                    "import sys; sys.path.insert(0, sys.argv[1]); "
-                    "from scripts.generation_build_tasks import verify_built_tasks; "
-                    "verify_built_tasks(sys.argv[2])"
-                ), str(root), str(rlbench_root)],
-                runner=runner, cwd=root, environment=probe_environment,
-            )
-            checks["generation_tasks"] = _status("PASS" if ok else "FAIL", output if not ok else "all compiled task sources and models present")
-    else:
-        checks["renderer"] = _status("NOT_RUN", "generation profile not selected")
-        checks["simulator"] = _status("NOT_RUN", "generation profile not selected")
-        checks["rlbench_pyrep"] = _status("NOT_RUN", "generation profile not selected")
 
     checks["credentials"] = _credential_check(credential_paths)
     if receipt_path is None:
@@ -260,8 +182,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--profile", choices=PROFILE_NAMES, required=True)
     parser.add_argument("--repo-root", default=".")
     parser.add_argument("--python", dest="python_executable", default=sys.executable)
-    parser.add_argument("--simulator-root")
-    parser.add_argument("--rlbench-root")
     parser.add_argument("--credential-path", action="append", default=[])
     parser.add_argument("--receipt")
     parser.add_argument("--json", action="store_true", help="emit JSON only")
@@ -270,8 +190,6 @@ def main(argv: list[str] | None = None) -> int:
         args.profile,
         repo_root=args.repo_root,
         python_executable=args.python_executable,
-        simulator_root=args.simulator_root,
-        rlbench_root=args.rlbench_root,
         credential_paths=args.credential_path,
         receipt_path=args.receipt,
     )

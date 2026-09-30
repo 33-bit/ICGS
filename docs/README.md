@@ -12,7 +12,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Original baseline](baselines/instant_policy.md) | Historical source/defaults, entry-point overrides, assets and reproduction limits |
 | [Policy data contract](components/policy-data-contract.md) | Current data, graph, frame, action and normalization semantics |
 | [RoboHiMan backbone](components/robohiman.md) | Primary task/environment path under migration: pinned simulator venv, Stage-1 records, instrumentation, gates |
-| [RoboHiMan decision](decisions/0016-robohiman-backbone.md) | RoboHiMan as upstream backbone; ICGS-owned instrumentation; custom generator non-primary |
+| [RoboHiMan decision](decisions/0016-robohiman-backbone.md) | RoboHiMan as upstream backbone; ICGS-owned instrumentation; custom generator removed (ADR 0019) |
 | [RoboHiMan migration plan](plans/active/robohiman-backbone-migration.md) | Phases, go/no-go gates and recovery for the backbone switch |
 | [Migration classification](audits/2026-09-30-robohiman-migration-classification.md) | Generic vs custom-generator vs mixed components before refactor |
 | [RoboHiMan validation evidence](experiments/robohiman-validation/README.md) | Parity, A0, replay, dependency, split-overlap and smoke-collection results |
@@ -20,9 +20,8 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [RoboHiMan pre-flight and split lock](experiments/robohiman-validation/v3/README.md) | 22-task compatibility, monitor coverage, overlap matrix, frozen split evidence |
 | [Stage-1 split decision](decisions/0017-icgs-stage1-split.md) | Frozen TRAIN/DEV/TEST split-v1, tracks, claims, lineage rules |
 | [RoboHiMan dataset layout](decisions/0018-robohiman-dataset-layout.md) | `datasets/robohiman/` layout, episode schema v2, split enforcement, D_task semantics |
-| [Data generation](components/generation.md) | Custom 36-program generator (legacy/reference since ADR 0016; not scaled): modules, HF archive lifecycle, record classes, resume and view finalization |
-| [Generation artifacts](components/generation-artifacts.md) | Legacy v2 and lossless HF archive trees, file inventories, consumers and retention |
-| [Environment setup](components/environment.md) | Portable CPU/CUDA/generation profiles, verification and credential boundary |
+| [Legacy data stack removal](decisions/0019-remove-legacy-generation.md) | Custom 36-program generator, archives and generation profile removed; recovery via Git |
+| [Environment setup](components/environment.md) | Portable CPU/CUDA profiles, verification and credential boundary |
 | [Composition examples](components/composition-examples.md) | Current component replacement APIs and future extension boundaries |
 | [Boundary decision](decisions/0001-harness-boundary.md) | Runtime independence from repository harness |
 | [Runtime composition decision](decisions/0002-runtime-composition.md) | Accepted core dependency direction and composition/config strategy |
@@ -49,15 +48,6 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [Experiment template](experiments/TEMPLATE.md) | Lightweight research-contract record |
 | [Validation guide](../tests/README.md) | Validation tiers, ownership, commands, result vocabulary |
 | [Onboarding audit](audits/harness-onboarding.md) | Dated evidence, design approval, adoption choices and discovered debt |
-| [Generation contract audit](audits/2026-09-20-generation-contract.md) | Historical collection quota, splits, schema, perturbations and views |
-| [Generation launch record](audits/2026-09-21-generation-launch.md) | Historical distributed launch evidence and publication receipts |
-| [Resumable multi-host generation](plans/active/resumable-multihost-generation.md) | Current HF archive resume, shared-filesystem worker leases and host-scoped launch contract |
-| [Generation storage and view finalization](plans/active/generation-storage-and-view-finalization.md) | HF source-of-truth lossless archive, bounded local retention and frozen training-view plan |
-| [Generation storage decision](decisions/0015-generation-storage-and-view-snapshots.md) | Accepted HF archive, binary deduplication and provisional/final view boundary |
-| [Generation launch readiness](plans/completed/generation-launch-readiness.md) | Run-wide storage admission, fresh-host task build and selected-host acceptance |
-| [Generation readiness evidence](experiments/generation-validation/readiness-20260927/README.md) | VPS-only commands, live smoke and bounded publication/backpressure evidence |
-| [Colab archive capacity experiment](experiments/generation-validation/archive-v6e1-stress-20260927.md) | OAuth2 V6e-1 concurrency comparison, publication service rate and quota-aware ETA |
-| [Collector semantics audit](experiments/generation-validation/collector-semantics-20260929.md) | 36-program physical/label audit: measured timing, no snaps/freezes, step goals, clearance layouts |
 | [Third-party notices](third-party-notices.md) | Attribution and license for adapted guidance |
 
 Source code owns implementation detail; tests establish only the behavior they

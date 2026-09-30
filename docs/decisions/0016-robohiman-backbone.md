@@ -2,7 +2,8 @@
 
 Date: 2026-09-30. Status: accepted as migration direction by explicit owner
 request (2026-09-30 migration brief). Default-path switch remains gated by the
-go/no-go gates below; the custom generator stays recoverable until they pass.
+go/no-go gates below. The custom generator was later removed by
+[ADR 0019](0019-remove-legacy-generation.md).
 
 ## Context
 
@@ -33,8 +34,8 @@ validated anchors ([compatibility audit](../../ROBOHIMAN_ICGS_COMPATIBILITY.md))
    refused until a frozen `pi_ref` identity exists.
 5. Oracle predicates, object poses and task identities are offline labels only;
    the online field allowlist of `icgs_episode_v1` stays the model boundary.
-6. The custom generator becomes non-primary legacy/reference. It is not deleted
-   and not scaled.
+6. The custom generator becomes non-primary legacy/reference and is not scaled.
+   (Superseded: removed from the tree by [ADR 0019](0019-remove-legacy-generation.md).)
 
 Forbidden: editing RoboHiMan task/success/variation code to improve ICGS
 results; labelling achieved next pose as a command; fabricating failures by

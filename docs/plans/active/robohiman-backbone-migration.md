@@ -9,7 +9,8 @@ go/no-go gate list below, each backed by a recorded command and numeric result.
 
 ## Current and target states
 
-Current: custom generator is the only collection path
+Before migration: custom generator was the only collection path (removed by
+[ADR 0019](../../decisions/0019-remove-legacy-generation.md))
 ([classification](../../audits/2026-09-30-robohiman-migration-classification.md)).
 Target ([ADR 0016](../../decisions/0016-robohiman-backbone.md)):
 
@@ -21,8 +22,8 @@ icgs.environments.robohiman (session, recorder, expert mirror, monitors, snapsho
 RoboHiMan@33f71d3 + RLBench@587a6a0 + PyRep@231a1ac + CoppeliaSim 4.1 (unmodified)
 ```
 
-Unchanged: IP baseline, published profile, checkpoints, custom generator code and
-archives, `icgs_episode_v1/v2` schemas.
+Unchanged: IP baseline, published profile, checkpoints. The custom generator code,
+archives and `icgs_episode_v1/v2` schemas were removed later (ADR 0019).
 
 ## Invariants and scope
 

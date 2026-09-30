@@ -3,8 +3,8 @@
 Status: migration in progress under [ADR 0016](../decisions/0016-robohiman-backbone.md)
 and the [migration plan](../plans/active/robohiman-backbone-migration.md). Gate
 evidence lives in [robohiman-validation](../experiments/robohiman-validation/README.md).
-The custom generator in [generation](generation.md) is legacy/reference and is
-not scaled further.
+The legacy custom 36-program generator was removed
+([ADR 0019](../decisions/0019-remove-legacy-generation.md)); it remains in Git history.
 
 ## Ownership
 

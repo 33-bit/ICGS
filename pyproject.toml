@@ -21,14 +21,6 @@ cuda118 = [
     "torch-cluster==1.6.3+pt22cu118",
     "torch-scatter==2.1.2+pt22cu118",
 ]
-generation = [
-    "cffi",
-    "gymnasium==1.2.3",
-    "natsort",
-    "pillow",
-    "pyquaternion",
-    "transforms3d",
-]
 test = [
     "pytest==8.4.2",
     "tomli==2.4.1; python_version < '3.11'",
@@ -38,7 +30,7 @@ native-extensions = ["torch-cluster==1.6.3", "torch-scatter==2.1.2"]
 
 [tool.icgs.environment]
 python = ">=3.10,<3.13"
-profiles = ["cpu", "cuda118", "generation"]
+profiles = ["cpu", "cuda118"]
 credential_variables = ["HF_TOKEN", "HF_ACCESS_TOKEN", "HUGGINGFACE_HUB_TOKEN", "WANDB_API_KEY"]
 
 [tool.uv.sources]
@@ -84,4 +76,3 @@ include = ["icgs*"]
 [tool.setuptools.package-data]
 "icgs.artifacts" = ["profiles/*.json"]
 "icgs.configuration" = ["profiles/*.json"]
-"icgs.data.collection.generation" = ["*.json"]

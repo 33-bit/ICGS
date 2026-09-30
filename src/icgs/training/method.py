@@ -30,7 +30,6 @@ from icgs.artifacts.method import reference_fingerprint, validate_method_manifes
 from icgs.configuration.method import MethodConfig
 from icgs.contracts.method import ExecutedTransition, PhysicalPrediction, TimedCommand, TimedObservation
 from icgs.contracts.records import Observation
-from icgs.data.datasets.episodes import validate_split_lineage
 from icgs.models.decoders.physical import PhysicalDecoder
 from icgs.models.encoders.physical import PhysicalEncoder
 from icgs.models.memories.physical import action_descriptor, proprioception
@@ -1234,17 +1233,10 @@ def run_method_training(
             raise ValueError(
                 f"train and evaluation datasets share overlapping episode IDs: {sorted(overlap_ep)}"
             )
-        # Validate literal lineage split disjointness via P02 validate_split_lineage helper
-        # (Note: P02 does not provide descendant closure, so literal IDs are validated directly).
-        lineage_rows = [{"lineage_id": lin, "split": "train"} for lin in train_lineage_ids] + [
-            {"lineage_id": lin, "split": "dev"} for lin in eval_lineage_ids
-        ]
-        try:
-            validate_split_lineage(lineage_rows)
-        except ValueError as exc:
-            raise ValueError(
-                f"train and evaluation datasets share overlapping lineage IDs: {sorted(train_lineage_ids & eval_lineage_ids)}"
-            ) from exc
+        # Literal lineage IDs must stay on one side (no descendant closure is available).
+        overlap_lineage = train_lineage_ids & eval_lineage_ids
+        if overlap_lineage:
+            raise ValueError(f"train and evaluation datasets share overlapping lineage IDs: {sorted(overlap_lineage)}")
 
     # Preflight resume checkpoint identity before ANY live mutation (output writes, RNG, freeze, optimizer)
     preloaded_checkpoint: dict[str, Any] | None = None

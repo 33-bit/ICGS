@@ -17,19 +17,6 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by Python 3.10
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_generation_task_build_is_explicit_complete_and_headless(tmp_path):
-    setup = _setup_module()
-    commands = setup.plan_setup("generation", repo_root=tmp_path, venv_root=tmp_path / ".venv",
-                                provision_simulator=True, runtime_config=tmp_path / "runtime.json",
-                                build_generation_tasks=True)
-    assert commands[-1][-1] == "--build-tasks"
-    assert "--build-tasks" not in setup.plan_setup(
-        "generation", repo_root=tmp_path, venv_root=tmp_path / ".venv",
-        provision_simulator=True, runtime_config=tmp_path / "runtime.json")[-1]
-    with pytest.raises(ValueError, match="provision"):
-        setup.plan_setup("cpu", repo_root=tmp_path, venv_root=tmp_path / ".venv", build_generation_tasks=True)
-
-
 def _setup_module():
     return importlib.import_module("scripts.setup_environment")
 
@@ -42,7 +29,8 @@ def test_project_declares_portable_profiles_and_python_floor():
     payload = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     assert payload["project"]["requires-python"] == ">=3.10,<3.13"
     extras = payload["project"]["optional-dependencies"]
-    assert {"cpu", "cuda118", "generation"}.issubset(extras)
+    assert {"cpu", "cuda118"}.issubset(extras)
+    assert "generation" not in extras
     assert any("torch" in requirement for requirement in extras["cpu"])
     assert any("torch" in requirement for requirement in extras["cuda118"])
     assert {
@@ -50,7 +38,6 @@ def test_project_declares_portable_profiles_and_python_floor():
         "torch-cluster==1.6.3+pt22cu118",
         "torch-scatter==2.1.2+pt22cu118",
     }.issubset(extras["cuda118"])
-    assert any("gymnasium" in requirement for requirement in extras["generation"])
     assert any(
         "tomli" in requirement and "python_version < '3.11'" in requirement
         for requirement in extras["test"]
@@ -81,7 +68,6 @@ def test_clean_clone_instructions_have_no_fixed_content_or_conda_commands():
         ROOT / "README.md",
         ROOT / "docs" / "README.md",
         ROOT / "docs" / "components" / "environment.md",
-        ROOT / "docs" / "components" / "generation.md",
         ROOT / "tests" / "README.md",
     ]
     for path in documents:
@@ -127,10 +113,10 @@ def test_profile_command_plan_is_dry_run_safe(tmp_path: Path):
     assert any(command[:3] == ("uv", "sync", "--locked") for command in commands)
     assert all("environment.yml" not in " ".join(command) for command in commands)
     assert all("conda" not in " ".join(command).lower() for command in commands)
-    generation = setup.plan_setup("generation", repo_root=tmp_path, venv_root=tmp_path / ".venv")
-    sync = next(command for command in generation if command[:3] == ("uv", "sync", "--locked"))
-    assert sync.count("--extra") == 3
-    assert {sync[index + 1] for index, part in enumerate(sync) if part == "--extra"} == {"cpu", "generation", "test"}
+    sync = next(command for command in commands if command[:3] == ("uv", "sync", "--locked"))
+    assert {sync[index + 1] for index, part in enumerate(sync) if part == "--extra"} == {"cpu", "test"}
+    with pytest.raises(ValueError, match="profile"):
+        setup.plan_setup("generation", repo_root=tmp_path, venv_root=tmp_path / ".venv")
     with pytest.raises(ValueError, match="Python version"):
         setup.plan_setup("cpu", repo_root=tmp_path, venv_root=tmp_path / ".venv", python_version="3.9")
 
@@ -191,9 +177,6 @@ def test_verifier_emits_machine_readable_statuses():
         "icgs_imports",
         "core_dependencies",
         "pyg_abi",
-        "renderer",
-        "simulator",
-        "rlbench_pyrep",
         "credentials",
     }
     assert all(value["status"] in {"PASS", "FAIL", "SKIPPED", "NOT_RUN"} for value in result["checks"].values())
@@ -232,92 +215,3 @@ def test_cuda_profile_probe_requires_cuda_11_8(tmp_path: Path):
     )
     assert result["checks"]["cuda"]["status"] == "PASS"
     assert any("torch.version.cuda == '11.8'" in " ".join(command) for command in calls)
-
-
-def test_generation_verifier_passes_renderer_environment_to_probes(
-    tmp_path: Path, monkeypatch
-):
-    verify = _verify_module()
-    simulator_root = tmp_path / "CoppeliaSim"
-    rlbench_root = tmp_path / "RLBench"
-    simulator_root.mkdir()
-    rlbench_root.mkdir()
-    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/base-libraries")
-    environments: list[dict[str, str]] = []
-
-    def runner(command, **kwargs):
-        environment = kwargs.get("env")
-        if environment is not None:
-            environments.append(environment)
-        normalized = tuple(str(part) for part in command)
-        if normalized[0] == "sh":
-            stdout = "/usr/bin/Xvfb\n"
-        elif any("sys.version" in part for part in normalized):
-            stdout = "3.11.0\n"
-        else:
-            stdout = ""
-        return subprocess.CompletedProcess(normalized, 0, stdout=stdout, stderr="")
-
-    result = verify.verify_environment(
-        "generation",
-        repo_root=tmp_path,
-        python_executable=sys.executable,
-        simulator_root=simulator_root,
-        rlbench_root=rlbench_root,
-        runner=runner,
-    )
-
-    assert result["status"] == "PASS"
-    assert environments
-    for environment in environments:
-        assert environment["COPPELIASIM_ROOT"] == str(simulator_root)
-        assert environment["LD_LIBRARY_PATH"] == os.pathsep.join(
-            [str(simulator_root), "/opt/base-libraries"]
-        )
-        assert environment["QT_QPA_PLATFORM_PLUGIN_PATH"] == str(simulator_root)
-        assert environment["QT_QPA_PLATFORM"] == "xcb"
-        assert str(tmp_path / "src") in environment["PYTHONPATH"]
-        assert str(rlbench_root) in environment["PYTHONPATH"]
-    assert result["checks"]["rlbench_pyrep"]["detail"] == "PyRep and RLBench imports succeeded"
-
-
-def test_generation_setup_reapplies_provisioning_after_locked_sync(tmp_path: Path):
-    setup = _setup_module()
-    repo_root = tmp_path / "repo"
-    repo_root.mkdir()
-    venv_root = tmp_path / ".venv"
-    runtime_config = tmp_path / "runtime.json"
-    receipt_path = tmp_path / ".icgs" / "setup_receipt.json"
-    calls: list[tuple[str, ...]] = []
-
-    def runner(command, **kwargs):
-        calls.append(tuple(str(part) for part in command))
-        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
-
-    first = setup.setup_environment(
-        "generation",
-        repo_root=repo_root,
-        venv_root=venv_root,
-        runtime_config=runtime_config,
-        provision_simulator=True,
-        receipt_path=receipt_path,
-        runner=runner,
-    )
-    first_commands = first.commands
-    assert first_commands[-1][2:4] == ("scripts/generation_environment.py", "--runtime-config")
-    assert first_commands.index(next(command for command in first_commands if command[:2] == ("uv", "sync"))) < len(first_commands) - 1
-
-    calls.clear()
-    second = setup.setup_environment(
-        "generation",
-        repo_root=repo_root,
-        venv_root=venv_root,
-        runtime_config=runtime_config,
-        provision_simulator=True,
-        receipt_path=receipt_path,
-        runner=runner,
-    )
-
-    assert second.commands[-1] == first_commands[-1]
-    assert calls[-1] == first_commands[-1]
-    assert calls[-2][:2] == ("uv", "sync")

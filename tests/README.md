@@ -17,57 +17,16 @@ produce a false-green check by disappearing from discovery.
 ```bash
 python3 -B scripts/validate_fast.py
 python3 -B -S scripts/validate_fast.py
-python3 -B -m pytest -q tests/test_environment_setup.py tests/test_generation_environment.py
+python3 -B -m pytest -q tests/test_environment_setup.py
+PYTHONPATH=src python3 -B -m pytest -q tests/test_stage1_dataset.py tests/test_stage1_robohiman.py tests/test_stage1_split.py
 python3 -B -m unittest discover -s tests -p 'test_*.py' -v
 ```
 
-## Generation archive and view checks
-
-The lossless HF archive is opt-in and fixture-tested without network access. Run
-the focused checks separately so the report identifies which contract was
-actually exercised:
-
-```bash
-# archive round-trip, hashes, offsets, aliases and bounded chunk/cache reads
-PYTHONPATH=src .venv/bin/python -B -m pytest -q \
-  tests/test_generation_archive.py
-
-# provisional pointers and FINAL role/view snapshots at a frozen manifest
-PYTHONPATH=src .venv/bin/python -B -m pytest -q \
-  tests/test_generation_views.py tests/test_generation_view_finalization.py
-
-# compact training export and revision-bound lazy reader (local/fake-HF only)
-PYTHONPATH=src .venv/bin/python -B -m pytest -q \
-  tests/test_training_export.py
-
-# remote-resume contract fixtures and receipt-only publication/recovery
-PYTHONPATH=src .venv/bin/python -B -m pytest -q \
-  tests/test_generation_control.py tests/test_generation_planner.py \
-  tests/test_generation_publication.py tests/test_generation_queue.py
-
-# per-result and shared run-wide archive staging/size budgets
-PYTHONPATH=src .venv/bin/python -B -m pytest -q \
-  tests/test_capacity_probe.py tests/test_generation_storage.py
-```
-
-These tests use tiny local archives or fake HF clients. They do not download a
-dataset, launch a simulator, run preprocessing, execute Open3D SOR, start
-training, publish to HF or prove that native `icgs train` consumes archive-backed
-views. The current trainer still reads PyG sample directories; the compact
-`training/` export and reader are a separate boundary, and native trainer
-integration remains a deliberate follow-up. A clean-machine reader, resume
-command and revision-bound finalizer are documented in [Data generation](../docs/components/generation.md).
-
-Shared-storage fixtures exercise real multiprocess claim admission, retained
-reservations across lease expiry/backlog, verified-prune release, physical disk
-backpressure, production entry-point guards and run-local HF scratch. Production
-archive runtimes must explicitly configure `max_result_bytes`,
-`max_staging_bytes`, and `staging_reserve_bytes`; old validation fixtures without
-a budget remain supported, but cannot certify production admission.
+## Result vocabulary
 
 For each selected command report `PASS` when assertions pass, `FAIL` when the
 command ran and failed, `SKIPPED` with the unavailable prerequisite, or `NOT RUN`
-when it was not selected. `SKIPPED` is never a `PASS`; live HF, simulator,
+when it was not selected. `SKIPPED` is never a `PASS`; live simulator,
 Open3D, training and C1–C5 claims remain `NOT RUN` unless their explicit gate is
 provisioned.
 
@@ -101,8 +60,7 @@ acceptance job must run actual checkpoint tests and reference comparison.
 | test_checkpoints.py | Generated alias/compiled/shape/missing diagnostics and artifact immutability |
 | test_loading.py | Resolved config survives load→context→prediction |
 | test_training.py | Actual Lightning wrapper alias registration (no training job) |
-| test_generation_config.py / test_generation_archive.py / test_generation_views.py / test_generation_view_finalization.py / test_capacity_probe.py | Opt-in archive profile validation; lossless episode/attempt roundtrip, hashes, offsets, aliases, bit-packed validity, bounded chunk/cache behavior, provisional/final revision-bound views and staging budgets |
-| test_generation_storage.py | Shared admission policy, durable per-attempt reservations, real concurrent claims, retained backlog and verified-prune release, same-filesystem HF scratch and production guards |
+| test_stage1_dataset.py / test_stage1_robohiman.py / test_stage1_split.py | RoboHiMan dataset layout, split enforcement, immutable/derived writes, schema v2 timing/masks, monitor states, context-conditioned D_task, frozen split lock |
 | test_cli.py | Four bounded successful command-body lifecycle seam tests for infer/train/prepare-data/evaluate; installed `--help` and rejection parser/import probes kept separate |
 | test_differential.py | Verified original source methods, not two facades of new implementation |
 | test_model_integration.py | Real strict published native inference, explicitly enabled |
