@@ -207,13 +207,16 @@ TASK_SPECS: dict[str, dict[str, Any]] = {
         ("rubbish_in_dustpan", "detected", {"object": "rubbish", "sensor": "success"}),
         ("broom_grasped", "grasped", {"object": "broom"}),
         ("dirt_in_dustpan_ge1", "detected_count_ge", {"objects": _DIRT, "sensor": "success", "k": 1}),
-        ("dirt_in_dustpan_all", "detected_count_ge", {"objects": _DIRT, "sensor": "success", "k": 5})], "events": [
-        {"event_id": "rubbish_grasped", "relation": "rubbish_grasped"},
-        {"event_id": "rubbish_dropped_in_dustpan", "relation": "rubbish_in_dustpan",
-         "prerequisites": ["rubbish_grasped"], "count_only_when_eligible": True},
+        ("dirt_in_dustpan_all", "detected_count_ge", {"objects": _DIRT, "sensor": "success", "k": 5})],
+        # Spec order follows the upstream expert's waypoint order (broom first);
+        # the task's oracle language lists the rubbish first.
+        "events": [
         {"event_id": "broom_grasped", "relation": "broom_grasped"},
         {"event_id": "all_dirt_swept", "relation": "dirt_in_dustpan_all", "prerequisites": ["broom_grasped"],
-         "count_only_when_eligible": True}]},
+         "count_only_when_eligible": True},
+        {"event_id": "rubbish_grasped", "relation": "rubbish_grasped"},
+        {"event_id": "rubbish_dropped_in_dustpan", "relation": "rubbish_in_dustpan",
+         "prerequisites": ["rubbish_grasped"], "count_only_when_eligible": True}]},
 }
 SUPPORTED_TASKS = tuple(TASK_SPECS)
 

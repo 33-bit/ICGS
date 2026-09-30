@@ -429,22 +429,53 @@ def cmd_a0(args: argparse.Namespace) -> dict[str, Any]:
         session.shutdown()
 
 
+# Declared before the n>=20 runs: a pair of candidates is consequential when both
+# are locally successful in >=90% of trials, their downstream success rates
+# (conditioned on local success) differ by >=0.30, and Fisher's exact test on
+# those counts gives p<0.05.
+CONSEQUENCE_RULE = {"min_local_rate": 0.9, "min_gap": 0.30, "max_p": 0.05}
+
+
+def _wilson(k: int, n: int, z: float = 1.96) -> list[float] | None:
+    if n == 0:
+        return None
+    p = k / n
+    centre = (p + z * z / (2 * n)) / (1 + z * z / n)
+    half = z * np.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / (1 + z * z / n)
+    return [float(centre - half), float(centre + half)]
+
+
+def _candidate_offsets(args: argparse.Namespace, waypoints: list, decision: int) -> list[tuple[str, np.ndarray]]:
+    if args.offsets:
+        from scipy.spatial.transform import Rotation
+
+        frame = Rotation.from_quat(waypoints[decision]._waypoint.get_quaternion()).as_matrix()
+        out = []
+        for text in args.offsets:
+            local = np.array([float(v) for v in text.split(",")], dtype=np.float64)
+            out.append((f"waypoint-frame {local.tolist()}", frame @ local if args.offset_frame == "waypoint" else local))
+        return out
+    approach = waypoints[decision]._waypoint.get_position() - waypoints[decision - 1]._waypoint.get_position()
+    direction = approach / np.linalg.norm(approach)
+    return [(f"approach x {delta:+.3f}", direction * delta) for delta in args.deltas]
+
+
 def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
+    from scipy.stats import fisher_exact
+
     session = _session(args, cameras=(), image=(64, 64))
     decision = args.anchor_waypoint
     report: dict[str, Any] = {
         "gate": "dependency", "task": args.task, "variation": args.variation, "seed": args.seed,
-        "decision_waypoint": decision,
+        "decision_waypoint": decision, "trials_per_candidate": args.trials,
         "anchor": f"after waypoint {decision - 1} (post-reset snapshot restored, prefix commands replayed open loop)",
-        "candidate_axis": f"waypoint {decision} target offset along its approach direction",
         "continuation_policy": ("icgs mirror of the RoboHiMan scripted expert with per-trial Gaussian "
-                                f"waypoint jitter sigma={args.jitter_m} m; NOT pi_ref, diagnostic only"),
-        "local_success_predicate": f"{args.local_predicate} after waypoint {decision} completes",
-        "candidates": [],
+                                f"waypoint jitter sigma={args.jitter_m} m on every later waypoint; NOT pi_ref"),
+        "local_success_predicate": f"{args.local_predicate} at the first boundary after waypoint {decision} completes",
+        "consequence_rule": CONSEQUENCE_RULE, "candidates": [],
     }
     try:
         state0 = _warm_lineage(session, args)
-        # Reference prefix up to the anchor, executed once by the expert.
         session.reset(args.variation, lineage=state0)
         reset_snap = capture_snapshot(session, 0)
         monitor = build_monitor(session.task, session.task_env, args.variation)
@@ -457,20 +488,18 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
         prefix_arrays = prefix.arrays()
         anchor = prefix_arrays["cmd_phase"].shape[0]
         waypoints = session.task_obj.get_waypoints()
-        approach = waypoints[decision]._waypoint.get_position() - waypoints[decision - 1]._waypoint.get_position()
-        direction = approach / np.linalg.norm(approach)
-        report["approach_direction"] = direction.tolist()
+        candidates = _candidate_offsets(args, waypoints, decision)
         report["anchor_boundary"] = int(anchor)
         later = list(range(decision + 1, len(waypoints)))
         rng = np.random.default_rng(args.seed)
         anchor_states = []
-        for delta in args.deltas:
-            offset = {"family": "execution_pose_offset", "waypoint": decision, "delta_m": (direction * delta).tolist()}
+        for label, delta in candidates:
+            offset = {"family": "execution_pose_offset", "waypoint": decision, "delta_m": delta.tolist()}
             trials = []
             for trial in range(args.trials):
                 jitter = [{"family": "execution_pose_offset", "waypoint": w,
                            "delta_m": rng.normal(0.0, args.jitter_m, 3).tolist()} for w in later]
-                restore_snapshot(session, reset_snap)  # post-reset state: no contacts, restore is exact
+                restore_snapshot(session, reset_snap)  # post-reset state: no contacts
                 session.scene._has_init_episode = True
                 trial_monitor = build_monitor(session.task, session.task_env, args.variation)
                 rec = StepRecorder(session, trial_monitor, frame_stride=0)
@@ -487,36 +516,47 @@ def cmd_dependency(args: argparse.Namespace) -> dict[str, Any]:
                 names = trial_monitor.predicate_names
                 after = np.flatnonzero(arrays["cmd_waypoint"] > decision)
                 local_boundary = int(after[0]) if after.size else arrays["cmd_phase"].shape[0]
-                joint_index = rec.joint_names.index(trial_monitor.tracked_joints[0].get_name())
-                trials.append({
+                row = {
                     "trial": trial,
                     "prefix_replay_tip_drift_m": float(np.linalg.norm(
                         arrays["step_tip_pose"][anchor][:3] - prefix_arrays["step_tip_pose"][anchor][:3])),
                     "local_boundary": local_boundary,
-                    "drawer_joint_after_decision_m": float(arrays["step_task_joint_positions"][local_boundary][joint_index]),
+                    "local_predicates": {n: bool(v) for n, v in zip(names, arrays["step_predicates"][local_boundary])},
                     "local_success": bool(arrays["step_predicates"][local_boundary][names.index(args.local_predicate)]),
                     "final_status": result.status, "final_reason": result.reason,
                     "final_success": bool(result.task_success),
                     "final_predicates": {n: bool(v) for n, v in zip(names, arrays["step_predicates"][-1])},
                     "steps": int(arrays["cmd_phase"].shape[0]),
-                })
-            local = [t["local_success"] for t in trials]
+                }
+                if trial_monitor.tracked_joints:
+                    index = rec.joint_names.index(trial_monitor.tracked_joints[0].get_name())
+                    row["tracked_joint_after_decision_m"] = float(arrays["step_task_joint_positions"][local_boundary][index])
+                trials.append(row)
+            local = [t for t in trials if t["local_success"]]
+            downstream_given_local = sum(t["final_success"] for t in local)
             report["candidates"].append({
-                "delta_m": delta, "trials": trials,
-                "local_success_rate": float(np.mean(local)),
+                "label": label, "delta_world_m": delta.tolist(), "trials": trials,
+                "local_success_rate": len(local) / len(trials),
                 "final_success_rate": float(np.mean([t["final_success"] for t in trials])),
-                "final_success_rate_given_local": (float(np.mean([t["final_success"] for t in trials
-                                                                  if t["local_success"]])) if any(local) else None),
+                "downstream_given_local": [downstream_given_local, len(local)],
+                "downstream_given_local_rate": (downstream_given_local / len(local)) if local else None,
+                "downstream_given_local_wilson95": _wilson(downstream_given_local, len(local)),
+                "failure_reasons": sorted({str(t["final_reason"]) for t in trials if not t["final_success"]}),
             })
         spread = np.stack(anchor_states)
         report["anchor_object_spread_across_trials_m"] = float(np.linalg.norm(spread - spread[0], axis=-1).max())
-        locals_ok = [c for c in report["candidates"] if c["local_success_rate"] == 1.0]
-        rates = [c["final_success_rate"] for c in locals_ok]
-        report["consequential_gap"] = (max(rates) - min(rates)) if len(rates) >= 2 else None
-        report["interpretation_rule"] = ("consequential if >=2 candidates are locally successful in every trial "
-                                         "and their downstream success rates differ by >=0.5; with n<=5 trials "
-                                         "this is a screening signal, not an estimate")
-        report["consequential"] = bool(report["consequential_gap"] is not None and report["consequential_gap"] >= 0.5)
+        eligible = [c for c in report["candidates"] if c["local_success_rate"] >= CONSEQUENCE_RULE["min_local_rate"]]
+        pairs = []
+        for i, a in enumerate(eligible):
+            for b in eligible[i + 1:]:
+                (ka, na), (kb, nb) = a["downstream_given_local"], b["downstream_given_local"]
+                gap = abs(ka / na - kb / nb)
+                _, p_value = fisher_exact([[ka, na - ka], [kb, nb - kb]])
+                pairs.append({"a": a["label"], "b": b["label"], "gap": float(gap), "fisher_p": float(p_value),
+                              "consequential": bool(gap >= CONSEQUENCE_RULE["min_gap"]
+                                                    and p_value < CONSEQUENCE_RULE["max_p"])})
+        report["pairs"] = pairs
+        report["consequential"] = any(pair["consequential"] for pair in pairs)
         return report
     finally:
         session.shutdown()
@@ -602,9 +642,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--anchor-waypoint", type=int, default=3)
     parser.add_argument("--image-size", type=int, nargs=2, default=(128, 128))
     parser.add_argument("--deltas", type=float, nargs="+", default=(0.0, -0.05, -0.08, -0.11))
-    parser.add_argument("--trials", type=int, default=3)
+    parser.add_argument("--trials", type=int, default=20)
     parser.add_argument("--jitter-m", type=float, default=0.005)
     parser.add_argument("--local-predicate", default="drawer_open")
+    parser.add_argument("--offsets", nargs="+", help="candidate offsets 'dx,dy,dz' (see --offset-frame)")
+    parser.add_argument("--offset-frame", choices=("waypoint", "world"), default="waypoint")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
     started = time.time()
