@@ -86,9 +86,20 @@ def collect_episode(
     masks: bool = False,
     point_cloud: bool = False,
     stop_after: int | None = None,
+    canonical_start: bool = False,
 ) -> tuple[dict[str, Any], dict[str, np.ndarray], dict[str, Any]]:
-    """Return (manifest, arrays, runtime) for one episode; raises on simulator errors."""
+    """Return (manifest, arrays, runtime) for one episode; raises on simulator errors.
+
+    ``canonical_start`` restores the post-reset snapshot before execution so
+    the episode starts without engine-internal state left by the upstream
+    reset; only such episodes can be reproduced by snapshot + command replay.
+    """
     reset = session.reset(variation, rng_state=rng_state)
+    if canonical_start:
+        from icgs.environments.robohiman.snapshot import capture_snapshot, restore_snapshot
+
+        restore_snapshot(session, capture_snapshot(session, 0))
+        session.scene._has_init_episode = True
     monitor = build_monitor(session.task, session.task_env, variation)
     recorder = StepRecorder(session, monitor, frame_stride=frame_stride,
                             capture_frame=frame_capture(session, masks=masks, point_cloud=point_cloud))
@@ -157,6 +168,10 @@ def collect_episode(
             "benchmark_factors_after_reset": reset["factors_after_reset"],
         },
         "environment": {**session.provenance(), "workspace_bounds": session.workspace_bounds(),
+                        "canonical_start": {
+                            "applied": bool(canonical_start),
+                            "meaning": "post-reset configuration-tree snapshot restored before execution "
+                                       "(drops engine-internal contact/solver state; deviation from native)"},
                         "robot": {"arm_base_pose": [float(v) for v in session.robot.arm.get_pose()],
                                   "tip": session.robot.arm.get_tip().get_name(),
                                   "arm_joint_names": [j.get_name() for j in session.robot.arm.joints]}},

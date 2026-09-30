@@ -48,6 +48,39 @@ NATIVE_SPLITS = MappingProxyType({
 NATIVE_CAMERAS = ("left_shoulder", "right_shoulder", "wrist", "front")
 
 
+# Upstream behaviour preserved as-is and recorded in every episode's provenance.
+# Evidence: docs/experiments/robohiman-validation/README.md.
+GLOBAL_QUIRKS = (
+    "demo expert grasps kinematically (Gripper.grasp re-parents the object); attach happens after the "
+    "last physics step of a close_gripper waypoint",
+    "path.visualize() teleports the arm along each planned path and back before execution "
+    "(rows with cmd_arm_teleport_calls > 0)",
+    "robot reset leaves ~1e-4 rad joint residuals and RRTConnect is sensitive to them: re-execution from "
+    "one RNG state is not bitwise reproducible",
+    "Colosseum factors own RNGs advancing every reset; reset lineage = numpy state + factor states",
+    "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) "
+    "that configuration-tree restore removes",
+    "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+)
+_DRAWER_SIZE_LEAK = ("object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy "
+                     "(drawer/cupboard scale 0.9-1.15 in A/C levels)")
+TASK_QUIRKS = {
+    **{task: (_DRAWER_SIZE_LEAK,) for task in (
+        "box_out_of_opened_drawer", "put_in_opened_drawer", "take_out_of_opened_drawer", "put_in_without_close",
+        "take_out_without_close", "transfer_box", "put_in_and_close", "put_two_in_different", "put_two_in_same",
+        "take_out_and_close", "take_two_out_of_different", "take_two_out_of_same", "box_exchange")},
+    "rubbish_in_dustpan": ("collection strategy 0 is disabled: native train_A (IDX_TO_COLLECT=0) collects nothing",),
+    "sweep_and_drop": ("expert executes broom sweeping before the rubbish drop; oracle language lists rubbish first",),
+}
+for _task, _extra in (("box_exchange", "upstream success turns true while the spam is still held (before release)"),
+                      ("box_in_cupboard", "success sensor detects the grocery while it is still held")):
+    TASK_QUIRKS[_task] = tuple(TASK_QUIRKS.get(_task, ())) + (_extra,)
+
+
+def quirks_for(task: str) -> list[str]:
+    return list(GLOBAL_QUIRKS) + list(TASK_QUIRKS.get(task, ()))
+
+
 def task_family(task: str) -> str:
     if task in ATOMIC_TASKS:
         return "atomic"
@@ -69,8 +102,11 @@ __all__ = [
     "COMPOSITIONAL_TEST_TASKS",
     "COMPOSITIONAL_TRAIN_TASKS",
     "NATIVE_CAMERAS",
+    "GLOBAL_QUIRKS",
     "NATIVE_SPLITS",
+    "TASK_QUIRKS",
     "UPSTREAM",
+    "quirks_for",
     "level_for",
     "task_family",
 ]

@@ -22,7 +22,7 @@ from typing import Any, Sequence
 
 import numpy as np
 
-from icgs.environments.robohiman.pins import NATIVE_CAMERAS, UPSTREAM, level_for, task_family
+from icgs.environments.robohiman.pins import NATIVE_CAMERAS, UPSTREAM, level_for, quirks_for, task_family
 
 
 def _git_revision(path: Path) -> dict[str, Any]:
@@ -283,6 +283,7 @@ class RoboHiManSession:
             "numpy": np.__version__,
             "physics_dt": float(self.pyrep.get_simulation_timestep()),
             "env_seed": self.env_seed,
+            "known_upstream_quirks_preserved": quirks_for(self.task),
             "deviations_from_native_generator": [
                 "numpy RNG seeded explicitly and full MT19937 state stored before reset "
                 "(native workers call np.random.seed(None))",

@@ -42,6 +42,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-steps", type=int, default=3000)
     parser.add_argument("--perturbation", action="append", default=[],
                         help="JSON object with family/waypoint/... (repeatable)")
+    parser.add_argument("--canonical-start", action="store_true",
+                        help="restore the post-reset snapshot before execution (branchable episodes; deviation)")
     parser.add_argument("--masks", action="store_true")
     parser.add_argument("--point-cloud", action="store_true")
     parser.add_argument("--max-episodes-guard", type=int, default=20,
@@ -66,7 +68,8 @@ def main(argv: list[str] | None = None) -> int:
                 manifest, arrays, runtime = collect_episode(
                     session, run_id=args.run_id, episode_index=index, variation=args.variation,
                     rng_state=None, perturbations=perturbations, frame_stride=args.frame_stride,
-                    max_steps=args.max_steps, masks=args.masks, point_cloud=args.point_cloud)
+                    max_steps=args.max_steps, masks=args.masks, point_cloud=args.point_cloud,
+                    canonical_start=args.canonical_start)
             except Exception as error:  # simulator/runtime failure: attempt record only
                 record = attempt_record(run_id=args.run_id, task=args.task, variation=args.variation,
                                         episode_index=index, error=error)
