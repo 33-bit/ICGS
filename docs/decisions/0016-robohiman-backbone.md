@@ -13,7 +13,7 @@ predicates) and a costly custom benchmark. RoboHiMan / HiMan-Bench
 (`chenyt31/RoboHiMan@33f71d3`) provides atomic/compositional tasks, assets,
 perturbation factors and machine-readable predicates, but its saved
 demonstrations lack commanded actions, timing, failures, predicate traces and
-validated anchors ([compatibility audit](../../ROBOHIMAN_ICGS_COMPATIBILITY.md)).
+validated anchors ([compatibility audit](../audits/2026-09-30-robohiman-icgs-compatibility.md)).
 
 ## Decision
 

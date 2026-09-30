@@ -14,6 +14,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [RoboHiMan backbone](components/robohiman.md) | Primary task/environment path under migration: pinned simulator venv, Stage-1 records, instrumentation, gates |
 | [RoboHiMan decision](decisions/0016-robohiman-backbone.md) | RoboHiMan as upstream backbone; ICGS-owned instrumentation; custom generator removed (ADR 0019) |
 | [RoboHiMan migration plan](plans/active/robohiman-backbone-migration.md) | Phases, go/no-go gates and recovery for the backbone switch |
+| [RoboHiMan compatibility audit](audits/2026-09-30-robohiman-icgs-compatibility.md) | Source-level A0/A1/B and branch-feasibility audit of RoboHiMan@33f71d3 before migration |
 | [Migration classification](audits/2026-09-30-robohiman-migration-classification.md) | Generic vs custom-generator vs mixed components before refactor |
 | [RoboHiMan validation evidence](experiments/robohiman-validation/README.md) | Parity, A0, replay, dependency, split-overlap and smoke-collection results |
 | [RoboHiMan validation round 2](experiments/robohiman-validation/v2/README.md) | Monitor families, anchor replay fidelity and acceptance rule, n=20 dependency audit, storage cadence |
