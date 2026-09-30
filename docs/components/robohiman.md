@@ -106,3 +106,19 @@ Benchmark perturbations are selected with `--strategy` (Colosseum strategy index
   trials start from a post-reset snapshot (contact-free) and replay the
   recorded prefix open loop; long-horizon replay drifts by centimetres in
   articulated/free objects while predicates and outcome agree.
+
+## Round-2 additions
+
+- Monitors: generic predicate kinds + `TASK_SPECS` for 10 tasks in three
+  families; event relations may conjoin raw predicates; labels can be
+  re-derived offline (`robohiman_stage1_report.py --relabel`).
+- `--canonical-start` (collection) restores the post-reset snapshot before
+  execution; required for episodes that will be branched or replayed.
+- Anchor reproduction: direct restore for free and kinematic-grasp anchors,
+  nearest contact-free snapshot + open-loop replay for physical-grip anchors;
+  accept an anchor only after `robohiman_fidelity.py` repeats pass
+  `robohiman_fidelity_summary.py`.
+- Storage: low-dim state and commands every physics step; RGB-D every second
+  step plus every event boundary (default `--frame-stride 2`).
+- Dependency audit: `robohiman_gates.py dependency --offset=dx,dy,dz` (waypoint
+  frame) or `--deltas` (approach axis), 20 trials, Wilson + Fisher summary.

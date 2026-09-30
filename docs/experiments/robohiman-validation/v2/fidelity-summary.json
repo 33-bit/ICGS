@@ -1,0 +1,893 @@
+{
+ "by_class_and_strategy": {
+  "free/anchor_restore": {
+   "accepted": 20,
+   "anchors": 21
+  },
+  "free/contact_free": {
+   "accepted": 20,
+   "anchors": 21
+  },
+  "free/reset_snapshot": {
+   "accepted": 18,
+   "anchors": 21
+  },
+  "kinematic_grasp/anchor_regrip": {
+   "accepted": 12,
+   "anchors": 13
+  },
+  "kinematic_grasp/anchor_restore": {
+   "accepted": 13,
+   "anchors": 13
+  },
+  "kinematic_grasp/contact_free": {
+   "accepted": 11,
+   "anchors": 13
+  },
+  "kinematic_grasp/reset_snapshot": {
+   "accepted": 13,
+   "anchors": 13
+  },
+  "physical_grip/anchor_regrip": {
+   "accepted": 0,
+   "anchors": 2
+  },
+  "physical_grip/anchor_restore": {
+   "accepted": 0,
+   "anchors": 2
+  },
+  "physical_grip/contact_free": {
+   "accepted": 2,
+   "anchors": 2
+  },
+  "physical_grip/reset_snapshot": {
+   "accepted": 2,
+   "anchors": 2
+  }
+ },
+ "rule": {
+  "articulation_m": 0.002,
+  "depth_mean_abs_m": 0.002,
+  "ee_m": 0.0015,
+  "final_drift_floor_m": 0.01,
+  "floor_factor": 2.0,
+  "joint_rad": 0.002,
+  "object_m": 0.002,
+  "predicate_disagreement": 0.01
+ },
+ "tasks": {
+  "box_exchange": {
+   "anchors": [
+    {
+     "after_waypoint": 0,
+     "boundary": 86,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 2,
+     "boundary": 139,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 3,
+     "boundary": 181,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 5,
+     "boundary": 307,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 7,
+     "boundary": 366,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 9,
+     "boundary": 413,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 10,
+     "boundary": 498,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": false,
+       "reasons": [
+        "anchor_depth"
+       ]
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 12,
+     "boundary": 543,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": false,
+       "reasons": [
+        "anchor_object"
+       ]
+      }
+     }
+    }
+   ],
+   "granular_objects_excluded": false,
+   "reference": {
+    "status": "success",
+    "steps": 544,
+    "task_success": true,
+    "waypoints": 13
+   }
+  },
+  "open_drawer": {
+   "anchors": [
+    {
+     "after_waypoint": 0,
+     "boundary": 47,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 1,
+     "boundary": 126,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 2,
+     "boundary": 157,
+     "class": "physical_grip",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": false,
+       "reasons": [
+        "final_articulation_m",
+        "final_object_m",
+        "outcome",
+        "predicate_trace"
+       ]
+      },
+      "anchor_restore": {
+       "accept": false,
+       "reasons": [
+        "final_articulation_m",
+        "final_object_m",
+        "outcome",
+        "predicate_trace"
+       ]
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 3,
+     "boundary": 197,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    }
+   ],
+   "granular_objects_excluded": false,
+   "reference": {
+    "status": "success",
+    "steps": 198,
+    "task_success": true,
+    "waypoints": 4
+   }
+  },
+  "put_in_and_close": {
+   "anchors": [
+    {
+     "after_waypoint": 0,
+     "boundary": 44,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 2,
+     "boundary": 158,
+     "class": "physical_grip",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": false,
+       "reasons": [
+        "final_object_m",
+        "outcome",
+        "predicate_trace"
+       ]
+      },
+      "anchor_restore": {
+       "accept": false,
+       "reasons": [
+        "final_object_m",
+        "outcome",
+        "predicate_trace"
+       ]
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 4,
+     "boundary": 211,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 6,
+     "boundary": 320,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 7,
+     "boundary": 346,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": false,
+       "reasons": [
+        "final_object_m"
+       ]
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 9,
+     "boundary": 378,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 11,
+     "boundary": 447,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": false,
+       "reasons": [
+        "final_object_m"
+       ]
+      },
+      "contact_free": {
+       "accept": false,
+       "reasons": [
+        "final_object_m"
+       ]
+      },
+      "reset_snapshot": {
+       "accept": false,
+       "reasons": [
+        "anchor_object"
+       ]
+      }
+     }
+    },
+    {
+     "after_waypoint": 13,
+     "boundary": 607,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": false,
+       "reasons": [
+        "anchor_object"
+       ]
+      }
+     }
+    }
+   ],
+   "granular_objects_excluded": false,
+   "reference": {
+    "status": "success",
+    "steps": 608,
+    "task_success": true,
+    "waypoints": 14
+   }
+  },
+  "put_in_without_close": {
+   "anchors": [
+    {
+     "after_waypoint": 0,
+     "boundary": 47,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 1,
+     "boundary": 132,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 3,
+     "boundary": 204,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 4,
+     "boundary": 220,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 6,
+     "boundary": 342,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 7,
+     "boundary": 368,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": false,
+       "reasons": [
+        "anchor_depth"
+       ]
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 9,
+     "boundary": 401,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 10,
+     "boundary": 442,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    }
+   ],
+   "granular_objects_excluded": false,
+   "reference": {
+    "status": "success",
+    "steps": 443,
+    "task_success": true,
+    "waypoints": 11
+   }
+  },
+  "sweep_and_drop": {
+   "anchors": [
+    {
+     "after_waypoint": 0,
+     "boundary": 42,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 2,
+     "boundary": 143,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 4,
+     "boundary": 212,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 6,
+     "boundary": 259,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 9,
+     "boundary": 372,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 11,
+     "boundary": 445,
+     "class": "free",
+     "verdicts": {
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 13,
+     "boundary": 491,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    },
+    {
+     "after_waypoint": 15,
+     "boundary": 546,
+     "class": "kinematic_grasp",
+     "verdicts": {
+      "anchor_regrip": {
+       "accept": true,
+       "reasons": []
+      },
+      "anchor_restore": {
+       "accept": true,
+       "reasons": []
+      },
+      "contact_free": {
+       "accept": true,
+       "reasons": []
+      },
+      "reset_snapshot": {
+       "accept": true,
+       "reasons": []
+      }
+     }
+    }
+   ],
+   "granular_objects_excluded": true,
+   "reference": {
+    "status": "success",
+    "steps": 547,
+    "task_success": true,
+    "waypoints": 16
+   }
+  }
+ }
+}

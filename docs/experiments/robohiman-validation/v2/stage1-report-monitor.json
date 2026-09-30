@@ -1,0 +1,3603 @@
+{
+ "d_value_refused": true,
+ "episodes": [
+  {
+   "A0": {
+    "calibration": {
+     "front": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       4.5
+      ],
+      "position_first_m": [
+       1.349999189376831,
+       3.715465624054559e-08,
+       1.579999327659607
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999999867252856,
+      "rotation_orthogonality_max_err": 3.6932476632500766e-08
+     },
+     "left_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499971389770508,
+       0.20000000298023224,
+       1.9799989461898804
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000208365662,
+      "rotation_orthogonality_max_err": 1.7171904165280694e-07
+     },
+     "right_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499709129333496,
+       -0.20000000298023224,
+       1.9799922704696655
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000228085544,
+      "rotation_orthogonality_max_err": 2.0511023723912558e-07
+     },
+     "wrist": {
+      "extrinsics_constant": false,
+      "fx_fy_first": [
+       -110.85124795436963,
+       -110.85124795436963
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.5
+      ],
+      "position_first_m": [
+       0.3052123188972473,
+       -0.006158137694001198,
+       1.5729289054870605
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.0000011764225625,
+      "rotation_orthogonality_max_err": 9.952922042089085e-07
+     }
+    },
+    "frames": [
+     {
+      "frame": 0,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.8633880615234375,
+      "valid_xyz_max": [
+       1.9385851544846282,
+       1.4645040752218896,
+       1.6898055849526588
+      ],
+      "valid_xyz_min": [
+       -2.510004067751872,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     },
+     {
+      "frame": 147,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.858306884765625,
+      "valid_xyz_max": [
+       1.9385851544846282,
+       1.4645040752218896,
+       1.5247761140941767
+      ],
+      "valid_xyz_min": [
+       -2.510004067751872,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     },
+     {
+      "frame": 294,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.85882568359375,
+      "valid_xyz_max": [
+       1.9385851544846282,
+       1.4645040752218896,
+       1.5314737351444467
+      ],
+      "valid_xyz_min": [
+       -2.510004067751872,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     }
+    ],
+    "physical_preprocessing": {
+     "fields": {
+      "anchor_valid": [
+       1,
+       128
+      ],
+      "anchors": [
+       1,
+       128,
+       3
+      ],
+      "neighbor_indices": [
+       1,
+       128,
+       32
+      ],
+      "neighbor_valid": [
+       1,
+       128,
+       32
+      ],
+      "point_valid": [
+       1,
+       2048
+      ],
+      "points": [
+       1,
+       2048,
+       3
+      ]
+     },
+     "status": "PASS"
+    },
+    "workspace_bounds": [
+     [
+      -0.27499998807907106,
+      -0.6550000429153442,
+      0.7519998550415039
+     ],
+     [
+      0.774999988079071,
+      0.6550000429153442,
+      1.751999855041504
+     ]
+    ]
+   },
+   "A1": {
+    "arm_target_command_rows": 519,
+    "canonical_ee_command": {
+     "canonical_commands_derivable": false,
+     "fk_id": "panda-mdh-fitted-base-tip-v1",
+     "residual_position_max_m": 0.9615856376866736,
+     "residual_position_mean_m": 0.5667307908772775,
+     "residual_rotation_max_deg": 179.6330334039529,
+     "samples": 571,
+     "tolerance": {
+      "position_m": 0.001,
+      "rotation_deg": 0.1
+     }
+    },
+    "command_vs_achieved_next_joint_abs_rad": {
+     "max": 0.02847510285983662,
+     "mean": 0.007189106437720334,
+     "p95": 0.018237135495125737,
+     "rows_identical": 0
+    },
+    "frames_per_boundary": 0.5166374781085814,
+    "grasp_events": 4,
+    "gripper_velocity_command_rows": 46,
+    "kinematic_excursion_rows": 13,
+    "phase_counts": {
+     "1": 523,
+     "2": 46,
+     "6": 1
+    },
+    "physics_dt_declared": 0.05000000074505806,
+    "rows_without_any_command": 5,
+    "sim_dt_all_equal_declared": true,
+    "sim_dt_min_max": [
+     0.049999237060546875,
+     0.05000114440917969
+    ],
+    "steps": 570,
+    "wall_s_per_step_mean": 0.017335413124314265
+   },
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "sugar_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "sugar_placed_on_table",
+      "from_boundary": 141
+     },
+     {
+      "alpha": 2,
+      "event": "spam_grasped",
+      "from_boundary": 289
+     },
+     {
+      "alpha": 3,
+      "event": "spam_placed_in_cupboard",
+      "from_boundary": 432
+     },
+     {
+      "alpha": 4,
+      "event": "null",
+      "from_boundary": 544
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "sugar_grasped",
+       "final_nu": false,
+       "first_occurrence": 141,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "sugar_placed_on_table",
+       "final_nu": true,
+       "first_occurrence": 289,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "spam_grasped",
+       "final_nu": false,
+       "first_occurrence": 432,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "spam_placed_in_cupboard",
+       "final_nu": true,
+       "first_occurrence": 544,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "spam_grasped": 432,
+     "spam_placed_in_cupboard": 544,
+     "sugar_grasped": 141,
+     "sugar_placed_on_table": 289
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      1,
+      0,
+      1
+     ],
+     "rho": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "labels_source": "stored at collection",
+    "predicate_edges": [
+     {
+      "boundary": 141,
+      "predicate": "sugar_grasped",
+      "to": true
+     },
+     {
+      "boundary": 159,
+      "predicate": "sugar_in_cupboard",
+      "to": false
+     },
+     {
+      "boundary": 289,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 289,
+      "predicate": "sugar_on_table",
+      "to": true
+     },
+     {
+      "boundary": 300,
+      "predicate": "sugar_grasped",
+      "to": false
+     },
+     {
+      "boundary": 432,
+      "predicate": "spam_grasped",
+      "to": true
+     },
+     {
+      "boundary": 443,
+      "predicate": "spam_on_table",
+      "to": false
+     },
+     {
+      "boundary": 544,
+      "predicate": "spam_in_cupboard",
+      "to": true
+     },
+     {
+      "boundary": 544,
+      "predicate": "success_condition_1",
+      "to": true
+     },
+     {
+      "boundary": 562,
+      "predicate": "spam_grasped",
+      "to": false
+     }
+    ],
+    "task_success_first_boundary": 544
+   },
+   "B_relabel": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "sugar_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "sugar_placed_on_table",
+      "from_boundary": 141
+     },
+     {
+      "alpha": 2,
+      "event": "spam_grasped",
+      "from_boundary": 300
+     },
+     {
+      "alpha": 3,
+      "event": "spam_placed_in_cupboard",
+      "from_boundary": 432
+     },
+     {
+      "alpha": 4,
+      "event": "null",
+      "from_boundary": 562
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "sugar_grasped",
+       "final_nu": false,
+       "first_occurrence": 141,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "sugar_placed_on_table",
+       "final_nu": true,
+       "first_occurrence": 300,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "spam_grasped",
+       "final_nu": false,
+       "first_occurrence": 432,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "spam_placed_in_cupboard",
+       "final_nu": true,
+       "first_occurrence": 562,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "spam_grasped": 432,
+     "spam_placed_in_cupboard": 562,
+     "sugar_grasped": 141,
+     "sugar_placed_on_table": 300
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      1,
+      0,
+      1
+     ],
+     "rho": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "labels_source": "offline relabel with current TASK_SPECS",
+    "predicate_edges": [
+     {
+      "boundary": 141,
+      "predicate": "sugar_grasped",
+      "to": true
+     },
+     {
+      "boundary": 159,
+      "predicate": "sugar_in_cupboard",
+      "to": false
+     },
+     {
+      "boundary": 289,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 289,
+      "predicate": "sugar_on_table",
+      "to": true
+     },
+     {
+      "boundary": 300,
+      "predicate": "sugar_grasped",
+      "to": false
+     },
+     {
+      "boundary": 432,
+      "predicate": "spam_grasped",
+      "to": true
+     },
+     {
+      "boundary": 443,
+      "predicate": "spam_on_table",
+      "to": false
+     },
+     {
+      "boundary": 544,
+      "predicate": "spam_in_cupboard",
+      "to": true
+     },
+     {
+      "boundary": 544,
+      "predicate": "success_condition_1",
+      "to": true
+     },
+     {
+      "boundary": 562,
+      "predicate": "spam_grasped",
+      "to": false
+     }
+    ],
+    "task_success_first_boundary": 544
+   },
+   "bytes": 59726758,
+   "counts": {
+    "frames": 295,
+    "steps": 570
+   },
+   "episode_id": "mon-box_exchange-v0-s0-0000",
+   "level": "C",
+   "outcome": {
+    "last_completed_waypoint": 12,
+    "reason": null,
+    "recoverability": "unknown",
+    "recoverability_evidence": null,
+    "status": "success",
+    "stopped_at_anchor_waypoint": null,
+    "success_first_step": 544,
+    "task_success_final": true
+   },
+   "perturbation": {
+    "enabled_benchmark_factors": [],
+    "execution": [],
+    "families": [
+     "none"
+    ]
+   },
+   "provenance": {
+    "arrays_sha256": "c4f0a280c29110b53a866fc831c87d40abce2ac800af47756315faec206c24e9",
+    "code": {
+     "icgs_revision": "a3098f13ad5e2a6a3e33760d1aa6d11d07341e72",
+     "icgs_src_dirty": false
+    },
+    "reset_rng_sha256": "d09ea66f893d22d652ccc3e1be20c096097a7f72e5efe89359b3b6b8c82f7a89",
+    "robohiman": {
+     "dirty_paths": [
+      "iMan-Bench/robot-colosseum/colosseum.egg-info/PKG-INFO"
+     ],
+     "revision": "33f71d30d9a100a83725ff00dfcc27374d5ce810"
+    },
+    "run": "mon",
+    "task_ttm_sha256": "924cb4dad85a19aac224e4bfd2933aa9a678af62ee5b8f37d8352c41abf6f5ea"
+   },
+   "review_frames": [
+    "mon-box_exchange-v0-s0-0000-b0000.png",
+    "mon-box_exchange-v0-s0-0000-b0140.png",
+    "mon-box_exchange-v0-s0-0000-b0141.png",
+    "mon-box_exchange-v0-s0-0000-b0288.png",
+    "mon-box_exchange-v0-s0-0000-b0289.png",
+    "mon-box_exchange-v0-s0-0000-b0432.png",
+    "mon-box_exchange-v0-s0-0000-b0432.png",
+    "mon-box_exchange-v0-s0-0000-b0544.png",
+    "mon-box_exchange-v0-s0-0000-b0544.png",
+    "mon-box_exchange-v0-s0-0000-b0570.png"
+   ],
+   "task": "box_exchange"
+  },
+  {
+   "A0": {
+    "calibration": {
+     "front": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       4.5
+      ],
+      "position_first_m": [
+       1.349999189376831,
+       3.715465624054559e-08,
+       1.579999327659607
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999999867252856,
+      "rotation_orthogonality_max_err": 3.6932476632500766e-08
+     },
+     "left_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499971389770508,
+       0.20000000298023224,
+       1.9799989461898804
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000208365662,
+      "rotation_orthogonality_max_err": 1.7171904165280694e-07
+     },
+     "right_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499709129333496,
+       -0.20000000298023224,
+       1.9799922704696655
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000228085544,
+      "rotation_orthogonality_max_err": 2.0511023723912558e-07
+     },
+     "wrist": {
+      "extrinsics_constant": false,
+      "fx_fy_first": [
+       -110.85124795436963,
+       -110.85124795436963
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.5
+      ],
+      "position_first_m": [
+       0.30518004298210144,
+       -0.0061666592955589294,
+       1.5729748010635376
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999998526247658,
+      "rotation_orthogonality_max_err": 8.444096093462861e-07
+     }
+    },
+    "frames": [
+     {
+      "frame": 0,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.8655853271484375,
+      "valid_xyz_max": [
+       1.9385851544846282,
+       1.4452162373015032,
+       1.6898235411133067
+      ],
+      "valid_xyz_min": [
+       -2.510004045637684,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     },
+     {
+      "frame": 145,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.8660888671875,
+      "valid_xyz_max": [
+       1.9385851544846282,
+       1.4452162373015032,
+       1.5268975069408544
+      ],
+      "valid_xyz_min": [
+       -2.510004004173582,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     },
+     {
+      "frame": 290,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.86676025390625,
+      "valid_xyz_max": [
+       1.9385851544846282,
+       1.4452162373015032,
+       1.531473239738681
+      ],
+      "valid_xyz_min": [
+       -2.510004045637684,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     }
+    ],
+    "physical_preprocessing": {
+     "fields": {
+      "anchor_valid": [
+       1,
+       128
+      ],
+      "anchors": [
+       1,
+       128,
+       3
+      ],
+      "neighbor_indices": [
+       1,
+       128,
+       32
+      ],
+      "neighbor_valid": [
+       1,
+       128,
+       32
+      ],
+      "point_valid": [
+       1,
+       2048
+      ],
+      "points": [
+       1,
+       2048,
+       3
+      ]
+     },
+     "status": "PASS"
+    },
+    "workspace_bounds": [
+     [
+      -0.27499998807907106,
+      -0.6550000429153442,
+      0.7519998550415039
+     ],
+     [
+      0.774999988079071,
+      0.6550000429153442,
+      1.751999855041504
+     ]
+    ]
+   },
+   "A1": {
+    "arm_target_command_rows": 482,
+    "canonical_ee_command": {
+     "canonical_commands_derivable": false,
+     "fk_id": "panda-mdh-fitted-base-tip-v1",
+     "residual_position_max_m": 0.7476512080147887,
+     "residual_position_mean_m": 0.4298757576730648,
+     "residual_rotation_max_deg": 178.27734336316877,
+     "samples": 558,
+     "tolerance": {
+      "position_m": 0.001,
+      "rotation_deg": 0.1
+     }
+    },
+    "command_vs_achieved_next_joint_abs_rad": {
+     "max": 0.02698138276329809,
+     "mean": 0.0071172984350095884,
+     "p95": 0.019512039101585242,
+     "rows_identical": 0
+    },
+    "frames_per_boundary": 0.521505376344086,
+    "grasp_events": 2,
+    "gripper_velocity_command_rows": 61,
+    "kinematic_excursion_rows": 13,
+    "phase_counts": {
+     "0": 10,
+     "1": 485,
+     "2": 61,
+     "6": 1
+    },
+    "physics_dt_declared": 0.05000000074505806,
+    "rows_without_any_command": 14,
+    "sim_dt_all_equal_declared": true,
+    "sim_dt_min_max": [
+     0.049999237060546875,
+     0.05000114440917969
+    ],
+    "steps": 557,
+    "wall_s_per_step_mean": 0.014366809763407245
+   },
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "sugar_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "sugar_grasped",
+       "final_nu": false,
+       "first_occurrence": null,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "sugar_placed_on_table",
+       "final_nu": false,
+       "first_occurrence": null,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "spam_grasped",
+       "final_nu": false,
+       "first_occurrence": 394,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "spam_placed_in_cupboard",
+       "final_nu": true,
+       "first_occurrence": 523,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "spam_grasped": 394,
+     "spam_placed_in_cupboard": 523,
+     "sugar_grasped": null,
+     "sugar_placed_on_table": null
+    },
+    "final": {
+     "epsilon": [
+      1,
+      0,
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "rho": [
+      0,
+      0,
+      1,
+      1
+     ]
+    },
+    "labels_source": "stored at collection",
+    "predicate_edges": [
+     {
+      "boundary": 394,
+      "predicate": "spam_grasped",
+      "to": true
+     },
+     {
+      "boundary": 403,
+      "predicate": "spam_on_table",
+      "to": false
+     },
+     {
+      "boundary": 523,
+      "predicate": "spam_in_cupboard",
+      "to": true
+     },
+     {
+      "boundary": 523,
+      "predicate": "success_condition_1",
+      "to": true
+     },
+     {
+      "boundary": 539,
+      "predicate": "spam_grasped",
+      "to": false
+     }
+    ],
+    "task_success_first_boundary": null
+   },
+   "B_relabel": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "sugar_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "sugar_grasped",
+       "final_nu": false,
+       "first_occurrence": null,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "sugar_placed_on_table",
+       "final_nu": false,
+       "first_occurrence": null,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "spam_grasped",
+       "final_nu": false,
+       "first_occurrence": 394,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "spam_placed_in_cupboard",
+       "final_nu": true,
+       "first_occurrence": 539,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "spam_grasped": 394,
+     "spam_placed_in_cupboard": 539,
+     "sugar_grasped": null,
+     "sugar_placed_on_table": null
+    },
+    "final": {
+     "epsilon": [
+      1,
+      0,
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      0,
+      0,
+      1
+     ],
+     "rho": [
+      0,
+      0,
+      1,
+      1
+     ]
+    },
+    "labels_source": "offline relabel with current TASK_SPECS",
+    "predicate_edges": [
+     {
+      "boundary": 394,
+      "predicate": "spam_grasped",
+      "to": true
+     },
+     {
+      "boundary": 403,
+      "predicate": "spam_on_table",
+      "to": false
+     },
+     {
+      "boundary": 523,
+      "predicate": "spam_in_cupboard",
+      "to": true
+     },
+     {
+      "boundary": 523,
+      "predicate": "success_condition_1",
+      "to": true
+     },
+     {
+      "boundary": 539,
+      "predicate": "spam_grasped",
+      "to": false
+     }
+    ],
+    "task_success_first_boundary": null
+   },
+   "bytes": 58990030,
+   "counts": {
+    "frames": 291,
+    "steps": 557
+   },
+   "episode_id": "mon-box_exchange-v0-s0-0001",
+   "level": "C",
+   "outcome": {
+    "last_completed_waypoint": 12,
+    "reason": "task_success_false_after_expert",
+    "recoverability": "unknown",
+    "recoverability_evidence": null,
+    "status": "failure",
+    "stopped_at_anchor_waypoint": null,
+    "success_first_step": null,
+    "task_success_final": false
+   },
+   "perturbation": {
+    "enabled_benchmark_factors": [],
+    "execution": [
+     {
+      "applied_at_step": 120,
+      "close_early_at_distance_m": 0.05,
+      "family": "gripper_timing",
+      "tip_to_waypoint_m": 0.04388098271714083,
+      "waypoint": 2
+     }
+    ],
+    "families": [
+     "gripper_timing"
+    ]
+   },
+   "provenance": {
+    "arrays_sha256": "24dbb28dae379411ec61767874aabcfae48d02ec5118ea6cbcb7246f4b2b94eb",
+    "code": {
+     "icgs_revision": "a3098f13ad5e2a6a3e33760d1aa6d11d07341e72",
+     "icgs_src_dirty": false
+    },
+    "reset_rng_sha256": "b12ea7bb168567191748d1234640e3426131789e30257fb856c30dcf960f4b86",
+    "robohiman": {
+     "dirty_paths": [
+      "iMan-Bench/robot-colosseum/colosseum.egg-info/PKG-INFO"
+     ],
+     "revision": "33f71d30d9a100a83725ff00dfcc27374d5ce810"
+    },
+    "run": "mon",
+    "task_ttm_sha256": "924cb4dad85a19aac224e4bfd2933aa9a678af62ee5b8f37d8352c41abf6f5ea"
+   },
+   "review_frames": [
+    "mon-box_exchange-v0-s0-0001-b0000.png",
+    "mon-box_exchange-v0-s0-0001-b0394.png",
+    "mon-box_exchange-v0-s0-0001-b0394.png",
+    "mon-box_exchange-v0-s0-0001-b0522.png",
+    "mon-box_exchange-v0-s0-0001-b0523.png",
+    "mon-box_exchange-v0-s0-0001-b0557.png"
+   ],
+   "task": "box_exchange"
+  },
+  {
+   "A0": {
+    "calibration": {
+     "front": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       4.5
+      ],
+      "position_first_m": [
+       1.349999189376831,
+       3.715465624054559e-08,
+       1.579999327659607
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999999867252856,
+      "rotation_orthogonality_max_err": 3.6932476632500766e-08
+     },
+     "left_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499971389770508,
+       0.20000000298023224,
+       1.9799989461898804
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000208365662,
+      "rotation_orthogonality_max_err": 1.7171904165280694e-07
+     },
+     "right_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499709129333496,
+       -0.20000000298023224,
+       1.9799922704696655
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000228085544,
+      "rotation_orthogonality_max_err": 2.0511023723912558e-07
+     },
+     "wrist": {
+      "extrinsics_constant": false,
+      "fx_fy_first": [
+       -110.85124795436963,
+       -110.85124795436963
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.5
+      ],
+      "position_first_m": [
+       0.30519899725914,
+       -0.006148217245936394,
+       1.5729271173477173
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000087768277,
+      "rotation_orthogonality_max_err": 1.0273404735805514e-06
+     }
+    },
+    "frames": [
+     {
+      "frame": 0,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.8813323974609375,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.6898162263028436
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     },
+     {
+      "frame": 56,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.88427734375,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.5269191341909412
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.390266804030432e-05
+      ]
+     },
+     {
+      "frame": 111,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.882781982421875,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.5314764003879153
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     }
+    ],
+    "physical_preprocessing": {
+     "fields": {
+      "anchor_valid": [
+       1,
+       128
+      ],
+      "anchors": [
+       1,
+       128,
+       3
+      ],
+      "neighbor_indices": [
+       1,
+       128,
+       32
+      ],
+      "neighbor_valid": [
+       1,
+       128,
+       32
+      ],
+      "point_valid": [
+       1,
+       2048
+      ],
+      "points": [
+       1,
+       2048,
+       3
+      ]
+     },
+     "status": "PASS"
+    },
+    "workspace_bounds": [
+     [
+      -0.27499998807907106,
+      -0.6550000429153442,
+      0.7519998550415039
+     ],
+     [
+      0.774999988079071,
+      0.6550000429153442,
+      1.751999855041504
+     ]
+    ]
+   },
+   "A1": {
+    "arm_target_command_rows": 194,
+    "canonical_ee_command": {
+     "canonical_commands_derivable": false,
+     "fk_id": "panda-mdh-fitted-base-tip-v1",
+     "residual_position_max_m": 0.6876456227238475,
+     "residual_position_mean_m": 0.35531294105462236,
+     "residual_rotation_max_deg": 45.923812808918434,
+     "samples": 217,
+     "tolerance": {
+      "position_m": 0.001,
+      "rotation_deg": 0.1
+     }
+    },
+    "command_vs_achieved_next_joint_abs_rad": {
+     "max": 0.024113930933538974,
+     "mean": 0.006594569381852699,
+     "p95": 0.019979818461260353,
+     "rows_identical": 0
+    },
+    "frames_per_boundary": 0.5161290322580645,
+    "grasp_events": 2,
+    "gripper_velocity_command_rows": 19,
+    "kinematic_excursion_rows": 6,
+    "phase_counts": {
+     "1": 196,
+     "2": 19,
+     "6": 1
+    },
+    "physics_dt_declared": 0.05000000074505806,
+    "rows_without_any_command": 3,
+    "sim_dt_all_equal_declared": true,
+    "sim_dt_min_max": [
+     0.049999237060546875,
+     0.05000019073486328
+    ],
+    "steps": 216,
+    "wall_s_per_step_mean": 0.020356323731700994
+   },
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "target_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "target_placed_in_cupboard",
+      "from_boundary": 81
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 186
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "target_grasped",
+       "final_nu": false,
+       "first_occurrence": 81,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "target_placed_in_cupboard",
+       "final_nu": true,
+       "first_occurrence": 186,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "target_grasped": 81,
+     "target_placed_in_cupboard": 186
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      1
+     ],
+     "rho": [
+      1,
+      1
+     ]
+    },
+    "labels_source": "stored at collection",
+    "predicate_edges": [
+     {
+      "boundary": 81,
+      "predicate": "target_grasped",
+      "to": true
+     },
+     {
+      "boundary": 186,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 186,
+      "predicate": "target_in_cupboard",
+      "to": true
+     },
+     {
+      "boundary": 208,
+      "predicate": "target_grasped",
+      "to": false
+     }
+    ],
+    "task_success_first_boundary": 186
+   },
+   "B_relabel": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "target_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "target_placed_in_cupboard",
+      "from_boundary": 81
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 208
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "target_grasped",
+       "final_nu": false,
+       "first_occurrence": 81,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "target_placed_in_cupboard",
+       "final_nu": true,
+       "first_occurrence": 208,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "target_grasped": 81,
+     "target_placed_in_cupboard": 208
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      1
+     ],
+     "rho": [
+      1,
+      1
+     ]
+    },
+    "labels_source": "offline relabel with current TASK_SPECS",
+    "predicate_edges": [
+     {
+      "boundary": 81,
+      "predicate": "target_grasped",
+      "to": true
+     },
+     {
+      "boundary": 186,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 186,
+      "predicate": "target_in_cupboard",
+      "to": true
+     },
+     {
+      "boundary": 208,
+      "predicate": "target_grasped",
+      "to": false
+     }
+    ],
+    "task_success_first_boundary": 186
+   },
+   "bytes": 23293751,
+   "counts": {
+    "frames": 112,
+    "steps": 216
+   },
+   "episode_id": "mon-box_in_cupboard-v1-s0-0000",
+   "level": "A",
+   "outcome": {
+    "last_completed_waypoint": 5,
+    "reason": null,
+    "recoverability": "unknown",
+    "recoverability_evidence": null,
+    "status": "success",
+    "stopped_at_anchor_waypoint": null,
+    "success_first_step": 186,
+    "task_success_final": true
+   },
+   "perturbation": {
+    "enabled_benchmark_factors": [],
+    "execution": [],
+    "families": [
+     "none"
+    ]
+   },
+   "provenance": {
+    "arrays_sha256": "8c3f02316dcdccdc68c4f4dd49ac74c2a1d330301c0ea46bfba437355cf1626a",
+    "code": {
+     "icgs_revision": "a3098f13ad5e2a6a3e33760d1aa6d11d07341e72",
+     "icgs_src_dirty": false
+    },
+    "reset_rng_sha256": "48ea2f33ece2090468dc68c6c761efcb648fa6872b04b13195f68e493fe72059",
+    "robohiman": {
+     "dirty_paths": [
+      "iMan-Bench/robot-colosseum/colosseum.egg-info/PKG-INFO"
+     ],
+     "revision": "33f71d30d9a100a83725ff00dfcc27374d5ce810"
+    },
+    "run": "mon",
+    "task_ttm_sha256": "9454bbb06c789fa06a4f8c688017ac96f1d298a01476445dca99cb05e26c1f11"
+   },
+   "review_frames": [
+    "mon-box_in_cupboard-v1-s0-0000-b0000.png",
+    "mon-box_in_cupboard-v1-s0-0000-b0080.png",
+    "mon-box_in_cupboard-v1-s0-0000-b0081.png",
+    "mon-box_in_cupboard-v1-s0-0000-b0186.png",
+    "mon-box_in_cupboard-v1-s0-0000-b0186.png",
+    "mon-box_in_cupboard-v1-s0-0000-b0216.png"
+   ],
+   "task": "box_in_cupboard"
+  },
+  {
+   "A0": {
+    "calibration": {
+     "front": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       4.5
+      ],
+      "position_first_m": [
+       1.349999189376831,
+       3.715465624054559e-08,
+       1.579999327659607
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999999867252856,
+      "rotation_orthogonality_max_err": 3.6932476632500766e-08
+     },
+     "left_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499971389770508,
+       0.20000000298023224,
+       1.9799989461898804
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000208365662,
+      "rotation_orthogonality_max_err": 1.7171904165280694e-07
+     },
+     "right_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499709129333496,
+       -0.20000000298023224,
+       1.9799922704696655
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000228085544,
+      "rotation_orthogonality_max_err": 2.0511023723912558e-07
+     },
+     "wrist": {
+      "extrinsics_constant": false,
+      "fx_fy_first": [
+       -110.85124795436963,
+       -110.85124795436963
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.5
+      ],
+      "position_first_m": [
+       0.3051447868347168,
+       -0.006148172542452812,
+       1.572965145111084
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000074101876,
+      "rotation_orthogonality_max_err": 1.0211478926880346e-06
+     }
+    },
+    "frames": [
+     {
+      "frame": 0,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.79217529296875,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.689855447279239
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.390266804030432e-05
+      ]
+     },
+     {
+      "frame": 163,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.8183135986328125,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.5357576237921116
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.390266804030432e-05
+      ]
+     },
+     {
+      "frame": 325,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.8113555908203125,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.4482586043163055
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.390266804030432e-05
+      ]
+     }
+    ],
+    "physical_preprocessing": {
+     "fields": {
+      "anchor_valid": [
+       1,
+       128
+      ],
+      "anchors": [
+       1,
+       128,
+       3
+      ],
+      "neighbor_indices": [
+       1,
+       128,
+       32
+      ],
+      "neighbor_valid": [
+       1,
+       128,
+       32
+      ],
+      "point_valid": [
+       1,
+       2048
+      ],
+      "points": [
+       1,
+       2048,
+       3
+      ]
+     },
+     "status": "PASS"
+    },
+    "workspace_bounds": [
+     [
+      -0.27499998807907106,
+      -0.6550000429153442,
+      0.7519998550415039
+     ],
+     [
+      0.774999988079071,
+      0.6550000429153442,
+      1.751999855041504
+     ]
+    ]
+   },
+   "A1": {
+    "arm_target_command_rows": 520,
+    "canonical_ee_command": {
+     "canonical_commands_derivable": false,
+     "fk_id": "panda-mdh-fitted-base-tip-v1",
+     "residual_position_max_m": 0.6139134261255731,
+     "residual_position_mean_m": 0.32597078062285584,
+     "residual_rotation_max_deg": 178.38959223750518,
+     "samples": 620,
+     "tolerance": {
+      "position_m": 0.001,
+      "rotation_deg": 0.1
+     }
+    },
+    "command_vs_achieved_next_joint_abs_rad": {
+     "max": 0.03180726209009385,
+     "mean": 0.006585072400914839,
+     "p95": 0.020791382962338904,
+     "rows_identical": 0
+    },
+    "frames_per_boundary": 0.5258064516129032,
+    "grasp_events": 4,
+    "gripper_velocity_command_rows": 92,
+    "kinematic_excursion_rows": 17,
+    "phase_counts": {
+     "0": 1,
+     "1": 525,
+     "2": 92,
+     "6": 1
+    },
+    "physics_dt_declared": 0.05000000074505806,
+    "rows_without_any_command": 7,
+    "sim_dt_all_equal_declared": true,
+    "sim_dt_min_max": [
+     0.049999237060546875,
+     0.05000114440917969
+    ],
+    "steps": 619,
+    "wall_s_per_step_mean": 0.020366388696933434
+   },
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "first_block_placed",
+      "from_boundary": 165
+     },
+     {
+      "alpha": 2,
+      "event": "second_block_placed",
+      "from_boundary": 409
+     },
+     {
+      "alpha": 3,
+      "event": "null",
+      "from_boundary": 606
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "drawer_opened",
+       "final_nu": true,
+       "first_occurrence": 165,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "first_block_placed",
+       "final_nu": true,
+       "first_occurrence": 409,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "second_block_placed",
+       "final_nu": true,
+       "first_occurrence": 606,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "drawer_opened": 165,
+     "first_block_placed": 409,
+     "second_block_placed": 606
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1,
+      1
+     ],
+     "nu": [
+      1,
+      1,
+      1
+     ],
+     "rho": [
+      1,
+      1,
+      1
+     ]
+    },
+    "labels_source": "stored at collection",
+    "predicate_edges": [
+     {
+      "boundary": 158,
+      "predicate": "drawer_closed",
+      "to": false
+     },
+     {
+      "boundary": 165,
+      "predicate": "drawer_open",
+      "to": true
+     },
+     {
+      "boundary": 339,
+      "predicate": "block_grasped",
+      "to": true
+     },
+     {
+      "boundary": 409,
+      "predicate": "block_grasped",
+      "to": false
+     },
+     {
+      "boundary": 409,
+      "predicate": "blocks_in_drawer_ge1",
+      "to": true
+     },
+     {
+      "boundary": 409,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 521,
+      "predicate": "block_grasped",
+      "to": true
+     },
+     {
+      "boundary": 606,
+      "predicate": "block_grasped",
+      "to": false
+     },
+     {
+      "boundary": 606,
+      "predicate": "blocks_in_drawer_ge2",
+      "to": true
+     },
+     {
+      "boundary": 606,
+      "predicate": "success_condition_1",
+      "to": true
+     }
+    ],
+    "task_success_first_boundary": 606
+   },
+   "B_relabel": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "drawer_opened",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "first_block_placed",
+      "from_boundary": 165
+     },
+     {
+      "alpha": 2,
+      "event": "second_block_placed",
+      "from_boundary": 409
+     },
+     {
+      "alpha": 3,
+      "event": "null",
+      "from_boundary": 606
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "drawer_opened",
+       "final_nu": true,
+       "first_occurrence": 165,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "first_block_placed",
+       "final_nu": true,
+       "first_occurrence": 409,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "second_block_placed",
+       "final_nu": true,
+       "first_occurrence": 606,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "drawer_opened": 165,
+     "first_block_placed": 409,
+     "second_block_placed": 606
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1,
+      1
+     ],
+     "nu": [
+      1,
+      1,
+      1
+     ],
+     "rho": [
+      1,
+      1,
+      1
+     ]
+    },
+    "labels_source": "offline relabel with current TASK_SPECS",
+    "predicate_edges": [
+     {
+      "boundary": 158,
+      "predicate": "drawer_closed",
+      "to": false
+     },
+     {
+      "boundary": 165,
+      "predicate": "drawer_open",
+      "to": true
+     },
+     {
+      "boundary": 339,
+      "predicate": "block_grasped",
+      "to": true
+     },
+     {
+      "boundary": 409,
+      "predicate": "block_grasped",
+      "to": false
+     },
+     {
+      "boundary": 409,
+      "predicate": "blocks_in_drawer_ge1",
+      "to": true
+     },
+     {
+      "boundary": 409,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 521,
+      "predicate": "block_grasped",
+      "to": true
+     },
+     {
+      "boundary": 606,
+      "predicate": "block_grasped",
+      "to": false
+     },
+     {
+      "boundary": 606,
+      "predicate": "blocks_in_drawer_ge2",
+      "to": true
+     },
+     {
+      "boundary": 606,
+      "predicate": "success_condition_1",
+      "to": true
+     }
+    ],
+    "task_success_first_boundary": 606
+   },
+   "bytes": 58383456,
+   "counts": {
+    "frames": 326,
+    "steps": 619
+   },
+   "episode_id": "mon-put_two_in_same-v0-s0-0000",
+   "level": "C",
+   "outcome": {
+    "last_completed_waypoint": 16,
+    "reason": null,
+    "recoverability": "unknown",
+    "recoverability_evidence": null,
+    "status": "success",
+    "stopped_at_anchor_waypoint": null,
+    "success_first_step": 606,
+    "task_success_final": true
+   },
+   "perturbation": {
+    "enabled_benchmark_factors": [
+     {
+      "enabled": true,
+      "name": "recv_obj_color",
+      "type": "object_size"
+     }
+    ],
+    "execution": [],
+    "families": [
+     "benchmark_factor"
+    ]
+   },
+   "provenance": {
+    "arrays_sha256": "e8105a62b5be1878df49d736e27750689fe6089fcaa89417fc3dfe74adc07856",
+    "code": {
+     "icgs_revision": "a3098f13ad5e2a6a3e33760d1aa6d11d07341e72",
+     "icgs_src_dirty": false
+    },
+    "reset_rng_sha256": "268d90d24e0a2fb24351b0ed6e8f5c9b55b8bb57e7a71af90f729f8c9231fffe",
+    "robohiman": {
+     "dirty_paths": [
+      "iMan-Bench/robot-colosseum/colosseum.egg-info/PKG-INFO"
+     ],
+     "revision": "33f71d30d9a100a83725ff00dfcc27374d5ce810"
+    },
+    "run": "mon",
+    "task_ttm_sha256": "0e4441f5ffeabb1560b9d3514747f23ef38c767bde6a1ead13b9322ba1a29a8c"
+   },
+   "review_frames": [
+    "mon-put_two_in_same-v0-s0-0000-b0000.png",
+    "mon-put_two_in_same-v0-s0-0000-b0164.png",
+    "mon-put_two_in_same-v0-s0-0000-b0165.png",
+    "mon-put_two_in_same-v0-s0-0000-b0408.png",
+    "mon-put_two_in_same-v0-s0-0000-b0409.png",
+    "mon-put_two_in_same-v0-s0-0000-b0606.png",
+    "mon-put_two_in_same-v0-s0-0000-b0606.png",
+    "mon-put_two_in_same-v0-s0-0000-b0619.png"
+   ],
+   "task": "put_two_in_same"
+  },
+  {
+   "A0": {
+    "calibration": {
+     "front": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       4.5
+      ],
+      "position_first_m": [
+       1.349999189376831,
+       3.715465624054559e-08,
+       1.579999327659607
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999999867252856,
+      "rotation_orthogonality_max_err": 3.6932476632500766e-08
+     },
+     "left_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499971389770508,
+       0.20000000298023224,
+       1.9799989461898804
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000208365662,
+      "rotation_orthogonality_max_err": 1.7171904165280694e-07
+     },
+     "right_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499709129333496,
+       -0.20000000298023224,
+       1.9799922704696655
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000228085544,
+      "rotation_orthogonality_max_err": 2.0511023723912558e-07
+     },
+     "wrist": {
+      "extrinsics_constant": false,
+      "fx_fy_first": [
+       -110.85124795436963,
+       -110.85124795436963
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.5
+      ],
+      "position_first_m": [
+       0.30519238114356995,
+       -0.006140399724245071,
+       1.5729488134384155
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999999958685539,
+      "rotation_orthogonality_max_err": 1.062565838427787e-06
+     }
+    },
+    "frames": [
+     {
+      "frame": 0,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.779754638671875,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.689819552842565
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     },
+     {
+      "frame": 139,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.77301025390625,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.4965095188612882
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -2.498907815570861,
+       -0.012194793013685201
+      ]
+     },
+     {
+      "frame": 278,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.7990264892578125,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.4248897134378988
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     }
+    ],
+    "physical_preprocessing": {
+     "fields": {
+      "anchor_valid": [
+       1,
+       128
+      ],
+      "anchors": [
+       1,
+       128,
+       3
+      ],
+      "neighbor_indices": [
+       1,
+       128,
+       32
+      ],
+      "neighbor_valid": [
+       1,
+       128,
+       32
+      ],
+      "point_valid": [
+       1,
+       2048
+      ],
+      "points": [
+       1,
+       2048,
+       3
+      ]
+     },
+     "status": "PASS"
+    },
+    "workspace_bounds": [
+     [
+      -0.27499998807907106,
+      -0.6550000429153442,
+      0.7519998550415039
+     ],
+     [
+      0.774999988079071,
+      0.6550000429153442,
+      1.751999855041504
+     ]
+    ]
+   },
+   "A1": {
+    "arm_target_command_rows": 485,
+    "canonical_ee_command": {
+     "canonical_commands_derivable": false,
+     "fk_id": "panda-mdh-fitted-base-tip-v1",
+     "residual_position_max_m": 0.8464433363445837,
+     "residual_position_mean_m": 0.2973754748545541,
+     "residual_rotation_max_deg": 99.63568063561782,
+     "samples": 538,
+     "tolerance": {
+      "position_m": 0.001,
+      "rotation_deg": 0.1
+     }
+    },
+    "command_vs_achieved_next_joint_abs_rad": {
+     "max": 0.03223333059693467,
+     "mean": 0.006359512405379751,
+     "p95": 0.02102651006769766,
+     "rows_identical": 0
+    },
+    "frames_per_boundary": 0.5185873605947955,
+    "grasp_events": 3,
+    "gripper_velocity_command_rows": 48,
+    "kinematic_excursion_rows": 16,
+    "phase_counts": {
+     "1": 488,
+     "2": 48,
+     "6": 1
+    },
+    "physics_dt_declared": 0.05000000074505806,
+    "rows_without_any_command": 4,
+    "sim_dt_all_equal_declared": true,
+    "sim_dt_min_max": [
+     0.049999237060546875,
+     0.05000114440917969
+    ],
+    "steps": 537,
+    "wall_s_per_step_mean": 0.02550828891322433
+   },
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "all_dirt_swept",
+      "from_boundary": 128
+     },
+     {
+      "alpha": 2,
+      "event": "rubbish_grasped",
+      "from_boundary": 232
+     },
+     {
+      "alpha": 3,
+      "event": "rubbish_dropped_in_dustpan",
+      "from_boundary": 456
+     },
+     {
+      "alpha": 4,
+      "event": "null",
+      "from_boundary": 535
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "broom_grasped",
+       "final_nu": false,
+       "first_occurrence": 128,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "all_dirt_swept",
+       "final_nu": true,
+       "first_occurrence": 232,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "rubbish_grasped",
+       "final_nu": true,
+       "first_occurrence": 456,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "rubbish_dropped_in_dustpan",
+       "final_nu": true,
+       "first_occurrence": 535,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "all_dirt_swept": 232,
+     "broom_grasped": 128,
+     "rubbish_dropped_in_dustpan": 535,
+     "rubbish_grasped": 456
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      1,
+      1,
+      1
+     ],
+     "rho": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "labels_source": "stored at collection",
+    "predicate_edges": [
+     {
+      "boundary": 128,
+      "predicate": "broom_grasped",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "dirt_in_dustpan_all",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "dirt_in_dustpan_ge1",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_1",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_2",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_3",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_4",
+      "to": true
+     },
+     {
+      "boundary": 347,
+      "predicate": "broom_grasped",
+      "to": false
+     },
+     {
+      "boundary": 456,
+      "predicate": "rubbish_grasped",
+      "to": true
+     },
+     {
+      "boundary": 535,
+      "predicate": "rubbish_in_dustpan",
+      "to": true
+     },
+     {
+      "boundary": 535,
+      "predicate": "success_condition_5",
+      "to": true
+     }
+    ],
+    "task_success_first_boundary": 535
+   },
+   "B_relabel": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "all_dirt_swept",
+      "from_boundary": 128
+     },
+     {
+      "alpha": 2,
+      "event": "rubbish_grasped",
+      "from_boundary": 232
+     },
+     {
+      "alpha": 3,
+      "event": "rubbish_dropped_in_dustpan",
+      "from_boundary": 456
+     },
+     {
+      "alpha": 4,
+      "event": "null",
+      "from_boundary": 535
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "broom_grasped",
+       "final_nu": false,
+       "first_occurrence": 128,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "all_dirt_swept",
+       "final_nu": true,
+       "first_occurrence": 232,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "rubbish_grasped",
+       "final_nu": true,
+       "first_occurrence": 456,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "rubbish_dropped_in_dustpan",
+       "final_nu": true,
+       "first_occurrence": 535,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "all_dirt_swept": 232,
+     "broom_grasped": 128,
+     "rubbish_dropped_in_dustpan": 535,
+     "rubbish_grasped": 456
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1,
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      1,
+      1,
+      1
+     ],
+     "rho": [
+      1,
+      1,
+      1,
+      1
+     ]
+    },
+    "labels_source": "offline relabel with current TASK_SPECS",
+    "predicate_edges": [
+     {
+      "boundary": 128,
+      "predicate": "broom_grasped",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "dirt_in_dustpan_all",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "dirt_in_dustpan_ge1",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_1",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_2",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_3",
+      "to": true
+     },
+     {
+      "boundary": 232,
+      "predicate": "success_condition_4",
+      "to": true
+     },
+     {
+      "boundary": 347,
+      "predicate": "broom_grasped",
+      "to": false
+     },
+     {
+      "boundary": 456,
+      "predicate": "rubbish_grasped",
+      "to": true
+     },
+     {
+      "boundary": 535,
+      "predicate": "rubbish_in_dustpan",
+      "to": true
+     },
+     {
+      "boundary": 535,
+      "predicate": "success_condition_5",
+      "to": true
+     }
+    ],
+    "task_success_first_boundary": 535
+   },
+   "bytes": 58351144,
+   "counts": {
+    "frames": 279,
+    "steps": 537
+   },
+   "episode_id": "mon-sweep_and_drop-v0-s0-0000",
+   "level": "C",
+   "outcome": {
+    "last_completed_waypoint": 15,
+    "reason": null,
+    "recoverability": "unknown",
+    "recoverability_evidence": null,
+    "status": "success",
+    "stopped_at_anchor_waypoint": null,
+    "success_first_step": 535,
+    "task_success_final": true
+   },
+   "perturbation": {
+    "enabled_benchmark_factors": [],
+    "execution": [],
+    "families": [
+     "none"
+    ]
+   },
+   "provenance": {
+    "arrays_sha256": "ca0d1973889775339025fb64cdfc1f30ee9c06556134bc40ff2146f9485b0257",
+    "code": {
+     "icgs_revision": "a3098f13ad5e2a6a3e33760d1aa6d11d07341e72",
+     "icgs_src_dirty": false
+    },
+    "reset_rng_sha256": "f6abbca439753f80a5658524db93e55f1cfcde5e15a2124c006c412590e03e30",
+    "robohiman": {
+     "dirty_paths": [
+      "iMan-Bench/robot-colosseum/colosseum.egg-info/PKG-INFO"
+     ],
+     "revision": "33f71d30d9a100a83725ff00dfcc27374d5ce810"
+    },
+    "run": "mon",
+    "task_ttm_sha256": "d45750fe3f1de1cc874f45354821e95b4c3030dfbf1f92df4ec27380a55d27a9"
+   },
+   "review_frames": [
+    "mon-sweep_and_drop-v0-s0-0000-b0000.png",
+    "mon-sweep_and_drop-v0-s0-0000-b0128.png",
+    "mon-sweep_and_drop-v0-s0-0000-b0128.png",
+    "mon-sweep_and_drop-v0-s0-0000-b0232.png",
+    "mon-sweep_and_drop-v0-s0-0000-b0232.png",
+    "mon-sweep_and_drop-v0-s0-0000-b0456.png",
+    "mon-sweep_and_drop-v0-s0-0000-b0456.png",
+    "mon-sweep_and_drop-v0-s0-0000-b0534.png",
+    "mon-sweep_and_drop-v0-s0-0000-b0535.png",
+    "mon-sweep_and_drop-v0-s0-0000-b0537.png"
+   ],
+   "task": "sweep_and_drop"
+  },
+  {
+   "A0": {
+    "calibration": {
+     "front": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       4.5
+      ],
+      "position_first_m": [
+       1.349999189376831,
+       3.715465624054559e-08,
+       1.579999327659607
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999999867252856,
+      "rotation_orthogonality_max_err": 3.6932476632500766e-08
+     },
+     "left_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499971389770508,
+       0.20000000298023224,
+       1.9799989461898804
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000208365662,
+      "rotation_orthogonality_max_err": 1.7171904165280694e-07
+     },
+     "right_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499709129333496,
+       -0.20000000298023224,
+       1.9799922704696655
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000228085544,
+      "rotation_orthogonality_max_err": 2.0511023723912558e-07
+     },
+     "wrist": {
+      "extrinsics_constant": false,
+      "fx_fy_first": [
+       -110.85124795436963,
+       -110.85124795436963
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.5
+      ],
+      "position_first_m": [
+       0.30517804622650146,
+       -0.006143361330032349,
+       1.5729328393936157
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.999999966267117,
+      "rotation_orthogonality_max_err": 1.1853872328160264e-06
+     }
+    },
+    "frames": [
+     {
+      "frame": 0,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.7792205810546875,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.6898348441945115
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     },
+     {
+      "frame": 155,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.797210693359375,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.731433317799118,
+       1.4489990123147911
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -0.0012990605233862418
+      ]
+     },
+     {
+      "frame": 310,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.7995147705078125,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.423624850593527
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.390266804030432e-05
+      ]
+     }
+    ],
+    "physical_preprocessing": {
+     "fields": {
+      "anchor_valid": [
+       1,
+       128
+      ],
+      "anchors": [
+       1,
+       128,
+       3
+      ],
+      "neighbor_indices": [
+       1,
+       128,
+       32
+      ],
+      "neighbor_valid": [
+       1,
+       128,
+       32
+      ],
+      "point_valid": [
+       1,
+       2048
+      ],
+      "points": [
+       1,
+       2048,
+       3
+      ]
+     },
+     "status": "PASS"
+    },
+    "workspace_bounds": [
+     [
+      -0.27499998807907106,
+      -0.6550000429153442,
+      0.7519998550415039
+     ],
+     [
+      0.774999988079071,
+      0.6550000429153442,
+      1.751999855041504
+     ]
+    ]
+   },
+   "A1": {
+    "arm_target_command_rows": 538,
+    "canonical_ee_command": {
+     "canonical_commands_derivable": false,
+     "fk_id": "panda-mdh-fitted-base-tip-v1",
+     "residual_position_max_m": 0.9114156990733713,
+     "residual_position_mean_m": 0.514963879479237,
+     "residual_rotation_max_deg": 174.73890531783795,
+     "samples": 604,
+     "tolerance": {
+      "position_m": 0.001,
+      "rotation_deg": 0.1
+     }
+    },
+    "command_vs_achieved_next_joint_abs_rad": {
+     "max": 0.02402153780602817,
+     "mean": 0.007404652473408241,
+     "p95": 0.017029564754403648,
+     "rows_identical": 0
+    },
+    "frames_per_boundary": 0.5149006622516556,
+    "grasp_events": 1,
+    "gripper_velocity_command_rows": 50,
+    "kinematic_excursion_rows": 16,
+    "phase_counts": {
+     "0": 10,
+     "1": 542,
+     "2": 50,
+     "6": 1
+    },
+    "physics_dt_declared": 0.05000000074505806,
+    "rows_without_any_command": 15,
+    "sim_dt_all_equal_declared": true,
+    "sim_dt_min_max": [
+     0.049999237060546875,
+     0.05000114440917969
+    ],
+    "steps": 603,
+    "wall_s_per_step_mean": 0.02238158557265163
+   },
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "broom_grasped",
+       "final_nu": false,
+       "first_occurrence": null,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "all_dirt_swept",
+       "final_nu": false,
+       "first_occurrence": null,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "rubbish_grasped",
+       "final_nu": true,
+       "first_occurrence": 494,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "rubbish_dropped_in_dustpan",
+       "final_nu": true,
+       "first_occurrence": 590,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "all_dirt_swept": null,
+     "broom_grasped": null,
+     "rubbish_dropped_in_dustpan": 590,
+     "rubbish_grasped": 494
+    },
+    "final": {
+     "epsilon": [
+      1,
+      0,
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "rho": [
+      0,
+      0,
+      1,
+      1
+     ]
+    },
+    "labels_source": "stored at collection",
+    "predicate_edges": [
+     {
+      "boundary": 494,
+      "predicate": "rubbish_grasped",
+      "to": true
+     },
+     {
+      "boundary": 590,
+      "predicate": "rubbish_in_dustpan",
+      "to": true
+     },
+     {
+      "boundary": 590,
+      "predicate": "success_condition_5",
+      "to": true
+     }
+    ],
+    "task_success_first_boundary": null
+   },
+   "B_relabel": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "broom_grasped",
+       "final_nu": false,
+       "first_occurrence": null,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "all_dirt_swept",
+       "final_nu": false,
+       "first_occurrence": null,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "rubbish_grasped",
+       "final_nu": true,
+       "first_occurrence": 494,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      },
+      {
+       "event_id": "rubbish_dropped_in_dustpan",
+       "final_nu": true,
+       "first_occurrence": 590,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "all_dirt_swept": null,
+     "broom_grasped": null,
+     "rubbish_dropped_in_dustpan": 590,
+     "rubbish_grasped": 494
+    },
+    "final": {
+     "epsilon": [
+      1,
+      0,
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      0,
+      1,
+      1
+     ],
+     "rho": [
+      0,
+      0,
+      1,
+      1
+     ]
+    },
+    "labels_source": "offline relabel with current TASK_SPECS",
+    "predicate_edges": [
+     {
+      "boundary": 494,
+      "predicate": "rubbish_grasped",
+      "to": true
+     },
+     {
+      "boundary": 590,
+      "predicate": "rubbish_in_dustpan",
+      "to": true
+     },
+     {
+      "boundary": 590,
+      "predicate": "success_condition_5",
+      "to": true
+     }
+    ],
+    "task_success_first_boundary": null
+   },
+   "bytes": 63170117,
+   "counts": {
+    "frames": 311,
+    "steps": 603
+   },
+   "episode_id": "mon-sweep_and_drop-v0-s0-0001",
+   "level": "C",
+   "outcome": {
+    "last_completed_waypoint": 15,
+    "reason": "task_success_false_after_expert",
+    "recoverability": "unknown",
+    "recoverability_evidence": null,
+    "status": "failure",
+    "stopped_at_anchor_waypoint": null,
+    "success_first_step": null,
+    "task_success_final": false
+   },
+   "perturbation": {
+    "enabled_benchmark_factors": [],
+    "execution": [
+     {
+      "applied_at_step": 123,
+      "close_early_at_distance_m": 0.05,
+      "family": "gripper_timing",
+      "tip_to_waypoint_m": 0.04803973401599224,
+      "waypoint": 2
+     }
+    ],
+    "families": [
+     "gripper_timing"
+    ]
+   },
+   "provenance": {
+    "arrays_sha256": "6ec284ab1f7f67b2d6416e34ac7b9cb79e2cb7d85a5df5c5defb86427a0908a0",
+    "code": {
+     "icgs_revision": "a3098f13ad5e2a6a3e33760d1aa6d11d07341e72",
+     "icgs_src_dirty": false
+    },
+    "reset_rng_sha256": "7809fd6f203ffb1fb63dee2d7c69fd231e8128ff9b599b5d7e2ca29e9ceab9ef",
+    "robohiman": {
+     "dirty_paths": [
+      "iMan-Bench/robot-colosseum/colosseum.egg-info/PKG-INFO"
+     ],
+     "revision": "33f71d30d9a100a83725ff00dfcc27374d5ce810"
+    },
+    "run": "mon",
+    "task_ttm_sha256": "d45750fe3f1de1cc874f45354821e95b4c3030dfbf1f92df4ec27380a55d27a9"
+   },
+   "review_frames": [
+    "mon-sweep_and_drop-v0-s0-0001-b0000.png",
+    "mon-sweep_and_drop-v0-s0-0001-b0494.png",
+    "mon-sweep_and_drop-v0-s0-0001-b0494.png",
+    "mon-sweep_and_drop-v0-s0-0001-b0590.png",
+    "mon-sweep_and_drop-v0-s0-0001-b0590.png",
+    "mon-sweep_and_drop-v0-s0-0001-b0603.png"
+   ],
+   "task": "sweep_and_drop"
+  },
+  {
+   "A0": {
+    "calibration": {
+     "front": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       4.5
+      ],
+      "position_first_m": [
+       1.349999189376831,
+       3.715465624054559e-08,
+       1.579999327659607
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999999867252856,
+      "rotation_orthogonality_max_err": 3.6932476632500766e-08
+     },
+     "left_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499971389770508,
+       0.20000000298023224,
+       1.9799989461898804
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000208365662,
+      "rotation_orthogonality_max_err": 1.7171904165280694e-07
+     },
+     "right_shoulder": {
+      "extrinsics_constant": true,
+      "fx_fy_first": [
+       -175.83856040078922,
+       -175.83856040078922
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.200000047683716
+      ],
+      "position_first_m": [
+       -0.17499709129333496,
+       -0.20000000298023224,
+       1.9799922704696655
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 1.000000228085544,
+      "rotation_orthogonality_max_err": 2.0511023723912558e-07
+     },
+     "wrist": {
+      "extrinsics_constant": false,
+      "fx_fy_first": [
+       -110.85124795436963,
+       -110.85124795436963
+      ],
+      "intrinsics_constant": true,
+      "near_far_first": [
+       0.009999999776482582,
+       3.5
+      ],
+      "position_first_m": [
+       0.30521246790885925,
+       -0.006153108552098274,
+       1.5728672742843628
+      ],
+      "principal_first": [
+       64.0,
+       64.0
+      ],
+      "rotation_det_first": 0.9999999767535828,
+      "rotation_orthogonality_max_err": 9.949207562254259e-07
+     }
+    },
+    "frames": [
+     {
+      "frame": 0,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.779876708984375,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.6897929584094142
+      ],
+      "valid_xyz_min": [
+       -2.5100042004370007,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     },
+     {
+      "frame": 72,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.79364013671875,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.490372522327438,
+       1.4245284921039698
+      ],
+      "valid_xyz_min": [
+       -2.5176048323373617,
+       -1.6331426997701057,
+       -7.682656974505875e-05
+      ]
+     },
+     {
+      "frame": 143,
+      "points": 65536,
+      "valid_frac": 1.0,
+      "valid_within_workspace_5cm_frac": 0.80322265625,
+      "valid_xyz_max": [
+       1.9411809880896604,
+       1.4489701655674554,
+       1.4245284921039698
+      ],
+      "valid_xyz_min": [
+       -2.5100041451515303,
+       -1.5140282952913324,
+       -7.682656974505875e-05
+      ]
+     }
+    ],
+    "physical_preprocessing": {
+     "fields": {
+      "anchor_valid": [
+       1,
+       128
+      ],
+      "anchors": [
+       1,
+       128,
+       3
+      ],
+      "neighbor_indices": [
+       1,
+       128,
+       32
+      ],
+      "neighbor_valid": [
+       1,
+       128,
+       32
+      ],
+      "point_valid": [
+       1,
+       2048
+      ],
+      "points": [
+       1,
+       2048,
+       3
+      ]
+     },
+     "status": "PASS"
+    },
+    "workspace_bounds": [
+     [
+      -0.27499998807907106,
+      -0.6550000429153442,
+      0.7519998550415039
+     ],
+     [
+      0.774999988079071,
+      0.6550000429153442,
+      1.751999855041504
+     ]
+    ]
+   },
+   "A1": {
+    "arm_target_command_rows": 231,
+    "canonical_ee_command": {
+     "canonical_commands_derivable": false,
+     "fk_id": "panda-mdh-fitted-base-tip-v1",
+     "residual_position_max_m": 0.40311972973515897,
+     "residual_position_mean_m": 0.22448290757658088,
+     "residual_rotation_max_deg": 104.28370462616274,
+     "samples": 274,
+     "tolerance": {
+      "position_m": 0.001,
+      "rotation_deg": 0.1
+     }
+    },
+    "command_vs_achieved_next_joint_abs_rad": {
+     "max": 0.03218852923092674,
+     "mean": 0.006289023193787815,
+     "p95": 0.02488303890450845,
+     "rows_identical": 0
+    },
+    "frames_per_boundary": 0.5255474452554745,
+    "grasp_events": 2,
+    "gripper_velocity_command_rows": 39,
+    "kinematic_excursion_rows": 7,
+    "phase_counts": {
+     "1": 233,
+     "2": 39,
+     "6": 1
+    },
+    "physics_dt_declared": 0.05000000074505806,
+    "rows_without_any_command": 3,
+    "sim_dt_all_equal_declared": true,
+    "sim_dt_min_max": [
+     0.049999237060546875,
+     0.05000019073486328
+    ],
+    "steps": 273,
+    "wall_s_per_step_mean": 0.02434886740597354
+   },
+   "B": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "all_dirt_swept",
+      "from_boundary": 134
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 244
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "broom_grasped",
+       "final_nu": false,
+       "first_occurrence": 134,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "all_dirt_swept",
+       "final_nu": true,
+       "first_occurrence": 244,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "all_dirt_swept": 244,
+     "broom_grasped": 134
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      1
+     ],
+     "rho": [
+      1,
+      1
+     ]
+    },
+    "labels_source": "stored at collection",
+    "predicate_edges": [
+     {
+      "boundary": 134,
+      "predicate": "broom_grasped",
+      "to": true
+     },
+     {
+      "boundary": 243,
+      "predicate": "dirt_in_dustpan_ge1",
+      "to": true
+     },
+     {
+      "boundary": 243,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 243,
+      "predicate": "success_condition_4",
+      "to": true
+     },
+     {
+      "boundary": 244,
+      "predicate": "dirt_in_dustpan_all",
+      "to": true
+     },
+     {
+      "boundary": 244,
+      "predicate": "success_condition_1",
+      "to": true
+     },
+     {
+      "boundary": 244,
+      "predicate": "success_condition_2",
+      "to": true
+     },
+     {
+      "boundary": 244,
+      "predicate": "success_condition_3",
+      "to": true
+     },
+     {
+      "boundary": 255,
+      "predicate": "broom_grasped",
+      "to": false
+     }
+    ],
+    "task_success_first_boundary": 244
+   },
+   "B_relabel": {
+    "alpha_segments": [
+     {
+      "alpha": 0,
+      "event": "broom_grasped",
+      "from_boundary": 0
+     },
+     {
+      "alpha": 1,
+      "event": "all_dirt_swept",
+      "from_boundary": 134
+     },
+     {
+      "alpha": 2,
+      "event": "null",
+      "from_boundary": 244
+     }
+    ],
+    "consistency": {
+     "events": [
+      {
+       "event_id": "broom_grasped",
+       "final_nu": false,
+       "first_occurrence": 134,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": true
+      },
+      {
+       "event_id": "all_dirt_swept",
+       "final_nu": true,
+       "first_occurrence": 244,
+       "occurred_while_ineligible": false,
+       "undone_after_occurrence": false
+      }
+     ],
+     "occurrences_in_spec_order": true
+    },
+    "event_first_occurrence": {
+     "all_dirt_swept": 244,
+     "broom_grasped": 134
+    },
+    "final": {
+     "epsilon": [
+      1,
+      1
+     ],
+     "nu": [
+      0,
+      1
+     ],
+     "rho": [
+      1,
+      1
+     ]
+    },
+    "labels_source": "offline relabel with current TASK_SPECS",
+    "predicate_edges": [
+     {
+      "boundary": 134,
+      "predicate": "broom_grasped",
+      "to": true
+     },
+     {
+      "boundary": 243,
+      "predicate": "dirt_in_dustpan_ge1",
+      "to": true
+     },
+     {
+      "boundary": 243,
+      "predicate": "success_condition_0",
+      "to": true
+     },
+     {
+      "boundary": 243,
+      "predicate": "success_condition_4",
+      "to": true
+     },
+     {
+      "boundary": 244,
+      "predicate": "dirt_in_dustpan_all",
+      "to": true
+     },
+     {
+      "boundary": 244,
+      "predicate": "success_condition_1",
+      "to": true
+     },
+     {
+      "boundary": 244,
+      "predicate": "success_condition_2",
+      "to": true
+     },
+     {
+      "boundary": 244,
+      "predicate": "success_condition_3",
+      "to": true
+     },
+     {
+      "boundary": 255,
+      "predicate": "broom_grasped",
+      "to": false
+     }
+    ],
+    "task_success_first_boundary": 244
+   },
+   "bytes": 30251960,
+   "counts": {
+    "frames": 144,
+    "steps": 273
+   },
+   "episode_id": "mon-sweep_to_dustpan-v0-s0-0000",
+   "level": "A",
+   "outcome": {
+    "last_completed_waypoint": 6,
+    "reason": null,
+    "recoverability": "unknown",
+    "recoverability_evidence": null,
+    "status": "success",
+    "stopped_at_anchor_waypoint": null,
+    "success_first_step": 244,
+    "task_success_final": true
+   },
+   "perturbation": {
+    "enabled_benchmark_factors": [],
+    "execution": [],
+    "families": [
+     "none"
+    ]
+   },
+   "provenance": {
+    "arrays_sha256": "95674dfd6d8b00b5cdd964fe3f91eea928c560a7fcbad3abaabb0a1ff8d16402",
+    "code": {
+     "icgs_revision": "a3098f13ad5e2a6a3e33760d1aa6d11d07341e72",
+     "icgs_src_dirty": false
+    },
+    "reset_rng_sha256": "e3baffc7876eba0c86688f0dce4d9f98430ea14057b64cd04937fbff616d6a0e",
+    "robohiman": {
+     "dirty_paths": [
+      "iMan-Bench/robot-colosseum/colosseum.egg-info/PKG-INFO"
+     ],
+     "revision": "33f71d30d9a100a83725ff00dfcc27374d5ce810"
+    },
+    "run": "mon",
+    "task_ttm_sha256": "836e31667a67cd0d2295680d62350199487fab64c8756b876d360d743ed14b32"
+   },
+   "review_frames": [
+    "mon-sweep_to_dustpan-v0-s0-0000-b0000.png",
+    "mon-sweep_to_dustpan-v0-s0-0000-b0134.png",
+    "mon-sweep_to_dustpan-v0-s0-0000-b0134.png",
+    "mon-sweep_to_dustpan-v0-s0-0000-b0243.png",
+    "mon-sweep_to_dustpan-v0-s0-0000-b0244.png",
+    "mon-sweep_to_dustpan-v0-s0-0000-b0273.png"
+   ],
+   "task": "sweep_to_dustpan"
+  }
+ ],
+ "store": "outputs/robohiman/store-monitor-a3098f1",
+ "views": {
+  "D_dyn": {
+   "file": "D_dyn.jsonl",
+   "rows": 3324,
+   "sha256": "2c90bf9321352b5b0619e659dcc58bb51cfdb9087182958941e4f552fa73a020"
+  },
+  "D_geom": {
+   "file": "D_geom.jsonl",
+   "rows": 1758,
+   "sha256": "761adbb8e1b9307be775ca595c57b0d00d1697f8548c73435c2d6c68f08724b7"
+  },
+  "D_task": {
+   "file": "D_task.jsonl",
+   "rows": 3382,
+   "sha256": "121afbfc09d968fb992a52a47bf2688e2431c2ee8221b2ae9e64df63e0df1583"
+  }
+ }
+}

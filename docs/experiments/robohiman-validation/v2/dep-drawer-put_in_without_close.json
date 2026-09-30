@@ -1,0 +1,2714 @@
+{
+ "anchor": "after waypoint 2: canonical start (post-reset snapshot restored before the reference prefix and every trial), prefix commands replayed open loop",
+ "anchor_boundary": 157,
+ "anchor_object_spread_across_trials_m": 0.0018077060890030394,
+ "candidates": [
+  {
+   "delta_world_m": [
+    0.011814489690608727,
+    -0.0689957747944472,
+    2.9897565548164227e-05
+   ],
+   "downstream_given_local": [
+    20,
+    20
+   ],
+   "downstream_given_local_rate": 1.0,
+   "downstream_given_local_wilson95": [
+    0.8388698745050667,
+    1.0
+   ],
+   "failure_reasons": [],
+   "final_success_rate": 1.0,
+   "label": "approach x -0.070",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.8528108682567088e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.17072513699531555,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.405056908772588e-05,
+     "steps": 409,
+     "tracked_joint_after_decision_m": 0.17070400714874268,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.309003084728674e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.1701282560825348,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.7667054647676478e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.17047461867332458,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.2369643644505504e-05,
+     "steps": 416,
+     "tracked_joint_after_decision_m": 0.17053350806236267,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.132102592520558e-05,
+     "steps": 424,
+     "tracked_joint_after_decision_m": 0.17066147923469543,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.194859604931206e-05,
+     "steps": 416,
+     "tracked_joint_after_decision_m": 0.17017334699630737,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.3604895144473076e-06,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.17073103785514832,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.180175788261657e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.17081305384635925,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.638651511760547e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.17072784900665283,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.0344103730495147e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.1701623499393463,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.746712349744591e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.17329272627830505,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.686727297784253e-05,
+     "steps": 436,
+     "tracked_joint_after_decision_m": 0.17011824250221252,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.915857703206042e-05,
+     "steps": 409,
+     "tracked_joint_after_decision_m": 0.1705469787120819,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.188578052310775e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.17073982954025269,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 8.374068950169121e-06,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.1706414520740509,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.0540136002875688e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.17022046446800232,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.3912961329920565e-05,
+     "steps": 419,
+     "tracked_joint_after_decision_m": 0.1704767942428589,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.1460003209339263e-05,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.1705317497253418,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.7347679587141394e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.17071497440338135,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    0.013502273932124258,
+    -0.07885231405079679,
+    3.4168646340759114e-05
+   ],
+   "downstream_given_local": [
+    20,
+    20
+   ],
+   "downstream_given_local_rate": 1.0,
+   "downstream_given_local_wilson95": [
+    0.8388698745050667,
+    1.0
+   ],
+   "failure_reasons": [],
+   "final_success_rate": 1.0,
+   "label": "approach x -0.080",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.6801817943612326e-05,
+     "steps": 420,
+     "tracked_joint_after_decision_m": 0.16117596626281738,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.2873320483198326e-05,
+     "steps": 450,
+     "tracked_joint_after_decision_m": 0.16113901138305664,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.149842224825368e-05,
+     "steps": 413,
+     "tracked_joint_after_decision_m": 0.16101089119911194,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.017881008365979e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.16115593910217285,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.950538983878138e-05,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.1611742079257965,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.2359578427776587e-05,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.16101893782615662,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.322287407324869e-05,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.1612878441810608,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.68663440816998e-06,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.1612471640110016,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.8200186738618422e-05,
+     "steps": 413,
+     "tracked_joint_after_decision_m": 0.16124209761619568,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.8150270452500296e-05,
+     "steps": 427,
+     "tracked_joint_after_decision_m": 0.16222843527793884,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.219066178816015e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.16102617979049683,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.3365087309433517e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.16189807653427124,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.2592980603980162e-05,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.16105782985687256,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.9481129532000077e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.16107097268104553,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.675056523290749e-05,
+     "steps": 409,
+     "tracked_joint_after_decision_m": 0.16116726398468018,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.4904338832959283e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.1611073613166809,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.908361322792128e-05,
+     "steps": 416,
+     "tracked_joint_after_decision_m": 0.16115882992744446,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3616098160603024e-05,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.16114568710327148,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.2946526685088314e-05,
+     "steps": 444,
+     "tracked_joint_after_decision_m": 0.1609669029712677,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 191,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.963127748266595e-05,
+     "steps": 410,
+     "tracked_joint_after_decision_m": 0.16112112998962402,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    0.014346166052882026,
+    -0.08378058367897159,
+    3.630418673705656e-05
+   ],
+   "downstream_given_local": [
+    19,
+    20
+   ],
+   "downstream_given_local_rate": 0.95,
+   "downstream_given_local_wilson95": [
+    0.7638641064874331,
+    0.9911187805671268
+   ],
+   "failure_reasons": [
+    "task_success_false_after_expert"
+   ],
+   "final_success_rate": 0.95,
+   "label": "approach x -0.085",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.3614753171607137e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.15549790859222412,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.7626666703409422e-05,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.15557751059532166,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.50629311942461e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.15540611743927002,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.601714541788044e-05,
+     "steps": 413,
+     "tracked_joint_after_decision_m": 0.15508565306663513,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.7421385672530275e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.15516874194145203,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "task_success_false_after_expert",
+     "final_status": "failure",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.526706685693995e-05,
+     "steps": 436,
+     "tracked_joint_after_decision_m": 0.15510502457618713,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.0734446422604915e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.15497177839279175,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.6997914639564136e-05,
+     "steps": 410,
+     "tracked_joint_after_decision_m": 0.15646830201148987,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.4971257490855825e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.15482959151268005,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.5449509625373986e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.1556035280227661,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3440412274545617e-05,
+     "steps": 420,
+     "tracked_joint_after_decision_m": 0.15489912033081055,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.344294401989198e-05,
+     "steps": 408,
+     "tracked_joint_after_decision_m": 0.1613633930683136,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3069735983328344e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.1556672751903534,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.693228671901165e-06,
+     "steps": 409,
+     "tracked_joint_after_decision_m": 0.1557193398475647,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.0041089952248812e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.15556040406227112,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.831043596481741e-05,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.15511849522590637,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.155602752150705e-05,
+     "steps": 413,
+     "tracked_joint_after_decision_m": 0.1556175947189331,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3417421350112905e-05,
+     "steps": 428,
+     "tracked_joint_after_decision_m": 0.15550819039344788,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.681808723276399e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.15554925799369812,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.421131698713774e-05,
+     "steps": 429,
+     "tracked_joint_after_decision_m": 0.15542444586753845,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    0.014852501325336684,
+    -0.08673754545587646,
+    3.758551097483502e-05
+   ],
+   "downstream_given_local": [
+    18,
+    20
+   ],
+   "downstream_given_local_rate": 0.9,
+   "downstream_given_local_wilson95": [
+    0.6989617935882066,
+    0.9721341060158468
+   ],
+   "failure_reasons": [
+    "no_path_waypoint_10",
+    "task_success_false_after_expert"
+   ],
+   "final_success_rate": 0.9,
+   "label": "approach x -0.088",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.8356416236407725e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.15241974592208862,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.0206200196672854e-05,
+     "steps": 431,
+     "tracked_joint_after_decision_m": 0.15273207426071167,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.9025994227076804e-05,
+     "steps": 410,
+     "tracked_joint_after_decision_m": 0.15222382545471191,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.3952341559448086e-05,
+     "steps": 416,
+     "tracked_joint_after_decision_m": 0.15243852138519287,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.4555722275411624e-05,
+     "steps": 413,
+     "tracked_joint_after_decision_m": 0.15313339233398438,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.564038805729311e-05,
+     "steps": 417,
+     "tracked_joint_after_decision_m": 0.15278348326683044,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "task_success_false_after_expert",
+     "final_status": "failure",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.1135128879762383e-05,
+     "steps": 438,
+     "tracked_joint_after_decision_m": 0.15275192260742188,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.6595550848047496e-05,
+     "steps": 374,
+     "tracked_joint_after_decision_m": 0.1529894471168518,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.802677329044174e-05,
+     "steps": 413,
+     "tracked_joint_after_decision_m": 0.154148668050766,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.4916889258378797e-05,
+     "steps": 415,
+     "tracked_joint_after_decision_m": 0.1583482027053833,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.8068579645341644e-05,
+     "steps": 410,
+     "tracked_joint_after_decision_m": 0.15265724062919617,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.678101662835264e-05,
+     "steps": 420,
+     "tracked_joint_after_decision_m": 0.1568109393119812,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.6167952167229092e-05,
+     "steps": 419,
+     "tracked_joint_after_decision_m": 0.15277236700057983,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.854074606384977e-05,
+     "steps": 441,
+     "tracked_joint_after_decision_m": 0.1527448296546936,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.514084491873449e-05,
+     "steps": 419,
+     "tracked_joint_after_decision_m": 0.15284889936447144,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.2487428460529175e-05,
+     "steps": 418,
+     "tracked_joint_after_decision_m": 0.15283602476119995,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.9803167048069896e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.15250557661056519,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.5557234563198566e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.1525539755821228,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.0143047582887906e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.1528354287147522,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.7539383599422656e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.1528337299823761,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    0.01519005817363979,
+    -0.08870885330714638,
+    3.8439727133354005e-05
+   ],
+   "downstream_given_local": [
+    10,
+    20
+   ],
+   "downstream_given_local_rate": 0.5,
+   "downstream_given_local_wilson95": [
+    0.2992949144298199,
+    0.7007050855701801
+   ],
+   "failure_reasons": [
+    "no_path_waypoint_10",
+    "no_path_waypoint_7",
+    "task_success_false_after_expert"
+   ],
+   "final_success_rate": 0.5,
+   "label": "approach x -0.090",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.207267196127434e-05,
+     "steps": 411,
+     "tracked_joint_after_decision_m": 0.15063726902008057,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.709044219343045e-05,
+     "steps": 418,
+     "tracked_joint_after_decision_m": 0.15081146359443665,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.935506687943829e-05,
+     "steps": 418,
+     "tracked_joint_after_decision_m": 0.15090343356132507,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.950898499574515e-05,
+     "steps": 373,
+     "tracked_joint_after_decision_m": 0.15079781413078308,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.135785098598173e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.15096858143806458,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_7",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.7656035279551302e-05,
+     "steps": 312,
+     "tracked_joint_after_decision_m": 0.15099000930786133,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "task_success_false_after_expert",
+     "final_status": "failure",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.522468747349277e-05,
+     "steps": 436,
+     "tracked_joint_after_decision_m": 0.1507541537284851,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.4331712263541748e-05,
+     "steps": 368,
+     "tracked_joint_after_decision_m": 0.15081021189689636,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.398311225984483e-05,
+     "steps": 382,
+     "tracked_joint_after_decision_m": 0.15089714527130127,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.133846366142272e-05,
+     "steps": 409,
+     "tracked_joint_after_decision_m": 0.1507740616798401,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3610551353337287e-05,
+     "steps": 413,
+     "tracked_joint_after_decision_m": 0.15062716603279114,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.9143880827628524e-05,
+     "steps": 371,
+     "tracked_joint_after_decision_m": 0.15104058384895325,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.8815701903965216e-05,
+     "steps": 409,
+     "tracked_joint_after_decision_m": 0.150841623544693,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.1760870584577767e-05,
+     "steps": 372,
+     "tracked_joint_after_decision_m": 0.15080899000167847,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.3171749927302108e-05,
+     "steps": 377,
+     "tracked_joint_after_decision_m": 0.1508060097694397,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.4436979852461324e-05,
+     "steps": 412,
+     "tracked_joint_after_decision_m": 0.15098389983177185,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.9030132011094414e-05,
+     "steps": 420,
+     "tracked_joint_after_decision_m": 0.15092405676841736,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.7720137353635508e-05,
+     "steps": 374,
+     "tracked_joint_after_decision_m": 0.1508973240852356,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": true,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "final_reason": "no_path_waypoint_10",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.4347066736927913e-05,
+     "steps": 375,
+     "tracked_joint_after_decision_m": 0.1506546139717102,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": true,
+      "success_condition_0": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 190,
+     "local_predicates": {
+      "drawer_closed": false,
+      "drawer_open": true,
+      "item_grasped": false,
+      "item_in_drawer": false,
+      "success_condition_0": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.9994554177700916e-05,
+     "steps": 414,
+     "tracked_joint_after_decision_m": 0.15138810873031616,
+     "trial": 19
+    }
+   ]
+  }
+ ],
+ "consequence_rule": {
+  "max_p": 0.05,
+  "min_gap": 0.3,
+  "min_local_rate": 0.9
+ },
+ "consequential": true,
+ "continuation_policy": "icgs mirror of the RoboHiMan scripted expert with per-trial Gaussian waypoint jitter sigma=0.005 m on every later waypoint; NOT pi_ref",
+ "decision_waypoint": 3,
+ "gate": "dependency",
+ "local_success_predicate": "drawer_open at the first boundary after waypoint 3 completes",
+ "pairs": [
+  {
+   "a": "approach x -0.070",
+   "b": "approach x -0.080",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.0
+  },
+  {
+   "a": "approach x -0.070",
+   "b": "approach x -0.085",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.050000000000000044
+  },
+  {
+   "a": "approach x -0.070",
+   "b": "approach x -0.088",
+   "consequential": false,
+   "fisher_p": 0.48717948717948717,
+   "gap": 0.09999999999999998
+  },
+  {
+   "a": "approach x -0.070",
+   "b": "approach x -0.090",
+   "consequential": true,
+   "fisher_p": 0.00043591979075850045,
+   "gap": 0.5
+  },
+  {
+   "a": "approach x -0.080",
+   "b": "approach x -0.085",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.050000000000000044
+  },
+  {
+   "a": "approach x -0.080",
+   "b": "approach x -0.088",
+   "consequential": false,
+   "fisher_p": 0.48717948717948717,
+   "gap": 0.09999999999999998
+  },
+  {
+   "a": "approach x -0.080",
+   "b": "approach x -0.090",
+   "consequential": true,
+   "fisher_p": 0.00043591979075850045,
+   "gap": 0.5
+  },
+  {
+   "a": "approach x -0.085",
+   "b": "approach x -0.088",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.04999999999999993
+  },
+  {
+   "a": "approach x -0.085",
+   "b": "approach x -0.090",
+   "consequential": true,
+   "fisher_p": 0.003342051729148504,
+   "gap": 0.44999999999999996
+  },
+  {
+   "a": "approach x -0.088",
+   "b": "approach x -0.090",
+   "consequential": true,
+   "fisher_p": 0.013814147851967653,
+   "gap": 0.4
+  }
+ ],
+ "seed": 7,
+ "task": "put_in_without_close",
+ "trials_per_candidate": 20,
+ "unplaceable_lineages_skipped": [],
+ "variation": 0,
+ "wall_s": 1970.0
+}

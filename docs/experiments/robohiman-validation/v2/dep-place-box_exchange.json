@@ -1,0 +1,3215 @@
+{
+ "anchor": "after waypoint 4: canonical start (post-reset snapshot restored before the reference prefix and every trial), prefix commands replayed open loop",
+ "anchor_boundary": 278,
+ "anchor_object_spread_across_trials_m": 0.00018218795949777553,
+ "candidates": [
+  {
+   "delta_world_m": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "downstream_given_local": [
+    20,
+    20
+   ],
+   "downstream_given_local_rate": 1.0,
+   "downstream_given_local_wilson95": [
+    0.8388698745050667,
+    1.0
+   ],
+   "failure_reasons": [],
+   "final_success_rate": 1.0,
+   "label": "waypoint-frame [0.0, 0.0, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.184357783647457e-05,
+     "steps": 611,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.109001955165569e-05,
+     "steps": 618,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.3483144980100699e-06,
+     "steps": 600,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.9099861248915495e-05,
+     "steps": 602,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.922468535015445e-05,
+     "steps": 602,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.053183521029816e-05,
+     "steps": 607,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.3319851432482296e-05,
+     "steps": 608,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.503796542905195e-05,
+     "steps": 604,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.6164814427411133e-05,
+     "steps": 619,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.134019419656958e-05,
+     "steps": 608,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.9114013544184144e-05,
+     "steps": 606,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.371787757316621e-05,
+     "steps": 614,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.200487691282786e-05,
+     "steps": 610,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.4838285006318e-05,
+     "steps": 620,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.960602099843731e-05,
+     "steps": 604,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.197454512933261e-05,
+     "steps": 617,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": true,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": "no_path_waypoint_12",
+     "final_status": "invalid_execution",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.665792444370075e-05,
+     "steps": 588,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.325445313285258e-06,
+     "steps": 625,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.9884970430857356e-05,
+     "steps": 617,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 317,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.696013615444686e-05,
+     "steps": 604,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    1.8422976925103362e-16,
+    0.049999999999999815,
+    -4.371139537117818e-09
+   ],
+   "downstream_given_local": [
+    19,
+    20
+   ],
+   "downstream_given_local_rate": 0.95,
+   "downstream_given_local_wilson95": [
+    0.7638641064874331,
+    0.9911187805671268
+   ],
+   "failure_reasons": [
+    "no_path_waypoint_11"
+   ],
+   "final_success_rate": 0.95,
+   "label": "waypoint-frame [0.05, 0.0, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.7820058127880973e-05,
+     "steps": 610,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.69817480896655e-05,
+     "steps": 613,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.2566724788484735e-05,
+     "steps": 607,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.5109099427259967e-05,
+     "steps": 607,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.24170609031778e-05,
+     "steps": 601,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.894579876370319e-05,
+     "steps": 604,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.545632901493854e-05,
+     "steps": 611,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.980857343648121e-05,
+     "steps": 618,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.2030276499008106e-05,
+     "steps": 604,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.0211057318451542e-05,
+     "steps": 602,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.342069798323592e-05,
+     "steps": 604,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.457277204441629e-05,
+     "steps": 625,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": true,
+      "spam_in_cupboard": false,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": "no_path_waypoint_11",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 9.988458358166622e-06,
+     "steps": 547,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.1494546838629764e-05,
+     "steps": 618,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.1276277101424534e-05,
+     "steps": 600,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.915489905733636e-05,
+     "steps": 619,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 9.228160887294663e-06,
+     "steps": 613,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.8533152784148084e-05,
+     "steps": 611,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3025363665728246e-05,
+     "steps": 616,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 315,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.093389273283434e-05,
+     "steps": 614,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    -1.8422976925103362e-16,
+    -0.049999999999999815,
+    4.371139537117818e-09
+   ],
+   "downstream_given_local": [
+    18,
+    20
+   ],
+   "downstream_given_local_rate": 0.9,
+   "downstream_given_local_wilson95": [
+    0.6989617935882066,
+    0.9721341060158468
+   ],
+   "failure_reasons": [
+    "no_path_waypoint_11",
+    "no_path_waypoint_12"
+   ],
+   "final_success_rate": 0.9,
+   "label": "waypoint-frame [-0.05, 0.0, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.627642528658584e-05,
+     "steps": 617,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": true,
+      "spam_in_cupboard": false,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": "no_path_waypoint_11",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 9.418243929494141e-05,
+     "steps": 563,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.039582319620384e-05,
+     "steps": 610,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.6932423868978846e-05,
+     "steps": 612,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.053575881620196e-05,
+     "steps": 618,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.8532261673129904e-05,
+     "steps": 608,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.8091766887574432e-05,
+     "steps": 626,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.1621405209146326e-05,
+     "steps": 607,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.546186338348771e-05,
+     "steps": 616,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.9257029205385656e-05,
+     "steps": 605,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3383427987987203e-05,
+     "steps": 607,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.1813928824362593e-05,
+     "steps": 612,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.2582141956347547e-05,
+     "steps": 615,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.0014148649680517e-05,
+     "steps": 617,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.4292258646958127e-05,
+     "steps": 607,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.3635271215837463e-05,
+     "steps": 613,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": true,
+      "spam_in_cupboard": false,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": "no_path_waypoint_12",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.6350506415679218e-05,
+     "steps": 605,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.079331704113893e-05,
+     "steps": 632,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.682333410338547e-05,
+     "steps": 608,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 319,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.9754564026631924e-05,
+     "steps": 604,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    0.04999999999999982,
+    1.8422976925103362e-16,
+    4.214685156733931e-09
+   ],
+   "downstream_given_local": [
+    17,
+    20
+   ],
+   "downstream_given_local_rate": 0.85,
+   "downstream_given_local_wilson95": [
+    0.6395767041130426,
+    0.9476322080405041
+   ],
+   "failure_reasons": [
+    "no_path_waypoint_11"
+   ],
+   "final_success_rate": 0.85,
+   "label": "waypoint-frame [0.0, 0.05, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.7921594141191575e-05,
+     "steps": 608,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.198494357273075e-05,
+     "steps": 611,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.049861918927097e-05,
+     "steps": 619,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": true,
+      "spam_in_cupboard": false,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": "no_path_waypoint_11",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.7873977340230067e-05,
+     "steps": 561,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": true,
+      "spam_in_cupboard": false,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": "no_path_waypoint_11",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.3429480772940188e-05,
+     "steps": 565,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.9360608745406863e-05,
+     "steps": 609,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.8113252406812605e-05,
+     "steps": 612,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.054466438925109e-05,
+     "steps": 617,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.3949894534608186e-05,
+     "steps": 607,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.000338321923897e-05,
+     "steps": 628,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.8430394498314653e-06,
+     "steps": 621,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.5500747813079615e-05,
+     "steps": 616,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.27212011910925e-05,
+     "steps": 615,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.3606370545017734e-05,
+     "steps": 626,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.220176203464521e-05,
+     "steps": 613,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.6000499761902694e-05,
+     "steps": 615,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.777583114917873e-05,
+     "steps": 619,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": true,
+      "spam_in_cupboard": false,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": "no_path_waypoint_11",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.2567142556394022e-05,
+     "steps": 565,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.5762310239529287e-05,
+     "steps": 616,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 321,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.0700162628373443e-05,
+     "steps": 606,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    -0.04999999999999982,
+    -1.8422976925103362e-16,
+    -4.214685156733931e-09
+   ],
+   "downstream_given_local": [
+    18,
+    20
+   ],
+   "downstream_given_local_rate": 0.9,
+   "downstream_given_local_wilson95": [
+    0.6989617935882066,
+    0.9721341060158468
+   ],
+   "failure_reasons": [
+    "no_path_waypoint_11",
+    "task_success_false_after_expert"
+   ],
+   "final_success_rate": 0.9,
+   "label": "waypoint-frame [0.0, -0.05, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.6704059400717614e-05,
+     "steps": 598,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.193232581697139e-05,
+     "steps": 601,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.9590630067591204e-05,
+     "steps": 625,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": "task_success_false_after_expert",
+     "final_status": "failure",
+     "final_success": false,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.948686074042426e-05,
+     "steps": 629,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.383872006073858e-05,
+     "steps": 595,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.932978134250404e-05,
+     "steps": 601,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.271977318535216e-05,
+     "steps": 606,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.1222813436669504e-05,
+     "steps": 620,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.8786146468079016e-05,
+     "steps": 603,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.418531488854366e-05,
+     "steps": 606,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.7940062296525777e-05,
+     "steps": 614,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": true,
+      "spam_in_cupboard": false,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": "no_path_waypoint_11",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.3542301228868955e-05,
+     "steps": 542,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.667828850774566e-05,
+     "steps": 614,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.103674538447217e-05,
+     "steps": 611,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3971785638050887e-05,
+     "steps": 600,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.874457884102317e-05,
+     "steps": 603,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.0783220307105546e-05,
+     "steps": 612,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.210622640574396e-05,
+     "steps": 604,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.911445516460245e-05,
+     "steps": 609,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": true,
+      "spam_on_table": false,
+      "success_condition_0": true,
+      "success_condition_1": true,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 313,
+     "local_predicates": {
+      "spam_grasped": false,
+      "spam_in_cupboard": false,
+      "spam_on_table": true,
+      "success_condition_0": true,
+      "success_condition_1": false,
+      "sugar_grasped": false,
+      "sugar_in_cupboard": false,
+      "sugar_on_table": true
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.505182892391643e-05,
+     "steps": 607,
+     "trial": 19
+    }
+   ]
+  }
+ ],
+ "consequence_rule": {
+  "max_p": 0.05,
+  "min_gap": 0.3,
+  "min_local_rate": 0.9
+ },
+ "consequential": false,
+ "continuation_policy": "icgs mirror of the RoboHiMan scripted expert with per-trial Gaussian waypoint jitter sigma=0.005 m on every later waypoint; NOT pi_ref",
+ "decision_waypoint": 5,
+ "gate": "dependency",
+ "local_success_predicate": "sugar_on_table at the first boundary after waypoint 5 completes",
+ "pairs": [
+  {
+   "a": "waypoint-frame [0.0, 0.0, 0.0]",
+   "b": "waypoint-frame [0.05, 0.0, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.050000000000000044
+  },
+  {
+   "a": "waypoint-frame [0.0, 0.0, 0.0]",
+   "b": "waypoint-frame [-0.05, 0.0, 0.0]",
+   "consequential": false,
+   "fisher_p": 0.48717948717948717,
+   "gap": 0.09999999999999998
+  },
+  {
+   "a": "waypoint-frame [0.0, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, 0.05, 0.0]",
+   "consequential": false,
+   "fisher_p": 0.23076923076923084,
+   "gap": 0.15000000000000002
+  },
+  {
+   "a": "waypoint-frame [0.0, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, -0.05, 0.0]",
+   "consequential": false,
+   "fisher_p": 0.48717948717948717,
+   "gap": 0.09999999999999998
+  },
+  {
+   "a": "waypoint-frame [0.05, 0.0, 0.0]",
+   "b": "waypoint-frame [-0.05, 0.0, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.04999999999999993
+  },
+  {
+   "a": "waypoint-frame [0.05, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, 0.05, 0.0]",
+   "consequential": false,
+   "fisher_p": 0.6049896049896051,
+   "gap": 0.09999999999999998
+  },
+  {
+   "a": "waypoint-frame [0.05, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, -0.05, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.04999999999999993
+  },
+  {
+   "a": "waypoint-frame [-0.05, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, 0.05, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.050000000000000044
+  },
+  {
+   "a": "waypoint-frame [-0.05, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, -0.05, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.0
+  },
+  {
+   "a": "waypoint-frame [0.0, 0.05, 0.0]",
+   "b": "waypoint-frame [0.0, -0.05, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.050000000000000044
+  }
+ ],
+ "seed": 13,
+ "task": "box_exchange",
+ "trials_per_candidate": 20,
+ "unplaceable_lineages_skipped": [],
+ "variation": 0,
+ "wall_s": 2623.5
+}

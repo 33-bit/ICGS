@@ -16,6 +16,7 @@ This repository is the system of record. Read the smallest relevant owner below.
 | [RoboHiMan migration plan](plans/active/robohiman-backbone-migration.md) | Phases, go/no-go gates and recovery for the backbone switch |
 | [Migration classification](audits/2026-09-30-robohiman-migration-classification.md) | Generic vs custom-generator vs mixed components before refactor |
 | [RoboHiMan validation evidence](experiments/robohiman-validation/README.md) | Parity, A0, replay, dependency, split-overlap and smoke-collection results |
+| [RoboHiMan validation round 2](experiments/robohiman-validation/v2/README.md) | Monitor families, anchor replay fidelity and acceptance rule, n=20 dependency audit, storage cadence |
 | [Data generation](components/generation.md) | Custom 36-program generator (legacy/reference since ADR 0016; not scaled): modules, HF archive lifecycle, record classes, resume and view finalization |
 | [Generation artifacts](components/generation-artifacts.md) | Legacy v2 and lossless HF archive trees, file inventories, consumers and retention |
 | [Environment setup](components/environment.md) | Portable CPU/CUDA/generation profiles, verification and credential boundary |

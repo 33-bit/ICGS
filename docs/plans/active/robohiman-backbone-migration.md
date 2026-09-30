@@ -48,11 +48,17 @@ archives, `icgs_episode_v1/v2` schemas.
       A0 PASS, A1 PASS, B PASS (2 tasks), failure retention PASS, mirror parity
       PASS (distributional), snapshot/replay PARTIAL, dependency PARTIAL.
 - [x] P5 documentation map/component doc; custom generator marked legacy in the map.
-- [ ] P6 dependency audit at n≥20 per candidate in the 0.14–0.16 m band plus a
-      second decision axis (grasp point / place pose) on ≥2 compositional tasks.
-- [ ] P7 replay strategy for long horizons (shorter anchors, or post-reset
-      snapshot + replay with measured per-anchor drift carried as label noise).
-- [ ] P8 default-path switch after gates 4–5 are decided.
+- [x] P6 dependency audit at n=20 per candidate: drawer boundary on 2 tasks, place pose on 3
+      tasks ([round 2](../../experiments/robohiman-validation/v2/README.md)). One consequential
+      band (put_in_without_close, drawer 0.151 m: 10/20 vs 20/20, p=0.0004); none elsewhere.
+- [x] P7 replay strategy: canonical start + per-anchor-class reproduction (direct restore for
+      free/kinematic-grasp anchors, contact-free snapshot + replay for physical grip); proposed
+      acceptance rule met by 35/36 tuning and 27/32 held-out anchors.
+- [x] P7b monitors for container pick-place and dustpan tool-use families (10 tasks total).
+- [ ] P8 decide the consequential-evidence source: extend the RoboHiMan audit (grasp point,
+      drawer choice in put_two_in_different/take_two_*) and/or a small mechanistic diagnostic
+      suite; only then Stage-2 design.
+- [ ] P9 default-path switch and Stage-1 scale-up after the owner accepts the round-2 verdicts.
 
 Findings that changed the design during P4: upstream is not bitwise
 reproducible (robot reset residuals + RRTConnect); Colosseum factors own RNGs
@@ -100,7 +106,9 @@ No checkpoint/config/evaluation change. New dataset identity
 
 ## Final evidence
 
-See [robohiman-validation](../../experiments/robohiman-validation/README.md).
-Recommendation at 2026-09-30: READY_FOR_SMALL_SCALE_COLLECTION of Stage-1
-D_geom/D_dyn/D_task on reviewed tasks only; NOT ready for branch/continuation
-collection or bulk Stage-1 collection. Plan stays active until P6–P8.
+[Round 1](../../experiments/robohiman-validation/README.md) and
+[round 2](../../experiments/robohiman-validation/v2/README.md). Round-2 verdicts:
+monitor coverage PASS, snapshot/replay PARTIAL, dependency PARTIAL. Recommendation at
+2026-09-30: READY_FOR_STAGE1_ONLY — bounded Stage-1 collection on the 10 monitored tasks
+with frame stride 2 + event frames; no Stage-1 scale-up, branch, D_value or D_pair
+collection. Plan stays active until P8–P9.

@@ -38,7 +38,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--env-seed", type=int, default=42, help="Colosseum factor seed (native train=42)")
     parser.add_argument("--image-size", type=int, nargs=2, default=(128, 128))
     parser.add_argument("--cameras", nargs="+", default=list(NATIVE_CAMERAS))
-    parser.add_argument("--frame-stride", type=int, default=1)
+    parser.add_argument("--frame-stride", type=int, default=2,
+                        help="render every k-th physics boundary (2 = 0.1 s model cadence) plus every event boundary")
     parser.add_argument("--max-steps", type=int, default=3000)
     parser.add_argument("--perturbation", action="append", default=[],
                         help="JSON object with family/waypoint/... (repeatable)")

@@ -1,0 +1,3110 @@
+{
+ "anchor": "after waypoint 9: canonical start (post-reset snapshot restored before the reference prefix and every trial), prefix commands replayed open loop",
+ "anchor_boundary": 377,
+ "anchor_object_spread_across_trials_m": 0.0003746974684320527,
+ "candidates": [
+  {
+   "delta_world_m": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "downstream_given_local": [
+    20,
+    20
+   ],
+   "downstream_given_local_rate": 1.0,
+   "downstream_given_local_wilson95": [
+    0.8388698745050667,
+    1.0
+   ],
+   "failure_reasons": [],
+   "final_success_rate": 1.0,
+   "label": "waypoint-frame [0.0, 0.0, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.376350035616459e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24114207923412323,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.4811072744198464e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24077396094799042,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.318373173756286e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24110837280750275,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.461926605454223e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.24113714694976807,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 8.297821960537946e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24125094711780548,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.3737308810653756e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24104216694831848,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.861286881763452e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24103650450706482,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.9098848006794663e-05,
+     "steps": 576,
+     "tracked_joint_after_decision_m": 0.24091622233390808,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.816090840754389e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.24110475182533264,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.2797413876777383e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24135728180408478,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 8.850002141228233e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24116745591163635,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.74744760654219e-05,
+     "steps": 571,
+     "tracked_joint_after_decision_m": 0.2411888837814331,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.5142344155300058e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.2410118281841278,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.297491956714473e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.2411741316318512,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.541835405178519e-05,
+     "steps": 585,
+     "tracked_joint_after_decision_m": 0.24114307761192322,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.640786142630334e-05,
+     "steps": 576,
+     "tracked_joint_after_decision_m": 0.24112744629383087,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.5465196429795484e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.2414844036102295,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.925083315076822e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24093814194202423,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.1077411674206916e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24017281830310822,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.597041974896538e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24102458357810974,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    -0.0069406816835532355,
+    0.029186072800275197,
+    -9.605447641256987e-06
+   ],
+   "downstream_given_local": [
+    20,
+    20
+   ],
+   "downstream_given_local_rate": 1.0,
+   "downstream_given_local_wilson95": [
+    0.8388698745050667,
+    1.0
+   ],
+   "failure_reasons": [],
+   "final_success_rate": 1.0,
+   "label": "waypoint-frame [0.03, 0.0, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.047899546926805e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24093684554100037,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.996006233228427e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24119937419891357,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.3131531412146544e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.2410583198070526,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.58957941883051e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24107404053211212,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.2778029779792615e-05,
+     "steps": 581,
+     "tracked_joint_after_decision_m": 0.23994413018226624,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.1105527554696345e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24112021923065186,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.7278114876141083e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24112844467163086,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.101943957753417e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24109983444213867,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 8.134114783370102e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.24111108481884003,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.895608441158176e-06,
+     "steps": 576,
+     "tracked_joint_after_decision_m": 0.241144061088562,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.996218418698286e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24109306931495667,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.9248247078683564e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.2410290241241455,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.125618677218773e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.240987628698349,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.2780449597522825e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24110987782478333,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.8451831794170258e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24110159277915955,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.7184722394522357e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.24121680855751038,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.5922068964134215e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.239275261759758,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3109582470946728e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.2411302626132965,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.15701602829756e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24099591374397278,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 424,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.152418188332459e-05,
+     "steps": 581,
+     "tracked_joint_after_decision_m": 0.2412087619304657,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    0.0069406816835532355,
+    -0.029186072800275197,
+    9.605447641256987e-06
+   ],
+   "downstream_given_local": [
+    20,
+    20
+   ],
+   "downstream_given_local_rate": 1.0,
+   "downstream_given_local_wilson95": [
+    0.8388698745050667,
+    1.0
+   ],
+   "failure_reasons": [],
+   "final_success_rate": 1.0,
+   "label": "waypoint-frame [-0.03, 0.0, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.2972450196626245e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24105104804039001,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.610440705184218e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.2409655749797821,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.8054237938186694e-05,
+     "steps": 573,
+     "tracked_joint_after_decision_m": 0.24111321568489075,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.346655438422154e-05,
+     "steps": 571,
+     "tracked_joint_after_decision_m": 0.24112936854362488,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.88916089422825e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.2402375042438507,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.7378518771083683e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.2411939650774002,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.554385426940248e-05,
+     "steps": 574,
+     "tracked_joint_after_decision_m": 0.24104690551757812,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.758793685442538e-05,
+     "steps": 576,
+     "tracked_joint_after_decision_m": 0.2412298619747162,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.6449967388388174e-05,
+     "steps": 574,
+     "tracked_joint_after_decision_m": 0.24098911881446838,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.746031365653342e-05,
+     "steps": 581,
+     "tracked_joint_after_decision_m": 0.2412162721157074,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.4261950761258035e-05,
+     "steps": 574,
+     "tracked_joint_after_decision_m": 0.2411992996931076,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.164626819652892e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.24103908240795135,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.7034865910193054e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24103519320487976,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.7864537926729717e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.24108383059501648,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.324802299825932e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24101731181144714,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.215374344083544e-05,
+     "steps": 572,
+     "tracked_joint_after_decision_m": 0.2409651279449463,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.116571473976907e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.24109351634979248,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.9110367424640404e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.24099211394786835,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.023370918994796e-05,
+     "steps": 573,
+     "tracked_joint_after_decision_m": 0.24131926894187927,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.7159413150731955e-05,
+     "steps": 574,
+     "tracked_joint_after_decision_m": 0.2409898042678833,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    0.02918607167645911,
+    0.0069406849149241025,
+    1.0630537893309753e-05
+   ],
+   "downstream_given_local": [
+    18,
+    20
+   ],
+   "downstream_given_local_rate": 0.9,
+   "downstream_given_local_wilson95": [
+    0.6989617935882066,
+    0.9721341060158468
+   ],
+   "failure_reasons": [
+    "no_path_waypoint_13",
+    "task_success_false_after_expert"
+   ],
+   "final_success_rate": 0.9,
+   "label": "waypoint-frame [0.0, 0.03, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "final_reason": "no_path_waypoint_13",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.383112657512654e-05,
+     "steps": 476,
+     "tracked_joint_after_decision_m": 0.2409227341413498,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.1828676936938286e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24091844260692596,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.82587990076051e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24122807383537292,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.717340833525941e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24109375476837158,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.4757538290252935e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.2411569058895111,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "final_reason": "task_success_false_after_expert",
+     "final_status": "failure",
+     "final_success": false,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 9.072924996803673e-05,
+     "steps": 598,
+     "tracked_joint_after_decision_m": 0.24127021431922913,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.4727148433205235e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24127110838890076,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.602723729315473e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24101576209068298,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.824159651302297e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24144041538238525,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.2624495598805e-05,
+     "steps": 581,
+     "tracked_joint_after_decision_m": 0.2411513328552246,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 0.00012461282790357113,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24109692871570587,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.1636137308351734e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.2411353886127472,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.0854999824294155e-05,
+     "steps": 580,
+     "tracked_joint_after_decision_m": 0.24116282165050507,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3227709294044614e-05,
+     "steps": 576,
+     "tracked_joint_after_decision_m": 0.2409534752368927,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.24366784704307e-05,
+     "steps": 576,
+     "tracked_joint_after_decision_m": 0.24109897017478943,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.2186264136777785e-05,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24125131964683533,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.6692531402612765e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.2411407232284546,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.0051059448391624e-05,
+     "steps": 581,
+     "tracked_joint_after_decision_m": 0.241251140832901,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.147609405025243e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24101261794567108,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 423,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.7787214774746013e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24062128365039825,
+     "trial": 19
+    }
+   ]
+  },
+  {
+   "delta_world_m": [
+    -0.02918607167645911,
+    -0.0069406849149241025,
+    -1.0630537893309753e-05
+   ],
+   "downstream_given_local": [
+    19,
+    20
+   ],
+   "downstream_given_local_rate": 0.95,
+   "downstream_given_local_wilson95": [
+    0.7638641064874331,
+    0.9911187805671268
+   ],
+   "failure_reasons": [
+    "no_path_waypoint_13"
+   ],
+   "final_success_rate": 0.95,
+   "label": "waypoint-frame [0.0, -0.03, 0.0]",
+   "local_success_rate": 1.0,
+   "trials": [
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 8.567809694782904e-05,
+     "steps": 576,
+     "tracked_joint_after_decision_m": 0.2411356419324875,
+     "trial": 0
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.3564085190576724e-05,
+     "steps": 573,
+     "tracked_joint_after_decision_m": 0.2411063015460968,
+     "trial": 1
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 8.817092125334553e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.241109699010849,
+     "trial": 2
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 1.7111174431136838e-05,
+     "steps": 576,
+     "tracked_joint_after_decision_m": 0.24120931327342987,
+     "trial": 3
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.107220210425251e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24123582243919373,
+     "trial": 4
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.208272450653715e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24116599559783936,
+     "trial": 5
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 6.57831503083566e-05,
+     "steps": 572,
+     "tracked_joint_after_decision_m": 0.2411668300628662,
+     "trial": 6
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 0.00011612733362583073,
+     "steps": 578,
+     "tracked_joint_after_decision_m": 0.24113205075263977,
+     "trial": 7
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.5860424322522783e-05,
+     "steps": 576,
+     "tracked_joint_after_decision_m": 0.24124446511268616,
+     "trial": 8
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.895927687177054e-05,
+     "steps": 574,
+     "tracked_joint_after_decision_m": 0.24119095504283905,
+     "trial": 9
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 8.350991263696633e-05,
+     "steps": 573,
+     "tracked_joint_after_decision_m": 0.24108223617076874,
+     "trial": 10
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.62506117015037e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24122950434684753,
+     "trial": 11
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.3488164317662045e-05,
+     "steps": 581,
+     "tracked_joint_after_decision_m": 0.2409532368183136,
+     "trial": 12
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 4.7487831193342786e-05,
+     "steps": 574,
+     "tracked_joint_after_decision_m": 0.24103493988513947,
+     "trial": 13
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.984639665739695e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24111123383045197,
+     "trial": 14
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.6157336609650944e-05,
+     "steps": 579,
+     "tracked_joint_after_decision_m": 0.24097201228141785,
+     "trial": 15
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 3.205091259991481e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24129319190979004,
+     "trial": 16
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "final_reason": "no_path_waypoint_13",
+     "final_status": "invalid_execution",
+     "final_success": false,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 7.585689271953995e-05,
+     "steps": 474,
+     "tracked_joint_after_decision_m": 0.24099573493003845,
+     "trial": 17
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 5.204522375397798e-05,
+     "steps": 577,
+     "tracked_joint_after_decision_m": 0.24106526374816895,
+     "trial": 18
+    },
+    {
+     "final_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": true,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": true
+     },
+     "final_reason": null,
+     "final_status": "success",
+     "final_success": true,
+     "local_boundary": 422,
+     "local_predicates": {
+      "block_grasped": false,
+      "blocks_in_drawer_ge1": true,
+      "blocks_in_drawer_ge2": false,
+      "drawer_closed": false,
+      "drawer_open": true,
+      "success_condition_0": true,
+      "success_condition_1": false
+     },
+     "local_success": true,
+     "prefix_replay_tip_drift_m": 2.468853059113598e-05,
+     "steps": 575,
+     "tracked_joint_after_decision_m": 0.24114832282066345,
+     "trial": 19
+    }
+   ]
+  }
+ ],
+ "consequence_rule": {
+  "max_p": 0.05,
+  "min_gap": 0.3,
+  "min_local_rate": 0.9
+ },
+ "consequential": false,
+ "continuation_policy": "icgs mirror of the RoboHiMan scripted expert with per-trial Gaussian waypoint jitter sigma=0.005 m on every later waypoint; NOT pi_ref",
+ "decision_waypoint": 10,
+ "gate": "dependency",
+ "local_success_predicate": "blocks_in_drawer_ge1 at the first boundary after waypoint 10 completes",
+ "pairs": [
+  {
+   "a": "waypoint-frame [0.0, 0.0, 0.0]",
+   "b": "waypoint-frame [0.03, 0.0, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.0
+  },
+  {
+   "a": "waypoint-frame [0.0, 0.0, 0.0]",
+   "b": "waypoint-frame [-0.03, 0.0, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.0
+  },
+  {
+   "a": "waypoint-frame [0.0, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, 0.03, 0.0]",
+   "consequential": false,
+   "fisher_p": 0.48717948717948717,
+   "gap": 0.09999999999999998
+  },
+  {
+   "a": "waypoint-frame [0.0, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, -0.03, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.050000000000000044
+  },
+  {
+   "a": "waypoint-frame [0.03, 0.0, 0.0]",
+   "b": "waypoint-frame [-0.03, 0.0, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.0
+  },
+  {
+   "a": "waypoint-frame [0.03, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, 0.03, 0.0]",
+   "consequential": false,
+   "fisher_p": 0.48717948717948717,
+   "gap": 0.09999999999999998
+  },
+  {
+   "a": "waypoint-frame [0.03, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, -0.03, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.050000000000000044
+  },
+  {
+   "a": "waypoint-frame [-0.03, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, 0.03, 0.0]",
+   "consequential": false,
+   "fisher_p": 0.48717948717948717,
+   "gap": 0.09999999999999998
+  },
+  {
+   "a": "waypoint-frame [-0.03, 0.0, 0.0]",
+   "b": "waypoint-frame [0.0, -0.03, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.050000000000000044
+  },
+  {
+   "a": "waypoint-frame [0.0, 0.03, 0.0]",
+   "b": "waypoint-frame [0.0, -0.03, 0.0]",
+   "consequential": false,
+   "fisher_p": 1.0,
+   "gap": 0.04999999999999993
+  }
+ ],
+ "seed": 12,
+ "task": "put_two_in_same",
+ "trials_per_candidate": 20,
+ "unplaceable_lineages_skipped": [],
+ "variation": 0,
+ "wall_s": 1280.7
+}
