@@ -61,6 +61,9 @@ GLOBAL_QUIRKS = (
     "upstream reset can leave engine-internal contact state (e.g. a non-target drawer creeping ~15 mm/3 s) "
     "that configuration-tree restore removes",
     "native generator workers call np.random.seed(None); native episode placement lineage is unrecoverable",
+    "success sensors detect objects that are still held: upstream task success can turn true 4-14 steps "
+    "before release (ICGS placement events require release)",
+    "CoppeliaSim simulation time is float32: step intervals are 0.05 s within the clock's float32 spacing",
 )
 _DRAWER_SIZE_LEAK = ("object_size factor named 'recv_obj_color' stays enabled in the no_variations strategy "
                      "(drawer/cupboard scale 0.9-1.15 in A/C levels)")
@@ -72,9 +75,9 @@ TASK_QUIRKS = {
     "rubbish_in_dustpan": ("collection strategy 0 is disabled: native train_A (IDX_TO_COLLECT=0) collects nothing",),
     "sweep_and_drop": ("expert executes broom sweeping before the rubbish drop; oracle language lists rubbish first",),
 }
-for _task, _extra in (("box_exchange", "upstream success turns true while the spam is still held (before release)"),
-                      ("box_in_cupboard", "success sensor detects the grocery while it is still held")):
-    TASK_QUIRKS[_task] = tuple(TASK_QUIRKS.get(_task, ())) + (_extra,)
+for _task in ("put_two_in_different", "take_two_out_of_different"):
+    TASK_QUIRKS[_task] = tuple(TASK_QUIRKS.get(_task, ())) + (
+        "success does not require closing the first drawer, but the upstream expert closes it",)
 
 
 def quirks_for(task: str) -> list[str]:
