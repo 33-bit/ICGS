@@ -648,7 +648,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--trials", type=int, default=20)
     parser.add_argument("--jitter-m", type=float, default=0.005)
     parser.add_argument("--local-predicate", default="drawer_open")
-    parser.add_argument("--offsets", nargs="+", help="candidate offsets 'dx,dy,dz' (see --offset-frame)")
+    parser.add_argument("--offset", dest="offsets", action="append",
+                        help="candidate offset, repeatable: --offset=dx,dy,dz (see --offset-frame)")
     parser.add_argument("--offset-frame", choices=("waypoint", "world"), default="waypoint")
     parser.add_argument("--out", required=True)
     args = parser.parse_args(argv)
