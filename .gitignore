@@ -24,4 +24,4 @@ output/
 .DS_Store
 
 # Generated datasets (never committed)
-datasets/
+/datasets/
